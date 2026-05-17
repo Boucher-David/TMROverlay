@@ -445,30 +445,6 @@ internal static class FuelStrategyCalculator
             return "stint estimate";
         }
 
-        if (stintPlan.RhythmComparison is { IsRealistic: true, AdditionalStopCount: > 0 } rhythmComparison)
-        {
-            return rhythmComparison.Message;
-        }
-
-        if (stintPlan.StopOptimization is { IsRealistic: true } optimization)
-        {
-            return optimization.Message;
-        }
-
-        if (stintPlan.RequiredFuelSavingLitersPerLap is { } saving
-            && stintPlan.RequiredFuelSavingPercent is { } savingPercent
-            && saving > 0.01d
-            && savingPercent <= RealisticFuelSaveThresholdPercent)
-        {
-            var targetLaps = stintPlan.Stints
-                .Where(stint => stint.RequiredFuelSavingLitersPerLap is > 0d)
-                .Select(stint => stint.TargetLaps)
-                .OfType<int>()
-                .DefaultIfEmpty()
-                .Max();
-            return $"{targetLaps}-lap target: save {saving:0.0} L/lap";
-        }
-
         if (stintPlan.PlannedStintCount is { } stintCount && stintPlan.PlannedStopCount is { } stopCount)
         {
             var prefix = currentFuelLiters is null ? "model: " : string.Empty;

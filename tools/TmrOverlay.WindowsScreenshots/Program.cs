@@ -853,7 +853,7 @@ internal static class Program
 
         if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
-            return ReviewFuelModel();
+            return ReviewFuelModel(previewMode);
         }
 
         if (string.Equals(overlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
@@ -955,7 +955,7 @@ internal static class Program
             HeaderText: $"{status} | 06:37:08");
     }
 
-    private static DesignV2OverlayModel ReviewFuelModel()
+    private static DesignV2OverlayModel ReviewFuelModel(OverlaySessionKind previewMode)
     {
         var raceRows = new[]
         {
@@ -996,11 +996,35 @@ internal static class Program
                 ReviewSegment("Save", "None", DesignV2Evidence.Live)
             ])
         };
-        var sections = new[]
+        var sections = new List<DesignV2MetricSection>
         {
             new DesignV2MetricSection("Race Information", raceRows),
-            new DesignV2MetricSection("Stint Targets", stintRows)
         };
+        var usageLabel = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) switch
+        {
+            OverlaySessionKind.Practice => "Practice Usage",
+            OverlaySessionKind.Qualifying => "Quali Usage",
+            _ => null
+        };
+        if (usageLabel is not null)
+        {
+            var usageRows = new[]
+            {
+                ReviewMetric(usageLabel, "min 3.0 L/lap | avg 3.1 L/lap | max 3.2 L/lap", DesignV2Evidence.Measured,
+                [
+                    ReviewSegment("Min", "3.0 L/lap", DesignV2Evidence.Measured),
+                    ReviewSegment("Avg", "3.1 L/lap", DesignV2Evidence.Measured),
+                    ReviewSegment("Max", "3.2 L/lap", DesignV2Evidence.Measured),
+                    ReviewSegment("Laps", "3 laps", DesignV2Evidence.Measured)
+                ])
+            };
+            sections.Add(new DesignV2MetricSection("Fuel Usage", usageRows));
+        }
+
+        var visibleStintRows = usageLabel is not null
+            ? stintRows.Take(1).ToArray()
+            : stintRows;
+        sections.Add(new DesignV2MetricSection("Stint Targets", visibleStintRows));
         return new DesignV2OverlayModel(
             "Fuel Calculator",
             "3 stints / 2 stops",

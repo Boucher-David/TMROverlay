@@ -1281,10 +1281,6 @@ function fuelStatus(currentFuel, fuelPerLap, raceLapsRemaining, additionalFuel, 
 
   if (fuelPerLap == null) return 'waiting for burn';
   if (raceLapsRemaining == null) return 'stint estimate';
-  if (stintPlan.requiredFuelSavingLitersPerLap != null && stintPlan.requiredFuelSavingLitersPerLap > 0.01) {
-    const targetLaps = Math.max(...stintPlan.stints.map((stint) => stint.targetLaps || 0));
-    return `${targetLaps}-lap target: save ${stintPlan.requiredFuelSavingLitersPerLap.toFixed(1)} L/lap`;
-  }
 
   if (stintPlan.plannedStintCount != null && stintPlan.plannedStopCount != null) {
     return stintPlan.plannedStintCount <= 1

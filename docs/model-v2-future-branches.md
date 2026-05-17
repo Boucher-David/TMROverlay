@@ -234,6 +234,18 @@ Likely scope:
 
 V1.x is where heavy analysis overlays and broader platform features should mature, except for the engineer/operator mode, which is large enough to treat as V2.0. These branches can assume the V1.0 core app already has reliable release/support flow and stable core telemetry contracts.
 
+### V1.0.x Comfort Follow-Up - Windows Cursor Affordances
+
+Goal: make native Windows cursor state match the interaction target instead of inheriting the four-point move cursor across broad UI surfaces.
+
+Likely scope:
+
+- Add cursor hit testing to the Design V2 Settings surface: hand for clickable close/sidebar/region/action controls, `SizeAll` only on the title drag zone and explicit drag handles, and default arrow on non-clickable panels/text/background.
+- Keep content-column drag handles as `SizeAll`; they are actual drag/reorder handles.
+- Update Stream Chat native and Design V2 close/header hit regions so close uses hand, header drag uses `SizeAll`, and normal content uses the default arrow.
+- Split persistent overlay drag registration from global cursor assignment if needed, so draggable overlays do not force every child/control to display `SizeAll`.
+- Add Windows screenshot/manifest cursor evidence for settings controls and key Stream Chat hit regions because static screenshots alone cannot catch cursor regressions.
+
 ### Important V1.x Foundation - Overlay Lifecycle And Timer Efficiency
 
 Goal: make overlay refresh work proportional to what is actually visible or actively needed, without weakening telemetry freshness for overlays that are on screen.

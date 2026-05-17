@@ -94,12 +94,11 @@ Last updated: 2026-05-15
 - `src/TmrOverlay.App/Overlays/FuelCalculator/`
   - draggable three-column fuel strategy overlay placed in the left-side timing stack by default
   - estimates timed-race laps from shared `LiveRaceProjectionModel` clean-lap pace when enough evidence exists, falling back to session time, selected lap time, and leader/team progress
-  - uses live fuel burn first, then exact user history for car/track/session combos; tracked baseline/sample history is opt-in
-  - future fuel work should keep modeled stint-history analysis visible when a selected/focused driver lacks exposed live fuel scalars, instead of emptying the table
+  - uses measured completed green-lap fuel deltas first, then exact user history for car/track/session combos; tracked baseline/sample history is opt-in
+  - V1 keeps the overlay local in-car/pit only; future fuel work can revisit modeled stint-history analysis when a selected/focused driver lacks exposed live fuel scalars
   - renders whole-lap stint targets, target liters-per-lap, planned stint/stop count, final stint length, laps-per-tank, and min/avg/max burn when history exists
   - keeps the full table row layout visible so strategy changes do not resize or switch the overlay view during live updates
-  - adds an advice column that estimates whether tire service is likely free under refueling time or costs extra stationary time, using historical fill-rate and tire-service aggregates when available
-  - adds a strategy row when useful, comparing a shorter conservative stint rhythm against the longest realistic target and quantifying extra stops plus estimated pit-time loss
+  - hides rhythm optimization and tire-service advice for V1 until pit-service source buckets are strong enough to support those recommendations
   - accounts for overall leader/reference-class/team projection for timed-race lap count, stores class-leader context, and shows leader/class gaps in the shared source footer when enabled
   - can bias future stint targets toward historical team-stint evidence, currently 8 laps for the 4-hour Nürburgring baseline, without labeling teammate rows in the UI
   - warns when a target such as an 8-lap stint needs realistic fuel saving versus nominal tank range or avoids extra stops over longer races

@@ -8,7 +8,7 @@ internal sealed record ReleaseUpdateOptions
     public bool CheckOnStartup { get; init; } = true;
     public string RepositoryUrl { get; init; } = "https://github.com/Boucher-David/TMROverlay";
     public bool IncludePrerelease { get; init; }
-    public int StartupDelaySeconds { get; init; } = 8;
+    public int StartupDelaySeconds { get; init; }
 
     public static ReleaseUpdateOptions FromConfiguration(IConfiguration configuration)
     {
@@ -19,6 +19,7 @@ internal sealed record ReleaseUpdateOptions
             RepositoryUrl = string.IsNullOrWhiteSpace(options.RepositoryUrl)
                 ? "https://github.com/Boucher-David/TMROverlay"
                 : options.RepositoryUrl.Trim(),
+            CheckOnStartup = true,
             StartupDelaySeconds = Math.Clamp(options.StartupDelaySeconds, 0, 300)
         };
     }

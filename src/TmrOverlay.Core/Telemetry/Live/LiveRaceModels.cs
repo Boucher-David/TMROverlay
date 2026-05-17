@@ -789,7 +789,7 @@ internal sealed record LiveFuelPitModel(
         TeamOnPitRoad: null,
         FuelLevelEvidence: LiveSignalEvidence.Unavailable("FuelLevel", "missing_or_zero_fuel_level"),
         InstantaneousBurnEvidence: LiveSignalEvidence.Unavailable("FuelUsePerHour", "missing_or_zero_fuel_use"),
-        MeasuredBurnEvidence: LiveSignalEvidence.Unavailable("rolling-local-fuel-delta", "requires_two_green_distance_samples"),
+        MeasuredBurnEvidence: LiveSignalEvidence.Unavailable("rolling-local-fuel-delta", "requires_completed_green_lap_delta"),
         BaselineEligibilityEvidence: LiveSignalEvidence.Unavailable("measured-local-fuel-baseline", "requires_rolling_local_driver_window"),
         PitServiceStatus: null,
         PitServiceFlags: null,

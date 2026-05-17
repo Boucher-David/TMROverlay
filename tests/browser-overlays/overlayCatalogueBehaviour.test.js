@@ -82,6 +82,73 @@ describe('browser overlay catalogue behaviour', () => {
     expect(browserOverlayPages().find((page) => page.page.id === 'input-state')?.title).toBe('Inputs');
   });
 
+  it('shows practice and qualifying fuel usage from measured completed laps only', () => {
+    const live = freshLiveSnapshot({
+      ...localPlayerModels(),
+      session: {
+        hasData: true,
+        sessionType: 'Practice',
+        sessionName: 'Practice'
+      },
+      raceEvents: {
+        hasData: true,
+        isOnTrack: true,
+        isInGarage: false
+      },
+      fuelPit: {
+        hasData: true,
+        fuel: {
+          fuelLevelLiters: 42,
+          fuelLevelPercent: 0.4,
+          fuelPerLapLiters: 5.2,
+          confidence: 'measured-green-lap',
+          measuredFuelPerLapMinimumLiters: 5.0,
+          measuredFuelPerLapAverageLiters: 5.2,
+          measuredFuelPerLapMaximumLiters: 5.4,
+          measuredFuelPerLapSampleCount: 3
+        }
+      }
+    });
+
+    const practice = browserOverlayApiResponse('fuel-calculator', '/api/overlay-model/fuel-calculator', { live }).model;
+    const qualifying = browserOverlayApiResponse('fuel-calculator', '/api/overlay-model/fuel-calculator', {
+      live: {
+        ...live,
+        models: {
+          ...live.models,
+          session: {
+            ...live.models.session,
+            sessionType: 'Qualify',
+            sessionName: 'Qualify'
+          }
+        }
+      }
+    }).model;
+    const waiting = browserOverlayApiResponse('fuel-calculator', '/api/overlay-model/fuel-calculator', {
+      live: {
+        ...live,
+        models: {
+          ...live.models,
+          fuelPit: {
+            ...live.models.fuelPit,
+            fuel: {
+              ...live.models.fuelPit.fuel,
+              measuredFuelPerLapAverageLiters: null,
+              measuredFuelPerLapSampleCount: 0
+            }
+          }
+        }
+      }
+    }).model;
+
+    expect(practice.metricSections.find((section) => section.title === 'Fuel Usage').rows[0].label).toBe('Practice Usage');
+    expect(practice.metricSections.find((section) => section.title === 'Fuel Usage').rows[0].value).toContain('avg 5.2 L/lap');
+    expect(practice.metricSections.find((section) => section.title === 'Fuel Usage').rows[0].segments)
+      .toContainEqual(expect.objectContaining({ label: 'Laps', value: '3 laps' }));
+    expect(qualifying.metricSections.find((section) => section.title === 'Fuel Usage').rows[0].label).toBe('Quali Usage');
+    expect(waiting.metricSections.find((section) => section.title === 'Fuel Usage').rows[0].value).toBe('waiting for completed lap');
+  });
+
   for (const scenario of browserScenarios()) {
     it(`renders ${scenario.id} catalogue behaviour`, async () => {
       currentOverlay = await renderBrowserOverlay(scenario.id, scenario.fixture());
@@ -310,11 +377,10 @@ function browserScenarios() {
           ])
         ];
         const stintRows = [
-          metric('Stint 1', '12 laps | target 3.1 L/lap | tires free (36.8 L)', 'info', [
+          metric('Stint 1', '12 laps | target 3.1 L/lap', 'info', [
             segment('Laps', '12 laps', 'info'),
             segment('Target', '3.1 L/lap', 'info'),
-            segment('Save', '0.2 L/lap', 'warning'),
-            segment('Tires', 'tires free (36.8 L)', 'success')
+            segment('Save', '0.2 L/lap', 'warning')
           ])
         ];
         return {
@@ -324,7 +390,7 @@ function browserScenarios() {
             'Fuel Calculator',
             '3 stints / 2 stops',
             [...raceRows, ...stintRows],
-            'burn 3.1 L/lap (live burn) | 34.2 laps/tank | history user',
+            'burn 3.1 L/lap (measured green lap) | 34.2 laps/tank | history user',
             [],
             [
               { title: 'Race Information', rows: raceRows },

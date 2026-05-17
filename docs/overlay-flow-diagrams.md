@@ -88,13 +88,12 @@ flowchart TD
     Local -- yes --> Fuel{"Fuel and race context usable?"}
     Fuel -- no --> WaitingFuel["Show waiting/current fuel fallback"]
     Fuel -- yes --> History["Load user/baseline history for combo"]
-    History --> Burn["Choose live or historical burn rate"]
+    History --> Burn["Choose measured green-lap burn or exact history"]
     Burn --> Strategy{"Race laps/stints known?"}
     Strategy -- yes --> Plan["Calculate stint count and final stint target"]
     Strategy -- no --> Remaining["Estimate fuel needed from current state"]
-    Plan --> Tires["Evaluate free-tire or tradeoff advice"]
-    Remaining --> Tires
-    Tires --> Render["Render plan, strategy, stint rows, source text"]
+    Plan --> Render["Render plan, stint rows, source text"]
+    Remaining --> Render
 ```
 
 ## Track Map

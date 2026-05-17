@@ -346,7 +346,7 @@ private let overlaySpecs: [OverlaySpec] = [
         route: "/overlays/fuel-calculator",
         showOpacity: true,
         showSessionFilters: true,
-        options: ["Show advice column", "Footer source by session", "Units: metric"],
+        options: ["Footer source by session", "Units: metric"],
         kind: .fuel
     ),
     OverlaySpec(
@@ -853,17 +853,17 @@ private func drawGarageCoverOverlay(_ c: Canvas) {
 }
 
 private func drawFuelOverlay(_ c: Canvas) {
-    drawOverlayShell(c, title: "Fuel Calculator", status: "RACE", footer: "live burn plus exact car/track/session history")
+    drawOverlayShell(c, title: "Fuel Calculator", status: "RACE", footer: "measured burn plus exact car/track/session history")
     let cols: [CGFloat] = [20, 148, 270, 388, 504]
-    let headers = ["Metric", "Now", "Target", "Pit", "Advice"]
+    let headers = ["Metric", "Now", "Target", "Pit", "Note"]
     for (idx, header) in headers.enumerated() {
         c.text(header, cols[idx], 56, 90, 16, size: 10, weight: .heavy, color: idx == 0 ? Theme.magenta : Theme.cyan)
     }
     let rows = [
         ("Fuel", "48.2 L", "62.5 L", "+39 L", "8 lap stint"),
-        ("Burn", "7.21", "7.00", "safe", "lift 0.2"),
-        ("Laps", "6.6", "8", "5 stops", "-1 stop"),
-        ("Tires", "OK", "double", "free", "take lefts")
+        ("Burn", "7.21", "7.00", "safe", "measured"),
+        ("Laps", "6.6", "8", "5 stops", "target"),
+        ("Source", "live", "history", "pit", "green lap")
     ]
     for (idx, row) in rows.enumerated() {
         let y = CGFloat(82 + idx * 43)

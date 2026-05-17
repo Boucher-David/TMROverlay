@@ -44,7 +44,7 @@ internal enum DesignV2LiveOverlayKind
     GapToLeader
 }
 
-internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm
+internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSystemAwareOverlay
 {
     private const int DefaultRefreshIntervalMilliseconds = 250;
     private const int PaddingSize = 16;
@@ -174,7 +174,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm
     private readonly ILogger _logger;
     private readonly OverlaySettings _settings;
     private readonly string _fontFamily;
-    private readonly string _unitSystem;
+    private string _unitSystem;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private readonly PitServiceOverlayViewModel.StatefulBuilder _pitServiceBuilder;
     private readonly SessionWeatherOverlayViewModel.StatefulBuilder _sessionWeatherBuilder;
@@ -243,7 +243,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm
         _logger = logger;
         _settings = settings;
         _fontFamily = fontFamily;
-        _unitSystem = unitSystem;
+        _unitSystem = NormalizeUnitSystem(unitSystem);
         _pitServiceBuilder = PitServiceOverlayViewModel.CreateStatefulBuilder();
         _sessionWeatherBuilder = SessionWeatherOverlayViewModel.CreateStatefulBuilder();
         _model = InitialModelFor(kind);
@@ -333,11 +333,25 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm
 
     public DesignV2LayoutDiagnostics DiagnosticLayout => BuildLayoutDiagnostics(ClientRectangle, _model);
 
+    public string DiagnosticUnitSystem => _unitSystem;
+
+    public void SetUnitSystem(string unitSystem)
+    {
+        _unitSystem = NormalizeUnitSystem(unitSystem);
+    }
+
     public void SetFlagsManagedState(bool managedEnabled, bool settingsOverlayActive)
     {
         _flagsManagedEnabled = managedEnabled;
         _flagsSettingsOverlayActive = settingsOverlayActive;
         Invalidate();
+    }
+
+    private static string NormalizeUnitSystem(string unitSystem)
+    {
+        return string.Equals(unitSystem, "Imperial", StringComparison.OrdinalIgnoreCase)
+            ? "Imperial"
+            : "Metric";
     }
 
     protected override void Dispose(bool disposing)
@@ -771,11 +785,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm
 
         var viewModel = FuelCalculatorViewModel.From(
             strategyModel,
-            OverlayContentColumnSettings.ContentEnabledForSession(
-                _settings,
-                OverlayOptionKeys.FuelAdvice,
-                defaultEnabled: true,
-                OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot)),
+            showAdvice: false,
             _unitSystem,
             maximumRows: FuelVisibleRowsForHeight(ClientSize.Height, ShowFooterForSettings(_kind, _settings, snapshot)));
         var metricSections = viewModel.MetricSections.Select(section => new DesignV2MetricSection(

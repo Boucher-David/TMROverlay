@@ -35,8 +35,7 @@
           canCheckUpdates: config.support?.canCheckUpdates !== false,
           canInstallUpdate: config.support?.canInstallUpdate === true,
           canRestartUpdate: config.support?.canRestartUpdate === true,
-          updatePendingRestart: config.support?.updatePendingRestart === true,
-          releasePageAvailable: config.support?.releasePageAvailable === true
+          updatePendingRestart: config.support?.updatePendingRestart === true
         }
       };
       applySessionLayoutVars();
@@ -224,8 +223,7 @@
               row('Status', node('strong', 'field-value muted', {}, [support.updateText])),
               node('div', 'button-row small', {}, [
                 button('Check', () => checkReviewUpdates(), { disabled: support.canCheckUpdates === false }),
-                button(support.updatePendingRestart ? 'Restart' : 'Install', () => runSupportAction(support.updatePendingRestart ? 'restartUpdate' : 'installUpdate', support.updatePendingRestart ? 'Restart requested.' : 'No installable update in review run.'), { disabled: support.updatePendingRestart ? support.canRestartUpdate === false : support.canInstallUpdate !== true }),
-                button('Releases', () => runSupportAction('openReleases', 'Opened releases page.'), { disabled: support.releasePageAvailable === false })
+                button(support.updatePendingRestart ? 'Restart' : 'Install', () => runSupportAction(support.updatePendingRestart ? 'restartUpdate' : 'installUpdate', support.updatePendingRestart ? 'Restart requested.' : 'No installable update in review run.'), { disabled: support.updatePendingRestart ? support.canRestartUpdate === false : support.canInstallUpdate !== true })
               ])
             ])
           ]),

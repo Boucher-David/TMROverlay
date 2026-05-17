@@ -32,8 +32,6 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _updateStatusItem;
     private readonly ToolStripMenuItem _checkUpdatesItem;
     private readonly ToolStripMenuItem _installUpdateItem;
-    private readonly ToolStripMenuItem _restartUpdateItem;
-    private readonly ToolStripMenuItem _openUpdatePageItem;
     private readonly ToolStripMenuItem _rootItem;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private bool _exiting;
@@ -78,15 +76,7 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
             Enabled = false
         };
         _checkUpdatesItem = new ToolStripMenuItem("Check for Updates", null, async (_, _) => await CheckForUpdatesFromTrayAsync().ConfigureAwait(true));
-        _installUpdateItem = new ToolStripMenuItem("Download and Install Update", null, async (_, _) => await DownloadUpdateFromTrayAsync().ConfigureAwait(true))
-        {
-            Enabled = false
-        };
-        _restartUpdateItem = new ToolStripMenuItem("Restart to Apply Update", null, (_, _) => RestartToApplyUpdateFromTray())
-        {
-            Enabled = false
-        };
-        _openUpdatePageItem = new ToolStripMenuItem("Open Releases", null, (_, _) => OpenUpdatePage())
+        _installUpdateItem = new ToolStripMenuItem("Install Update", null, async (_, _) => await RunPrimaryUpdateActionFromTrayAsync().ConfigureAwait(true))
         {
             Enabled = false
         };
@@ -114,8 +104,6 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
             _updateStatusItem,
             _checkUpdatesItem,
             _installUpdateItem,
-            _restartUpdateItem,
-            _openUpdatePageItem,
             new ToolStripSeparator(),
             diagnosticsItem,
             new ToolStripSeparator(),
@@ -245,9 +233,12 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
             _ => "Updates not checked"
         };
         _checkUpdatesItem.Enabled = snapshot.CanCheck;
-        _installUpdateItem.Enabled = snapshot.CanDownload;
-        _restartUpdateItem.Enabled = snapshot.CanRestartToApply;
-        _openUpdatePageItem.Enabled = !string.IsNullOrWhiteSpace(snapshot.ReleasePageUrl);
+        _installUpdateItem.Text = snapshot.Status == ReleaseUpdateStatus.PendingRestart
+            ? "Restart to Apply Update"
+            : "Install Update";
+        _installUpdateItem.Enabled = snapshot.Status == ReleaseUpdateStatus.PendingRestart
+            ? snapshot.CanRestartToApply
+            : snapshot.CanDownload;
     }
 
     private async Task CheckForUpdatesFromTrayAsync()
@@ -276,6 +267,18 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
         }
     }
 
+    private async Task RunPrimaryUpdateActionFromTrayAsync()
+    {
+        var snapshot = _releaseUpdates.Snapshot();
+        if (snapshot.Status == ReleaseUpdateStatus.PendingRestart)
+        {
+            RestartToApplyUpdateFromTray();
+            return;
+        }
+
+        await DownloadUpdateFromTrayAsync().ConfigureAwait(true);
+    }
+
     private void RestartToApplyUpdateFromTray()
     {
         try
@@ -290,28 +293,6 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "Manual update apply failed from tray menu.");
-        }
-    }
-
-    private void OpenUpdatePage()
-    {
-        var snapshot = _releaseUpdates.Snapshot();
-        if (string.IsNullOrWhiteSpace(snapshot.ReleasePageUrl))
-        {
-            return;
-        }
-
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = snapshot.ReleasePageUrl,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception exception)
-        {
-            _logger.LogWarning(exception, "Failed to open release page {ReleasePageUrl}.", snapshot.ReleasePageUrl);
         }
     }
 

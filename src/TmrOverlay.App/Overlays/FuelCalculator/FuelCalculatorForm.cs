@@ -13,7 +13,7 @@ using TmrOverlay.Core.Telemetry.Live;
 
 namespace TmrOverlay.App.Overlays.FuelCalculator;
 
-internal sealed class FuelCalculatorForm : PersistentOverlayForm
+internal sealed class FuelCalculatorForm : PersistentOverlayForm, IUnitSystemAwareOverlay
 {
     private const int StintRowCount = 6;
     private const int NormalMinimumTableHeight = 150;
@@ -30,7 +30,7 @@ internal sealed class FuelCalculatorForm : PersistentOverlayForm
     private readonly Label _overviewValueLabel;
     private readonly Label _sourceLabel;
     private readonly string _fontFamily;
-    private readonly string _unitSystem;
+    private string _unitSystem;
     private readonly Label[] _stintNumberLabels = new Label[StintRowCount];
     private readonly Label[] _stintLengthLabels = new Label[StintRowCount];
     private readonly Label[] _stintTireLabels = new Label[StintRowCount];
@@ -47,11 +47,7 @@ internal sealed class FuelCalculatorForm : PersistentOverlayForm
 
     private bool ShowAdvice(LiveTelemetrySnapshot snapshot)
     {
-        return OverlayContentColumnSettings.ContentEnabledForSession(
-            _settings,
-            OverlayOptionKeys.FuelAdvice,
-            defaultEnabled: true,
-            OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
+        return false;
     }
 
     public FuelCalculatorForm(
@@ -73,9 +69,7 @@ internal sealed class FuelCalculatorForm : PersistentOverlayForm
         _performanceState = performanceState;
         _settings = settings;
         _fontFamily = fontFamily;
-        _unitSystem = string.Equals(unitSystem, "Imperial", StringComparison.OrdinalIgnoreCase)
-            ? "Imperial"
-            : "Metric";
+        _unitSystem = NormalizeUnitSystem(unitSystem);
 
         BackColor = OverlayTheme.Colors.WindowBackground;
         Padding = new Padding(OverlayTheme.Layout.OverlayChromePadding);
@@ -152,6 +146,25 @@ internal sealed class FuelCalculatorForm : PersistentOverlayForm
         _refreshTimer.Start();
 
         RefreshOverlay();
+    }
+
+    public void SetUnitSystem(string unitSystem)
+    {
+        var normalized = NormalizeUnitSystem(unitSystem);
+        if (string.Equals(_unitSystem, normalized, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _unitSystem = normalized;
+        _lastRefreshSequence = null;
+    }
+
+    private static string NormalizeUnitSystem(string unitSystem)
+    {
+        return string.Equals(unitSystem, "Imperial", StringComparison.OrdinalIgnoreCase)
+            ? "Imperial"
+            : "Metric";
     }
 
     protected override void OnResize(EventArgs e)

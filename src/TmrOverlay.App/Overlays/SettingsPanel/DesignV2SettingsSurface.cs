@@ -41,8 +41,6 @@ internal sealed class DesignV2SettingsCallbacks
 
     public required Action RestartToApplyUpdate { get; init; }
 
-    public required Action OpenReleaseUpdatePage { get; init; }
-
     public required Action<string> CopyTextToClipboard { get; init; }
 
     public required Action<OverlaySessionKind?> SetSessionPreview { get; init; }
@@ -452,7 +450,6 @@ internal sealed class DesignV2SettingsSurface : Control
             AddActionButton(new Rectangle(838, 292, 88, 30), "Install", () => _callbacks.DownloadAndPrepareUpdateAsync(), update.CanDownload);
         }
 
-        AddActionButton(new Rectangle(940, 292, 104, 30), "Releases", _callbacks.OpenReleaseUpdatePage, !string.IsNullOrWhiteSpace(update.ReleasePageUrl));
     }
 
     private void BuildSupportControls()
@@ -646,7 +643,6 @@ internal sealed class DesignV2SettingsSurface : Control
                     }));
                 break;
             case "fuel-calculator":
-                AddContentMatrixControls(settings, [new ContentMatrixRow("Advice column", OverlayOptionKeys.FuelAdvice, true)], new Rectangle(306, 272, 834, 150), UseContentSessionColumns(definition));
                 break;
             case "track-map":
                 AddContentMatrixControls(
@@ -1186,15 +1182,6 @@ internal sealed class DesignV2SettingsSurface : Control
                     followsMatrixRows: false);
                 break;
             case "fuel-calculator":
-                DrawContentMatrix(
-                    graphics,
-                    settings,
-                    "Content Display",
-                    [
-                        new ContentMatrixRow("Advice column", OverlayOptionKeys.FuelAdvice, true)
-                    ],
-                    new Rectangle(306, 272, 834, 150),
-                    UseContentSessionColumns(definition));
                 break;
             case "track-map":
                 DrawContentMatrix(

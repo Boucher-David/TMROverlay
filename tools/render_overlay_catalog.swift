@@ -267,8 +267,8 @@ private func renderFuel(_ c: Canvas) {
         c.text(metric.0, CGRect(x: x + 10, y: 229, width: 116, height: 14), size: 10, color: Theme.muted)
         c.text(metric.1, CGRect(x: x + 10, y: 209, width: 116, height: 20), size: 14, weight: .bold)
     }
-    header(c, y: 166, columns: [("STINT", 22, 72), ("LAPS", 120, 60), ("ADD", 206, 76), ("TARGET", 306, 92), ("ADVICE", 430, 160)])
-    let rows = [("1", "7/8", "48.0 L", "7.50", "save 0.12 L/lap"), ("2", "8", "60.8 L", "7.60", "tires free"), ("3", "7", "54.0 L", "7.65", "short fill")]
+    header(c, y: 166, columns: [("STINT", 22, 72), ("LAPS", 120, 60), ("ADD", 206, 76), ("TARGET", 306, 92), ("NOTE", 430, 160)])
+    let rows = [("1", "7/8", "48.0 L", "7.50", "save 0.12 L/lap"), ("2", "8", "60.8 L", "7.60", "target"), ("3", "7", "54.0 L", "7.65", "short fill")]
     for (i, row) in rows.enumerated() {
         let y = 124 - CGFloat(i) * 38
         c.fill(CGRect(x: 18, y: y, width: 604, height: 30), i == 0 ? Theme.infoBackground : Theme.panel, radius: 4)

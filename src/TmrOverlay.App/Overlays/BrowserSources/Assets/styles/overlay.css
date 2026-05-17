@@ -148,6 +148,7 @@
 
     body.fuel-calculator-page .overlay {
       width: min(503px, calc(100vw - 16px));
+      height: min(315px, calc(100vh - 16px));
       min-width: 0;
     }
 

@@ -101,6 +101,12 @@ public sealed class AppPerformanceStateTests
         var timestamp = DateTimeOffset.Parse("2026-05-07T12:00:00Z");
 
         state.RecordOverlayTimerTick("track-map", 50, visible: false, pauseEligible: true);
+        state.RecordOverlaySettingsMutation(
+            "unit_system",
+            timestamp,
+            existingFormCount: 3,
+            updatedFormCount: 2,
+            recreatedFormCount: 0);
         state.RecordOverlayLifecycleState(
             "track-map",
             timestamp,
@@ -132,6 +138,10 @@ public sealed class AppPerformanceStateTests
         Assert.Contains(snapshot.OverlayUpdates, metric => metric.Id == "overlay.timer.cadence.50ms.tick" && metric.Count == 1);
         Assert.Contains(snapshot.OverlayUpdates, metric => metric.Id == "overlay.timer.active_count" && metric.Last == 1d);
         Assert.Contains(snapshot.OverlayUpdates, metric => metric.Id == "overlay.timer.cadence.50ms.active_count" && metric.Last == 1d);
+        Assert.Contains(snapshot.OverlayUpdates, metric => metric.Id == "overlay.manager.settings.unit_system.changed" && metric.Last == 1d);
+        Assert.Contains(snapshot.OverlayUpdates, metric => metric.Id == "overlay.manager.settings.unit_system.existing_form_count" && metric.Last == 3d);
+        Assert.Contains(snapshot.OverlayUpdates, metric => metric.Id == "overlay.manager.settings.unit_system.updated_form_count" && metric.Last == 2d);
+        Assert.Contains(snapshot.OverlayUpdates, metric => metric.Id == "overlay.manager.settings.unit_system.recreated_form_count" && metric.Last == 0d);
         Assert.Contains(snapshot.OverlayUpdates, metric => metric.Id == "overlay.track_map.lifecycle.hidden_by_session" && metric.Last == 1d);
         Assert.Contains(snapshot.OverlayUpdates, metric => metric.Id == "overlay.track_map.lifecycle.context_available" && metric.Last == 1d);
         Assert.Contains(snapshot.OverlayUpdates, metric => metric.Id == "overlay.track_map.lifecycle.pause_eligible" && metric.Last == 1d);

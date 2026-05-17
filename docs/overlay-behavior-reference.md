@@ -89,7 +89,7 @@ Reviewer checks:
 
 ## Fuel Calculator
 
-Purpose: Estimate fuel range, stops, final stint shape, and whether tire service is effectively free.
+Purpose: Estimate fuel range, stops, and final stint shape without presenting unproven strategy advice as fact.
 
 Inputs:
 
@@ -103,14 +103,17 @@ Behavior:
 - Requires a local active driver/team context. In native overlay mode, focus on another car, unavailable focus, missing player car, garage/setup context, and no active local/pit context keep the enabled window hidden; localhost/model callers show `waiting for local fuel context`.
 - Shows planned race laps, stint count, and final stint target when those are known.
 - Otherwise shows current fuel, race laps remaining, and additional fuel needed.
-- Displays a strategy row when changing fuel rhythm avoids extra stops.
+- Uses measured completed green-lap fuel deltas first, exact history second, and keeps instantaneous `FuelUsePerHour` diagnostic-only.
+- In practice and qualifying, shows a `Practice Usage` or `Quali Usage` row with measured completed-lap min/avg/max and sample count; it waits for completed-lap evidence and does not use history or instantaneous burn for that row.
 - Displays stint rows for meaningful stints or a no-fuel-stop finish state.
-- Source text shows fuel-per-lap source, full-tank range, history source, historical min/avg/max when available, tire model source, and leader/class gap context.
-- Tire advice explains pending data, free tires, or expected time/fuel tradeoff.
+- Source text shows fuel-per-lap source, full-tank range, history source, historical min/avg/max when available, and leader/class gap context.
+- Rhythm optimization and tire-service tradeoff advice are hidden for V1.
 
 Reviewer checks:
 
-- Does the overlay distinguish live burn from historical/baseline burn?
+- Does the overlay distinguish measured green-lap burn from historical/baseline burn?
+- Does it avoid using instantaneous `FuelUsePerHour` as primary strategy burn?
+- Do practice/qualifying usage rows stay observational and wait for completed green laps?
 - Does the final stint display avoid implying an unnecessary fuel stop?
 - Are units correct in Metric and Imperial modes?
 

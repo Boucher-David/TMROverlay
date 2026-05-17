@@ -1,6 +1,6 @@
 # Windows Releases
 
-TmrOverlay publishes Windows tester builds from GitHub Actions. Starting with the Velopack release-channel branch, a release tag such as `v0.16.1` produces a public GitHub Release with Velopack installer/update assets plus the existing portable zip fallback.
+TmrOverlay publishes Windows tester builds from GitHub Actions. Release tags such as `v1.0.0` produce a public GitHub Release with Velopack installer/update assets plus the existing portable zip fallback.
 
 Expected release assets include:
 
@@ -50,7 +50,7 @@ Manual workflow dispatch can still produce package artifacts for a branch test r
 On Windows, a branch can produce an MSI without waiting for a tag by using the same Velopack path as the workflow. Use a unique prerelease/test version so the package identity does not collide with an installed release being validated:
 
 ```powershell
-$version = "0.20.1-local.$(Get-Date -Format yyyyMMddHHmmss)"
+$version = "1.0.0-local.$(Get-Date -Format yyyyMMddHHmmss)"
 $publishPath = ".\artifacts\local-publish"
 $velopackPath = ".\artifacts\local-velopack"
 
@@ -61,8 +61,8 @@ dotnet publish .\src\TmrOverlay.App\TmrOverlay.App.csproj `
   -p:PublishSingleFile=true `
   -p:IncludeNativeLibrariesForSelfExtract=true `
   -p:Version=$version `
-  -p:AssemblyVersion="0.20.1.0" `
-  -p:FileVersion="0.20.1.0" `
+  -p:AssemblyVersion="1.0.0.0" `
+  -p:FileVersion="1.0.0.0" `
   -p:InformationalVersion="$version+local" `
   -p:ContinuousIntegrationBuild=true `
   -p:DebugType=None `
@@ -109,7 +109,7 @@ The expected package shape is intentionally small:
 
 The executable icon is embedded from `src/TmrOverlay.App/Assets/TmrOverlay.ico`. Installer branding is generated from `tools/render_windows_installer_splash.swift` into `assets/brand/TMRInstallerSplash.png`, `assets/brand/TMRMsiBanner.bmp`, and `assets/brand/TMRMsiLogo.bmp`. The release manifest asset lists the exact published files and sizes for each build, so package review can happen without downloading and unzipping the app.
 
-Velopack package assets are generated from that audited publish folder. The package id is `TMROverlay`, the title is `Tech Mates Racing Overlay`, and the current channel is `win-x64`. The MSI installs Desktop and Start Menu shortcuts. Velopack shortcut locations are package-time options in the generated MSI path, so this branch creates both shortcuts by default rather than exposing per-shortcut wizard checkboxes. The package id intentionally changed from the early `TechMatesRacing.TmrOverlay` tester identity while the app is still pre-1.0 so installed package identity matches the shorter executable name.
+Velopack package assets are generated from that audited publish folder. The package id is `TMROverlay`, the title is `Tech Mates Racing Overlay`, and the current channel is `win-x64`. The MSI installs Desktop and Start Menu shortcuts. Velopack shortcut locations are package-time options in the generated MSI path, so this branch creates both shortcuts by default rather than exposing per-shortcut wizard checkboxes. The package id intentionally changed from the early `TechMatesRacing.TmrOverlay` tester identity so installed package identity matches the shorter executable name.
 
 ## Tester Download
 
@@ -163,17 +163,17 @@ The command should print `True`.
 
 ## Upgrade And Rollback
 
-Velopack-installed builds check the public GitHub Release feed. Startup checks remain passive, but the tray menu and Support tab now expose explicit user actions to download an available update and restart to apply it. The app does not auto-download, auto-apply, or restart without the user choosing those actions.
+Velopack-installed builds check the public GitHub Release feed once on app startup. Startup checks remain passive, but the tray menu and Support tab now expose explicit user actions to download an available update and restart to apply it. The app does not auto-download, auto-apply, or restart without the user choosing those actions.
 
 To upgrade a Velopack-installed build:
 
 1. Open TmrOverlay from the tray and use `Check for Updates`, or open the latest GitHub Release directly.
-2. If a newer release is available in the app, choose `Download and Install Update`.
-3. After the download finishes, choose `Restart to Apply Update`.
+2. If a newer release is available in the app, choose `Install`.
+3. After the download finishes, the primary action changes to `Restart`; choose it to apply the update.
 4. If the in-app update flow is unavailable or fails, close TmrOverlay and run the latest MSI from the GitHub Release.
 5. Launch TmrOverlay from the Desktop or Start Menu shortcut.
 
-Because the pre-1.0 package id moved from `TechMatesRacing.TmrOverlay` to `TMROverlay`, installed builds that used the older package id should be treated as a fresh installer transition: close the old app, run the new MSI, confirm `%LOCALAPPDATA%\TmrOverlay` settings/history are still present, and check the diagnostics bundle installer-cleanup metadata if a stale shortcut or old launch path is suspected. If Windows still shows both package entries, uninstall the old tester package from Windows settings.
+Because the early tester package id moved from `TechMatesRacing.TmrOverlay` to `TMROverlay`, installed builds that used the older package id should be treated as a fresh installer transition: close the old app, run the new MSI, confirm `%LOCALAPPDATA%\TmrOverlay` settings/history are still present, and check the diagnostics bundle installer-cleanup metadata if a stale shortcut or old launch path is suspected. If Windows still shows both package entries, uninstall the old tester package from Windows settings.
 
 To move from a portable zip to the Velopack installer:
 
@@ -209,4 +209,4 @@ For teammate feedback, ask testers to include:
 
 Diagnostics bundles include app version/runtime metadata, local logs, and live-overlay expected-state metadata. Rolling live-window overlay crops are included only when explicitly enabled for a diagnostic run. Bundles intentionally exclude raw `telemetry.bin` and source `.ibt` payloads.
 
-Diagnostics bundles also include release update state: whether the app is installed through Velopack, whether the current run is portable, the update source, current/latest versions, last checked time, download/apply timestamps, download progress, available update actions, and last failure if any. Installer cleanup metadata records the last startup/update legacy cleanup result so stale shortcuts or old package identity residue can be reviewed from the same bundle.
+Diagnostics bundles also include release update state: whether the app is installed through Velopack, whether the current run is portable, the update source, current/latest versions, last checked time, download/apply timestamps, download progress, available update actions, and last failure if any. Installer cleanup metadata records the last startup/update legacy cleanup result so stale shortcuts or old package identity residue can be reviewed from the same bundle. Performance metadata records settings-driven overlay form recreation counts, so a unit toggle should show updated unit-aware forms and zero recreated forms.

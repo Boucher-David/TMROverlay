@@ -138,8 +138,7 @@ function createReviewAppState() {
       canCheckUpdates: true,
       canInstallUpdate: false,
       canRestartUpdate: false,
-      updatePendingRestart: false,
-      releasePageAvailable: false
+      updatePendingRestart: false
     },
     overlays: Object.create(null)
   };
@@ -276,8 +275,7 @@ function applyReviewSupportPatch(patch) {
       canCheckUpdates: true,
       canInstallUpdate: false,
       canRestartUpdate: false,
-      updatePendingRestart: false,
-      releasePageAvailable: false
+      updatePendingRestart: false
   };
   const support = reviewAppState.support;
   const action = String(patch?.action || '').trim();
@@ -317,7 +315,6 @@ function applyReviewSupportPatch(patch) {
 function supportActionMessage(action) {
   return {
     installUpdate: 'No installable update in review run.',
-    openReleases: 'Opened releases page.',
     openLogs: 'Opened logs folder.',
     openDiagnostics: 'Opened diagnostics folder.',
     openCaptures: 'Opened captures folder.',
@@ -760,7 +757,6 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
       return applyReviewChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), overlayState), 'relative', overlayState, session), overlayId, previewMode);
     case 'fuel-calculator':
       {
-        const showAdvice = contentEnabled(overlayState, 'Advice column', true, [], session);
         const raceRows = [
           metricRow('Plan', '31 laps | 3 stints | 2 stops', 'info', [
             metricSegment('Race', '31 laps', 'info'),
@@ -777,35 +773,51 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
           ])
         ];
         const stintRows = [
-          metricRow('Stint 1', `12 laps | target ${formatFuelPerLap(3.1)} | tires free (${formatFuelVolume(36.8)})`, 'info', [
+          metricRow('Stint 1', `12 laps | target ${formatFuelPerLap(3.1)}`, 'info', [
             metricSegment('Laps', '12 laps', 'info'),
             metricSegment('Target', formatFuelPerLap(3.1), 'info'),
-            metricSegment('Save', formatFuelPerLap(0.2), 'warning'),
-            ...(showAdvice ? [metricSegment('Tires', `free (${formatFuelVolume(36.8)})`, 'success')] : [])
+            metricSegment('Save', formatFuelPerLap(0.2), 'warning')
           ]),
-          metricRow('Stint 2', `12 laps | target ${formatFuelPerLap(3.1)} | tires free (${formatFuelVolume(36.8)})`, 'info', [
+          metricRow('Stint 2', `12 laps | target ${formatFuelPerLap(3.1)}`, 'info', [
             metricSegment('Laps', '12 laps', 'info'),
             metricSegment('Target', formatFuelPerLap(3.1), 'info'),
-            metricSegment('Save', 'None', 'success'),
-            ...(showAdvice ? [metricSegment('Tires', `free (${formatFuelVolume(36.8)})`, 'success')] : [])
+            metricSegment('Save', 'None', 'success')
           ]),
-          metricRow('Stint 3', `7 laps final | target ${formatFuelPerLap(3.1)} | --`, 'info', [
+          metricRow('Stint 3', `7 laps final | target ${formatFuelPerLap(3.1)}`, 'info', [
             metricSegment('Laps', '7 laps', 'info'),
             metricSegment('Target', formatFuelPerLap(3.1), 'info'),
-            metricSegment('Save', 'None', 'success'),
-            ...(showAdvice ? [metricSegment('Tires', '--', 'waiting')] : [])
+            metricSegment('Save', 'None', 'success')
           ])
         ];
         const metricSections = [
-          { title: 'Race Information', rows: raceRows },
-          { title: 'Stint Targets', rows: stintRows }
+          { title: 'Race Information', rows: raceRows }
         ];
+        const usageLabel = session === 'qualifying'
+          ? 'Quali Usage'
+          : session === 'practice'
+            ? 'Practice Usage'
+            : null;
+        if (usageLabel != null) {
+          metricSections.push({
+            title: 'Fuel Usage',
+            rows: [
+              metricRow(usageLabel, `min ${formatFuelPerLap(3.0)} | avg ${formatFuelPerLap(3.1)} | max ${formatFuelPerLap(3.2)}`, 'info', [
+                metricSegment('Min', formatFuelPerLap(3.0), 'info'),
+                metricSegment('Avg', formatFuelPerLap(3.1), 'info'),
+                metricSegment('Max', formatFuelPerLap(3.2), 'info'),
+                metricSegment('Laps', '3 laps', 'info')
+              ])
+            ]
+          });
+        }
+        const visibleStintRows = usageLabel != null ? stintRows.slice(0, 1) : stintRows;
+        metricSections.push({ title: 'Stint Targets', rows: visibleStintRows });
         return applyReviewChrome(metricsModel(
           'fuel-calculator',
           'Fuel Calculator',
           '3 stints / 2 stops',
           metricSections.flatMap((section) => section.rows),
-          `burn ${formatFuelPerLap(3.1)} (live burn) | 34.2 laps/tank | history user | tires user pit history | gap O0.18 C0.04`,
+          `burn ${formatFuelPerLap(3.1)} (measured green lap) | 34.2 laps/tank | history user | gap O0.18 C0.04`,
           [],
           metricSections,
           [

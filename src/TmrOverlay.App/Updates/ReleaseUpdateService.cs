@@ -38,7 +38,7 @@ internal sealed class ReleaseUpdateService : IHostedService, IDisposable
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!_options.Enabled || !_options.CheckOnStartup)
+        if (!_options.Enabled)
         {
             return Task.CompletedTask;
         }

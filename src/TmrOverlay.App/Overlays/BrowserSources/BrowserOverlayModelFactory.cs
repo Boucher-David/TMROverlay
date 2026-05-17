@@ -384,12 +384,7 @@ internal sealed class BrowserOverlayModelFactory
 
         var viewModel = FuelCalculatorViewModel.From(
             strategyModel,
-            overlay is null
-                || OverlayContentColumnSettings.ContentEnabledForSession(
-                    overlay,
-                    OverlayOptionKeys.FuelAdvice,
-                    defaultEnabled: true,
-                    OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot)),
+            showAdvice: false,
             unitSystem,
             maximumRows: FuelVisibleRowsForHeight(
                 effectiveOverlay.Height > 0

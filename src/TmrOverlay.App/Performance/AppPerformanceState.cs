@@ -192,6 +192,29 @@ internal sealed class AppPerformanceState
         }
     }
 
+    public void RecordOverlaySettingsMutation(
+        string settingName,
+        DateTimeOffset timestampUtc,
+        int existingFormCount,
+        int updatedFormCount,
+        int recreatedFormCount)
+    {
+        if (string.IsNullOrWhiteSpace(settingName))
+        {
+            return;
+        }
+
+        var normalizedSettingName = NormalizeMetricSegment(settingName);
+        lock (_sync)
+        {
+            var prefix = $"overlay.manager.settings.{normalizedSettingName}";
+            RecordOverlayUpdateValue($"{prefix}.changed", 1d, timestampUtc);
+            RecordOverlayUpdateValue($"{prefix}.existing_form_count", Math.Max(0, existingFormCount), timestampUtc);
+            RecordOverlayUpdateValue($"{prefix}.updated_form_count", Math.Max(0, updatedFormCount), timestampUtc);
+            RecordOverlayUpdateValue($"{prefix}.recreated_form_count", Math.Max(0, recreatedFormCount), timestampUtc);
+        }
+    }
+
     public void RecordOverlayLifecycleState(
         string overlayId,
         DateTimeOffset timestampUtc,

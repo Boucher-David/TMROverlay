@@ -44,6 +44,7 @@ const outputRoot = resolve(repoRoot, args.output || defaultOutputFor(args.surfac
 const port = args.port || Number.parseInt(process.env.TMR_BROWSER_SCREENSHOT_PORT || '5199', 10);
 const baseUrl = stripTrailingSlash(args.baseUrl || `http://127.0.0.1:${port}`);
 const settleMilliseconds = args.settleMilliseconds ?? 350;
+const screenshotUnitSystem = normalizeUnitSystem(process.env.TMR_REVIEW_UNIT_SYSTEM || process.env.TMR_UNIT_SYSTEM || 'Metric');
 let serverProcess = null;
 
 try {
@@ -74,6 +75,7 @@ try {
       generatedAtUtc: new Date().toISOString(),
       baseUrl,
       surfaceMode: args.surface,
+      unitSystem: screenshotUnitSystem,
       screenshots: manifest
     }, null, 2)}\n`);
   console.log(`Wrote ${manifest.length} ${args.surface} screenshots to ${outputRoot}`);
@@ -332,6 +334,7 @@ async function captureRoute(page, route, manifest) {
     activeRegion: dom.activeRegion,
     routeAlias: route.routeAlias || null,
     previewMode: route.previewMode || null,
+    unitSystem: route.unitSystem || screenshotUnitSystem,
     menuId: route.menuId || null,
     status: stringOrNull(model?.status),
     source: stringOrNull(model?.source),
@@ -701,6 +704,7 @@ function uiEvidence(route, dom) {
     requestedRegion: route.region || null,
     activeRegion: dom.activeRegion || null,
     previewMode: route.previewMode || null,
+    unitSystem: route.unitSystem || screenshotUnitSystem,
     root: dom.layout?.root || null,
     contentBounds: dom.contentBounds || null,
     sidebar: firstElement(elements, 'settings-sidebar'),
@@ -837,6 +841,7 @@ function modelLayoutEvidence(model, layout) {
   return {
     contract: 'overlay-model-layout-evidence/v1',
     bodyKind: stringOrNull(model.bodyKind),
+    unitSystem: screenshotUnitSystem,
     columns: (Array.isArray(model.columns) ? model.columns : []).map((column, index) => {
       const rendered = tableRendering.headers[index] || null;
       return {
@@ -1496,6 +1501,7 @@ function scenarioEvidence(route, model, layout = null) {
     tab: route.tab || null,
     region: route.region || null,
     previewMode: route.previewMode || null,
+    unitSystem: route.unitSystem || screenshotUnitSystem,
     routeAlias: route.routeAlias || null,
     captureMode: route.captureMode || null,
     cropBounds: route.clip || null,
@@ -1511,6 +1517,10 @@ function scenarioEvidence(route, model, layout = null) {
         : 'browser-review-preview-fixture',
     urlPath: route.urlPath,
     selector: route.selector,
+    settingsContract: {
+      unitSystem: route.unitSystem || screenshotUnitSystem,
+      unitToggleLifecycle: 'browser-review-renders-model-values-without-native-form-lifecycle'
+    },
     sourceFiles,
     modelSummary,
     modelHash: model ? stableHash(model) : null
@@ -2484,6 +2494,12 @@ function requiredValue(values, index, flag) {
 
 function stripTrailingSlash(value) {
   return String(value || '').replace(/\/+$/, '');
+}
+
+function normalizeUnitSystem(value) {
+  return String(value || '').trim().toLowerCase() === 'imperial'
+    ? 'Imperial'
+    : 'Metric';
 }
 
 function formatError(error) {

@@ -122,53 +122,47 @@ The first real fuel overlay should favor clarity over breadth. The current imple
 Implemented initial overlay contents:
 
 - overview row: planned race laps, planned stint count, and final stint target
-- optional strategy row: compares a conservative shorter stint rhythm against the longest realistic target, then shows extra stops and estimated pit-time loss across any race length
+- practice/qualifying observation row: completed green-lap min/avg/max usage and sample count, waiting until measured evidence exists
 - stint rows: whole-lap targets such as neutral `8/8/7/7` or team-history-adjusted `7/8/7/8`
-- per-stint target liters-per-lap only; live/model burn is kept out of the row for now
-- advice column: per-stop guidance such as `tires free (106 L)`, `tires +4s`, `tire data pending`, `no tire stop`, or strategy time-loss/saving hints
+- per-stint target liters-per-lap only; selected burn source stays in the source footer
 - stable content state: when no fuel stop remains, including after the final stop, the overlay keeps the same full table layout and leaves future rows blank so threshold changes do not switch the view mid-run
 - shared source footer: selected burn source, laps-per-tank, history source, and min/avg/max burn when enabled
 - status color:
   - gray: waiting for usable fuel/burn
-  - amber: realistic fuel-saving target, final-stop deletion opportunity, or rhythm strategy opportunity
+  - amber: realistic fuel-saving target or final-stop deletion opportunity
   - green: current plan is covered by the selected model
+
+For V1, rhythm optimization and tire-free/tire-change advice are hidden. They remain future fuel-calculator work because the current pit-service evidence can make those recommendations look more certain than they are.
 
 Current derivations:
 
-- `burn_lph = FuelUsePerHour / DriverCarFuelKgPerLtr`
-- `minutes_left = FuelLevel / burn_lph * 60`
-- `laps_left = FuelLevel / (burn_lph * est_lap_time_s / 3600)`
+- `instant_lph = FuelUsePerHour / DriverCarFuelKgPerLtr` for diagnostic/current-fuel context only
+- `minutes_left = FuelLevel / instant_lph * 60`
+- `selected_fuel_per_lap = measured_completed_green_lap_delta` first, then exact user/baseline history
+- `practice_quali_usage = measured_completed_green_lap_min_avg_max`; this is observation only and does not use history or instantaneous burn
+- `laps_left = FuelLevel / selected_fuel_per_lap` only when selected burn evidence exists
 - `race_laps = ceil(overall_leader_progress + session_time_remaining / leader_pace) - team_progress`
 - `full_tank_laps = DriverCarFuelMaxLtr / selected_fuel_per_lap`
 - `whole_lap_targets = distribute(ceil(race_laps_remaining), planned_stint_count)`
 - `target_fuel_per_lap = available_fuel_for_stint / target_laps`
 - `required_save_per_lap = max(0, target_laps * selected_fuel_per_lap - available_fuel) / target_laps`
-- `rhythm_delta = ceil(race_laps / short_target_laps) - ceil(race_laps / long_target_laps)`
-- `rhythm_time_loss = rhythm_delta * historical_pit_lane_seconds`
-- `refuel_seconds = fuel_to_add / observed_fill_rate`
-- `tire_time_loss = max(refuel_seconds, tire_service_seconds) - max(refuel_seconds, no_tire_service_seconds)`
 
-The overlay must keep live race telemetry as the primary source for strategy and fuel numbers. Live session time, leader/team progress, lap pace, fuel level, fuel burn, pit state, and completed-stint inference should continuously update the table. Exact user history is only a fallback/model until the current session has enough reliable live data. Baseline/sample history is opt-in for development and must not override live data.
+The overlay must keep live race telemetry as the primary source for current fuel and race context. Current fuel may refresh during grid/pre-green/pit states, but strategy burn updates only after completed valid green laps from local fuel-level deltas. Exact user history is only a fallback/model until the current session has measured green-lap evidence. Baseline/sample history is opt-in for development and must not override live measured evidence.
 
-During teammate stints, local scalar fuel can be unavailable. The same gap can happen when the user switches focus to another driver/car whose fuel scalars are not exposed. In that mode the overlay should continue using available team/focus progress plus user/baseline fuel and completed-stint history, label the usage as a model rather than live burn, and keep completed stints in historical storage instead of rendering them as active table rows.
-
-If matching history exists but live fuel is unavailable for the selected/focused driver, the table should still show modeled stint analysis and strategy comparison instead of becoming empty. The key UI distinction is source confidence: measured live fuel when available, historical/model stint analysis when fuel scalars are hidden or unavailable.
+During teammate stints, local scalar fuel can be unavailable. The same gap can happen when the user switches focus to another driver/car whose fuel scalars are not exposed. For V1, the fuel calculator is local in-car/pit only; it does not render modeled active strategy for teammate/focused-other-car contexts. Completed stints can still be stored in historical storage for later use.
 
 When historical completed-stint data shows team stints around 8 laps and the fuel-saving requirement stays within the realistic threshold, the calculator can bias projected rows to 8 laps. This is a planning hint, not proof that current live teammate fuel is directly available, and the UI intentionally does not label rows as teammate stints.
-
-Strategy analysis should feed table generation, not be a separate afterthought. For every race length, the calculator should check whether a slightly longer realistic stint rhythm avoids one or more stops versus the conservative rhythm, then show the stop/time cost in the table before listing the next actionable stints. Long endurance races should not render every future stint row; the overlay should keep a stable near-term table plus the strategic delta. As live progress advances, completed rows should disappear from the active row content so the top actionable row is the current or next stint, while the table layout itself remains stable.
-
-Tire guidance is also a planning hint. It should only use measured or confidence-flagged historical pit-service data, and it should display `tire data pending` when fill-rate or tire-service history is not available for the combo.
 
 ## Next Direction
 
 The next implementation step is to harden the fuel/stint overlay by adding:
 
-- rolling smoothing around live fuel burn so instantaneous `FuelUsePerHour` spikes do not whipsaw stint targets
+- longer rolling smoothing and source-confidence labels for measured green-lap burn
 - explicit reserve/margin settings
 - broader fallback lookup for same car or similar track when exact car/track/session history is missing
 - modeled stint-analysis rows when selected/focused-driver fuel is unavailable but completed-stint history exists
 - confidence/source flags in the overlay so teammate-stint fuel is never treated as direct measured fuel unless a future source exposes it
+- rhythm optimization and tire-service advice once pit-service history has stronger source buckets
 
 ## Pit Service Timing Direction
 

@@ -13,7 +13,7 @@ using TmrOverlay.Core.Telemetry.Live;
 
 namespace TmrOverlay.App.Overlays.InputState;
 
-internal sealed class InputStateOverlayForm : PersistentOverlayForm
+internal sealed class InputStateOverlayForm : PersistentOverlayForm, IUnitSystemAwareOverlay
 {
     private const int RefreshIntervalMilliseconds = 50;
     private const int MaximumTracePoints = 180;
@@ -32,7 +32,7 @@ internal sealed class InputStateOverlayForm : PersistentOverlayForm
     private readonly AppPerformanceState _performanceState;
     private readonly OverlaySettings _settings;
     private readonly string _fontFamily;
-    private readonly string _unitSystem;
+    private string _unitSystem;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private readonly List<InputTracePoint> _trace = [];
     private LiveInputTelemetryModel _latestInputs = LiveInputTelemetryModel.Empty;
@@ -67,7 +67,7 @@ internal sealed class InputStateOverlayForm : PersistentOverlayForm
         _performanceState = performanceState;
         _settings = settings;
         _fontFamily = fontFamily;
-        _unitSystem = unitSystem;
+        _unitSystem = NormalizeUnitSystem(unitSystem);
         BackColor = OverlayTheme.Colors.WindowBackground;
 
         _refreshTimer = new System.Windows.Forms.Timer
@@ -86,6 +86,18 @@ internal sealed class InputStateOverlayForm : PersistentOverlayForm
         _refreshTimer.Start();
 
         RefreshOverlay();
+    }
+
+    public void SetUnitSystem(string unitSystem)
+    {
+        _unitSystem = NormalizeUnitSystem(unitSystem);
+    }
+
+    private static string NormalizeUnitSystem(string unitSystem)
+    {
+        return string.Equals(unitSystem, "Imperial", StringComparison.OrdinalIgnoreCase)
+            ? "Imperial"
+            : "Metric";
     }
 
     protected override void Dispose(bool disposing)

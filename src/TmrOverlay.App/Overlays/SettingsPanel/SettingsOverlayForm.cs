@@ -78,7 +78,6 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
     private readonly Panel _updateBannerPanel;
     private readonly Label _updateBannerLabel;
     private readonly Button _updateBannerCheckButton;
-    private readonly Button _updateBannerOpenButton;
     private readonly TabControl _tabs;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private readonly System.Windows.Forms.Timer _saveApplyTimer;
@@ -97,6 +96,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
     private Label? _latestDiagnosticsBundleLabel;
     private Label? _supportStatusLabel;
     private Label? _releaseUpdateStatusLabel;
+    private Button? _releaseUpdatePrimaryButton;
     private TextBox? _garageCoverImagePathBox;
     private Panel? _garageCoverPreviewPanel;
     private Label? _garageCoverPreviewCaptionLabel;
@@ -242,12 +242,9 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        _updateBannerOpenButton = CreateBannerButton("Open", ClientSize.Width - 184);
-        _updateBannerOpenButton.Click += (_, _) => OpenReleaseUpdatePage();
         _updateBannerCheckButton = CreateBannerButton("Check", ClientSize.Width - 104);
         _updateBannerCheckButton.Click += async (_, _) => await RunPrimaryUpdateActionFromSettingsAsync().ConfigureAwait(true);
         _updateBannerPanel.Controls.Add(_updateBannerLabel);
-        _updateBannerPanel.Controls.Add(_updateBannerOpenButton);
         _updateBannerPanel.Controls.Add(_updateBannerCheckButton);
 
         _tabs = new TabControl
@@ -295,7 +292,6 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
                 CheckForUpdatesAsync = CheckForUpdatesFromSettingsAsync,
                 DownloadAndPrepareUpdateAsync = DownloadAndPrepareUpdateFromSettingsAsync,
                 RestartToApplyUpdate = RestartToApplyUpdateFromSettings,
-                OpenReleaseUpdatePage = OpenReleaseUpdatePage,
                 CopyTextToClipboard = CopyTextToClipboard,
                 SetSessionPreview = SetSessionPreview,
                 SessionPreviewSnapshot = _sessionPreviewState.Snapshot,
@@ -357,7 +353,6 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             _v2Surface?.Dispose();
             _tabs.Dispose();
             _updateBannerCheckButton.Dispose();
-            _updateBannerOpenButton.Dispose();
             _updateBannerLabel.Dispose();
             _updateBannerPanel.Dispose();
             _closeButton.Dispose();
@@ -424,8 +419,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         _updateBannerPanel.Location = new Point(OverlayTheme.Layout.SettingsTabInset, OverlayTheme.Layout.SettingsTitleBarHeight + 8);
         _updateBannerPanel.Size = new Size(width, 32);
         _updateBannerCheckButton.Location = new Point(Math.Max(210, width - 82), 4);
-        _updateBannerOpenButton.Location = new Point(Math.Max(132, width - 160), 4);
-        _updateBannerLabel.Size = new Size(Math.Max(80, width - 184), 20);
+        _updateBannerLabel.Size = new Size(Math.Max(80, width - 106), 20);
     }
 
     private void LayoutSettingsTabs()
@@ -673,7 +667,6 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         SetLabelText(_updateBannerLabel, ReleaseUpdateBannerText(snapshot));
         SetTextIfChanged(_updateBannerCheckButton, PrimaryUpdateActionText(snapshot));
         SetEnabledIfChanged(_updateBannerCheckButton, PrimaryUpdateActionEnabled(snapshot));
-        SetEnabledIfChanged(_updateBannerOpenButton, !string.IsNullOrWhiteSpace(snapshot.ReleasePageUrl));
 
         if (_releaseUpdateStatusLabel is not null)
         {
@@ -681,9 +674,15 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             SetLabelColor(_releaseUpdateStatusLabel, ColorForReleaseUpdateStatus(snapshot.Status));
         }
 
+        if (_releaseUpdatePrimaryButton is not null)
+        {
+            SetTextIfChanged(_releaseUpdatePrimaryButton, PrimaryUpdateActionText(snapshot));
+            SetEnabledIfChanged(_releaseUpdatePrimaryButton, PrimaryUpdateActionEnabled(snapshot));
+        }
+
         if (_v2Surface is not null)
         {
-            if (releaseStatusChanged && _v2Surface.IsSupportSelected)
+            if (releaseStatusChanged)
             {
                 _v2Surface.RefreshSelectedPage();
             }
@@ -752,30 +751,6 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             default:
                 await CheckForUpdatesFromSettingsAsync().ConfigureAwait(true);
                 break;
-        }
-    }
-
-    private void OpenReleaseUpdatePage()
-    {
-        var snapshot = _releaseUpdates.Snapshot();
-        if (string.IsNullOrWhiteSpace(snapshot.ReleasePageUrl))
-        {
-            SetSupportStatus("No update page available.", isError: true);
-            return;
-        }
-
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = snapshot.ReleasePageUrl,
-                UseShellExecute = true
-            });
-            SetSupportStatus("Opened release page.", isError: false);
-        }
-        catch (Exception exception)
-        {
-            SetSupportStatus($"Open failed: {exception.Message}", isError: true);
         }
     }
 
@@ -1008,17 +983,18 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         _releaseUpdateStatusLabel = CreateMultiLineValueLabel(ReleaseUpdateSupportText(_releaseUpdates.Snapshot()), 564, top + 62, 330, 76);
         var checkButton = CreateActionButton("Check", 564, top + 150, 86);
         checkButton.Click += async (_, _) => await CheckForUpdatesFromSettingsAsync().ConfigureAwait(true);
-        var installButton = CreateActionButton("Install", 660, top + 150, 86);
-        installButton.Click += async (_, _) => await RunPrimaryUpdateActionFromSettingsAsync().ConfigureAwait(true);
-        var openButton = CreateActionButton("Releases", 756, top + 150, 92);
-        openButton.Click += (_, _) => OpenReleaseUpdatePage();
+        _releaseUpdatePrimaryButton = CreateActionButton(
+            PrimaryUpdateActionText(_releaseUpdates.Snapshot()),
+            660,
+            top + 150,
+            86);
+        _releaseUpdatePrimaryButton.Click += async (_, _) => await RunPrimaryUpdateActionFromSettingsAsync().ConfigureAwait(true);
 
         page.Controls.Add(title);
         page.Controls.Add(note);
         page.Controls.Add(_releaseUpdateStatusLabel);
         page.Controls.Add(checkButton);
-        page.Controls.Add(installButton);
-        page.Controls.Add(openButton);
+        page.Controls.Add(_releaseUpdatePrimaryButton);
     }
 
     private void AddSupportStorageControls(TabPage page, int x, int top, int width)

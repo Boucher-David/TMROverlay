@@ -13,45 +13,70 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v0.20.1 - Windows Fixes And V1 Candidate Polish
+### v1.0.0 - Private Team Release Candidate
 
 Current branch name:
 
 ```text
-v0.20.1-windows-fixes
+v1.0.0-fuel-and-release-handoff
 ```
 
 Release/tag decision:
 
-- Treat this as a patch hardening branch on top of the tagged `v0.20.0` model-completeness baseline unless the final branch diff deliberately widens into a new milestone.
-- Do not create the `v0.20.1` release tag until the branch is merged or explicitly designated as the release point.
-- `Directory.Build.props` is aligned to `0.20.1` so branch-built MSI and screenshot artifacts are distinguishable from the tagged `v0.20.0` baseline.
-- Keep `fixtures/data-contracts/v0.19.0/` as the previous durable-release snapshot unless this branch deliberately changes a persisted user-data contract.
+- Treat this as the V1.0 private-team release candidate branch on top of the tagged `v0.20.1` Windows parity baseline.
+- Do not create the `v1.0.0` release tag until the branch is merged or explicitly designated as the release point.
+- `Directory.Build.props` is aligned to `1.0.0` so branch-built MSI and screenshot artifacts are distinguishable from the tagged `v0.20.1` baseline.
+- Keep `fixtures/data-contracts/v0.19.0/` as the previous durable-release snapshot unless this branch deliberately changes a persisted user-data contract or the final V1 release pass adds a new release snapshot.
 
 Planned scope:
 
-- Fix Windows/native, browser review, and localhost parity issues in the current overlay/settings surfaces.
+- Narrow Fuel Calculator V1 so it is local in-car/pit only, keeps current fuel live, and waits for measured completed green-lap burn or exact history before showing strategy burn.
+- Add safe practice/qualifying usage rows that show completed green-lap min/avg/max and sample count without turning those observations into strategy advice.
+- Keep instantaneous `FuelUsePerHour` as diagnostic/current-fuel context rather than fuel-per-lap strategy evidence.
+- Hide rhythm optimization, tire-service advice, and fuel advice settings until a V1.x/V2 fuel strategy pass has stronger pit-service source buckets.
 - Preserve completed `LiveTelemetrySnapshot.Models` as the active native, localhost, and browser overlay runtime contract.
-- Keep `LatestSample` as collector, diagnostics, compatibility, and test evidence rather than an overlay rendering input.
 - Keep localhost overlay pages on `/api/overlay-model/{id}` and keep `/api/snapshot` as a diagnostic/compatibility route, not an overlay page runtime dependency.
+- Add first-pass teammate-facing V1 release readiness docs that separate install/test/support flow from internal future-branch planning.
 - Keep browser review as the primary local development surface, localhost as the OBS/browser-source route surface, and Windows as the production/iRacing behavior gate.
-- Keep the deprecated mac harness out of the V1 parity, screenshot, and release gate.
-- For any overlay/settings/renderer/browser/localhost change, keep screenshot generator and validation-profile coverage aligned across native Windows, browser review, and localhost.
 
 Branch-complete checklist:
 
-1. Re-read the final branch diff before writing the squash title/body; do not reuse the stale v0.20.0 model-completeness text for this patch branch.
-2. Confirm `Directory.Build.props` stays aligned to `0.20.1` before tagging.
-3. Refresh `docs/model-v2-future-branches.md` and any behavior docs touched by the actual fixes.
-4. Run the branch-appropriate browser review, localhost, Windows screenshot, and Windows .NET gates before tagging.
+1. Re-read the final branch diff before writing the squash title/body; do not reuse stale model-completeness or Windows-parity text for this V1 branch.
+2. Confirm `Directory.Build.props` stays aligned to `1.0.0` before tagging.
+3. Refresh `docs/model-v2-future-branches.md`, `docs/v1-release-readiness.md`, and any behavior docs touched by the actual fixes.
+4. Run the branch-appropriate browser review, localhost, screenshot expectation, Windows screenshot, data-contract, publish dry-run, and Windows .NET gates before tagging.
 
 Suggested squash title:
+
+```text
+[v1.0.0] Prepare private team V1 fuel and release handoff
+```
+
+Suggested squash body:
+
+- Made Fuel Calculator V1 conservative by rendering only in local in-car/pit context, keeping current fuel live, and using measured completed green-lap fuel deltas before exact history for strategy burn.
+- Added observational practice/qualifying usage rows backed only by completed green-lap min/avg/max samples.
+- Kept pre-green/grid fuel consumption in current-fuel state while preventing pre-green-to-green drops and instantaneous `FuelUsePerHour` from becoming fuel-per-lap strategy evidence.
+- Hid rhythm optimization, tire-service advice, and the fuel advice content control from V1 overlay/settings surfaces while keeping future helper shapes available for a later strategy branch.
+- Updated native, browser review, localhost, screenshot, replay-export, and test fixtures so fuel source labels and rows match the V1 behavior.
+- Made Velopack-installed builds check for updates on startup without the old configured delay, consolidated install/restart into one primary action, refreshed settings controls when downloads become pending restarts, and removed in-app release-page launchers.
+- Applied unit-system changes in place for unit-aware overlays so non-unit overlays such as Stream Chat are not recreated on Metric/Imperial toggles; added lifecycle diagnostics and screenshot-manifest unit evidence to catch related regressions.
+- Added teammate-facing V1 release readiness docs covering product scope, install/test/support flow, validation gates, accepted rough edges, and fuel/teammate telemetry caveats.
+- Aligned shared build metadata to `1.0.0` for V1 candidate branch artifacts without introducing a durable user-data schema change.
+
+## Merged Mainline Milestones
+
+### v0.20.1 - Windows Fixes And V1 Candidate Polish
+
+Commit: `ea73353`
+
+Squash title:
 
 ```text
 [v0.20.1] Harden Windows parity and screenshot validation
 ```
 
-Suggested squash body:
+Summary:
 
 - Aligned native Windows, browser review, and localhost overlay parity for the Design V2 surfaces, including configured overlay sizes, table/metric row geometry, track map defaults/evidence, input graph evidence, Gap To Leader graph evidence, Stream Chat evidence, and review fixture data.
 - Added Standings fastest-lap and last-lap columns, kept race-only Relative lap-down coloring, and preserved native/browser/localhost content-option coverage through shared settings contracts and tests.
@@ -59,18 +84,6 @@ Suggested squash body:
 - Added Windows installer screenshot capture and the browser installer review surface, kept MSI capture bundled with the Windows screenshot command, and removed the unresolved welcome placeholder path.
 - Refreshed telemetry and SDK corpora for pit-service tire inventory evidence, NASCAR/PCup tire-set interpretation, and SDK field availability without changing durable user-data schemas.
 - Refreshed branch docs, archived historical/research-only docs under `docs/archive/`, documented local branch MSI/screenshot generation, and aligned shared build metadata to `0.20.1`.
-
-## Next Planned Milestone
-
-No version number is assigned here yet. After `v0.20.1`, keep the next branch focused on V1-candidate release readiness unless teammate testing or Windows validation forces another patch.
-
-Likely scope:
-
-- Use the telemetry and SDK corpora for overlay behavior validation as teammate test evidence arrives.
-- Continue release-readiness checks: product-scope lock, installer/update polish, first-run docs, Windows-native behavior validation, and support-bundle completeness.
-- Keep branch theory, fixture-corpus decisions, and future-product discussion in `docs/model-v2-future-branches.md`.
-
-## Merged Mainline Milestones
 
 ### v0.20.0 - Model Completeness Runtime Contract
 

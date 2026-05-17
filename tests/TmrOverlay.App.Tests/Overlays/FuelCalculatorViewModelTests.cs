@@ -2,6 +2,7 @@ using TmrOverlay.App.Overlays.FuelCalculator;
 using TmrOverlay.App.Overlays.SimpleTelemetry;
 using TmrOverlay.Core.Fuel;
 using TmrOverlay.Core.History;
+using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Telemetry.Live;
 using Xunit;
 
@@ -38,9 +39,13 @@ public sealed class FuelCalculatorViewModelTests
             CurrentFuelLiters: 50d,
             FuelPercent: 0.5d,
             FuelPerLapLiters: 10d,
-            FuelPerLapSource: "live burn",
+            FuelPerLapSource: "measured green lap",
             FuelPerLapMinimumLiters: 9.8d,
             FuelPerLapMaximumLiters: 10.2d,
+            MeasuredFuelPerLapMinimumLiters: 9.8d,
+            MeasuredFuelPerLapAverageLiters: 10d,
+            MeasuredFuelPerLapMaximumLiters: 10.2d,
+            MeasuredFuelPerLapSampleCount: 3,
             FuelPerHourLiters: null,
             LapTimeSeconds: 100d,
             LapTimeSource: "live",
@@ -77,7 +82,7 @@ public sealed class FuelCalculatorViewModelTests
                     TargetLaps: 5,
                     TargetFuelPerLapLiters: 10d,
                     CurrentFuelPerLapLiters: 10d,
-                    CurrentFuelPerLapSource: "live burn",
+                    CurrentFuelPerLapSource: "measured green lap",
                     RequiredFuelSavingLitersPerLap: null,
                     RequiredFuelSavingPercent: null,
                     TireAdvice: new TireChangeAdvice("tires free (50 L)", FuelToAddLiters: 50d, TimeLossSeconds: 0d)),
@@ -88,11 +93,12 @@ public sealed class FuelCalculatorViewModelTests
                     TargetLaps: 7,
                     TargetFuelPerLapLiters: 10d,
                     CurrentFuelPerLapLiters: 10d,
-                    CurrentFuelPerLapSource: "live burn",
+                    CurrentFuelPerLapSource: "measured green lap",
                     RequiredFuelSavingLitersPerLap: null,
                     RequiredFuelSavingPercent: null,
                     TireAdvice: TireChangeAdvice.NoStop)
-            ]);
+            ],
+            SessionKind: OverlaySessionKind.Race);
 
         var viewModel = FuelCalculatorViewModel.From(
             strategy,
@@ -142,9 +148,81 @@ public sealed class FuelCalculatorViewModelTests
         Assert.Equal(SimpleTelemetryTone.Info, stint.Tone);
         Assert.Contains(stint.Segments, segment => segment.Label == "Laps" && segment.Tone == SimpleTelemetryTone.Info);
         Assert.Contains(stint.Segments, segment => segment.Label == "Target" && segment.Tone == SimpleTelemetryTone.Info);
-        Assert.Contains(stint.Segments, segment => segment.Label == "Tires" && segment.Tone == SimpleTelemetryTone.Success);
+        Assert.DoesNotContain(stint.Segments, segment => segment.Label == "Tires");
+        Assert.DoesNotContain(viewModel.Rows, row => row.Advice.Contains("tires", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(
             viewModel.MetricSections.SelectMany(section => section.Rows).SelectMany(row => row.Segments),
             segment => segment.Tone == SimpleTelemetryTone.Modeled);
+    }
+
+    [Fact]
+    public void From_ShowsMeasuredUsageRowsForPracticeAndQualifying()
+    {
+        var strategy = new FuelStrategySnapshot(
+            HasData: true,
+            Status: "stint estimate",
+            CurrentFuelLiters: 40d,
+            FuelPercent: 0.4d,
+            FuelPerLapLiters: 5.2d,
+            FuelPerLapSource: "measured green lap",
+            FuelPerLapMinimumLiters: null,
+            FuelPerLapMaximumLiters: null,
+            MeasuredFuelPerLapMinimumLiters: 5.0d,
+            MeasuredFuelPerLapAverageLiters: 5.2d,
+            MeasuredFuelPerLapMaximumLiters: 5.4d,
+            MeasuredFuelPerLapSampleCount: 3,
+            FuelPerHourLiters: null,
+            LapTimeSeconds: 100d,
+            LapTimeSource: "live",
+            RacePaceSeconds: 100d,
+            RacePaceSource: "live",
+            RaceLapsRemaining: null,
+            RaceLapEstimateSource: "unavailable",
+            OverallLeaderGapLaps: null,
+            ClassLeaderGapLaps: null,
+            TeamOverallPosition: null,
+            TeamClassPosition: null,
+            PlannedRaceLaps: null,
+            FuelToFinishLiters: null,
+            AdditionalFuelNeededLiters: null,
+            FullTankStintLaps: 19.2d,
+            PlannedStintCount: null,
+            PlannedStopCount: null,
+            FinalStintTargetLaps: null,
+            RequiredFuelSavingLitersPerLap: null,
+            RequiredFuelSavingPercent: null,
+            StopOptimization: null,
+            RhythmComparison: null,
+            TeammateStintTargetLaps: null,
+            TeammateStintTargetSource: null,
+            TireModelSource: "none",
+            FuelFillRateLitersPerSecond: null,
+            TireChangeServiceSeconds: null,
+            Stints: [],
+            SessionKind: OverlaySessionKind.Practice);
+
+        var practice = FuelCalculatorViewModel.From(
+            strategy,
+            SessionHistoryLookupResult.Empty(new HistoricalComboIdentity { CarKey = "car", TrackKey = "track", SessionKey = "practice" }),
+            showAdvice: false,
+            unitSystem: "Metric",
+            maximumRows: 4);
+        var qualifying = FuelCalculatorViewModel.From(
+            strategy with { SessionKind = OverlaySessionKind.Qualifying },
+            SessionHistoryLookupResult.Empty(new HistoricalComboIdentity { CarKey = "car", TrackKey = "track", SessionKey = "qualifying" }),
+            showAdvice: false,
+            unitSystem: "Metric",
+            maximumRows: 4);
+
+        var practiceUsage = Assert.Single(practice.MetricSections.Single(section => section.Title == "Fuel Usage").Rows);
+        Assert.Equal("Practice Usage", practiceUsage.Label);
+        Assert.Contains(practiceUsage.Segments, segment => segment.Label == "Min" && segment.Value == "5.0 L/lap");
+        Assert.Contains(practiceUsage.Segments, segment => segment.Label == "Avg" && segment.Value == "5.2 L/lap");
+        Assert.Contains(practiceUsage.Segments, segment => segment.Label == "Max" && segment.Value == "5.4 L/lap");
+        Assert.Contains(practiceUsage.Segments, segment => segment.Label == "Laps" && segment.Value == "3 laps");
+
+        var qualiUsage = Assert.Single(qualifying.MetricSections.Single(section => section.Title == "Fuel Usage").Rows);
+        Assert.Equal("Quali Usage", qualiUsage.Label);
+        Assert.Contains(qualiUsage.Segments, segment => segment.Label == "Avg" && segment.Value == "5.2 L/lap");
     }
 }

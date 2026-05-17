@@ -11,7 +11,7 @@ using TmrOverlay.Core.Telemetry.Live;
 
 namespace TmrOverlay.App.Overlays.SimpleTelemetry;
 
-internal sealed class SimpleTelemetryOverlayForm : PersistentOverlayForm
+internal sealed class SimpleTelemetryOverlayForm : PersistentOverlayForm, IUnitSystemAwareOverlay
 {
     private const int MaximumRows = 10;
     private const int MinimumTableHeight = 128;
@@ -23,7 +23,7 @@ internal sealed class SimpleTelemetryOverlayForm : PersistentOverlayForm
     private readonly AppPerformanceState _performanceState;
     private readonly OverlaySettings _settings;
     private readonly string _fontFamily;
-    private readonly string _unitSystem;
+    private string _unitSystem;
     private readonly SimpleTelemetryOverlayMetrics _metrics;
     private readonly Func<LiveTelemetrySnapshot, DateTimeOffset, string, SimpleTelemetryOverlayViewModel> _buildViewModel;
     private readonly Label _titleLabel;
@@ -60,7 +60,7 @@ internal sealed class SimpleTelemetryOverlayForm : PersistentOverlayForm
         _performanceState = performanceState;
         _settings = settings;
         _fontFamily = fontFamily;
-        _unitSystem = unitSystem;
+        _unitSystem = NormalizeUnitSystem(unitSystem);
         _metrics = metrics;
         _buildViewModel = buildViewModel;
 
@@ -118,6 +118,18 @@ internal sealed class SimpleTelemetryOverlayForm : PersistentOverlayForm
         _refreshTimer.Start();
 
         RefreshOverlay();
+    }
+
+    public void SetUnitSystem(string unitSystem)
+    {
+        _unitSystem = NormalizeUnitSystem(unitSystem);
+    }
+
+    private static string NormalizeUnitSystem(string unitSystem)
+    {
+        return string.Equals(unitSystem, "Imperial", StringComparison.OrdinalIgnoreCase)
+            ? "Imperial"
+            : "Metric";
     }
 
     protected override void OnResize(EventArgs e)

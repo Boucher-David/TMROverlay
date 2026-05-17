@@ -1,6 +1,6 @@
 # TmrOverlay
 
-TmrOverlay is a pre-1.0 Windows companion app for iRacing. It runs as a tray application, reads live iRacing telemetry, and renders small purpose-built overlays for racing, streaming, and support workflows.
+TmrOverlay is a Windows companion app for iRacing. It runs as a tray application, reads live iRacing telemetry, and renders small purpose-built overlays for racing, streaming, and support workflows.
 
 The production app is Windows-only because it talks to iRacing through the SDK. The browser review UI is the primary local parity surface for localhost/OBS behavior and generated review screenshots; the tracked macOS harness is deprecated secondary native-shell scaffolding for cases that still need it.
 
@@ -8,7 +8,7 @@ TmrOverlay is not affiliated with or endorsed by iRacing.
 
 ## Current Status
 
-This project is still moving quickly toward a V1.0-quality core overlay app. Expect active changes to overlay behavior, release packaging, diagnostics, and internal data contracts while the 0.x releases mature.
+This project is at the private-team V1.0 candidate stage. Expect active teammate-driven changes to overlay behavior, release packaging, diagnostics, and internal data contracts while the first team release is validated.
 
 Current releases focus on:
 
@@ -31,7 +31,7 @@ Current releases focus on:
 
 ## Install
 
-Pre-release Windows builds are published from GitHub Actions on version tags.
+Windows builds are published from GitHub Actions on version tags.
 
 1. Open the latest GitHub Release.
 2. Prefer the Velopack MSI installer for normal installs and upgrades.
@@ -40,7 +40,7 @@ Pre-release Windows builds are published from GitHub Actions on version tags.
 
 ## Upgrade
 
-Velopack-installed builds check GitHub Releases passively on startup and from the tray or Support tab. The current app does not auto-download or auto-restart; when an update is available, use `Download and Install Update` and then `Restart to Apply Update`, or run the latest MSI installer from the release page.
+Velopack-installed builds check GitHub Releases once on startup and from the tray or Support tab. The current app does not auto-download or auto-restart; when an update is available, use `Install`, then use the same primary action after it changes to `Restart`, or run the latest MSI installer from the release page.
 
 Portable zip users should close TmrOverlay, unzip the newer package into a fresh folder or replace the old app files while the app is closed, then run `TMROverlay.exe`. Settings, history, logs, diagnostics, and captures stay under `%LOCALAPPDATA%\TmrOverlay`, so switching from the portable zip to the setup installer should keep existing user data.
 
@@ -182,6 +182,7 @@ Those snapshots include telemetry throughput, iRacing network/system values, ove
 ## Documentation
 
 - [docs/windows-release.md](docs/windows-release.md) - release assets, install, update, rollback, signing, and diagnostics.
+- [docs/v1-release-readiness.md](docs/v1-release-readiness.md) - first-pass V1 teammate release scope, validation, and handoff checklist.
 - [docs/update-strategy.md](docs/update-strategy.md) - Velopack release-channel plan and follow-up work.
 - [docs/overlay-logic.md](docs/overlay-logic.md) - index of overlay behavior notes.
 - [docs/overlay-behavior-reference.md](docs/overlay-behavior-reference.md) - plain-English behavior reference for each overlay.
@@ -197,7 +198,7 @@ Those snapshots include telemetry throughput, iRacing network/system values, ove
 Near-term work is focused on validating the release channel and preparing V1.x foundations:
 
 - validate installed Velopack updates from public GitHub Releases
-- use the new diagnostics to measure overlay lifecycle and timer efficiency before changing refresh behavior
+- use the diagnostics to measure overlay lifecycle, settings-driven form recreation, and timer efficiency before changing refresh behavior
 - add replay tooling for raw captures
 - continue hardening radar, relative, standings, track map, and gap behavior with large multiclass sessions
 - add future analysis and broadcast overlays such as a compact Timing Tower after the core app is stable

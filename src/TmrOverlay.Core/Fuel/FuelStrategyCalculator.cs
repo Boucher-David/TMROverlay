@@ -1,4 +1,5 @@
 using TmrOverlay.Core.History;
+using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Telemetry.Live;
 
 namespace TmrOverlay.Core.Fuel;
@@ -57,6 +58,10 @@ internal static class FuelStrategyCalculator
             FuelPerLapSource: fuelPerLap.Source,
             FuelPerLapMinimumLiters: fuelPerLap.Minimum,
             FuelPerLapMaximumLiters: fuelPerLap.Maximum,
+            MeasuredFuelPerLapMinimumLiters: fuel.MeasuredFuelPerLapMinimumLiters,
+            MeasuredFuelPerLapAverageLiters: fuel.MeasuredFuelPerLapAverageLiters,
+            MeasuredFuelPerLapMaximumLiters: fuel.MeasuredFuelPerLapMaximumLiters,
+            MeasuredFuelPerLapSampleCount: fuel.MeasuredFuelPerLapSampleCount,
             FuelPerHourLiters: fuelPerHour,
             LapTimeSeconds: lapTime.Value,
             LapTimeSource: lapTime.Source,
@@ -86,7 +91,8 @@ internal static class FuelStrategyCalculator
             TireModelSource: pitStrategy.Source,
             FuelFillRateLitersPerSecond: pitStrategy.FuelFillRateLitersPerSecond,
             TireChangeServiceSeconds: pitStrategy.TireChangeServiceSeconds,
-            Stints: stintPlan.Stints);
+            Stints: stintPlan.Stints,
+            SessionKind: OverlayAvailabilityEvaluator.NormalizeSessionKind(inputs.SessionKind));
     }
 
     public static string FormatNumber(double? value, string suffix, string fallback = "--")
@@ -102,11 +108,12 @@ internal static class FuelStrategyCalculator
         string? aggregateSource)
     {
         var historicalRange = aggregate?.FuelPerLapLiters;
-        if (ValidPositive(inputs.FuelPit.Fuel.FuelPerLapLiters) is { } liveFuelPerLap)
+        if (ValidPositive(inputs.FuelPit.Fuel.FuelPerLapLiters) is { } liveFuelPerLap
+            && IsMeasuredFuelPerLap(inputs.FuelPit.Fuel))
         {
             return new FuelPerLapSelection(
                 liveFuelPerLap,
-                "live burn",
+                "measured green lap",
                 ValidPositive(historicalRange?.Minimum),
                 ValidPositive(historicalRange?.Maximum));
         }
@@ -151,6 +158,11 @@ internal static class FuelStrategyCalculator
 
         var source = HistorySourceLabel(aggregateSource, "teammate stints");
         return new HistoricalStintTarget(targetLaps, source);
+    }
+
+    private static bool IsMeasuredFuelPerLap(LiveFuelSnapshot fuel)
+    {
+        return string.Equals(fuel.Confidence, "measured-green-lap", StringComparison.OrdinalIgnoreCase);
     }
 
     private static PitStrategyEstimate SelectPitStrategy(HistoricalSessionAggregate? aggregate, string? aggregateSource)
@@ -338,14 +350,7 @@ internal static class FuelStrategyCalculator
                         CurrentFuelPerLapSource: fuelPerLapSource,
                         RequiredFuelSavingLitersPerLap: requiredSaving,
                         RequiredFuelSavingPercent: requiredSaving / fuelPerLapLiters.Value,
-                        TireAdvice: BuildTireAdvice(
-                            index,
-                            stintTargets.Count,
-                            targetLaps,
-                            availableLiters,
-                            maxFuelLiters,
-                            fuelPerLapLiters.Value,
-                            pitStrategy)));
+                        TireAdvice: null));
                 }
 
                 var requiredFuelSaving = requiredSavings.Count > 0 ? requiredSavings.Max() : (double?)null;
@@ -357,8 +362,8 @@ internal static class FuelStrategyCalculator
                     FinalStintTargetLaps: stintTargets.Count > 0 ? stintTargets[^1] : null,
                     RequiredFuelSavingLitersPerLap: requiredFuelSaving,
                     RequiredFuelSavingPercent: requiredFuelSaving / fuelPerLapLiters.Value,
-                    StopOptimization: BuildStopOptimization(plannedRaceLaps, count, currentFuelLiters, maxFuelLiters, fuelPerLapLiters.Value, pitStrategy),
-                    RhythmComparison: BuildRhythmComparison(plannedRaceLaps, fuelPerLapLiters.Value, maxFuelLiters, teammateStintTargetLaps, pitStrategy));
+                    StopOptimization: null,
+                    RhythmComparison: null);
             }
         }
 
@@ -374,7 +379,7 @@ internal static class FuelStrategyCalculator
                 TargetFuelPerLapLiters: fuelPerLapLiters,
                 CurrentFuelPerLapLiters: fuelPerLapLiters,
                 CurrentFuelPerLapSource: fuelPerLapSource,
-                TireAdvice: TireChangeAdvice.NoStop));
+                TireAdvice: null));
         }
 
         double? remainingAfterCurrent = raceLapsRemaining is not null && currentStintLaps is not null
@@ -396,7 +401,7 @@ internal static class FuelStrategyCalculator
                 TargetFuelPerLapLiters: fuelPerLapLiters,
                 CurrentFuelPerLapLiters: fuelPerLapLiters,
                 CurrentFuelPerLapSource: fuelPerLapSource,
-                TireAdvice: TireChangeAdvice.Pending));
+                TireAdvice: null));
             remainingAfterCurrent = remainingLaps - stintLength;
         }
 
@@ -409,7 +414,7 @@ internal static class FuelStrategyCalculator
                 TargetFuelPerLapLiters: fuelPerLapLiters,
                 CurrentFuelPerLapLiters: fuelPerLapLiters,
                 CurrentFuelPerLapSource: fuelPerLapSource,
-                TireAdvice: TireChangeAdvice.Pending));
+                TireAdvice: null));
         }
 
         return StintPlan.ForUnplanned(stints);
@@ -438,30 +443,6 @@ internal static class FuelStrategyCalculator
         if (raceLapsRemaining is null)
         {
             return "stint estimate";
-        }
-
-        if (stintPlan.RhythmComparison is { IsRealistic: true, AdditionalStopCount: > 0 } rhythmComparison)
-        {
-            return rhythmComparison.Message;
-        }
-
-        if (stintPlan.StopOptimization is { IsRealistic: true } optimization)
-        {
-            return optimization.Message;
-        }
-
-        if (stintPlan.RequiredFuelSavingLitersPerLap is { } saving
-            && stintPlan.RequiredFuelSavingPercent is { } savingPercent
-            && saving > 0.01d
-            && savingPercent <= RealisticFuelSaveThresholdPercent)
-        {
-            var targetLaps = stintPlan.Stints
-                .Where(stint => stint.RequiredFuelSavingLitersPerLap is > 0d)
-                .Select(stint => stint.TargetLaps)
-                .OfType<int>()
-                .DefaultIfEmpty()
-                .Max();
-            return $"{targetLaps}-lap target: save {saving:0.0} L/lap";
         }
 
         if (stintPlan.PlannedStintCount is { } stintCount && stintPlan.PlannedStopCount is { } stopCount)
@@ -952,6 +933,10 @@ internal sealed record FuelStrategySnapshot(
     string FuelPerLapSource,
     double? FuelPerLapMinimumLiters,
     double? FuelPerLapMaximumLiters,
+    double? MeasuredFuelPerLapMinimumLiters,
+    double? MeasuredFuelPerLapAverageLiters,
+    double? MeasuredFuelPerLapMaximumLiters,
+    int MeasuredFuelPerLapSampleCount,
     double? FuelPerHourLiters,
     double? LapTimeSeconds,
     string LapTimeSource,
@@ -979,7 +964,8 @@ internal sealed record FuelStrategySnapshot(
     string TireModelSource,
     double? FuelFillRateLitersPerSecond,
     double? TireChangeServiceSeconds,
-    IReadOnlyList<FuelStintEstimate> Stints);
+    IReadOnlyList<FuelStintEstimate> Stints,
+    OverlaySessionKind? SessionKind = null);
 
 internal sealed record FuelStrategyInputs(
     HistoricalSessionContext Context,
@@ -987,7 +973,8 @@ internal sealed record FuelStrategyInputs(
     LiveRaceProgressModel RaceProgress,
     LiveRaceProjectionModel RaceProjection,
     LiveFuelPitModel FuelPit,
-    int CompletedStintCount)
+    int CompletedStintCount,
+    OverlaySessionKind? SessionKind)
 {
     public static FuelStrategyInputs From(LiveTelemetrySnapshot live)
     {
@@ -999,7 +986,8 @@ internal sealed record FuelStrategyInputs(
             RaceProgress: models.RaceProgress,
             RaceProjection: models.RaceProjection,
             FuelPit: models.FuelPit,
-            CompletedStintCount: live.CompletedStintCount);
+            CompletedStintCount: live.CompletedStintCount,
+            SessionKind: OverlayAvailabilityEvaluator.CurrentSessionKind(live));
     }
 }
 

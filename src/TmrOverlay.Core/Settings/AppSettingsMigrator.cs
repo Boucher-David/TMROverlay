@@ -202,7 +202,7 @@ internal static class AppSettingsMigrator
         switch (overlay.Id.Trim().ToLowerInvariant())
         {
             case "fuel-calculator":
-                EnsureOption(overlay, OverlayOptionKeys.FuelAdvice, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.FuelAdvice, defaultValue: false);
                 break;
             case "car-radar":
                 EnsureOption(overlay, OverlayOptionKeys.RadarMulticlassWarning, defaultValue: true);

@@ -25,8 +25,9 @@ The fuel calculator estimates:
 - Whole-lap stint targets.
 - Final stint length.
 - Required fuel saving for target stints.
-- Whether a longer rhythm avoids stops.
-- Whether tire service is likely free under refueling time.
+- Practice/qualifying fuel-usage observations once completed green laps exist.
+
+For V1, the visible overlay deliberately stops there. Rhythm optimization and tire-service tradeoff advice are V2 work, because the current telemetry and history evidence can make those rows look more certain than they are.
 
 It uses model-v2 live telemetry first, then exact user history for the same car/track/session combo, then optional baseline history only when baseline lookup is enabled.
 
@@ -43,7 +44,7 @@ Each refresh:
 5. Looks up exact combo history with a 30 second cache.
 6. Builds a `FuelStrategySnapshot`.
 7. Converts the snapshot to display text and rows.
-8. Applies status color, source visibility, advice-column visibility, and row text only when the target UI value changed.
+8. Applies status color, source visibility, and row text only when the target UI value changed.
 9. Keeps all six stint rows visible, using blank future rows when fewer rows are available.
 10. Records whether the timer tick saw new input, how old that input was, and whether the tick actually changed UI state.
 
@@ -53,7 +54,7 @@ Fuel V2 separates reusable live race facts from fuel strategy math.
 
 The calculator builds `FuelStrategyInputs` from:
 
-- `LiveFuelPitModel`: current fuel level/percent, fuel burn projection, fuel confidence, and pit/service signals.
+- `LiveFuelPitModel`: current fuel level/percent, diagnostic instantaneous fuel use, measured green-lap fuel burn confidence, and pit/service signals.
 - `LiveSessionModel`: session state, remaining clock, and lap limits.
 - `LiveRaceProgressModel`: strategy-car progress, reference progress, leader progress, lap gaps, race pace, positions, and race-laps-remaining estimates.
 - `LiveRaceProjectionModel`: rolling clean-lap pace and timed-race lap projections for overall leader, reference class, and team strategy.
@@ -80,26 +81,37 @@ If fuel level exists:
    - Driver estimated lap time.
    - Class estimated lap time.
    - Unavailable.
-6. Convert burn to fuel per lap:
-   - `fuelPerLapLiters = fuelUsePerHourLiters * lapTimeSeconds / 3600`
-7. Estimate minutes remaining on current fuel:
+6. Estimate minutes remaining on current fuel:
    - `fuelLevelLiters / fuelUsePerHourLiters * 60`
-8. Estimate laps remaining on current fuel:
-   - `fuelLevelLiters / fuelPerLapLiters`
+
+`FuelUsePerHour` is retained as diagnostic/current-fuel context. It does not become `fuelPerLapLiters` and does not drive stint strategy by itself.
 
 Live fuel confidence is:
 
-- `live` when burn exists.
-- `level-only` when fuel level exists but live burn does not.
+- `measured-green-lap` when `LiveTelemetryStore` has measured at least one completed valid green lap using fuel-level deltas.
+- `level-only` when fuel level exists but completed-lap burn evidence does not.
 - `none` when fuel level is unavailable.
+
+`LiveTelemetryStore` owns the stateful measured-burn estimator. It seeds only from green/racing frames (`SessionState == 4`) in local active context, ignores pre-green-to-green transitions, rejects pit road, garage, focus-on-other-car, refuel/reset, invalid fuel, and implausible lap/fuel deltas, and publishes a short rolling minimum/average/maximum only after a completed valid green lap. Current fuel level still refreshes live during grid, pit, and pre-green states; those drops lower current fuel but do not count as burn-rate evidence.
 
 Data review note from the May 2026 capture analysis:
 
 - `FuelUsePerHour` is not stable enough to treat as lap-average burn by itself. In the 4-hour Nürburgring raw capture, sampled valid-level `FuelUsePerHour` commonly implied about 18-19 L/lap even though the historical fuel-delta baseline for the same combo is about 13.4 L/lap.
 - Some frames expose positive `FuelUsePerHour` while `FuelLevel` is zero or unavailable. That must not become a measured fuel baseline.
-- Future live fuel work should prefer a rolling measured fuel-level delta over valid green-flag distance/time, using the instantaneous burn channel as an activity/diagnostic signal or short-term hint only after smoothing and confidence checks.
+- Future live fuel work can revisit whether a smoothed `FuelUsePerHour` signal is useful as a short-term hint, but it must agree with measured fuel-level behavior before it can affect strategy.
 
-For V1, the fuel calculator is local active driver/team context only. It does not display modeled strategy while the camera is focused on another car, while focus is unavailable, or while garage/setup context is active, even if historical data exists. In native overlay mode, that means the enabled overlay remains hidden until context is valid. Once local context is valid, history can still fill burn-rate/stint modeling gaps when live scalar fuel or live burn is unavailable, and the source text labels that as historical/model rather than live measured fuel.
+For V1, the fuel calculator is local active driver/team context only. It does not display modeled strategy while the camera is focused on another car, while focus is unavailable, or while garage/setup context is active, even if historical data exists. In native overlay mode, that means the enabled overlay remains hidden until context is valid. Once local context is valid, exact history can fill burn-rate/stint modeling gaps when measured green-lap burn is unavailable, and the source text labels that as historical/model rather than live measured fuel.
+
+## Practice And Qualifying Usage
+
+In practice and qualifying sessions, the overlay can show one observational usage row:
+
+- Practice: `Practice Usage`.
+- Qualifying: `Quali Usage`.
+
+The row shows rolling measured completed-lap minimum, average, maximum, and sample count. It stays in `waiting for completed lap` until the measured green-lap estimator has at least one valid sample.
+
+This row is not a strategy recommendation. It does not use partial-lap burn, instantaneous `FuelUsePerHour`, or historical fallback data, and it does not enable rhythm, tire, or pit-stop advice.
 
 ## History Lookup
 
@@ -128,17 +140,16 @@ History contributes:
 
 The calculator selects fuel per lap in this order:
 
-1. Live fuel per lap from `LiveFuelPitModel.Fuel`.
+1. Measured green-lap fuel per lap from `LiveFuelPitModel.Fuel`.
 2. Preferred history aggregate mean fuel per lap.
 3. Unavailable.
 
-When live fuel per lap is selected, history min/max can still appear as context in the shared source footer when that footer is enabled.
+When measured green-lap fuel per lap is selected, history min/max can still appear as context in the shared source footer when that footer is enabled. `FuelUsePerHour` remains diagnostic and never outranks exact history for V1 strategy.
 
 Planned hardening:
 
-- Add a live measured-burn estimator based on fuel-level deltas over valid on-track distance/time.
-- Require minimum evidence windows before measured live burn can drive stint targets.
-- Reject samples around pits, refuels, session resets, zero/unavailable fuel levels, and implausible fuel deltas.
+- Add longer measured-burn smoothing windows and confidence labels.
+- Add explicit reserve/margin settings.
 - Keep `FuelUsePerHour` out of primary strategy selection until it is smoothed and agrees with measured fuel-level behavior.
 - Fuel Calculator V2 should own any pit-service refuel recommendation. When that exists, Pit Service can surface the selected pit fuel against that shared recommendation; the first Pit Service pass intentionally shows only requested and selected pit fuel.
 
@@ -275,89 +286,17 @@ The realistic saving threshold is currently 5 percent of selected fuel per lap.
 
 ## Tire Advice
 
-Tire advice is only built for stops before the final stint.
+Tire advice is disabled in the V1 overlay. Existing helper code is retained for future Fuel Calculator V2 work, but the calculator does not attach tire advice to stint rows and the view model does not render a tire/advice segment.
 
-If max fuel, available fuel, or fill/service history is missing, advice is pending.
-
-For each stop:
-
-1. Estimate fuel remaining at stop:
-   - `fuelAtStop = max(0, availableFuel - targetLaps * fuelPerLap)`
-2. Estimate fuel to add:
-   - `fuelToAdd = max(0, maxFuel - fuelAtStop)`
-3. If fill rate exists:
-   - `refuelSeconds = fuelToAdd / fillRate`
-4. If tire service seconds are missing:
-   - Show pending tire data, optionally with fuel amount.
-5. If refuel seconds are missing:
-   - Show approximate tire service time.
-6. If both refuel and tire service exist:
-   - `noTireStopSeconds = max(refuelSeconds, noTireServiceSeconds or 0)`
-   - `tireStopSeconds = max(refuelSeconds, tireServiceSeconds)`
-   - `timeLoss = max(0, tireStopSeconds - noTireStopSeconds)`
-   - If time loss is at most 1 second, tires are considered free.
-   - Otherwise show the estimated tire time loss.
+Before re-enabling this as a user-facing recommendation, the model needs stronger pit-service buckets for no tires, side tires, four tires, driver swaps, repair, full-fuel stops, and partial-fuel stops.
 
 ## Stop Optimization
 
-The stop optimization asks: can we skip one planned stop?
-
-It only runs when:
-
-- Planned race laps are positive.
-- Planned stint count is greater than 1.
-- Max fuel exists.
-
-Candidate:
-
-- `candidateStintCount = plannedStintCount - 1`
-- `savedStopCount = 1`
-
-Available fuel:
-
-- If current fuel exists:
-  - `currentFuel + max(0, candidateStintCount - 1) * maxFuel`
-- Otherwise:
-  - `candidateStintCount * maxFuel`
-
-Required fuel per lap:
-
-- `requiredFuelPerLap = availableFuel / plannedRaceLaps`
-- `requiredSaving = fuelPerLap - requiredFuelPerLap`
-- `requiredSavingPercent = requiredSaving / fuelPerLap`
-
-If required saving is at most 5 percent, it is realistic.
-
-Estimated saved seconds uses the first available value from:
-
-- Pit lane seconds.
-- Tire change service seconds.
-- No-tire service seconds.
-
-Break-even loss per lap is:
-
-- `estimatedSavedSeconds / plannedRaceLaps`
+Stop optimization is disabled in the V1 overlay. The overlay may still show required saving for a selected whole-lap target, but it does not recommend skipping a stop or changing rhythm to save time.
 
 ## Rhythm Comparison
 
-The rhythm comparison asks: does the longest realistic target avoid stops compared with one lap shorter?
-
-It only runs when race laps, fuel per lap, and max fuel are valid.
-
-1. Select longest realistic stint target:
-   - Prefer teammate long target when valid.
-   - Otherwise use `ceil(maxFuel / fuelPerLap)`.
-   - If that requires more than 5 percent saving, fall back to `floor(maxFuel / fuelPerLap)`.
-2. Short target is `longTarget - 1`.
-3. Calculate stint and stop counts:
-   - `shortStintCount = ceil(plannedRaceLaps / shortTarget)`
-   - `longStintCount = ceil(plannedRaceLaps / longTarget)`
-   - `shortStopCount = shortStintCount - 1`
-   - `longStopCount = longStintCount - 1`
-4. If short rhythm has more stops:
-   - `additionalStopCount = shortStopCount - longStopCount`
-   - Estimate time loss from pit strategy if available.
-   - Mark realistic when long target saving is at most 5 percent.
+Rhythm comparison is disabled in the V1 overlay. The code keeps the future helper shape, but the visible status and rows use only the current stint plan and required saving. This avoids presenting a one-lap-longer rhythm as a recommendation before we can prove it against current-session stint history and pit-loss evidence.
 
 ## Status Text Priority
 
@@ -366,22 +305,19 @@ The first matching rule wins:
 1. Missing current fuel and missing enough model data: `waiting for fuel`.
 2. Missing fuel per lap: `waiting for burn`.
 3. Missing race laps remaining: `stint estimate`.
-4. Realistic rhythm comparison with additional stops: rhythm message.
-5. Realistic stop optimization: skip-stop message.
-6. Required saving within 5 percent: target save message.
-7. Planned stint count exists:
+4. Required saving within 5 percent: target save message.
+5. Planned stint count exists:
    - `fuel covers finish` when no stop.
    - `{stints} stints / {stops} stops` otherwise.
    - Prefix `model: ` when current fuel is missing.
-8. Additional fuel needed exists: `+X L needed`.
-9. Fallback: `fuel covers finish`.
+6. Additional fuel needed exists: `+X L needed`.
+7. Fallback: `fuel covers finish`.
 
 ## Display Rows
 
-The view model builds rows in this order:
+The view model builds stint rows up to the maximum row count.
 
-1. Strategy row when rhythm comparison has additional stops.
-2. Stint rows, up to the maximum row count after the strategy row.
+Practice and qualifying sessions reserve one row for the observational usage summary when the session kind is known. Race sessions do not show this usage row.
 
 Stint row text:
 
@@ -400,7 +336,6 @@ The shared source footer includes:
 - Laps per tank.
 - History source: user, baseline, or none.
 - Min/avg/max fuel per lap when history range exists.
-- Tire model source when fill/tire data exists.
 - Overall/class leader gap in laps when available.
 
 ## Design Notes
@@ -408,7 +343,7 @@ The shared source footer includes:
 - Live data must win over history.
 - Baseline history must stay opt-in.
 - Teammate stint targets are hints, not measured live teammate fuel.
-- Missing focused-driver fuel should still allow stint-history analysis rows when matching history exists.
+- Missing focused-driver fuel does not keep the V1 overlay visible unless the local in-car/pit context is valid.
 - Strategy suggestions should distinguish measured facts from model assumptions.
 - The table layout should stay stable during a run.
 

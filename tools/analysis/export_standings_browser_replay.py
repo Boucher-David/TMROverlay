@@ -68,6 +68,8 @@ REPLAY_SCALAR_FIELDS = list(
             "RPM",
             "EngineWarnings",
             "PlayerTireCompound",
+            "TeamLapCompleted",
+            "TeamLapDistPct",
             "LapDeltaToSessionBestLap",
             "LapDeltaToSessionBestLap_DD",
             "LapDeltaToSessionBestLap_OK",
@@ -727,6 +729,10 @@ def live_fuel_snapshot(session_data: dict[str, Any], raw: dict[str, Any]) -> dic
             "fuelUsePerHourKg": None,
             "fuelUsePerHourLiters": None,
             "fuelPerLapLiters": None,
+            "measuredFuelPerLapMinimumLiters": None,
+            "measuredFuelPerLapAverageLiters": None,
+            "measuredFuelPerLapMaximumLiters": None,
+            "measuredFuelPerLapSampleCount": 0,
             "lapTimeSeconds": None,
             "lapTimeSource": "unavailable",
             "estimatedMinutesRemaining": None,
@@ -739,9 +745,7 @@ def live_fuel_snapshot(session_data: dict[str, Any], raw: dict[str, Any]) -> dic
     fuel_density = positive(driver_info(session_data).get("DriverCarFuelKgPerLtr"))
     fuel_use_liters = fuel_use_kg / fuel_density if fuel_use_kg is not None and fuel_density is not None else None
     lap_time, lap_time_source = selected_lap_time_seconds(session_data, raw)
-    fuel_per_lap = fuel_use_liters * lap_time / 3600.0 if fuel_use_liters is not None and lap_time is not None else None
     estimated_minutes = fuel_level / fuel_use_liters * 60.0 if fuel_use_liters is not None and fuel_use_liters > 0.0 else None
-    estimated_laps = fuel_level / fuel_per_lap if fuel_per_lap is not None and fuel_per_lap > 0.0 else None
     return {
         "hasValidFuel": True,
         "source": "local-driver-scalar",
@@ -749,13 +753,161 @@ def live_fuel_snapshot(session_data: dict[str, Any], raw: dict[str, Any]) -> dic
         "fuelLevelPercent": fuel_pct,
         "fuelUsePerHourKg": fuel_use_kg,
         "fuelUsePerHourLiters": fuel_use_liters,
-        "fuelPerLapLiters": fuel_per_lap,
+        "fuelPerLapLiters": None,
+        "measuredFuelPerLapMinimumLiters": None,
+        "measuredFuelPerLapAverageLiters": None,
+        "measuredFuelPerLapMaximumLiters": None,
+        "measuredFuelPerLapSampleCount": 0,
         "lapTimeSeconds": lap_time,
         "lapTimeSource": lap_time_source,
         "estimatedMinutesRemaining": estimated_minutes,
-        "estimatedLapsRemaining": estimated_laps,
-        "confidence": "live" if fuel_use_liters is not None else "level-only",
+        "estimatedLapsRemaining": None,
+        "confidence": "level-only",
     }
+
+
+class FuelBurnLapTracker:
+    GREEN_SESSION_STATE = 4
+    ROLLING_LAP_LIMIT = 3
+    MINIMUM_PROGRESS = 0.95
+    MAXIMUM_PROGRESS = 1.25
+    MINIMUM_FUEL_BURN_LITERS = 0.05
+    MAXIMUM_FUEL_BURN_LITERS_PER_LAP = 40.0
+    MINIMUM_LAP_SECONDS = 20.0
+    MAXIMUM_LAP_SECONDS = 1800.0
+
+    def __init__(self) -> None:
+        self.anchor: dict[str, float] | None = None
+        self.measured: list[float] = []
+
+    def update(
+        self,
+        raw: dict[str, Any],
+        fuel_snapshot: dict[str, Any],
+        player_idx: int | None,
+        focus_idx: int | None,
+        on_pit_road: bool,
+    ) -> dict[str, Any]:
+        fuel_level = positive(fuel_snapshot.get("fuelLevelLiters"))
+        if not fuel_snapshot.get("hasValidFuel") or fuel_level is None:
+            self.anchor = None
+            return fuel_snapshot
+
+        if not self.can_use(raw, player_idx, focus_idx, on_pit_road):
+            self.anchor = None
+            return self.apply(fuel_snapshot)
+
+        lap_completed = self.local_lap_completed(raw)
+        lap_dist_pct = self.local_lap_dist_pct(raw)
+        session_time = raw.get("SessionTime")
+        if lap_completed is None or not finite(lap_dist_pct) or not finite(session_time):
+            self.anchor = None
+            return self.apply(fuel_snapshot)
+
+        pct = max(0.0, min(1.0, float(lap_dist_pct)))
+        progress = float(lap_completed) + pct
+        session_seconds = float(session_time)
+        if self.anchor is None:
+            self.anchor = {
+                "progress": progress,
+                "fuel": fuel_level,
+                "sessionTime": session_seconds,
+            }
+            return self.apply(fuel_snapshot)
+
+        progress_delta = progress - self.anchor["progress"]
+        if progress_delta < 0.0:
+            self.anchor = {
+                "progress": progress,
+                "fuel": fuel_level,
+                "sessionTime": session_seconds,
+            }
+            return self.apply(fuel_snapshot)
+
+        if progress_delta < self.MINIMUM_PROGRESS:
+            return self.apply(fuel_snapshot)
+
+        elapsed = session_seconds - self.anchor["sessionTime"]
+        fuel_delta = self.anchor["fuel"] - fuel_level
+        if (
+            progress_delta <= self.MAXIMUM_PROGRESS
+            and self.MINIMUM_LAP_SECONDS <= elapsed <= self.MAXIMUM_LAP_SECONDS
+            and fuel_delta >= self.MINIMUM_FUEL_BURN_LITERS
+        ):
+            fuel_per_lap = fuel_delta / progress_delta
+            if finite(fuel_per_lap) and 0.0 < fuel_per_lap <= self.MAXIMUM_FUEL_BURN_LITERS_PER_LAP:
+                self.measured.append(fuel_per_lap)
+                self.measured = self.measured[-self.ROLLING_LAP_LIMIT :]
+
+        self.anchor = {
+            "progress": progress,
+            "fuel": fuel_level,
+            "sessionTime": session_seconds,
+        }
+        return self.apply(fuel_snapshot)
+
+    def apply(self, fuel_snapshot: dict[str, Any]) -> dict[str, Any]:
+        if not self.measured:
+            return fuel_snapshot
+
+        fuel_per_lap = sum(self.measured) / len(self.measured)
+        fuel_level = positive(fuel_snapshot.get("fuelLevelLiters"))
+        return {
+            **fuel_snapshot,
+            "fuelPerLapLiters": fuel_per_lap,
+            "measuredFuelPerLapMinimumLiters": min(self.measured),
+            "measuredFuelPerLapAverageLiters": fuel_per_lap,
+            "measuredFuelPerLapMaximumLiters": max(self.measured),
+            "measuredFuelPerLapSampleCount": len(self.measured),
+            "estimatedLapsRemaining": fuel_level / fuel_per_lap if fuel_level is not None and fuel_per_lap > 0.0 else None,
+            "confidence": "measured-green-lap",
+        }
+
+    @classmethod
+    def can_use(
+        cls,
+        raw: dict[str, Any],
+        player_idx: int | None,
+        focus_idx: int | None,
+        on_pit_road: bool,
+    ) -> bool:
+        if raw.get("SessionState") != cls.GREEN_SESSION_STATE:
+            return False
+        if raw.get("IsOnTrack") is False or raw.get("IsInGarage") is True:
+            return False
+        if on_pit_road or raw.get("PitstopActive") is True or raw.get("PlayerCarInPitStall") is True:
+            return False
+        if raw.get("PlayerTrackSurface") is not None and raw.get("PlayerTrackSurface") != 3:
+            return False
+        if player_idx is not None and focus_idx is not None and player_idx != focus_idx:
+            return False
+        return True
+
+    @staticmethod
+    def local_lap_completed(raw: dict[str, Any]) -> int | None:
+        team_lap_completed = raw.get("TeamLapCompleted")
+        if isinstance(team_lap_completed, int) and team_lap_completed >= 0:
+            return team_lap_completed
+        lap_completed = raw.get("LapCompleted")
+        return lap_completed if isinstance(lap_completed, int) and lap_completed >= 0 else None
+
+    @staticmethod
+    def local_lap_dist_pct(raw: dict[str, Any]) -> float | None:
+        team_lap_dist_pct = raw.get("TeamLapDistPct")
+        if finite(team_lap_dist_pct) and float(team_lap_dist_pct) >= 0.0:
+            return float(team_lap_dist_pct)
+        lap_dist_pct = raw.get("LapDistPct")
+        return float(lap_dist_pct) if finite(lap_dist_pct) else None
+
+
+def has_measured_fuel_burn(fuel: dict[str, Any]) -> bool:
+    sample_count = fuel.get("measuredFuelPerLapSampleCount")
+    return (
+        fuel.get("confidence") == "measured-green-lap"
+        and positive(fuel.get("fuelPerLapLiters")) is not None
+        and isinstance(sample_count, int)
+        and sample_count > 0
+    )
 
 
 def live_fuel_pit_model(
@@ -819,7 +971,11 @@ def live_fuel_pit_model(
             "partial" if fuel.get("fuelUsePerHourKg") is not None else "unavailable",
             False,
             "instantaneous_burn_requires_smoothing" if fuel.get("fuelUsePerHourKg") is not None else "missing_or_zero_fuel_use"),
-        "measuredBurnEvidence": signal_evidence("rolling-local-fuel-delta", "unavailable", False, "requires_two_green_distance_samples"),
+        "measuredBurnEvidence": signal_evidence(
+            "rolling-local-fuel-delta",
+            "reliable" if has_measured_fuel_burn(fuel) else "unavailable",
+            has_measured_fuel_burn(fuel),
+            None if has_measured_fuel_burn(fuel) else "requires_completed_green_lap_delta"),
         "baselineEligibilityEvidence": signal_evidence("measured-local-fuel-baseline", "unavailable", False, "requires_rolling_local_driver_window"),
         "pitServiceStatus": raw_int(raw, "PlayerCarPitSvStatus"),
         "pitServiceFlags": raw_int(raw, "PitSvFlags"),
@@ -1192,6 +1348,7 @@ def build_live_snapshot(
     session_data: dict[str, Any],
     values: dict[str, list[Any]],
     gridded_car_idxs: set[int],
+    fuel_burn_tracker: FuelBurnLapTracker,
 ) -> dict[str, Any]:
     selected = current_session(session_data)
     session_kind = classify_session_kind(str((selected or {}).get("SessionType") or (selected or {}).get("SessionName") or ""))
@@ -1217,6 +1374,7 @@ def build_live_snapshot(
     track_display_name = str((weekend.get("TrackDisplayName") or "")).strip()
     sectors = live_track_map_sectors(session_data)
     fuel_snapshot = live_fuel_snapshot(session_data, raw)
+    fuel_snapshot = fuel_burn_tracker.update(raw, fuel_snapshot, player_idx, focus_idx, on_pit_road)
     tire_compounds = live_tire_compounds(session_data, timing_rows, focus_idx, player_idx, raw)
     tire_condition = live_tire_condition(raw)
     fuel_pit = live_fuel_pit_model(raw, values, player_idx, on_pit_road, fuel_snapshot)
@@ -1271,6 +1429,11 @@ def build_live_snapshot(
             "fuelUsePerHourKg": fuel_snapshot.get("fuelUsePerHourKg"),
             "fuelUsePerHourLiters": fuel_snapshot.get("fuelUsePerHourLiters"),
             "fuelPerLapLiters": fuel_snapshot.get("fuelPerLapLiters"),
+            "measuredFuelPerLapMinimumLiters": fuel_snapshot.get("measuredFuelPerLapMinimumLiters"),
+            "measuredFuelPerLapAverageLiters": fuel_snapshot.get("measuredFuelPerLapAverageLiters"),
+            "measuredFuelPerLapMaximumLiters": fuel_snapshot.get("measuredFuelPerLapMaximumLiters"),
+            "measuredFuelPerLapSampleCount": fuel_snapshot.get("measuredFuelPerLapSampleCount"),
+            "confidence": fuel_snapshot.get("confidence"),
         },
         "proximity": {},
         "leaderGap": {},
@@ -2134,6 +2297,7 @@ def build_frame(
     other_class_rows: int,
     maximum_rows: int,
     gridded_car_idxs: set[int],
+    fuel_burn_tracker: FuelBurnLapTracker,
 ) -> dict[str, Any]:
     raw, values = extract_raw(schema, payload)
     update_gridded_cars(raw, values, session_data, gridded_car_idxs)
@@ -2173,6 +2337,7 @@ def build_frame(
         session_data,
         values,
         gridded_car_idxs,
+        fuel_burn_tracker,
     )
     return replay_frame
 
@@ -2289,6 +2454,7 @@ def export_capture(args: argparse.Namespace) -> dict[str, Any]:
     frame_count = readable_frame_count(telemetry_path, buffer_length, manifest_frame_count)
     frames = []
     gridded_car_idxs: set[int] = set()
+    fuel_burn_tracker = FuelBurnLapTracker()
     requested_indexes = frame_indexes(frame_count, args.max_frames, args.stride, args.start_frame)
     for replay_index, requested_index in enumerate(requested_indexes):
         frame = read_capture_frame(telemetry_path, buffer_length, requested_index)
@@ -2306,7 +2472,8 @@ def export_capture(args: argparse.Namespace) -> dict[str, Any]:
             session_data,
             args.other_class_rows,
             args.maximum_rows,
-            gridded_car_idxs)
+            gridded_car_idxs,
+            fuel_burn_tracker)
         if args.start_relative_seconds is not None and args.step_seconds is not None:
             replay_frame["raceStartRelativeSeconds"] = args.start_relative_seconds + replay_index * args.step_seconds
         frames.append(replay_frame)

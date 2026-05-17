@@ -14,6 +14,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
     private readonly HashSet<int> _griddedCarIdxs = [];
     private readonly TrackMapSectorTracker _trackMapSectorTracker = new();
     private readonly LiveRaceProjectionTracker _raceProjectionTracker = new();
+    private readonly FuelBurnLapTracker _fuelBurnLapTracker = new();
     private HistoricalSessionContext _context = HistoricalSessionContext.Empty;
     private LiveTelemetrySnapshot _snapshot = LiveTelemetrySnapshot.Empty;
     private int? _lastProximityReferenceCarIdx;
@@ -49,6 +50,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             {
                 _trackMapSectorTracker.Reset();
                 _raceProjectionTracker.Reset();
+                _fuelBurnLapTracker.Reset();
                 ResetGriddingTracker();
             }
 
@@ -72,6 +74,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             _proximityHistory.Clear();
             _trackMapSectorTracker.Reset();
             _raceProjectionTracker.Reset();
+            _fuelBurnLapTracker.Reset();
             ResetGriddingTracker();
             _lastProximityReferenceCarIdx = null;
             _snapshot = LiveTelemetrySnapshot.Empty with
@@ -97,6 +100,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             _context = context;
             _trackMapSectorTracker.Reset();
             _raceProjectionTracker.Reset();
+            _fuelBurnLapTracker.Reset();
             _snapshot = _snapshot with
             {
                 Context = context,
@@ -112,6 +116,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
         lock (_sync)
         {
             var fuel = LiveFuelSnapshot.From(_context, sample);
+            fuel = _fuelBurnLapTracker.Update(sample, fuel);
             var proximity = LiveProximitySnapshot.From(_context, sample);
             ResetProximityHistoryIfReferenceChanged(sample);
             var multiclassApproaches = BuildMulticlassApproaches(sample, proximity);
@@ -880,6 +885,165 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
         private sealed record SectorCrossing(
             int SectorIndex,
             int BoundaryLapCompleted,
+            double SessionTimeSeconds);
+    }
+
+    private sealed class FuelBurnLapTracker
+    {
+        private const int GreenSessionState = 4;
+        private const int RollingLapLimit = 3;
+        private const double MinimumMeasuredLapProgress = 0.95d;
+        private const double MaximumMeasuredLapProgress = 1.25d;
+        private const double MinimumFuelBurnLiters = 0.05d;
+        private const double MaximumFuelBurnLitersPerLap = 40d;
+        private const double MinimumLapSeconds = 20d;
+        private const double MaximumLapSeconds = 1800d;
+
+        private readonly Queue<double> _measuredFuelPerLap = new();
+        private FuelLapAnchor? _anchor;
+
+        public void Reset()
+        {
+            _anchor = null;
+            _measuredFuelPerLap.Clear();
+        }
+
+        public LiveFuelSnapshot Update(HistoricalTelemetrySample sample, LiveFuelSnapshot fuel)
+        {
+            if (!fuel.HasValidFuel || fuel.FuelLevelLiters is not { } fuelLevel || !IsPositiveFinite(fuelLevel))
+            {
+                _anchor = null;
+                return fuel;
+            }
+
+            if (!CanUseAsLapBurnSample(sample))
+            {
+                _anchor = null;
+                return ApplyMeasuredBurn(fuel);
+            }
+
+            var lapCompleted = LocalLapCompleted(sample);
+            var lapDistPct = LocalLapDistPct(sample);
+            if (lapCompleted is not { } completed
+                || lapDistPct is not { } pct
+                || !IsFinite(pct)
+                || pct < 0d
+                || pct > 1.000001d
+                || !IsFinite(sample.SessionTime))
+            {
+                _anchor = null;
+                return ApplyMeasuredBurn(fuel);
+            }
+
+            var progress = completed + Math.Clamp(pct, 0d, 1d);
+            if (_anchor is not { } anchor)
+            {
+                _anchor = new FuelLapAnchor(completed, progress, fuelLevel, sample.SessionTime);
+                return ApplyMeasuredBurn(fuel);
+            }
+
+            var progressDelta = progress - anchor.ProgressLaps;
+            if (progressDelta < 0d)
+            {
+                _anchor = new FuelLapAnchor(completed, progress, fuelLevel, sample.SessionTime);
+                return ApplyMeasuredBurn(fuel);
+            }
+
+            if (progressDelta < MinimumMeasuredLapProgress)
+            {
+                return ApplyMeasuredBurn(fuel);
+            }
+
+            var elapsedSeconds = sample.SessionTime - anchor.SessionTimeSeconds;
+            var fuelDelta = anchor.FuelLevelLiters - fuelLevel;
+            if (progressDelta <= MaximumMeasuredLapProgress
+                && elapsedSeconds is >= MinimumLapSeconds and <= MaximumLapSeconds
+                && fuelDelta >= MinimumFuelBurnLiters)
+            {
+                var fuelPerLap = fuelDelta / progressDelta;
+                if (IsPositiveFinite(fuelPerLap) && fuelPerLap <= MaximumFuelBurnLitersPerLap)
+                {
+                    _measuredFuelPerLap.Enqueue(fuelPerLap);
+                    while (_measuredFuelPerLap.Count > RollingLapLimit)
+                    {
+                        _measuredFuelPerLap.Dequeue();
+                    }
+                }
+            }
+
+            _anchor = new FuelLapAnchor(completed, progress, fuelLevel, sample.SessionTime);
+            return ApplyMeasuredBurn(fuel);
+        }
+
+        private LiveFuelSnapshot ApplyMeasuredBurn(LiveFuelSnapshot fuel)
+        {
+            return _measuredFuelPerLap.Count > 0
+                ? fuel.WithMeasuredFuelPerLap(
+                    _measuredFuelPerLap.Average(),
+                    _measuredFuelPerLap.Min(),
+                    _measuredFuelPerLap.Max(),
+                    _measuredFuelPerLap.Count)
+                : fuel;
+        }
+
+        private static bool CanUseAsLapBurnSample(HistoricalTelemetrySample sample)
+        {
+            if (sample.SessionState != GreenSessionState
+                || !sample.IsOnTrack
+                || sample.IsInGarage
+                || sample.OnPitRoad
+                || sample.PitstopActive
+                || sample.PlayerCarInPitStall
+                || sample.TeamOnPitRoad == true)
+            {
+                return false;
+            }
+
+            if (sample.PlayerTrackSurface is not null && sample.PlayerTrackSurface != OnTrackSurface)
+            {
+                return false;
+            }
+
+            if (sample.PlayerCarIdx is { } playerCarIdx
+                && sample.FocusCarIdx is { } focusCarIdx
+                && playerCarIdx != focusCarIdx)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static int? LocalLapCompleted(HistoricalTelemetrySample sample)
+        {
+            return sample.TeamLapCompleted is >= 0
+                ? sample.TeamLapCompleted
+                : sample.LapCompleted is >= 0
+                    ? sample.LapCompleted
+                    : null;
+        }
+
+        private static double? LocalLapDistPct(HistoricalTelemetrySample sample)
+        {
+            return sample.TeamLapDistPct is { } teamLapDistPct && IsFinite(teamLapDistPct) && teamLapDistPct >= 0d
+                ? teamLapDistPct
+                : sample.LapDistPct;
+        }
+
+        private static bool IsPositiveFinite(double value)
+        {
+            return IsFinite(value) && value > 0d;
+        }
+
+        private static bool IsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private sealed record FuelLapAnchor(
+            int LapCompleted,
+            double ProgressLaps,
+            double FuelLevelLiters,
             double SessionTimeSeconds);
     }
 

@@ -413,8 +413,7 @@ function settingsAppConfig({ previewMode = 'off', selectedTab = 'general', selec
       canCheckUpdates: reviewState?.support?.canCheckUpdates ?? true,
       canInstallUpdate: reviewState?.support?.canInstallUpdate ?? false,
       canRestartUpdate: reviewState?.support?.canRestartUpdate ?? false,
-      updatePendingRestart: reviewState?.support?.updatePendingRestart ?? false,
-      releasePageAvailable: reviewState?.support?.releasePageAvailable ?? false
+      updatePendingRestart: reviewState?.support?.updatePendingRestart ?? false
     },
     sessionLabels: ['Practice', 'Qualifying', 'Race'],
     overlays: settingsAppOverlays(reviewState)
@@ -585,7 +584,7 @@ function settingsContentRows(id, overlayState = {}) {
     case 'gap-to-leader':
       return [];
     case 'fuel-calculator':
-      return [enabled('Advice column')];
+      return [];
     case 'track-map':
       return [
         enabled('Sector boundaries')
@@ -710,9 +709,7 @@ function settingsContentOptionKey(id, label) {
       'Relative delta': 'relative.content.relative.gap.enabled',
       'Pit status': 'relative.content.relative.pit.enabled'
     },
-    'fuel-calculator': {
-      'Advice column': 'fuel.advice'
-    },
+    'fuel-calculator': {},
     'track-map': {
       'Sector boundaries': 'track-map.sector-boundaries.enabled',
       'Local map building': 'track-map.build-from-telemetry'
@@ -1037,9 +1034,13 @@ function fuelStrategy(live, unitSystem) {
   const projection = models.raceProjection || {};
   const session = models.session || {};
   const currentFuel = positiveNumber(fuel.fuelLevelLiters ?? live?.fuel?.fuelLevelLiters);
-  const fuelPerLap = positiveNumber(fuel.fuelPerLapLiters ?? live?.fuel?.fuelPerLapLiters);
+  const fuelConfidence = fuel.confidence ?? live?.fuel?.confidence;
+  const fuelPerLap = fuelConfidence === 'measured-green-lap'
+    ? positiveNumber(fuel.fuelPerLapLiters ?? live?.fuel?.fuelPerLapLiters)
+    : null;
   const fuelPercent = positiveNumber(fuel.fuelLevelPercent ?? live?.fuel?.fuelLevelPercent);
   const maxFuel = fuelTankLiters(live, fuelPit, currentFuel, fuelPercent);
+  const usageLabel = fuelUsageLabel(session);
   const lapTime = validLapTime(fuel.lapTimeSeconds)
     ?? validLapTime(progress.strategyLapTimeSeconds)
     ?? validLapTime(projection.overallLeaderPaceSeconds)
@@ -1073,20 +1074,51 @@ function fuelStrategy(live, unitSystem) {
       [
         fuelMetricSegment('Laps', formatStintLaps(stint), 'info'),
         fuelMetricSegment('Target', formatStintTarget(stint, unitSystem), fuelStintTargetTone(stint)),
-        fuelMetricSegment('Save', formatFuelSaving(stint.requiredFuelSavingLitersPerLap, unitSystem), fuelSavingTone(stint.requiredFuelSavingLitersPerLap)),
-        fuelMetricSegment('Tires', stint.tireAdvice, stint.tireAdvice === 'no tire stop' ? 'success' : 'waiting')
+        fuelMetricSegment('Save', formatFuelSaving(stint.requiredFuelSavingLitersPerLap, unitSystem), fuelSavingTone(stint.requiredFuelSavingLitersPerLap))
       ]));
   const metricSections = [
     { title: 'Race Information', rows: [planRow, fuelRow] }
   ];
-  if (stintRows.length > 0) {
-    metricSections.push({ title: 'Stint Targets', rows: stintRows });
+  if (usageLabel != null) {
+    metricSections.push({ title: 'Fuel Usage', rows: [fuelUsageRow(usageLabel, fuel, unitSystem)] });
+  }
+  const visibleStintRows = usageLabel != null ? stintRows.slice(0, 1) : stintRows;
+  if (visibleStintRows.length > 0) {
+    metricSections.push({ title: 'Stint Targets', rows: visibleStintRows });
   }
 
   const source = fuelPerLap != null
-    ? `burn ${formatFuelPerLap(fuelPerLap, unitSystem)} (live burn) | ${formatFuelLaps(fullTankLaps, ' laps/tank')} | history none`
+    ? `burn ${formatFuelPerLap(fuelPerLap, unitSystem)} (measured green lap) | ${formatFuelLaps(fullTankLaps, ' laps/tank')} | history none`
     : 'source: waiting';
   return { status, metricSections, source };
+}
+
+function fuelUsageLabel(session) {
+  const text = `${session?.sessionType ?? ''} ${session?.sessionName ?? ''}`.toLowerCase();
+  if (text.includes('qual')) return 'Quali Usage';
+  if (text.includes('practice') || text.includes('test')) return 'Practice Usage';
+  return null;
+}
+
+function fuelUsageRow(label, fuel, unitSystem) {
+  const samples = Number.isFinite(fuel?.measuredFuelPerLapSampleCount) ? Math.max(0, Math.trunc(fuel.measuredFuelPerLapSampleCount)) : 0;
+  const average = positiveNumber(fuel?.measuredFuelPerLapAverageLiters);
+  const hasMeasuredUsage = samples > 0 && average != null;
+  const min = hasMeasuredUsage ? positiveNumber(fuel?.measuredFuelPerLapMinimumLiters ?? average) : null;
+  const max = hasMeasuredUsage ? positiveNumber(fuel?.measuredFuelPerLapMaximumLiters ?? average) : null;
+  const tone = hasMeasuredUsage ? 'info' : 'waiting';
+  return fuelMetricRow(
+    label,
+    hasMeasuredUsage
+      ? `min ${formatFuelPerLap(min, unitSystem)} | avg ${formatFuelPerLap(average, unitSystem)} | max ${formatFuelPerLap(max, unitSystem)}`
+      : 'waiting for completed lap',
+    tone,
+    [
+      fuelMetricSegment('Min', formatFuelPerLap(min, unitSystem), tone),
+      fuelMetricSegment('Avg', formatFuelPerLap(average, unitSystem), tone),
+      fuelMetricSegment('Max', formatFuelPerLap(max, unitSystem), tone),
+      fuelMetricSegment('Laps', samples > 0 ? `${samples} ${samples === 1 ? 'lap' : 'laps'}` : '--', tone)
+    ]);
 }
 
 function fuelTankLiters(live, fuelPit, currentFuel, fuelPercent) {
@@ -1168,8 +1200,7 @@ function fuelStintPlan(currentFuel, fuelPerLap, maxFuel, raceLapsRemaining) {
           source: targets.length === 1 ? 'finish' : index === targets.length - 1 ? 'final' : 'target',
           targetLaps,
           targetFuelPerLapLiters: availableFuel != null && targetLaps > 0 ? availableFuel / targetLaps : null,
-          requiredFuelSavingLitersPerLap: requiredSaving,
-          tireAdvice: targets.length <= 1 || index >= targets.length - 1 ? 'no tire stop' : 'tire data pending'
+          requiredFuelSavingLitersPerLap: requiredSaving
         });
       }
 
@@ -1193,8 +1224,7 @@ function fuelStintPlan(currentFuel, fuelPerLap, maxFuel, raceLapsRemaining) {
         source: 'current fuel',
         targetLaps: null,
         targetFuelPerLapLiters: fuelPerLap,
-        requiredFuelSavingLitersPerLap: null,
-        tireAdvice: 'no tire stop'
+        requiredFuelSavingLitersPerLap: null
       }]
     };
   }
@@ -1208,8 +1238,7 @@ function fuelStintPlan(currentFuel, fuelPerLap, maxFuel, raceLapsRemaining) {
         source: 'full tank',
         targetLaps: null,
         targetFuelPerLapLiters: fuelPerLap,
-        requiredFuelSavingLitersPerLap: null,
-        tireAdvice: 'tire data pending'
+        requiredFuelSavingLitersPerLap: null
       }]
     };
   }
@@ -1252,10 +1281,6 @@ function fuelStatus(currentFuel, fuelPerLap, raceLapsRemaining, additionalFuel, 
 
   if (fuelPerLap == null) return 'waiting for burn';
   if (raceLapsRemaining == null) return 'stint estimate';
-  if (stintPlan.requiredFuelSavingLitersPerLap != null && stintPlan.requiredFuelSavingLitersPerLap > 0.01) {
-    const targetLaps = Math.max(...stintPlan.stints.map((stint) => stint.targetLaps || 0));
-    return `${targetLaps}-lap target: save ${stintPlan.requiredFuelSavingLitersPerLap.toFixed(1)} L/lap`;
-  }
 
   if (stintPlan.plannedStintCount != null && stintPlan.plannedStopCount != null) {
     return stintPlan.plannedStintCount <= 1

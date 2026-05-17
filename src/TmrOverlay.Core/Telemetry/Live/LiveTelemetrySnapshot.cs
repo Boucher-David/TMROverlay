@@ -1008,6 +1008,10 @@ internal sealed record LiveFuelSnapshot(
     double? FuelUsePerHourKg,
     double? FuelUsePerHourLiters,
     double? FuelPerLapLiters,
+    double? MeasuredFuelPerLapMinimumLiters,
+    double? MeasuredFuelPerLapAverageLiters,
+    double? MeasuredFuelPerLapMaximumLiters,
+    int MeasuredFuelPerLapSampleCount,
     double? LapTimeSeconds,
     string LapTimeSource,
     double? EstimatedMinutesRemaining,
@@ -1022,6 +1026,10 @@ internal sealed record LiveFuelSnapshot(
         FuelUsePerHourKg: null,
         FuelUsePerHourLiters: null,
         FuelPerLapLiters: null,
+        MeasuredFuelPerLapMinimumLiters: null,
+        MeasuredFuelPerLapAverageLiters: null,
+        MeasuredFuelPerLapMaximumLiters: null,
+        MeasuredFuelPerLapSampleCount: 0,
         LapTimeSeconds: null,
         LapTimeSource: "unavailable",
         EstimatedMinutesRemaining: null,
@@ -1048,10 +1056,6 @@ internal sealed record LiveFuelSnapshot(
             ? fuelLevelLiters / fuelUsePerHourLiters!.Value * 60d
             : null;
         var lapTime = SelectLapTime(context, sample);
-        var fuelPerLapLiters = CalculateFuelPerLapLiters(fuelUsePerHourLiters, lapTime.Seconds);
-        double? estimatedLapsRemaining = fuelPerLapLiters is not null && fuelPerLapLiters.Value > 0d
-            ? fuelLevelLiters / fuelPerLapLiters.Value
-            : null;
 
         return new LiveFuelSnapshot(
             HasValidFuel: true,
@@ -1060,12 +1064,57 @@ internal sealed record LiveFuelSnapshot(
             FuelLevelPercent: fuelLevelPercent,
             FuelUsePerHourKg: fuelUsePerHourKg,
             FuelUsePerHourLiters: fuelUsePerHourLiters,
-            FuelPerLapLiters: fuelPerLapLiters,
+            FuelPerLapLiters: null,
+            MeasuredFuelPerLapMinimumLiters: null,
+            MeasuredFuelPerLapAverageLiters: null,
+            MeasuredFuelPerLapMaximumLiters: null,
+            MeasuredFuelPerLapSampleCount: 0,
             LapTimeSeconds: lapTime.Seconds,
             LapTimeSource: lapTime.Source,
             EstimatedMinutesRemaining: estimatedMinutesRemaining,
-            EstimatedLapsRemaining: estimatedLapsRemaining,
-            Confidence: hasFuelUse ? "live" : "level-only");
+            EstimatedLapsRemaining: null,
+            Confidence: "level-only");
+    }
+
+    public LiveFuelSnapshot WithMeasuredFuelPerLap(double fuelPerLapLiters)
+    {
+        return WithMeasuredFuelPerLap(
+            fuelPerLapLiters,
+            minimumFuelPerLapLiters: fuelPerLapLiters,
+            maximumFuelPerLapLiters: fuelPerLapLiters,
+            sampleCount: 1);
+    }
+
+    public LiveFuelSnapshot WithMeasuredFuelPerLap(
+        double fuelPerLapLiters,
+        double minimumFuelPerLapLiters,
+        double maximumFuelPerLapLiters,
+        int sampleCount)
+    {
+        if (!HasValidFuel || !IsPositiveFinite(fuelPerLapLiters))
+        {
+            return this;
+        }
+
+        var safeMinimum = IsPositiveFinite(minimumFuelPerLapLiters)
+            ? Math.Min(minimumFuelPerLapLiters, fuelPerLapLiters)
+            : fuelPerLapLiters;
+        var safeMaximum = IsPositiveFinite(maximumFuelPerLapLiters)
+            ? Math.Max(maximumFuelPerLapLiters, fuelPerLapLiters)
+            : fuelPerLapLiters;
+
+        return this with
+        {
+            FuelPerLapLiters = fuelPerLapLiters,
+            MeasuredFuelPerLapMinimumLiters = safeMinimum,
+            MeasuredFuelPerLapAverageLiters = fuelPerLapLiters,
+            MeasuredFuelPerLapMaximumLiters = safeMaximum,
+            MeasuredFuelPerLapSampleCount = Math.Max(1, sampleCount),
+            EstimatedLapsRemaining = FuelLevelLiters is { } fuelLevel && fuelPerLapLiters > 0d
+                ? fuelLevel / fuelPerLapLiters
+                : null,
+            Confidence = "measured-green-lap"
+        };
     }
 
     private static double? CalculateFuelUsePerHourLiters(HistoricalSessionContext context, double? fuelUsePerHourKg)
@@ -1077,19 +1126,6 @@ internal sealed record LiveFuelSnapshot(
         }
 
         return fuelUsePerHourKg.Value / fuelKgPerLiter.Value;
-    }
-
-    private static double? CalculateFuelPerLapLiters(double? fuelUsePerHourLiters, double? estimatedLapSeconds)
-    {
-        if (fuelUsePerHourLiters is null
-            || fuelUsePerHourLiters.Value <= 0d
-            || estimatedLapSeconds is null
-            || estimatedLapSeconds.Value <= 0d)
-        {
-            return null;
-        }
-
-        return fuelUsePerHourLiters.Value * estimatedLapSeconds.Value / 3600d;
     }
 
     private static LapTimeSelection SelectLapTime(HistoricalSessionContext context, HistoricalTelemetrySample sample)

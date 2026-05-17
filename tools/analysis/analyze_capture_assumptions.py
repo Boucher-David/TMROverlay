@@ -1523,7 +1523,7 @@ def build_markdown(raw_doc: dict[str, Any], ibt_doc: dict[str, Any]) -> str:
         lines.append(f"- Fuel level stats: `{json.dumps(stats.get('FuelLevel', {'count': 0}))}`.")
         lines.append(f"- Positive instantaneous fuel-use stats with valid fuel level: `{json.dumps(fuel['fuelUsePerHourKgPositive'])}` kg/h.")
         lines.append(f"- Positive fuel-use samples without a valid fuel level: {fuel['fuelUseWithoutValidFuelLevelSampleCount']}.")
-        lines.append(f"- Estimated live fuel/lap stats from sampled live burn plus valid fuel level: `{json.dumps(fuel['liveFuelPerLapLitersEstimated'])}` L/lap.")
+        lines.append(f"- Estimated fuel/lap stats from sampled instantaneous fuel-use plus valid fuel level: `{json.dumps(fuel['liveFuelPerLapLitersEstimated'])}` L/lap.")
         lines.append(f"- Fuel-delta-derived burn stats while sampled as moving/green: `{json.dumps(fuel['fuelDeltaDerivedLitersPerHour'])}` L/h.")
         lines.append(f"- Pit-like segments detected from team/local pit-road signals: {fuel['pitSegmentCount']}. Fuel increase events over sampled intervals: {fuel['fuelIncreaseEventCount']}.")
         lines.append(f"- Flat-but-valid fuel while team progress moved segments: {fuel['flatFuelSegmentCount']}.")
@@ -1597,7 +1597,7 @@ def build_markdown(raw_doc: dict[str, Any], ibt_doc: dict[str, Any]) -> str:
             "",
             "## Recommended Follow-up Changes",
             "",
-            "1. Add smoothing/confidence to live fuel burn before it can move stint targets.",
+            "1. Extend measured green-lap fuel smoothing/confidence before adding richer fuel recommendations.",
             "2. Preserve generic side-warning rendering in radar even when no decoded nearby car can be attached to the side slot.",
             "3. In gap logic/model-v2, distinguish `leader F2 missing` from `leader F2 is valid zero` instead of silently using zero.",
             "4. Keep IBT analysis in the post-session path, but treat IBT as local-car post-race enrichment rather than a replacement for raw/live opponent timing.",

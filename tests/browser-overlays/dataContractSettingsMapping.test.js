@@ -45,7 +45,7 @@ describe('data contract settings mapping', () => {
     expect(contentRow(relative, 'Pit status').enabled).toBe(false);
 
     const fuel = overlay(config, 'fuel-calculator');
-    expect(contentRow(fuel, 'Advice column').enabled).toBe(true);
+    expect(fuel.contentRows).toEqual([]);
     expect(fuel.chrome.footer.Source.race).toBe(false);
 
     const sessionWeather = overlay(config, 'session-weather');

@@ -421,11 +421,15 @@ public sealed class DataContractSnapshotOverlayMappingTests
             FuelUsePerHourKg: null,
             FuelUsePerHourLiters: 120d,
             FuelPerLapLiters: 3d,
+            MeasuredFuelPerLapMinimumLiters: 2.9d,
+            MeasuredFuelPerLapAverageLiters: 3d,
+            MeasuredFuelPerLapMaximumLiters: 3.1d,
+            MeasuredFuelPerLapSampleCount: 2,
             LapTimeSeconds: 90d,
             LapTimeSource: "contract-test",
             EstimatedMinutesRemaining: 24d,
             EstimatedLapsRemaining: 16d,
-            Confidence: "live");
+            Confidence: "measured-green-lap");
         var fuelPit = LiveFuelPitModel.Empty with
         {
             HasData = true,

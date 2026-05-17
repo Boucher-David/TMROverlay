@@ -659,7 +659,7 @@ internal sealed class OverlayManager : IDisposable
         try
         {
             RecreateManagedFormsIfFontChanged();
-            RecreateManagedFormsIfUnitsChanged();
+            ApplyUnitSystemIfChanged();
             var liveSnapshot = _liveTelemetrySource.Snapshot();
             var liveTelemetryAvailable = IsLiveTelemetryAvailable(liveSnapshot);
             var currentSession = CurrentSessionKind(liveSnapshot);
@@ -980,6 +980,10 @@ internal sealed class OverlayManager : IDisposable
             return;
         }
 
+        var existingFormCount = _forms
+            .Where(pair => ManagedOverlayDefinitions.Any(definition => string.Equals(definition.Id, pair.Key, StringComparison.Ordinal)))
+            .Count(pair => !pair.Value.IsDisposed);
+        var recreatedFormCount = 0;
         foreach (var definition in ManagedOverlayDefinitions)
         {
             if (!_forms.Remove(definition.Id, out var form))
@@ -991,12 +995,19 @@ internal sealed class OverlayManager : IDisposable
             form.Dispose();
             _appliedScales.Remove(definition.Id);
             _appliedOpacities.Remove(definition.Id);
+            recreatedFormCount++;
         }
 
+        _performanceState.RecordOverlaySettingsMutation(
+            "font_family",
+            DateTimeOffset.UtcNow,
+            existingFormCount,
+            updatedFormCount: 0,
+            recreatedFormCount);
         _appliedFontFamily = fontFamily;
     }
 
-    private void RecreateManagedFormsIfUnitsChanged()
+    private void ApplyUnitSystemIfChanged()
     {
         var unitSystem = SelectedUnitSystem;
         if (_appliedUnitSystem is null)
@@ -1010,19 +1021,29 @@ internal sealed class OverlayManager : IDisposable
             return;
         }
 
-        foreach (var definition in ManagedOverlayDefinitions)
+        var existingForms = _forms
+            .Where(pair => ManagedOverlayDefinitions.Any(definition => string.Equals(definition.Id, pair.Key, StringComparison.Ordinal)))
+            .Select(pair => pair.Value)
+            .Where(form => !form.IsDisposed)
+            .ToArray();
+        var updatedFormCount = 0;
+        foreach (var form in existingForms)
         {
-            if (!_forms.Remove(definition.Id, out var form))
+            if (form is not IUnitSystemAwareOverlay unitAware)
             {
                 continue;
             }
 
-            form.Close();
-            form.Dispose();
-            _appliedScales.Remove(definition.Id);
-            _appliedOpacities.Remove(definition.Id);
+            unitAware.SetUnitSystem(unitSystem);
+            updatedFormCount++;
         }
 
+        _performanceState.RecordOverlaySettingsMutation(
+            "unit_system",
+            DateTimeOffset.UtcNow,
+            existingForms.Length,
+            updatedFormCount,
+            recreatedFormCount: 0);
         _appliedUnitSystem = unitSystem;
     }
 

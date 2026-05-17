@@ -1487,9 +1487,13 @@ internal static class LiveRaceModelBuilder
     {
         var fuelLevelEvidence = BuildFuelLevelEvidence(sample);
         var instantaneousBurnEvidence = BuildInstantaneousBurnEvidence(sample, fuel);
-        var measuredBurnEvidence = LiveSignalEvidence.Unavailable(
-            "rolling-local-fuel-delta",
-            "requires_two_green_distance_samples");
+        var measuredBurnEvidence = fuel.FuelPerLapLiters is > 0d
+            && fuel.MeasuredFuelPerLapSampleCount > 0
+            && string.Equals(fuel.Confidence, "measured-green-lap", StringComparison.OrdinalIgnoreCase)
+                ? LiveSignalEvidence.Reliable("rolling-local-fuel-delta")
+                : LiveSignalEvidence.Unavailable(
+                    "rolling-local-fuel-delta",
+                    "requires_completed_green_lap_delta");
         var baselineEligibilityEvidence = BuildBaselineEligibilityEvidence(sample, fuel);
         var hasPitData = sample.OnPitRoad
             || sample.PitstopActive

@@ -853,7 +853,7 @@ internal static class Program
 
         if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
-            return ReviewFuelModel();
+            return ReviewFuelModel(previewMode);
         }
 
         if (string.Equals(overlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
@@ -955,7 +955,7 @@ internal static class Program
             HeaderText: $"{status} | 06:37:08");
     }
 
-    private static DesignV2OverlayModel ReviewFuelModel()
+    private static DesignV2OverlayModel ReviewFuelModel(OverlaySessionKind previewMode)
     {
         var raceRows = new[]
         {
@@ -977,37 +977,58 @@ internal static class Program
         };
         var stintRows = new[]
         {
-            ReviewMetric("Stint 1", "12 laps | target 3.1 L/lap | tires free (36.8 L)", DesignV2Evidence.Measured,
+            ReviewMetric("Stint 1", "12 laps | target 3.1 L/lap", DesignV2Evidence.Measured,
             [
                 ReviewSegment("Laps", "12 laps", DesignV2Evidence.Measured),
                 ReviewSegment("Target", "3.1 L/lap", DesignV2Evidence.Measured),
-                ReviewSegment("Save", "0.2 L/lap", DesignV2Evidence.Partial),
-                ReviewSegment("Tires", "free (36.8 L)", DesignV2Evidence.Live)
+                ReviewSegment("Save", "0.2 L/lap", DesignV2Evidence.Partial)
             ]),
-            ReviewMetric("Stint 2", "12 laps | target 3.1 L/lap | tires free (36.8 L)", DesignV2Evidence.Measured,
+            ReviewMetric("Stint 2", "12 laps | target 3.1 L/lap", DesignV2Evidence.Measured,
             [
                 ReviewSegment("Laps", "12 laps", DesignV2Evidence.Measured),
                 ReviewSegment("Target", "3.1 L/lap", DesignV2Evidence.Measured),
-                ReviewSegment("Save", "None", DesignV2Evidence.Live),
-                ReviewSegment("Tires", "free (36.8 L)", DesignV2Evidence.Live)
+                ReviewSegment("Save", "None", DesignV2Evidence.Live)
             ]),
-            ReviewMetric("Stint 3", "7 laps final | target 3.1 L/lap | --", DesignV2Evidence.Measured,
+            ReviewMetric("Stint 3", "7 laps final | target 3.1 L/lap", DesignV2Evidence.Measured,
             [
                 ReviewSegment("Laps", "7 laps", DesignV2Evidence.Measured),
                 ReviewSegment("Target", "3.1 L/lap", DesignV2Evidence.Measured),
-                ReviewSegment("Save", "None", DesignV2Evidence.Live),
-                ReviewSegment("Tires", "--", DesignV2Evidence.Unavailable)
+                ReviewSegment("Save", "None", DesignV2Evidence.Live)
             ])
         };
-        var sections = new[]
+        var sections = new List<DesignV2MetricSection>
         {
             new DesignV2MetricSection("Race Information", raceRows),
-            new DesignV2MetricSection("Stint Targets", stintRows)
         };
+        var usageLabel = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) switch
+        {
+            OverlaySessionKind.Practice => "Practice Usage",
+            OverlaySessionKind.Qualifying => "Quali Usage",
+            _ => null
+        };
+        if (usageLabel is not null)
+        {
+            var usageRows = new[]
+            {
+                ReviewMetric(usageLabel, "min 3.0 L/lap | avg 3.1 L/lap | max 3.2 L/lap", DesignV2Evidence.Measured,
+                [
+                    ReviewSegment("Min", "3.0 L/lap", DesignV2Evidence.Measured),
+                    ReviewSegment("Avg", "3.1 L/lap", DesignV2Evidence.Measured),
+                    ReviewSegment("Max", "3.2 L/lap", DesignV2Evidence.Measured),
+                    ReviewSegment("Laps", "3 laps", DesignV2Evidence.Measured)
+                ])
+            };
+            sections.Add(new DesignV2MetricSection("Fuel Usage", usageRows));
+        }
+
+        var visibleStintRows = usageLabel is not null
+            ? stintRows.Take(1).ToArray()
+            : stintRows;
+        sections.Add(new DesignV2MetricSection("Stint Targets", visibleStintRows));
         return new DesignV2OverlayModel(
             "Fuel Calculator",
             "3 stints / 2 stops",
-            "burn 3.1 L/lap (live burn) | 34.2 laps/tank | history user | tires user pit history | gap O0.18 C0.04",
+            "burn 3.1 L/lap (measured green lap) | 34.2 laps/tank | history user | gap O0.18 C0.04",
             DesignV2Evidence.Modeled,
             new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, []),
             HeaderText: "3 stints / 2 stops | 06:37:08");
@@ -1839,6 +1860,7 @@ internal static class Program
                 ModelSource = ReadDesignV2ModelFooter(designV2),
                 Evidence = designV2.DiagnosticEvidence,
                 Body = designV2.DiagnosticBodyKind,
+                UnitSystem = designV2.DiagnosticUnitSystem,
                 RadarShouldRender = designV2.DiagnosticRadarShouldRender,
                 RadarSurfaceAlpha = designV2.DiagnosticRadarSurfaceAlpha,
                 RadarCarCount = designV2.DiagnosticRadarCarCount,
@@ -1934,6 +1956,7 @@ internal static class Program
                 tab = screenshot.Metadata.Tab,
                 region = screenshot.Metadata.Region,
                 previewMode = screenshot.Metadata.PreviewMode,
+                unitSystem = screenshot.Metadata.UnitSystem ?? "Metric",
                 fixture = screenshot.Metadata.Fixture,
                 fixtureParity = screenshot.Metadata.FixtureParity,
                 comparisonMode = screenshot.Metadata.ComparisonMode,
@@ -1963,6 +1986,7 @@ internal static class Program
                     tab = screenshot.Metadata.Tab,
                     region = screenshot.Metadata.Region,
                     previewMode = screenshot.Metadata.PreviewMode,
+                    unitSystem = screenshot.Metadata.UnitSystem ?? "Metric",
                     fixture = screenshot.Metadata.Fixture,
                     fixtureParity = screenshot.Metadata.FixtureParity,
                     comparisonMode = screenshot.Metadata.ComparisonMode,
@@ -2031,6 +2055,7 @@ internal static class Program
             tab = metadata.Tab,
             region = metadata.Region,
             previewMode = metadata.PreviewMode,
+            unitSystem = metadata.UnitSystem ?? "Metric",
             fixture = metadata.Fixture,
             fixtureParity = metadata.FixtureParity,
             comparisonMode = metadata.ComparisonMode,
@@ -2038,6 +2063,13 @@ internal static class Program
             status = metadata.Status,
             bodyKind = NormalizedBodyKind(metadata.Body),
             source = NativeSourceEvidence(metadata),
+            settingsContract = new
+            {
+                unitSystem = metadata.UnitSystem ?? "Metric",
+                unitToggleLifecycle = IsWindowsSettingsSurface(metadata)
+                    ? "settings-mutates-unit-system"
+                    : "native-overlays-update-unit-system-in-place-without-form-recreation"
+            },
             sourceFiles,
             layoutHash = metadata.Layout is null ? null : Sha256(JsonSerializer.Serialize(metadata.Layout))
         };
@@ -2052,6 +2084,7 @@ internal static class Program
             tab = payload.tab,
             region = payload.region,
             previewMode = payload.previewMode,
+            unitSystem = payload.unitSystem,
             fixture = payload.fixture,
             fixtureParity = payload.fixtureParity,
             comparisonMode = payload.comparisonMode,
@@ -2059,6 +2092,7 @@ internal static class Program
             status = payload.status,
             bodyKind = payload.bodyKind,
             source = payload.source,
+            settingsContract = payload.settingsContract,
             sourceFiles = payload.sourceFiles,
             layoutHash = payload.layoutHash,
             sourceHash = Sha256(JsonSerializer.Serialize(sourceFiles)),
@@ -2289,6 +2323,7 @@ internal static class Program
             requestedRegion = metadata.Region,
             activeRegion = metadata.Region,
             previewMode = metadata.PreviewMode,
+            unitSystem = metadata.UnitSystem ?? "Metric",
             root = RectEvidence(new Rectangle(0, 0, capture.Width, capture.Height)),
             contentBounds = RectEvidence(new Rectangle(0, 0, capture.Width, capture.Height), includeAspectRatio: true),
             sidebar = elements.FirstOrDefault(element => ElementRole(element) == "settings-sidebar"),
@@ -2980,6 +3015,7 @@ internal static class Program
             contract = "overlay-model-layout-evidence/v1",
             bodyKind = NormalizedBodyKind(body.Kind),
             nativeBodyKind = body.Kind,
+            unitSystem = metadata.UnitSystem ?? "Metric",
             state = body.State,
             columns = body.Columns.Select(ColumnEvidence).ToArray(),
             rows = body.Rows.Take(80).Select(RowEvidence).ToArray(),
@@ -3850,7 +3886,8 @@ internal static class Program
         object? ContentBounds = null,
         object? LayoutEvidence = null,
         object? UiEvidence = null,
-        object? ScenarioEvidence = null);
+        object? ScenarioEvidence = null,
+        string? UnitSystem = null);
 
     private sealed record SettingsRegionSpec(string Id, string Label);
 

@@ -18,7 +18,8 @@ public sealed class FuelStrategyCalculatorTests
             leaderLapCompleted: 4,
             leaderLapDistPct: 0.5d,
             sessionTimeRemain: 250d,
-            teamLastLapTimeSeconds: 100d);
+            teamLastLapTimeSeconds: 100d,
+            measuredFuelPerLapLiters: 2.778d);
 
         var strategy = FuelStrategyCalculator.From(live, EmptyHistory(live.Combo));
 
@@ -28,7 +29,7 @@ public sealed class FuelStrategyCalculatorTests
         Assert.Equal("fuel covers finish", strategy.Status);
         Assert.Equal(2.8d, Assert.Single(strategy.Stints).LengthLaps, precision: 3);
         Assert.Equal("finish", strategy.Stints[0].Source);
-        Assert.Equal("no tire stop", strategy.Stints[0].TireAdvice!.Text);
+        Assert.Null(strategy.Stints[0].TireAdvice);
     }
 
     [Fact]
@@ -42,7 +43,8 @@ public sealed class FuelStrategyCalculatorTests
             leaderLapCompleted: 4,
             leaderLapDistPct: 0.5d,
             sessionTimeRemain: 250d,
-            teamLastLapTimeSeconds: 100d);
+            teamLastLapTimeSeconds: 100d,
+            measuredFuelPerLapLiters: 2.778d);
         var now = live.LastUpdatedAtUtc ?? DateTimeOffset.UtcNow;
 
         var model = LiveFuelStrategyModel.From(live, now, combo => EmptyHistory(combo));
@@ -95,7 +97,8 @@ public sealed class FuelStrategyCalculatorTests
             leaderLapDistPct: 0.5d,
             sessionTimeRemain: 250d,
             teamLastLapTimeSeconds: 100d,
-            leaderLastLapTimeSeconds: 80d);
+            leaderLastLapTimeSeconds: 80d,
+            measuredFuelPerLapLiters: 2.778d);
 
         var strategy = FuelStrategyCalculator.From(live, EmptyHistory(live.Combo));
 
@@ -110,7 +113,7 @@ public sealed class FuelStrategyCalculatorTests
     {
         var live = CreateLiveSnapshot(
             fuelLevelLiters: 50d,
-            fuelUsePerHourKg: 0d,
+            fuelUsePerHourKg: 75d,
             teamLastLapTimeSeconds: 100d,
             sessionTimeRemain: 1_000d);
         var aggregate = new HistoricalSessionAggregate
@@ -133,6 +136,25 @@ public sealed class FuelStrategyCalculatorTests
         Assert.Equal(2, strategy.PlannedStintCount);
         Assert.Equal(1, strategy.PlannedStopCount);
         Assert.Equal("2 stints / 1 stop", strategy.Status);
+    }
+
+    [Fact]
+    public void From_DoesNotUseInstantaneousFuelUseAsStrategyBurn()
+    {
+        var live = CreateLiveSnapshot(
+            fuelLevelLiters: 50d,
+            fuelUsePerHourKg: 75d,
+            teamLastLapTimeSeconds: 100d,
+            sessionTimeRemain: 1_000d);
+
+        var strategy = FuelStrategyCalculator.From(live, EmptyHistory(live.Combo));
+
+        Assert.Equal(50d, strategy.CurrentFuelLiters);
+        Assert.Equal(100d, strategy.FuelPerHourLiters);
+        Assert.Null(strategy.FuelPerLapLiters);
+        Assert.Equal("unavailable", strategy.FuelPerLapSource);
+        Assert.Equal("waiting for burn", strategy.Status);
+        Assert.Empty(strategy.Stints);
     }
 
     [Fact]
@@ -178,7 +200,8 @@ public sealed class FuelStrategyCalculatorTests
         var strategy = FuelStrategyCalculator.From(live, EmptyHistory(live.Combo));
 
         Assert.Equal(72d, strategy.CurrentFuelLiters);
-        Assert.Equal("live burn", strategy.FuelPerLapSource);
+        Assert.Equal("unavailable", strategy.FuelPerLapSource);
+        Assert.Null(strategy.FuelPerLapLiters);
         Assert.Equal(2.8d, strategy.RaceLapsRemaining!.Value, precision: 3);
         Assert.Equal(0.3d, strategy.OverallLeaderGapLaps!.Value, precision: 3);
         Assert.Equal(2, strategy.TeamOverallPosition);
@@ -241,16 +264,15 @@ public sealed class FuelStrategyCalculatorTests
         Assert.Equal(4, strategy.PlannedStintCount);
         Assert.Equal(3, strategy.PlannedStopCount);
         Assert.Equal(7, strategy.FinalStintTargetLaps);
-        Assert.Equal("8-lap rhythm avoids +1 stop (~65s)", strategy.Status);
+        Assert.Equal("4 stints / 3 stops", strategy.Status);
         Assert.Equal(new int?[] { 8, 8, 7, 7 }, strategy.Stints.Select(stint => stint.TargetLaps).ToArray());
         Assert.Equal(13.25d, strategy.Stints[0].TargetFuelPerLapLiters!.Value, precision: 3);
         Assert.Equal(13.36344d, strategy.Stints[0].CurrentFuelPerLapLiters!.Value, precision: 5);
         Assert.Equal("baseline history", strategy.Stints[0].CurrentFuelPerLapSource);
-        Assert.Equal("tires free (106 L)", strategy.Stints[0].TireAdvice!.Text);
-        Assert.Equal(1, strategy.RhythmComparison!.AdditionalStopCount);
-        Assert.Equal(64.822333d, strategy.RhythmComparison.EstimatedTimeLossSeconds!.Value, precision: 3);
+        Assert.Null(strategy.Stints[0].TireAdvice);
+        Assert.Null(strategy.RhythmComparison);
         Assert.Equal(0.113d, strategy.RequiredFuelSavingLitersPerLap!.Value, precision: 3);
-        Assert.False(strategy.StopOptimization!.IsRealistic);
+        Assert.Null(strategy.StopOptimization);
     }
 
     [Fact]
@@ -317,15 +339,14 @@ public sealed class FuelStrategyCalculatorTests
         Assert.Equal(8, strategy.TeammateStintTargetLaps);
         Assert.Equal("baseline teammate stints", strategy.TeammateStintTargetSource);
         Assert.Equal(8, strategy.FinalStintTargetLaps);
-        Assert.Equal("tires +4s", strategy.Stints[0].TireAdvice!.Text);
-        Assert.Equal("tires free (106 L)", strategy.Stints[1].TireAdvice!.Text);
-        Assert.Equal("8-lap rhythm avoids +1 stop (~65s)", strategy.Status);
-        Assert.Equal(1, strategy.RhythmComparison!.AdditionalStopCount);
+        Assert.All(strategy.Stints, stint => Assert.Null(stint.TireAdvice));
+        Assert.Equal("4 stints / 3 stops", strategy.Status);
+        Assert.Null(strategy.RhythmComparison);
         Assert.Equal(0.113d, strategy.RequiredFuelSavingLitersPerLap!.Value, precision: 3);
     }
 
     [Fact]
-    public void From_QuantifiesEnduranceRhythmStopCost()
+    public void From_HidesEnduranceRhythmOptimizationForV1()
     {
         var live = CreateLiveSnapshot(
             fuelLevelLiters: 106d,
@@ -373,14 +394,9 @@ public sealed class FuelStrategyCalculatorTests
         Assert.Equal(180, strategy.PlannedRaceLaps);
         Assert.Equal(23, strategy.PlannedStintCount);
         Assert.Equal(22, strategy.PlannedStopCount);
-        Assert.Equal("8-lap rhythm avoids +3 stops (~194s)", strategy.Status);
-        Assert.Equal(7, strategy.RhythmComparison!.ShortTargetLaps);
-        Assert.Equal(8, strategy.RhythmComparison.LongTargetLaps);
-        Assert.Equal(25, strategy.RhythmComparison.ShortStopCount);
-        Assert.Equal(22, strategy.RhythmComparison.LongStopCount);
-        Assert.Equal(3, strategy.RhythmComparison.AdditionalStopCount);
-        Assert.Equal(194.467d, strategy.RhythmComparison.EstimatedTimeLossSeconds!.Value, precision: 3);
-        Assert.True(strategy.RhythmComparison.IsRealistic);
+        Assert.Equal("23 stints / 22 stops", strategy.Status);
+        Assert.Null(strategy.RhythmComparison);
+        Assert.Null(strategy.StopOptimization);
     }
 
     [Fact]
@@ -443,7 +459,8 @@ public sealed class FuelStrategyCalculatorTests
         double teamLastLapTimeSeconds = 100d,
         double? leaderLastLapTimeSeconds = null,
         double fuelMaxLiters = 100d,
-        double estimatedLapSeconds = 100d)
+        double estimatedLapSeconds = 100d,
+        double? measuredFuelPerLapLiters = null)
     {
         var context = new HistoricalSessionContext
         {
@@ -507,6 +524,10 @@ public sealed class FuelStrategyCalculatorTests
             LeaderLastLapTimeSeconds: leaderLastLapTimeSeconds);
 
         var fuel = LiveFuelSnapshot.From(context, sample);
+        if (measuredFuelPerLapLiters is { } measured)
+        {
+            fuel = fuel.WithMeasuredFuelPerLap(measured);
+        }
         var proximity = LiveProximitySnapshot.From(context, sample);
         var leaderGap = LiveLeaderGapSnapshot.From(sample);
         var models = LiveRaceModelBuilder.From(context, sample, fuel, proximity, leaderGap);

@@ -39,7 +39,8 @@ test-results/
 /history/user/
 /artifacts/
 # Local screenshot drops copied in for review, for example 0.20.0/.
-/[0-9]*.[0-9]*.[0-9]*/
+/0.20.1/
+/v*-screenshots/
 
 # Local PSD/livery experiments can be large binary files.
 /livery-poc/

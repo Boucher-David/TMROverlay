@@ -835,6 +835,38 @@ public sealed class SimpleTelemetryOverlayViewModelTests
     }
 
     [Fact]
+    public void PitService_FromTelemetry_HidesAvailableTiresWhenDryTireLimitIsUnlimited()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = Snapshot(now, LiveRaceModels.Empty with
+        {
+            FuelPit = LiveFuelPitModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                PlayerCarDryTireSetLimit = 0,
+                TireSetsAvailable = 1,
+                LeftFrontTiresAvailable = 1,
+                RightFrontTiresAvailable = 1,
+                LeftRearTiresAvailable = 1,
+                RightRearTiresAvailable = 1,
+                TireSetsUsed = 1,
+                LeftFrontTiresUsed = 1,
+                RightFrontTiresUsed = 1,
+                LeftRearTiresUsed = 1,
+                RightRearTiresUsed = 1
+            }
+        });
+
+        var viewModel = PitServiceOverlayViewModel.From(snapshot, now, "Metric");
+
+        var section = Assert.Single(viewModel.Sections);
+        Assert.DoesNotContain(section.Rows, row => row.Label == "Set limit");
+        Assert.DoesNotContain(section.Rows, row => row.Label == "Available");
+        Assert.Contains(section.Rows, row => row.Label == "Used" && row.Cells.All(cell => cell.Value == "1"));
+    }
+
+    [Fact]
     public void PitService_FromTelemetry_ShowsRepresentativeTireAnalysisRows()
     {
         var now = DateTimeOffset.UtcNow;
@@ -855,7 +887,7 @@ public sealed class SimpleTelemetryOverlayViewModelTests
         Assert.Contains(section.Rows, row => row.Label == "Compound" && row.Cells.All(cell => cell.Value == "Dry" && cell.Tone == SimpleTelemetryTone.Info));
         Assert.Contains(section.Rows, row => row.Label == "Change" && row.Cells[0].Value == "Change" && row.Cells[0].Tone == SimpleTelemetryTone.Success);
         Assert.Contains(section.Rows, row => row.Label == "Change" && row.Cells[1].Value == "Keep" && row.Cells[1].Tone == SimpleTelemetryTone.Info);
-        Assert.Contains(section.Rows, row => row.Label == "Available" && row.Cells[0].Value == "2");
+        Assert.Contains(section.Rows, row => row.Label == "Available" && row.Cells.All(cell => cell.Value == "2"));
         Assert.Contains(section.Rows, row => row.Label == "Used" && row.Cells[0].Value == "1");
         Assert.Contains(section.Rows, row => row.Label == "Wear" && row.Cells[0].Value == "92/91/90%");
         Assert.Contains(section.Rows, row => row.Label == "Temp" && row.Cells[0].Value == "176/178/180 F");
@@ -875,6 +907,7 @@ public sealed class SimpleTelemetryOverlayViewModelTests
                 Quality = LiveModelQuality.Reliable,
                 PlayerCarDryTireSetLimit = 4,
                 TireSetsAvailable = 0,
+                TireSetsUsed = 4,
                 LeftFrontTiresAvailable = 0,
                 RightFrontTiresAvailable = 0,
                 LeftRearTiresAvailable = 0,
@@ -887,6 +920,31 @@ public sealed class SimpleTelemetryOverlayViewModelTests
         var section = Assert.Single(viewModel.Sections);
         Assert.Contains(section.Rows, row => row.Label == "Set limit" && row.Cells.All(cell => cell.Value == "4 sets"));
         Assert.Contains(section.Rows, row => row.Label == "Available" && row.Cells.All(cell => cell.Value == "0" && cell.Tone == SimpleTelemetryTone.Error));
+    }
+
+    [Fact]
+    public void PitService_FromTelemetry_CollapsesAvailableTiresToSharedLimitedInventory()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = Snapshot(now, LiveRaceModels.Empty with
+        {
+            FuelPit = LiveFuelPitModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                PlayerCarDryTireSetLimit = 13,
+                TireSetsAvailable = 11,
+                LeftFrontTiresAvailable = 12,
+                RightFrontTiresAvailable = 11,
+                LeftRearTiresAvailable = 12,
+                RightRearTiresAvailable = 11
+            }
+        });
+
+        var viewModel = PitServiceOverlayViewModel.From(snapshot, now, "Metric");
+
+        var section = Assert.Single(viewModel.Sections);
+        Assert.Contains(section.Rows, row => row.Label == "Available" && row.Cells.All(cell => cell.Value == "11"));
     }
 
     [Fact]
@@ -971,6 +1029,52 @@ public sealed class SimpleTelemetryOverlayViewModelTests
         var viewModel = InputStateOverlayViewModel.From(snapshot, now, "Metric");
 
         Assert.Equal("waiting for player in car", viewModel.Status);
+    }
+
+    [Fact]
+    public void InputState_FromTelemetry_RendersWhenPlayerIsInPitRoadButNotGarage()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = Snapshot(now, LiveRaceModels.Empty with
+        {
+            RaceEvents = LiveRaceEventModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                IsOnTrack = true,
+                IsInGarage = false,
+                IsGarageVisible = false,
+                OnPitRoad = true
+            },
+            FuelPit = LiveFuelPitModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                OnPitRoad = true,
+                PlayerCarInPitStall = true,
+                PitstopActive = true
+            },
+            Inputs = LiveInputTelemetryModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                SpeedMetersPerSecond = 0.01d,
+                Gear = 0,
+                Rpm = 2_015d,
+                Throttle = 0d,
+                Brake = 1d,
+                Clutch = 0d,
+                HasPedalInputs = true,
+                SteeringWheelAngle = 0.003d,
+                HasSteeringInput = true
+            }
+        });
+
+        var viewModel = InputStateOverlayViewModel.From(snapshot, now, "Metric");
+
+        Assert.Equal("N | 2015 rpm", viewModel.Status);
+        Assert.Contains(viewModel.Rows, row => row.Label == "Pedals" && row.Value.Contains("B 100%", StringComparison.Ordinal));
+        Assert.Contains(viewModel.Rows, row => row.Label == "Steering" && row.Value == "0 deg");
     }
 
     private static LiveTelemetrySnapshot Snapshot(DateTimeOffset now, LiveRaceModels models)

@@ -102,7 +102,7 @@ Unexpected refresh/render failures are logged through the overlay logger and sur
 `OverlayManager` registers Relative as a normal managed driving overlay:
 
 - Default id: `relative`.
-- Default size: `520x360`.
+- Default size: `360x373`.
 - Default position: `(650, 24)`, near the right-side driver stack.
 - Settings expose a symmetric rows-around-focus count and Content-tab row visibility controls.
 - Theme font, visibility, scale, opacity, content/header/footer session gates, and persistence follow the same managed-overlay behavior as the other product overlays.

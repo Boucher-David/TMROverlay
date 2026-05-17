@@ -49,6 +49,8 @@ DEFAULT_COLUMNS = [
     {"id": "standings.driver", "label": "Driver", "dataKey": "driver", "width": 250, "alignment": "left"},
     {"id": "standings.gap", "label": "GAP", "dataKey": "gap", "width": 60, "alignment": "right"},
     {"id": "standings.interval", "label": "INT", "dataKey": "interval", "width": 60, "alignment": "right"},
+    {"id": "standings.fastest-lap", "label": "FAST", "dataKey": "fastest-lap", "width": 70, "alignment": "right"},
+    {"id": "standings.last-lap", "label": "LAST", "dataKey": "last-lap", "width": 70, "alignment": "right"},
     {"id": "standings.pit", "label": "PIT", "dataKey": "pit", "width": 30, "alignment": "right"},
 ]
 
@@ -1603,13 +1605,14 @@ def timing_display_rows(
             row.get("carIdx") or 999,
         ),
     )
-    rows = select_around_reference(rows, ref_idx, maximum_rows, preserve_first=True)
+    ordered_rows = rows
+    rows = select_around_reference(ordered_rows, ref_idx, maximum_rows, preserve_first=True)
     display_rows = [
         car_display_row(
             timing,
             timing,
             ref_idx,
-            rows,
+            ordered_rows,
             timing_rows,
             drivers,
             session_data=session_data,
@@ -1685,6 +1688,14 @@ def car_display_row(
     else:
         gap = signed_gap(gap_seconds, gap_laps)
     interval = interval_override or ("0.0" if display_class_position == 1 else signed_gap(interval_seconds, interval_laps))
+    fastest_lap_seconds = row_best_lap_seconds(row, timing)
+    last_lap_seconds = row_last_lap_seconds(row, timing)
+    class_fastest_lap_seconds = fastest_lap_seconds_for_class(group_rows, timing_rows)
+    cell_tones = lap_cell_tones(
+        fastest_lap_seconds,
+        last_lap_seconds,
+        class_fastest_lap_seconds,
+        session_kind)
     return {
         "cells": [
             str(display_class_position) if display_class_position else "--",
@@ -1692,8 +1703,11 @@ def car_display_row(
             driver_name(driver, car_idx),
             gap,
             interval,
+            format_lap_time(fastest_lap_seconds),
+            format_lap_time(last_lap_seconds),
             "IN" if timing.get("onPitRoad") is True else "",
         ],
+        "cellTones": cell_tones,
         "isClassHeader": False,
         "isReference": ref_idx == car_idx,
         "isPit": timing.get("onPitRoad") is True,
@@ -1703,6 +1717,69 @@ def car_display_row(
         "headerTitle": None,
         "headerDetail": None,
     }
+
+
+def row_best_lap_seconds(row: dict[str, Any], timing: dict[str, Any] | None) -> float | None:
+    row_value = valid_lap_time(row.get("bestLapTimeSeconds"))
+    if row_value is not None:
+        return row_value
+    return valid_lap_time((timing or {}).get("bestLapTimeSeconds"))
+
+
+def row_last_lap_seconds(row: dict[str, Any], timing: dict[str, Any] | None) -> float | None:
+    row_value = valid_lap_time(row.get("lastLapTimeSeconds"))
+    if row_value is not None:
+        return row_value
+    return valid_lap_time((timing or {}).get("lastLapTimeSeconds"))
+
+
+def fastest_lap_seconds_for_class(
+    group_rows: list[dict[str, Any]],
+    timing_rows: dict[int, dict[str, Any]],
+) -> float | None:
+    fastest: float | None = None
+    for row in group_rows:
+        lap_time = row_best_lap_seconds(row, timing_rows.get(row["carIdx"]))
+        if lap_time is None:
+            continue
+        if fastest is None or lap_time < fastest:
+            fastest = lap_time
+    return fastest
+
+
+def lap_cell_tones(
+    fastest_lap_seconds: float | None,
+    last_lap_seconds: float | None,
+    class_fastest_lap_seconds: float | None,
+    session_kind: str | None,
+) -> list[str | None]:
+    is_class_fastest = matching_lap_time(fastest_lap_seconds, class_fastest_lap_seconds)
+    is_class_fastest_last = matching_lap_time(last_lap_seconds, class_fastest_lap_seconds)
+    recent_car_best = matching_lap_time(last_lap_seconds, fastest_lap_seconds) and not is_class_fastest
+    race_highlights = session_kind == "race"
+    return [
+        None,
+        None,
+        None,
+        None,
+        None,
+        "best-lap" if race_highlights and is_class_fastest else ("personal-best" if recent_car_best else None),
+        "best-lap" if race_highlights and is_class_fastest_last else ("personal-best" if recent_car_best and not is_class_fastest_last else None),
+        None,
+    ]
+
+
+def matching_lap_time(value: float | None, reference: float | None) -> bool:
+    return value is not None and reference is not None and abs(value - reference) <= 0.0005
+
+
+def format_lap_time(seconds: float | None) -> str:
+    value = valid_lap_time(seconds)
+    if value is None:
+        return "--"
+    minutes = math.floor(value / 60.0)
+    remaining = value - minutes * 60.0
+    return f"{minutes}:{remaining:06.3f}" if minutes > 0 else f"{remaining:.3f}"
 
 
 def leader_progress(row: dict[str, Any], timing: dict[str, Any] | None) -> str | None:

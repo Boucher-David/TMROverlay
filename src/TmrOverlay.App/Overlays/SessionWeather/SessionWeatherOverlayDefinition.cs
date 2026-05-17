@@ -7,7 +7,7 @@ internal static class SessionWeatherOverlayDefinition
     public static OverlayDefinition Definition { get; } = new(
         Id: "session-weather",
         DisplayName: "Session / Weather",
-        DefaultWidth: 480,
-        DefaultHeight: 520,
+        DefaultWidth: 464,
+        DefaultHeight: 496,
         FadeWhenLiveTelemetryUnavailable: true);
 }

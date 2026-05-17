@@ -6,6 +6,7 @@ import {
 } from './browserOverlayTestHost.js';
 import {
   renderAppValidatorReviewHtml,
+  renderInstallerReviewHtml,
   renderSettingsGeneralReviewHtml
 } from './browserOverlayAssets.js';
 
@@ -422,6 +423,62 @@ test.describe('browser overlay Playwright integration', () => {
     await expect(page.getByText('Detection')).toHaveCount(0);
     await page.getByRole('tab', { name: 'Preview' }).click();
     await expect(page.locator('.cover-preview.standalone')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('renders browser installer review with captured MSI menu structure', async ({ page }) => {
+    await page.route('**/*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.hostname === 'localhost' && url.pathname === '/review/installer') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/html; charset=utf-8',
+          body: renderInstallerReviewHtml({
+            menuId: url.searchParams.get('menu') || 'welcome'
+          })
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 404,
+        contentType: 'text/plain; charset=utf-8',
+        body: 'not found'
+      });
+    });
+
+    await page.setViewportSize({ width: 900, height: 620 });
+    await page.goto('http://localhost:8765/review/installer?menu=welcome');
+
+    await expect(page.locator('.installer-window')).toHaveAttribute('data-menu-id', 'welcome');
+    await expect(page.locator('.installer-titlebar-title')).toHaveText('Tech Mates Racing Overlay Setup');
+    await expect(page.locator('.installer-splash img')).toHaveAttribute('src', /^data:image\/bmp;base64,/);
+    await expect(page.locator('.installer-heading')).toHaveText('Welcome to the Tech Mates Racing Overlay Setup Wizard');
+    await expect(page.locator('.installer-copy')).toContainText('change the way Tech Mates Racing Overlay features are installed');
+    await expect(page.getByRole('button', { name: /Back/ })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /Next/ })).toBeEnabled();
+
+    await page.goto('http://localhost:8765/review/installer?menu=installer-page-02');
+    await expect(page.locator('.installer-window')).toHaveAttribute('data-menu-id', 'installer-page-02');
+    await expect(page.locator('.installer-banner img')).toHaveAttribute('src', /^data:image\/bmp;base64,/);
+    await expect(page.locator('.installer-heading')).toHaveText('Installation Scope');
+    await expect(page.locator('.installer-copy')).toContainText('Choose the installation scope and folder');
+    await expect(page.locator('.installer-copy')).toContainText('Install &just for you (David)');
+    await expect(page.locator('.installer-copy')).toContainText('Install for all users of this &machine');
+    await expect(page.getByRole('button', { name: /Next/ })).toBeEnabled();
+
+    await page.goto('http://localhost:8765/review/installer?menu=ready-to-install');
+    await expect(page.locator('.installer-window')).toHaveAttribute('data-menu-id', 'ready-to-install');
+    await expect(page.locator('.installer-heading')).toHaveText('Ready to install Tech Mates Racing Overlay');
+    await expect(page.locator('.installer-copy')).toContainText('Click Install to begin the installation.');
+    await expect(page.getByRole('button', { name: /Back/ })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /Install/ })).toBeEnabled();
+
+    await page.goto('http://localhost:8765/review/installer?menu=cancel-confirm');
+    await expect(page.locator('.installer-window')).toHaveAttribute('data-menu-id', 'cancel-confirm');
+    await expect(page.locator('.installer-cancel-window')).toContainText('Are you sure you want to cancel Tech Mates Racing Overlay installation?');
+    await expect(page.getByRole('button', { name: /Yes/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /No/ })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
@@ -954,15 +1011,17 @@ function standingsDisplayModel() {
       { id: 'standings.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
       { id: 'standings.gap', label: 'GAP', dataKey: 'gap', width: 60, alignment: 'right' },
       { id: 'standings.interval', label: 'INT', dataKey: 'interval', width: 60, alignment: 'right' },
+      { id: 'standings.fastest-lap', label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
+      { id: 'standings.last-lap', label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
       { id: 'standings.pit', label: 'PIT', dataKey: 'pit', width: 30, alignment: 'right' }
     ],
     rows: [
       headerRow('LMP2', '2 cars | ~10 laps', '#33CEFF'),
-      carRow(['1', '#8', 'Proto One', 'Lap 22', '-45.0', '']),
+      carRow(['1', '#8', 'Proto One', 'Lap 22', '-45.0', '1:45.884', '1:46.210', '']),
       headerRow('GT3', '3 cars | ~12.4 laps', '#FFAA00'),
-      carRow(['1', '#11', 'GT3 Leader', 'Lap 21', '-2.0', '']),
-      carRow(['2', '#71', 'Focus Racer', '+3.4', '0.0', ''], { isReference: true }),
-      carRow(['3', '#91', 'Chaser', '+8.9', '+5.5', 'IN'], { isPit: true })
+      carRow(['1', '#11', 'GT3 Leader', 'Lap 21', '-2.0', '1:53.112', '1:53.112', '']),
+      carRow(['2', '#71', 'Focus Racer', '+3.4', '0.0', '1:54.228', '1:54.901', ''], { isReference: true }),
+      carRow(['3', '#91', 'Chaser', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
     ],
     metrics: []
   };

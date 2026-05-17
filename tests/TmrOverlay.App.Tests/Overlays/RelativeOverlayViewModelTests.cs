@@ -245,13 +245,14 @@ public sealed class RelativeOverlayViewModelTests
     }
 
     [Fact]
-    public void From_CarriesWholeLapRelationshipForLappedRows()
+    public void From_CarriesWholeLapRelationshipForLappedRowsDuringRace()
     {
         var now = DateTimeOffset.UtcNow;
-        var snapshot = Snapshot(
+        var snapshot = WithSession(Snapshot(
             now,
             RelativeRow(carIdx: 11, isAhead: true, seconds: 8.4d, classPosition: 4, lapDeltaToReference: 1),
-            RelativeRow(carIdx: 12, isAhead: false, seconds: 12.1d, classPosition: 8, lapDeltaToReference: -2));
+            RelativeRow(carIdx: 12, isAhead: false, seconds: 12.1d, classPosition: 8, lapDeltaToReference: -2)),
+            "Race");
 
         var viewModel = RelativeOverlayViewModel.From(
             snapshot,
@@ -260,6 +261,29 @@ public sealed class RelativeOverlayViewModelTests
             carsBehind: 5);
 
         Assert.Equal(new int?[] { 1, 0, -2 }, viewModel.Rows.Select(row => row.LapDeltaToReference));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Practice")]
+    [InlineData("Open Practice")]
+    [InlineData("Qualify")]
+    public void From_SuppressesWholeLapRelationshipOutsideRace(string? sessionType)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = WithSession(Snapshot(
+            now,
+            RelativeRow(carIdx: 11, isAhead: true, seconds: 8.4d, classPosition: 4, lapDeltaToReference: 1),
+            RelativeRow(carIdx: 12, isAhead: false, seconds: 12.1d, classPosition: 8, lapDeltaToReference: -2)),
+            sessionType);
+
+        var viewModel = RelativeOverlayViewModel.From(
+            snapshot,
+            now,
+            carsAhead: 5,
+            carsBehind: 5);
+
+        Assert.Equal(new int?[] { null, null, null }, viewModel.Rows.Select(row => row.LapDeltaToReference));
     }
 
     [Fact]
@@ -575,6 +599,24 @@ public sealed class RelativeOverlayViewModelTests
                     Quality: rows.Length == 0 ? LiveModelQuality.Unavailable : rows.Max(row => row.Quality),
                     ReferenceCarIdx: 10,
                     Rows: rows)
+            }
+        };
+    }
+
+    private static LiveTelemetrySnapshot WithSession(LiveTelemetrySnapshot snapshot, string? sessionType)
+    {
+        return snapshot with
+        {
+            Models = snapshot.Models with
+            {
+                Session = LiveSessionModel.Empty with
+                {
+                    HasData = sessionType is not null,
+                    Quality = sessionType is null ? LiveModelQuality.Unavailable : LiveModelQuality.Reliable,
+                    SessionType = sessionType,
+                    SessionName = sessionType,
+                    EventType = sessionType
+                }
             }
         };
     }

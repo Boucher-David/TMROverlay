@@ -22,7 +22,8 @@ internal sealed record RelativeOverlayViewModel(
             return Waiting(availability.StatusText);
         }
 
-        var reference = ReferenceRow(snapshot);
+        var showLapRelationship = OverlayAvailabilityEvaluator.NormalizeSessionKind(availability.SessionKind) == OverlaySessionKind.Race;
+        var reference = ReferenceRow(snapshot, showLapRelationship);
         var relativeRows = snapshot.Models.Relative.Rows;
         if (reference is null)
         {
@@ -36,14 +37,14 @@ internal sealed record RelativeOverlayViewModel(
             .Take(Math.Clamp(carsAhead, 0, 8))
             .OrderByDescending(RelativeSortKey)
             .ThenBy(row => row.CarIdx)
-            .Select(row => ToRow(snapshot, row, direction: RelativeRowDirection.Ahead))
+            .Select(row => ToRow(snapshot, row, direction: RelativeRowDirection.Ahead, showLapRelationship))
             .ToArray();
         var behind = relativeRows
             .Where(row => row.IsBehind)
             .OrderBy(RelativeSortKey)
             .ThenBy(row => row.CarIdx)
             .Take(Math.Clamp(carsBehind, 0, 8))
-            .Select(row => ToRow(snapshot, row, direction: RelativeRowDirection.Behind))
+            .Select(row => ToRow(snapshot, row, direction: RelativeRowDirection.Behind, showLapRelationship))
             .ToArray();
         var rows = ahead.Concat([reference]).Concat(behind).ToArray();
         var status = BuildStatus(snapshot, rows.Count(row => !row.IsReference), relativeRows.Count);
@@ -103,7 +104,9 @@ internal sealed record RelativeOverlayViewModel(
             : stableRows;
     }
 
-    private static RelativeOverlayRowViewModel? ReferenceRow(LiveTelemetrySnapshot snapshot)
+    private static RelativeOverlayRowViewModel? ReferenceRow(
+        LiveTelemetrySnapshot snapshot,
+        bool showLapRelationship)
     {
         var referenceCarIdx = snapshot.Models.Reference.FocusCarIdx
             ?? snapshot.Models.Relative.ReferenceCarIdx
@@ -145,13 +148,14 @@ internal sealed record RelativeOverlayViewModel(
             IsSameClass: true,
             IsPit: timing?.OnPitRoad == true,
             IsPartial: false,
-            LapDeltaToReference: 0);
+            LapDeltaToReference: showLapRelationship ? 0 : null);
     }
 
     private static RelativeOverlayRowViewModel ToRow(
         LiveTelemetrySnapshot snapshot,
         LiveRelativeRow row,
-        RelativeRowDirection direction)
+        RelativeRowDirection direction,
+        bool showLapRelationship)
     {
         var driver = snapshot.Models.DriverDirectory.Drivers.FirstOrDefault(driver => driver.CarIdx == row.CarIdx);
         var scoring = snapshot.Models.Scoring.Rows.FirstOrDefault(scoringRow => scoringRow.CarIdx == row.CarIdx);
@@ -172,7 +176,7 @@ internal sealed record RelativeOverlayViewModel(
             IsSameClass: row.IsSameClass,
             IsPit: row.OnPitRoad == true,
             IsPartial: !row.TimingEvidence.IsUsable && !row.PlacementEvidence.IsUsable,
-            LapDeltaToReference: row.LapDeltaToReference);
+            LapDeltaToReference: showLapRelationship ? row.LapDeltaToReference : null);
     }
 
     private static string BuildStatus(

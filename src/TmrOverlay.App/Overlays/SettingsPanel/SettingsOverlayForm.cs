@@ -1111,7 +1111,10 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             definition.Id,
             definition.DefaultWidth,
             definition.DefaultHeight,
-            defaultEnabled: false);
+            defaultEnabled: false,
+            defaultOpacity: string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+                ? TrackMapBrowserSettings.Default.InternalOpacity
+                : 1d);
         var page = CreateTabPage(definition.DisplayName);
         page.Tag = definition.Id;
         var title = CreateSectionLabel(definition.DisplayName, 18, 18, 500);

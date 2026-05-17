@@ -8,18 +8,31 @@ public sealed class SdkFieldAvailabilityCorpusTests
     private const string CorpusRelativePath = "fixtures/telemetry-analysis/sdk-field-availability-corpus.json";
 
     [Fact]
-    public void Corpus_CoversCurrentEnduranceSdkSchema()
+    public void Corpus_CoversCurrentSdkSchemas()
     {
         var corpus = ReadCorpus();
 
         Assert.Equal(1, RequiredInt(corpus, "schemaVersion"));
-        Assert.Equal(334, RequiredInt(corpus, "fieldCount"));
+        Assert.Equal(340, RequiredInt(corpus, "fieldCount"));
+        Assert.Equal(340, RequiredArray(corpus["fields"]).Count);
 
         var sources = RequiredArray(corpus["sources"]).Select(RequiredObject).ToArray();
-        Assert.Equal(2, sources.Length);
+        Assert.Equal(4, sources.Length);
         Assert.Contains(sources, source => RequiredString(source, "sourceCategory") == "endurance-4h-team-race");
         Assert.Contains(sources, source => RequiredString(source, "sourceCategory") == "endurance-24h-fragment");
-        Assert.All(sources, source => Assert.Equal(334, RequiredInt(source, "schemaFieldCount")));
+        Assert.Contains(sources, source => RequiredString(source, "sourceCategory") == "ai-nascar-limited-tire-race");
+        Assert.Contains(sources, source => RequiredString(source, "sourceCategory") == "pcup-open-practice-pit-service");
+        Assert.All(
+            sources.Where(source => RequiredString(source, "sourceCategory").StartsWith("endurance-", StringComparison.Ordinal)),
+            source => Assert.Equal(334, RequiredInt(source, "schemaFieldCount")));
+        Assert.Contains(
+            sources,
+            source => RequiredString(source, "sourceCategory") == "ai-nascar-limited-tire-race"
+                && RequiredInt(source, "schemaFieldCount") == 325);
+        Assert.Contains(
+            sources,
+            source => RequiredString(source, "sourceCategory") == "pcup-open-practice-pit-service"
+                && RequiredInt(source, "schemaFieldCount") == 334);
 
         var fields = RequiredArray(corpus["fields"]).Select(RequiredObject).ToDictionary(field => RequiredString(field, "name"));
         foreach (var requiredField in new[]
@@ -31,7 +44,11 @@ public sealed class SdkFieldAvailabilityCorpusTests
             "PlayerCarPitSvStatus",
             "DCDriversSoFar",
             "WeatherDeclaredWet",
-            "CarIdxF2Time"
+            "CarIdxF2Time",
+            "dpLTireChange",
+            "dpRTireChange",
+            "dpWeightJackerLeft",
+            "dpWeightJackerRight"
         })
         {
             Assert.Contains(requiredField, fields.Keys);

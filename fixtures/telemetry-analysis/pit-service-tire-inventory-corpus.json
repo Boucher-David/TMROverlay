@@ -1,0 +1,364 @@
+{
+  "schemaVersion": 1,
+  "description": "Compact redacted pit-service and tire-inventory evidence from May 2026 raw captures. This records field behavior needed for overlay logic without storing raw telemetry frames, full session YAML, driver names, user IDs, team names, or source telemetry.bin payloads.",
+  "sources": [
+    {
+      "captureId": "capture-20260515-210810-124",
+      "sourceCategory": "ai-nascar-limited-tire-race",
+      "session": "AI NASCAR race at Charlotte Motor Speedway Oval",
+      "frameCount": 55944,
+      "tickRateHz": 60,
+      "sessionInfoSnapshotCount": 180,
+      "appInformationalVersion": "0.20.0+8ca6a6e54b934522f6c090ba18b4bca61804a854"
+    },
+    {
+      "captureId": "capture-20260516-204700-385",
+      "sourceCategory": "pcup-open-practice-pit-service",
+      "session": "Porsche 911 Cup open practice at Circuit de Spa-Francorchamps",
+      "frameCount": 29363,
+      "tickRateHz": 60,
+      "sessionInfoSnapshotCount": 40,
+      "appInformationalVersion": "0.20.0+8ca6a6e54b934522f6c090ba18b4bca61804a854"
+    }
+  ],
+  "fieldGroups": {
+    "tireInventory": [
+      "PlayerCarDryTireSetLimit",
+      "TireSetsAvailable",
+      "TireSetsUsed",
+      "LFTiresAvailable",
+      "RFTiresAvailable",
+      "LRTiresAvailable",
+      "RRTiresAvailable",
+      "LeftTireSetsAvailable",
+      "RightTireSetsAvailable",
+      "FrontTireSetsAvailable",
+      "RearTireSetsAvailable",
+      "LFTiresUsed",
+      "RFTiresUsed",
+      "LRTiresUsed",
+      "RRTiresUsed"
+    ],
+    "pitServiceState": [
+      "OnPitRoad",
+      "PlayerCarInPitStall",
+      "PitstopActive",
+      "PlayerCarPitSvStatus",
+      "PitSvFlags",
+      "PitSvFuel",
+      "dpFuelAddKg",
+      "dpFuelFill"
+    ],
+    "tireRequests": [
+      "dpLFTireChange",
+      "dpRFTireChange",
+      "dpLRTireChange",
+      "dpRRTireChange",
+      "dpLTireChange",
+      "dpRTireChange"
+    ],
+    "carSpecificPitSetupRequests": [
+      "dpWeightJackerLeft",
+      "dpWeightJackerRight"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "nascar-limited-shared-tire-inventory",
+      "captureId": "capture-20260515-210810-124",
+      "summary": "NASCAR exposes a real limited dry-tire inventory. The limit is 13 for the capture, and available/used counters become meaningful around pit road and service. Treat visible remaining as a shared inventory count, not four separate corner buckets, until future captures prove separate inventory buckets.",
+      "observedRanges": {
+        "PlayerCarDryTireSetLimit": {
+          "distinctValues": [
+            13
+          ]
+        },
+        "TireSetsAvailable": {
+          "distinctValues": [
+            0,
+            11,
+            12,
+            13
+          ]
+        },
+        "TireSetsUsed": {
+          "distinctValues": [
+            0,
+            1,
+            2
+          ]
+        },
+        "cornerTiresAvailable": {
+          "fields": [
+            "LFTiresAvailable",
+            "RFTiresAvailable",
+            "LRTiresAvailable",
+            "RRTiresAvailable"
+          ],
+          "distinctValues": [
+            0,
+            11,
+            12,
+            13
+          ]
+        }
+      },
+      "timeline": [
+        {
+          "sessionTimeSeconds": 43.233,
+          "frameIndex": 53,
+          "event": "available-counters-first-populated",
+          "values": {
+            "TireSetsAvailable": 13,
+            "TireSetsUsed": 0
+          }
+        },
+        {
+          "sessionTimeSeconds": 56.4,
+          "frameIndex": 838,
+          "event": "pre-race-pit-road-inventory-decrement-observed",
+          "values": {
+            "TireSetsAvailable": 12,
+            "TireSetsUsed": 1
+          }
+        },
+        {
+          "sessionTimeSeconds": 58.367,
+          "frameIndex": 958,
+          "event": "on-track-counters-return-to-zero",
+          "interpretation": "Zero before/away from a proven valid service context can mean not populated, not exhausted.",
+          "values": {
+            "TireSetsAvailable": 0,
+            "TireSetsUsed": 0
+          }
+        },
+        {
+          "sessionTimeSeconds": 733.317,
+          "frameIndex": 41451,
+          "event": "real-pit-entry",
+          "values": {
+            "OnPitRoad": true
+          }
+        },
+        {
+          "sessionTimeSeconds": 750.683,
+          "frameIndex": 42493,
+          "event": "service-start",
+          "values": {
+            "PitstopActive": true
+          }
+        },
+        {
+          "sessionTimeSeconds": 755.167,
+          "frameIndex": 42762,
+          "event": "right-side-and-shared-inventory-decrement",
+          "values": {
+            "TireSetsAvailable": 11,
+            "TireSetsUsed": 2,
+            "RFTiresAvailable": 11,
+            "RRTiresAvailable": 11,
+            "RightTireSetsAvailable": 11
+          }
+        },
+        {
+          "sessionTimeSeconds": 761.833,
+          "frameIndex": 43162,
+          "event": "left-rear-decrement",
+          "values": {
+            "LRTiresAvailable": 11,
+            "LeftTireSetsAvailable": 11
+          }
+        },
+        {
+          "sessionTimeSeconds": 762.167,
+          "frameIndex": 43182,
+          "event": "left-front-decrement",
+          "values": {
+            "LFTiresAvailable": 11
+          }
+        },
+        {
+          "sessionTimeSeconds": 809.433,
+          "frameIndex": 46018,
+          "event": "service-complete",
+          "values": {
+            "PitstopActive": false
+          }
+        }
+      ],
+      "overlayImplication": "Render tire remaining only when PlayerCarDryTireSetLimit is positive and a representative available counter is meaningful. Prefer TireSetsAvailable and collapse visible cells to one shared count."
+    },
+    {
+      "id": "pcup-open-practice-unlimited-counters",
+      "captureId": "capture-20260516-204700-385",
+      "summary": "PCup open practice exposes non-zero available/used counters even though PlayerCarDryTireSetLimit is 0. These counters are useful diagnostic/service-menu evidence but are not legitimate limited-inventory evidence for visible remaining cells.",
+      "observedRanges": {
+        "PlayerCarDryTireSetLimit": {
+          "distinctValues": [
+            0
+          ]
+        },
+        "TireSetsAvailable": {
+          "distinctValues": [
+            0,
+            1
+          ]
+        },
+        "TireSetsUsed": {
+          "distinctValues": [
+            0,
+            1
+          ]
+        },
+        "cornerTiresAvailable": {
+          "fields": [
+            "LFTiresAvailable",
+            "RFTiresAvailable",
+            "LRTiresAvailable",
+            "RRTiresAvailable"
+          ],
+          "distinctValues": [
+            0,
+            1
+          ]
+        }
+      },
+      "timeline": [
+        {
+          "sessionTimeSeconds": 3995.083,
+          "frameIndex": 115,
+          "event": "available-counters-populated-despite-zero-limit",
+          "values": {
+            "PlayerCarDryTireSetLimit": 0,
+            "TireSetsAvailable": 1
+          }
+        },
+        {
+          "sessionTimeSeconds": 4351.117,
+          "frameIndex": 21477,
+          "event": "pit-entry",
+          "values": {
+            "OnPitRoad": true
+          }
+        },
+        {
+          "sessionTimeSeconds": 4361.083,
+          "frameIndex": 22075,
+          "event": "fuel-request-reduction-start",
+          "values": {
+            "PitSvFuel": 109,
+            "dpFuelAddKg": 109
+          }
+        },
+        {
+          "sessionTimeSeconds": 4366.067,
+          "frameIndex": 22374,
+          "event": "fuel-request-reduction-end",
+          "values": {
+            "PitSvFuel": 76,
+            "dpFuelAddKg": 76
+          }
+        },
+        {
+          "sessionTimeSeconds": 4369.133,
+          "frameIndex": 22558,
+          "event": "fuel-fill-request-cleared",
+          "values": {
+            "PitSvFlags": 47,
+            "dpFuelFill": 0
+          }
+        },
+        {
+          "sessionTimeSeconds": 4369.6,
+          "frameIndex": 22586,
+          "event": "service-start",
+          "values": {
+            "PitstopActive": true
+          }
+        },
+        {
+          "sessionTimeSeconds": 4370.683,
+          "frameIndex": 22651,
+          "event": "right-front-tire-request-cleared",
+          "values": {
+            "PitSvFlags": 45,
+            "dpRFTireChange": 0
+          }
+        },
+        {
+          "sessionTimeSeconds": 4375.767,
+          "frameIndex": 22956,
+          "event": "left-front-tire-request-cleared",
+          "values": {
+            "PitSvFlags": 12,
+            "dpLFTireChange": 0
+          }
+        },
+        {
+          "sessionTimeSeconds": 4380.667,
+          "frameIndex": 23250,
+          "event": "left-rear-tire-request-cleared",
+          "values": {
+            "PitSvFlags": 8,
+            "dpLRTireChange": 0
+          }
+        },
+        {
+          "sessionTimeSeconds": 4385.667,
+          "frameIndex": 23550,
+          "event": "right-rear-tire-request-cleared",
+          "values": {
+            "PitSvFlags": 0,
+            "dpRRTireChange": 0
+          }
+        },
+        {
+          "sessionTimeSeconds": 4399.633,
+          "frameIndex": 24388,
+          "event": "service-complete",
+          "values": {
+            "PitstopActive": false
+          }
+        }
+      ],
+      "overlayImplication": "Do not render remaining tire cells when PlayerCarDryTireSetLimit is 0, even if available counters are non-zero. Keep these raw values as diagnostics/service evidence."
+    },
+    {
+      "id": "nascar-weight-jacker-request-fields",
+      "captureId": "capture-20260515-210810-124",
+      "summary": "NASCAR exposes pit-request weight-jacker/wedge channels. These are car-specific pit setup requests, not ARB or wing fields, and should not become Pit Service rows without a separate product pass.",
+      "observedRanges": {
+        "dpWeightJackerLeft": {
+          "distinctValues": [
+            -7.1437,
+            -7.1363,
+            -6.35,
+            -5.5562,
+            -4.7625,
+            -3.9688,
+            -3.175,
+            -2.3812,
+            -1.5875,
+            -0.7937,
+            0
+          ]
+        },
+        "dpWeightJackerRight": {
+          "distinctValues": [
+            -3.9688,
+            -3.175,
+            -2.3812,
+            -1.5875,
+            -0.7937,
+            0
+          ]
+        }
+      },
+      "overlayImplication": "Track as future NASCAR setup-service evidence. Do not infer ARB/wing support from these fields."
+    }
+  ],
+  "dataContractSnapshotDecision": {
+    "needsNewSnapshot": false,
+    "reason": "The captures add telemetry field availability and overlay rendering evidence only. They do not change durable user-data schemas, settings/history formats, raw capture format, or data-contract snapshot compatibility."
+  }
+}

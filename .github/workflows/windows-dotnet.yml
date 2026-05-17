@@ -233,6 +233,232 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  windows_installer_screenshots:
+    name: Windows installer screenshots
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Compute installer screenshot package metadata
+        id: package_metadata
+        shell: pwsh
+        run: |
+          [xml]$buildProps = Get-Content .\Directory.Build.props
+          $version = $buildProps.Project.PropertyGroup.VersionPrefix
+          $fileVersion = "$version.0"
+          $informationalVersion = "$version+${{ github.sha }}"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "file_version=$fileVersion" >> $env:GITHUB_OUTPUT
+          "informational_version=$informationalVersion" >> $env:GITHUB_OUTPUT
+          "publish_path=.\artifacts\installer-screenshot-publish" >> $env:GITHUB_OUTPUT
+          "velopack_path=.\artifacts\installer-screenshot-velopack" >> $env:GITHUB_OUTPUT
+
+      - name: Publish installer screenshot package
+        shell: pwsh
+        run: |
+          dotnet publish .\src\TmrOverlay.App\TmrOverlay.App.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=${{ steps.package_metadata.outputs.version }} `
+            -p:AssemblyVersion=${{ steps.package_metadata.outputs.file_version }} `
+            -p:FileVersion=${{ steps.package_metadata.outputs.file_version }} `
+            -p:InformationalVersion=${{ steps.package_metadata.outputs.informational_version }} `
+            -p:ContinuousIntegrationBuild=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o "${{ steps.package_metadata.outputs.publish_path }}"
+
+      - name: Install Velopack CLI
+        shell: pwsh
+        run: dotnet tool install --global vpk --version "${{ env.VELOPACK_VERSION }}"
+
+      - name: Build installer screenshot MSI
+        id: velopack_pack
+        shell: pwsh
+        run: |
+          $vpk = Join-Path $env:USERPROFILE ".dotnet\tools\vpk.exe"
+          $velopackPath = "${{ steps.package_metadata.outputs.velopack_path }}"
+          New-Item -ItemType Directory -Force -Path $velopackPath | Out-Null
+
+          & $vpk pack `
+            --packId "TMROverlay" `
+            --packVersion "${{ steps.package_metadata.outputs.version }}" `
+            --packDir "${{ steps.package_metadata.outputs.publish_path }}" `
+            --mainExe "TMROverlay.exe" `
+            --packTitle "Tech Mates Racing Overlay" `
+            --packAuthors "Tech Mates Racing" `
+            --outputDir $velopackPath `
+            --channel "win-x64" `
+            --shortcuts "Desktop,StartMenu" `
+            --msi `
+            --instLocation "Either" `
+            --splashImage ".\assets\brand\TMRInstallerSplash.png" `
+            --msiBanner ".\assets\brand\TMRMsiBanner.bmp" `
+            --msiLogo ".\assets\brand\TMRMsiLogo.bmp" `
+            --icon ".\src\TmrOverlay.App\Assets\TmrOverlay.ico"
+          if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+          }
+
+          $msi = Get-ChildItem $velopackPath -Filter "*.msi" |
+            Sort-Object LastWriteTimeUtc -Descending |
+            Select-Object -First 1
+          if ($null -eq $msi) {
+              Get-ChildItem $velopackPath | Format-Table Name, Length
+              throw "Velopack output is missing the MSI package needed for installer screenshots."
+          }
+          "msi_path=$($msi.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Generate Windows installer screenshots
+        shell: pwsh
+        run: |
+          dotnet run `
+            --project .\tools\TmrOverlay.WindowsInstallerScreenshots\TmrOverlay.WindowsInstallerScreenshots.csproj `
+            --configuration Release `
+            -- "${{ steps.velopack_pack.outputs.msi_path }}" .\artifacts\windows-installer-screenshots
+
+      - name: Validate Windows installer screenshots
+        run: python tools/validate_overlay_screenshots.py --profile windows-installer-ci --root artifacts/windows-installer-screenshots
+
+      - name: Upload Windows installer screenshots
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-installer-screenshots
+          path: artifacts/windows-installer-screenshots
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows_screenshot_bundle:
+    name: Windows screenshot bundle
+    runs-on: ubuntu-latest
+    needs:
+      - windows_screenshots
+      - windows_installer_screenshots
+    if: always()
+
+    steps:
+      - name: Download Windows overlay screenshots
+        uses: actions/download-artifact@v7
+        if: needs.windows_screenshots.result != 'skipped'
+        continue-on-error: true
+        with:
+          name: windows-overlay-screenshots
+          path: artifacts/windows-screenshots/overlays
+
+      - name: Download Windows installer screenshots
+        uses: actions/download-artifact@v7
+        if: needs.windows_installer_screenshots.result != 'skipped'
+        continue-on-error: true
+        with:
+          name: windows-installer-screenshots
+          path: artifacts/windows-screenshots/installer
+
+      - name: Summarize Windows screenshot bundle
+        shell: bash
+        run: |
+          mkdir -p artifacts/windows-screenshots
+          {
+            echo "# Windows screenshot bundle"
+            echo
+            echo "- overlays/: native Windows overlay and settings screenshots"
+            echo "- installer/: Windows installer menu screenshots"
+          } > artifacts/windows-screenshots/README.md
+
+      - name: Upload combined Windows screenshots
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-screenshots
+          path: artifacts/windows-screenshots
+          if-no-files-found: ignore
+          retention-days: 14
+
+  screenshot_manifest_parity:
+    name: Screenshot manifest parity
+    runs-on: ubuntu-latest
+    needs:
+      - browser_review_screenshots
+      - localhost_screenshots
+      - windows_screenshots
+      - windows_installer_screenshots
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Download browser review screenshots
+        uses: actions/download-artifact@v7
+        with:
+          name: browser-review-screenshots
+          path: artifacts/screenshot-manifest-parity/browser-review
+
+      - name: Download localhost screenshots
+        uses: actions/download-artifact@v7
+        with:
+          name: localhost-screenshots
+          path: artifacts/screenshot-manifest-parity/localhost
+
+      - name: Download Windows overlay screenshots
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-overlay-screenshots
+          path: artifacts/screenshot-manifest-parity/windows
+
+      - name: Download Windows installer screenshots
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-installer-screenshots
+          path: artifacts/screenshot-manifest-parity/installer
+
+      - name: Compare screenshot manifests
+        shell: bash
+        run: |
+          set +e
+          python3 tools/validate_overlay_screenshots.py --profile screenshot-manifest-parity --root artifacts/screenshot-manifest-parity
+          validation_status=$?
+
+          python3 tools/compare_screenshot_manifests.py \
+            --browser-root artifacts/screenshot-manifest-parity/browser-review \
+            --localhost-root artifacts/screenshot-manifest-parity/localhost \
+            --windows-root artifacts/screenshot-manifest-parity/windows \
+            --installer-root artifacts/screenshot-manifest-parity/installer \
+            --report artifacts/screenshot-manifest-parity/report.md
+          detailed_status=$?
+
+          if [ "$validation_status" -ne 0 ] || [ "$detailed_status" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload screenshot manifest parity report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: screenshot-manifest-parity-report
+          path: artifacts/screenshot-manifest-parity/report.md
+          if-no-files-found: ignore
+          retention-days: 14
+
   windows_publish_dry_run:
     name: Windows publish dry run
     runs-on: windows-latest
@@ -310,7 +536,6 @@ jobs:
             --shortcuts "Desktop,StartMenu" `
             --msi `
             --instLocation "Either" `
-            --instWelcome ".\assets\brand\TMRMsiWelcome.md" `
             --splashImage ".\assets\brand\TMRInstallerSplash.png" `
             --msiBanner ".\assets\brand\TMRMsiBanner.bmp" `
             --msiLogo ".\assets\brand\TMRMsiLogo.bmp" `
@@ -337,6 +562,7 @@ jobs:
       - windows_build
       - windows_tests
       - windows_screenshots
+      - windows_installer_screenshots
       - windows_publish_dry_run
     runs-on: windows-latest
     permissions:
@@ -464,7 +690,6 @@ jobs:
             --shortcuts "Desktop,StartMenu" `
             --msi `
             --instLocation "Either" `
-            --instWelcome ".\assets\brand\TMRMsiWelcome.md" `
             --splashImage ".\assets\brand\TMRInstallerSplash.png" `
             --msiBanner ".\assets\brand\TMRMsiBanner.bmp" `
             --msiLogo ".\assets\brand\TMRMsiLogo.bmp" `

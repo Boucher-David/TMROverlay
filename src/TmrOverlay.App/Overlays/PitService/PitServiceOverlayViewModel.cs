@@ -550,51 +550,19 @@ internal static class PitServiceOverlayViewModel
         LivePitServiceModel pit,
         PitServiceContentOptions options)
     {
-        if (!options.ShowTireSetsAvailable)
+        if (!options.ShowTireSetsAvailable || !HasLimitedTireInventory(pit))
         {
             return null;
         }
 
-        var showZeroAvailable = pit.Tires.DryTireSetLimit is > 0;
-        var leftFront = FormatAvailableForCorner(
-            pit.Tires.LeftFrontTiresAvailable,
-            pit.Tires.LeftTireSetsAvailable,
-            "L",
-            pit.Tires.FrontTireSetsAvailable,
-            "F",
-            pit.Tires.TireSetsAvailable,
-            showZeroAvailable);
-        var rightFront = FormatAvailableForCorner(
-            pit.Tires.RightFrontTiresAvailable,
-            pit.Tires.RightTireSetsAvailable,
-            "R",
-            pit.Tires.FrontTireSetsAvailable,
-            "F",
-            pit.Tires.TireSetsAvailable,
-            showZeroAvailable);
-        var leftRear = FormatAvailableForCorner(
-            pit.Tires.LeftRearTiresAvailable,
-            pit.Tires.LeftTireSetsAvailable,
-            "L",
-            pit.Tires.RearTireSetsAvailable,
-            "Rr",
-            pit.Tires.TireSetsAvailable,
-            showZeroAvailable);
-        var rightRear = FormatAvailableForCorner(
-            pit.Tires.RightRearTiresAvailable,
-            pit.Tires.RightTireSetsAvailable,
-            "R",
-            pit.Tires.RearTireSetsAvailable,
-            "Rr",
-            pit.Tires.TireSetsAvailable,
-            showZeroAvailable);
-        return AnyCellHasValue(leftFront, rightFront, leftRear, rightRear)
+        var available = FormatLimitedAvailableInventory(pit);
+        return available is not null
             ? Row(
                 "Available",
-                AvailableCell(leftFront),
-                AvailableCell(rightFront),
-                AvailableCell(leftRear),
-                AvailableCell(rightRear))
+                AvailableCell(available),
+                AvailableCell(available),
+                AvailableCell(available),
+                AvailableCell(available))
             : null;
     }
 
@@ -798,37 +766,78 @@ internal static class PitServiceOverlayViewModel
             || pit.Tires.RightRearTiresAvailable == 255;
     }
 
-    private static string FormatAvailableForCorner(
-        int? perCorner,
-        int? side,
-        string sideLabel,
-        int? axle,
-        string axleLabel,
-        int? global,
-        bool allowZero)
+    private static bool HasLimitedTireInventory(LivePitServiceModel pit)
     {
-        if (IsRepresentativeAvailable(perCorner, allowZero))
+        return pit.Tires.DryTireSetLimit is > 0;
+    }
+
+    private static string? FormatLimitedAvailableInventory(LivePitServiceModel pit)
+    {
+        if (IsRepresentativeLimitedAvailable(pit.Tires.TireSetsAvailable, pit))
         {
-            return FormatTireCounter(perCorner);
+            return FormatTireCounter(pit.Tires.TireSetsAvailable);
         }
 
-        var parts = new List<string>();
-        if (IsRepresentativeAvailable(side, allowZero))
+        var matchingCornerValue = MatchingLimitedAvailable(
+            pit,
+            pit.Tires.LeftFrontTiresAvailable,
+            pit.Tires.RightFrontTiresAvailable,
+            pit.Tires.LeftRearTiresAvailable,
+            pit.Tires.RightRearTiresAvailable);
+        if (matchingCornerValue is not null)
         {
-            parts.Add($"{sideLabel} {FormatTireCounter(side)}");
+            return FormatTireCounter(matchingCornerValue);
         }
 
-        if (IsRepresentativeAvailable(axle, allowZero) && axle != side)
+        var matchingSetValue = MatchingLimitedAvailable(
+            pit,
+            pit.Tires.LeftTireSetsAvailable,
+            pit.Tires.RightTireSetsAvailable,
+            pit.Tires.FrontTireSetsAvailable,
+            pit.Tires.RearTireSetsAvailable);
+        return matchingSetValue is not null
+            ? FormatTireCounter(matchingSetValue)
+            : null;
+    }
+
+    private static int? MatchingLimitedAvailable(LivePitServiceModel pit, params int?[] values)
+    {
+        if (values.Any(value => !IsRepresentativeLimitedAvailable(value, pit)))
         {
-            parts.Add($"{axleLabel} {FormatTireCounter(axle)}");
+            return null;
         }
 
-        if (parts.Count > 0)
+        var first = values[0]!.Value;
+        return values.All(value => value == first) ? first : null;
+    }
+
+    private static bool IsRepresentativeLimitedAvailable(int? value, LivePitServiceModel pit)
+    {
+        if (value is null || value == 255)
         {
-            return string.Join("/", parts);
+            return false;
         }
 
-        return IsRepresentativeAvailable(global, allowZero) ? FormatTireCounter(global) : "--";
+        if (value > 0)
+        {
+            return true;
+        }
+
+        return value == 0 && HasUsedEntireDryTireLimit(pit);
+    }
+
+    private static bool HasUsedEntireDryTireLimit(LivePitServiceModel pit)
+    {
+        if (pit.Tires.DryTireSetLimit is not { } limit || limit <= 0)
+        {
+            return false;
+        }
+
+        return pit.Tires.TireSetsUsed >= limit
+            || pit.Tires.LeftFrontTiresUsed >= limit
+            || pit.Tires.RightFrontTiresUsed >= limit
+            || pit.Tires.LeftRearTiresUsed >= limit
+            || pit.Tires.RightRearTiresUsed >= limit;
     }
 
     private static string FormatUsedForCorner(
@@ -945,11 +954,6 @@ internal static class PitServiceOverlayViewModel
     private static bool AnyCellHasValue(params string[] values)
     {
         return values.Any(value => !string.IsNullOrWhiteSpace(value) && value != "--");
-    }
-
-    private static bool IsRepresentativeAvailable(int? value, bool allowZero = false)
-    {
-        return value is > 0 || (allowZero && value == 0);
     }
 
     private static bool IsRepresentativeUsed(int? value)

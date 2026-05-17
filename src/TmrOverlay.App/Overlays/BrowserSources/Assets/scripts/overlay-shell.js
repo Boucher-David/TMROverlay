@@ -109,13 +109,16 @@
         return '<div class="empty">Waiting for live rows.</div>';
       }
       const fixedWidth = headers.reduce((total, header) => total + columnWidth(header), 0);
-      const tableStyle = fixedWidth > 0
+      const useProportionalColumns = shouldScaleTableColumns() && fixedWidth > 0;
+      const tableStyle = useProportionalColumns
+        ? ' style="width:100%; min-width:0; table-layout:fixed;"'
+        : fixedWidth > 0
         ? ` style="width:${fixedWidth}px; min-width:${fixedWidth}px; table-layout:fixed;"`
         : '';
       const colGroup = fixedWidth > 0
-        ? `<colgroup>${headers.map((header) => `<col style="width:${columnWidth(header)}px;">`).join('')}</colgroup>`
+        ? `<colgroup>${headers.map((header) => `<col style="${columnWidthDeclaration(header, fixedWidth)}">`).join('')}</colgroup>`
         : '';
-      const headerHtml = headers.map((header) => `<th${cellStyle(header)}>${escapeHtml(header.label)}</th>`).join('');
+      const headerHtml = headers.map((header) => `<th${cellStyle(header, null, null, fixedWidth)}>${escapeHtml(header.label)}</th>`).join('');
       const rowHtml = rows.map((row) => {
         const classes = [
           row.isFocus || row.isReference || row.isReferenceCar ? 'focus' : '',
@@ -131,10 +134,14 @@
           return `<tr class="${classes}"${classHeaderStyle(row)}><td colspan="${Math.max(1, headers.length)}">${classHeaderContent(row)}</td></tr>`;
         }
 
-        const cells = headers.map((header) => `<td${cellStyle(header)}>${header.value(row)}</td>`).join('');
+        const cells = headers.map((header, columnIndex) => `<td${cellStyle(header, row, columnIndex, fixedWidth)}>${header.value(row)}</td>`).join('');
         return `<tr class="${classes}"${rowStyle(row)}>${cells}</tr>`;
       }).join('');
       return `<table${tableStyle}>${colGroup}<thead><tr>${headerHtml}</tr></thead><tbody>${rowHtml}</tbody></table>`;
+    }
+
+    function shouldScaleTableColumns() {
+      return page?.id === 'relative';
     }
 
     function isClassHeaderRow(row) {
@@ -171,14 +178,33 @@
       return Number.isFinite(width) && width > 0 ? Math.round(width) : 0;
     }
 
-    function cellStyle(header) {
-      const styles = [];
+    function columnWidthDeclaration(header, totalWidth = 0) {
       const width = columnWidth(header);
-      if (width > 0) styles.push(`width:${width}px`);
+      if (width <= 0) return '';
+      if (shouldScaleTableColumns() && totalWidth > 0) {
+        return `width:${(width / totalWidth * 100).toFixed(4)}%;`;
+      }
+
+      return `width:${width}px;`;
+    }
+
+    function cellStyle(header, row = null, columnIndex = null, totalWidth = 0) {
+      const styles = [];
+      const width = columnWidthDeclaration(header, totalWidth);
+      if (width) styles.push(width);
       const align = ['left', 'right', 'center'].includes(header?.align) ? header.align : null;
       if (align) styles.push(`text-align:${align}`);
       if (header?.dataKey === 'driver') styles.push('padding-left:14px');
+      const tone = row ? cellTone(row, columnIndex) : '';
+      if (tone === 'best-lap') styles.push('color:var(--tmr-best-lap)');
+      if (tone === 'personal-best') styles.push('color:var(--tmr-green)');
       return styles.length ? ` style="${styles.join(';')}"` : '';
+    }
+
+    function cellTone(row, columnIndex) {
+      if (!Number.isInteger(columnIndex)) return '';
+      const tones = Array.isArray(row?.cellTones) ? row.cellTones : [];
+      return String(tones[columnIndex] || '').trim().toLowerCase();
     }
 
     function classHeaderStyle(row) {
@@ -717,6 +743,7 @@
         ctx.stroke();
         ctx.fillStyle = themeColor('--tmr-green', '#70e092');
         ctx.fillText('focus', plot.left - 8, referenceY);
+        ctx.strokeStyle = themeRgba('--tmr-text-muted-rgb', 0.18, 'rgba(140, 174, 212, 0.18)');
         ctx.fillStyle = themeColor('--tmr-text-muted', '#8caed4');
 
         const aheadStep = niceGridStep(numberOr(scale.aheadSeconds, 1) / 2);
@@ -901,8 +928,8 @@
       ctx.font = '8px "Segoe UI", Arial, sans-serif';
       ctx.fillStyle = themeColor('--tmr-text-muted', '#8caed4');
       ctx.fillText('Metric', rect.left + 8, rect.top + 26);
-      ctx.fillText(graph?.comparisonLabel || '--', rect.left + 43, rect.top + 26);
-      ctx.fillText('Threat', rect.left + 104, rect.top + 26);
+      ctx.fillText(graph?.comparisonLabel || '--', rect.left + 56, rect.top + 26);
+      ctx.fillText('Threat', rect.left + 108, rect.top + 26);
 
       ctx.font = `${rowHeight < 16 ? '8px' : '9px'} "Segoe UI", Arial, sans-serif`;
       visibleMetrics.forEach((metric, index) => {
@@ -910,9 +937,9 @@
         ctx.fillStyle = themeColor('--tmr-text-secondary', '#cdd8e4');
         ctx.fillText(metric?.label || '--', rect.left + 8, y);
         ctx.fillStyle = gapMetricValueColor(metric, numberOr(graph?.metricDeadbandSeconds, 0.25));
-        ctx.fillText(gapMetricValueText(metric), rect.left + 43, y);
+        ctx.fillText(gapMetricValueText(metric), rect.left + 56, y);
         ctx.fillStyle = gapMetricChaserColor(metric);
-        ctx.fillText(gapMetricChaserText(metric), rect.left + 104, y);
+        ctx.fillText(gapMetricChaserText(metric), rect.left + 108, y);
       });
 
       if (showThreatFooter) {

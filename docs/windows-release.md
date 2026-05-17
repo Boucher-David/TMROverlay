@@ -35,8 +35,8 @@ python3 tools/validate_overlay_screenshots.py --profile release-tutorial --root 
 2. Create an annotated tag on the merge commit:
 
    ```bash
-   git tag -a v0.11.0 -m "v0.11.0 - Track map and localhost overlays" -m "Publishes a portable Windows tester build with standings, track map, and localhost overlays."
-   git push origin v0.11.0
+   git tag -a vX.Y.Z -m "vX.Y.Z - Short release title" -m "Short release summary."
+   git push origin vX.Y.Z
    ```
 
 3. GitHub Actions runs `.github/workflows/windows-dotnet.yml`.
@@ -44,6 +44,57 @@ python3 tools/validate_overlay_screenshots.py --profile release-tutorial --root 
 5. The tag workflow publishes `src/TmrOverlay.App` for `win-x64`, audits the publish folder, writes a package manifest, zips it, generates a SHA-256 checksum, packs Velopack MSI/update assets, uploads workflow artifacts, and creates or updates the GitHub Release assets.
 
 Manual workflow dispatch can still produce package artifacts for a branch test run, but it does not create a GitHub Release unless the run is for a `vMAJOR.MINOR.PATCH` tag.
+
+## Local Branch Installer Build
+
+On Windows, a branch can produce an MSI without waiting for a tag by using the same Velopack path as the workflow. Use a unique prerelease/test version so the package identity does not collide with an installed release being validated:
+
+```powershell
+$version = "0.20.1-local.$(Get-Date -Format yyyyMMddHHmmss)"
+$publishPath = ".\artifacts\local-publish"
+$velopackPath = ".\artifacts\local-velopack"
+
+dotnet publish .\src\TmrOverlay.App\TmrOverlay.App.csproj `
+  -c Release `
+  -r win-x64 `
+  --self-contained true `
+  -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true `
+  -p:Version=$version `
+  -p:AssemblyVersion="0.20.1.0" `
+  -p:FileVersion="0.20.1.0" `
+  -p:InformationalVersion="$version+local" `
+  -p:ContinuousIntegrationBuild=true `
+  -p:DebugType=None `
+  -p:DebugSymbols=false `
+  -o $publishPath
+
+dotnet tool install --global vpk --version "0.0.1589-ga2c5a97"
+$vpk = Join-Path $env:USERPROFILE ".dotnet\tools\vpk.exe"
+New-Item -ItemType Directory -Force -Path $velopackPath | Out-Null
+
+& $vpk pack `
+  --packId "TMROverlay" `
+  --packVersion $version `
+  --packDir $publishPath `
+  --mainExe "TMROverlay.exe" `
+  --packTitle "Tech Mates Racing Overlay" `
+  --packAuthors "Tech Mates Racing" `
+  --outputDir $velopackPath `
+  --channel "win-x64" `
+  --shortcuts "Desktop,StartMenu" `
+  --msi `
+  --instLocation "Either" `
+  --splashImage ".\assets\brand\TMRInstallerSplash.png" `
+  --msiBanner ".\assets\brand\TMRMsiBanner.bmp" `
+  --msiLogo ".\assets\brand\TMRMsiLogo.bmp" `
+  --icon ".\src\TmrOverlay.App\Assets\TmrOverlay.ico"
+```
+
+The generated MSI is written under `artifacts\local-velopack`.
+
+If the `vpk` tool is already installed, replace the install command with
+`dotnet tool update --global vpk --version "0.0.1589-ga2c5a97"`.
 
 ## Package Contents
 
@@ -56,7 +107,7 @@ The expected package shape is intentionally small:
 - `Assets/TMRLogo.png`
 - optional `Assets/TrackMaps/*.json` bundled derived track maps
 
-The executable icon is embedded from `src/TmrOverlay.App/Assets/TmrOverlay.ico`. Installer branding is generated from `tools/render_windows_installer_splash.swift` into `assets/brand/TMRInstallerSplash.png`, `assets/brand/TMRMsiBanner.bmp`, and `assets/brand/TMRMsiLogo.bmp`; the MSI welcome text lives in `assets/brand/TMRMsiWelcome.md`. The release manifest asset lists the exact published files and sizes for each build, so package review can happen without downloading and unzipping the app.
+The executable icon is embedded from `src/TmrOverlay.App/Assets/TmrOverlay.ico`. Installer branding is generated from `tools/render_windows_installer_splash.swift` into `assets/brand/TMRInstallerSplash.png`, `assets/brand/TMRMsiBanner.bmp`, and `assets/brand/TMRMsiLogo.bmp`. The release manifest asset lists the exact published files and sizes for each build, so package review can happen without downloading and unzipping the app.
 
 Velopack package assets are generated from that audited publish folder. The package id is `TMROverlay`, the title is `Tech Mates Racing Overlay`, and the current channel is `win-x64`. The MSI installs Desktop and Start Menu shortcuts. Velopack shortcut locations are package-time options in the generated MSI path, so this branch creates both shortcuts by default rather than exposing per-shortcut wizard checkboxes. The package id intentionally changed from the early `TechMatesRacing.TmrOverlay` tester identity while the app is still pre-1.0 so installed package identity matches the shorter executable name.
 
@@ -101,7 +152,8 @@ If a release changes a durable user-data schema, the branch must update the matc
 From PowerShell in the folder containing the downloaded zip:
 
 ```powershell
-$zip = "TmrOverlay-v0.11.0-win-x64.zip"
+$version = "X.Y.Z"
+$zip = "TmrOverlay-v${version}-win-x64.zip"
 $expected = (Get-Content "$zip.sha256").Split(" ")[0]
 $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 $actual -eq $expected

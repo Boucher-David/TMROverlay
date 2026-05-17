@@ -572,6 +572,8 @@ internal sealed class StandingsForm : PersistentOverlayForm
             OverlayContentColumnSettings.DataDriver => row.Driver,
             OverlayContentColumnSettings.DataGap => row.Gap,
             OverlayContentColumnSettings.DataInterval => row.Interval,
+            OverlayContentColumnSettings.DataFastestLap => row.FastestLap,
+            OverlayContentColumnSettings.DataLastLap => row.LastLap,
             OverlayContentColumnSettings.DataPit => row.Pit,
             _ => string.Empty
         };
@@ -596,6 +598,16 @@ internal sealed class StandingsForm : PersistentOverlayForm
             return OverlayTheme.Colors.TextMuted;
         }
 
+        if (IsClassFastestLapCell(row, column))
+        {
+            return OverlayTheme.DesignV2.BestLapSector;
+        }
+
+        if (IsRecentCarBestLapCell(row, column))
+        {
+            return OverlayTheme.DesignV2.Green;
+        }
+
         if (string.Equals(column?.DataKey, OverlayContentColumnSettings.DataPit, StringComparison.Ordinal) && !string.IsNullOrEmpty(row.Pit))
         {
             return OverlayTheme.Colors.WarningIndicator;
@@ -614,6 +626,22 @@ internal sealed class StandingsForm : PersistentOverlayForm
         return string.Equals(column?.DataKey, OverlayContentColumnSettings.DataDriver, StringComparison.Ordinal)
             ? OverlayTheme.Colors.TextSecondary
             : OverlayTheme.Colors.TextPrimary;
+    }
+
+    private static bool IsClassFastestLapCell(StandingsOverlayRowViewModel row, OverlayContentColumnState? column)
+    {
+        return string.Equals(column?.DataKey, OverlayContentColumnSettings.DataFastestLap, StringComparison.Ordinal)
+                && row.IsClassFastestLap
+            || string.Equals(column?.DataKey, OverlayContentColumnSettings.DataLastLap, StringComparison.Ordinal)
+                && row.IsClassFastestLastLap;
+    }
+
+    private static bool IsRecentCarBestLapCell(StandingsOverlayRowViewModel row, OverlayContentColumnState? column)
+    {
+        return string.Equals(column?.DataKey, OverlayContentColumnSettings.DataFastestLap, StringComparison.Ordinal)
+                && row.IsRecentCarBestLap
+            || string.Equals(column?.DataKey, OverlayContentColumnSettings.DataLastLap, StringComparison.Ordinal)
+                && row.IsRecentCarBestLastLap;
     }
 
     private static Color RowBackColor(StandingsOverlayRowViewModel row)

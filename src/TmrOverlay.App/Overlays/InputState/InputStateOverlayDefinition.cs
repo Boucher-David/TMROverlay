@@ -10,5 +10,5 @@ internal static class InputStateOverlayDefinition
         DefaultWidth: 520,
         DefaultHeight: 260,
         FadeWhenLiveTelemetryUnavailable: true,
-        ContextRequirement: OverlayContextRequirement.LocalPlayerInCar);
+        ContextRequirement: OverlayContextRequirement.LocalPlayerInCarOrPit);
 }

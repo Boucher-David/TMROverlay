@@ -95,6 +95,10 @@ def source_category(capture_id: str) -> str:
         return "endurance-4h-team-race"
     if capture_id == "capture-20260502-143722-571":
         return "endurance-24h-fragment"
+    if capture_id == "capture-20260515-210810-124":
+        return "ai-nascar-limited-tire-race"
+    if capture_id == "capture-20260516-204700-385":
+        return "pcup-open-practice-pit-service"
     if capture_id.startswith("capture-20260502-"):
         return "endurance-24h-adjacent"
     return "raw-capture"

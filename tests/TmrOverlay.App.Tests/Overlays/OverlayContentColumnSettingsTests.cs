@@ -18,10 +18,13 @@ public sealed class OverlayContentColumnSettingsTests
     public void VisibleColumnsFor_PreservesUserOrderAndDisabledColumns()
     {
         var settings = new ApplicationSettings();
-        var standings = settings.GetOrAddOverlay("standings", 780, 520);
+        var standings = settings.GetOrAddOverlay(
+            "standings",
+            StandingsOverlayDefinition.Definition.DefaultWidth,
+            StandingsOverlayDefinition.Definition.DefaultHeight);
         foreach (var column in OverlayContentColumnSettings.Standings.Columns)
         {
-            standings.SetIntegerOption(column.OrderKey(standings.Id), column.DefaultOrder, 1, 6);
+            standings.SetIntegerOption(column.OrderKey(standings.Id), column.DefaultOrder, 1, 8);
         }
 
         var driver = Column(OverlayContentColumnSettings.StandingsDriverColumnId);
@@ -30,12 +33,14 @@ public sealed class OverlayContentColumnSettingsTests
         var interval = Column(OverlayContentColumnSettings.StandingsIntervalColumnId);
         var pit = Column(OverlayContentColumnSettings.StandingsPitColumnId);
         var gap = Column(OverlayContentColumnSettings.StandingsGapColumnId);
-        standings.SetIntegerOption(driver.OrderKey(standings.Id), 1, 1, 6);
-        standings.SetIntegerOption(car.OrderKey(standings.Id), 2, 1, 6);
-        standings.SetIntegerOption(@class.OrderKey(standings.Id), 3, 1, 6);
-        standings.SetIntegerOption(interval.OrderKey(standings.Id), 4, 1, 6);
-        standings.SetIntegerOption(pit.OrderKey(standings.Id), 5, 1, 6);
-        standings.SetIntegerOption(gap.OrderKey(standings.Id), 6, 1, 6);
+        standings.SetIntegerOption(driver.OrderKey(standings.Id), 1, 1, 8);
+        standings.SetIntegerOption(car.OrderKey(standings.Id), 2, 1, 8);
+        standings.SetIntegerOption(@class.OrderKey(standings.Id), 3, 1, 8);
+        standings.SetIntegerOption(interval.OrderKey(standings.Id), 4, 1, 8);
+        standings.SetIntegerOption(pit.OrderKey(standings.Id), 5, 1, 8);
+        standings.SetIntegerOption(gap.OrderKey(standings.Id), 6, 1, 8);
+        standings.SetBooleanOption(Column(OverlayContentColumnSettings.StandingsFastestLapColumnId).EnabledKey(standings.Id), false);
+        standings.SetBooleanOption(Column(OverlayContentColumnSettings.StandingsLastLapColumnId).EnabledKey(standings.Id), false);
         standings.SetBooleanOption(gap.EnabledKey(standings.Id), false);
         standings.SetIntegerOption(driver.WidthKey(standings.Id), 360, driver.MinimumWidth, driver.MaximumWidth);
 
@@ -59,7 +64,10 @@ public sealed class OverlayContentColumnSettingsTests
     public void BrowserRecommendedSize_ExpandsToConfiguredVisibleColumnWidths()
     {
         var settings = new ApplicationSettings();
-        var standings = settings.GetOrAddOverlay("standings", 780, 520);
+        var standings = settings.GetOrAddOverlay(
+            "standings",
+            StandingsOverlayDefinition.Definition.DefaultWidth,
+            StandingsOverlayDefinition.Definition.DefaultHeight);
         foreach (var column in OverlayContentColumnSettings.Standings.Columns)
         {
             standings.SetIntegerOption(column.WidthKey(standings.Id), column.MaximumWidth, column.MinimumWidth, column.MaximumWidth);
@@ -67,32 +75,44 @@ public sealed class OverlayContentColumnSettingsTests
 
         var size = BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings);
 
-        Assert.Equal(1276, size.Width);
-        Assert.Equal(520, size.Height);
+        Assert.Equal(1504, size.Width);
+        Assert.Equal(334, size.Height);
     }
 
     [Fact]
     public void BrowserRecommendedSize_UsesCompactDefaultVisibleColumnWidths()
     {
         var settings = new ApplicationSettings();
-        var standings = settings.GetOrAddOverlay("standings", 780, 520);
-        var relative = settings.GetOrAddOverlay("relative", 520, 360);
+        var standings = settings.GetOrAddOverlay(
+            "standings",
+            StandingsOverlayDefinition.Definition.DefaultWidth,
+            StandingsOverlayDefinition.Definition.DefaultHeight);
+        var relative = settings.GetOrAddOverlay(
+            "relative",
+            RelativeOverlayDefinition.Definition.DefaultWidth,
+            RelativeOverlayDefinition.Definition.DefaultHeight);
 
         var standingsSize = BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings);
         var relativeSize = BrowserOverlayRecommendedSize.For(RelativeOverlayDefinition.Definition, relative);
 
-        Assert.Equal(591, standingsSize.Width);
-        Assert.Equal(520, standingsSize.Height);
-        Assert.Equal(440, relativeSize.Width);
-        Assert.Equal(360, relativeSize.Height);
+        Assert.Equal(659, standingsSize.Width);
+        Assert.Equal(334, standingsSize.Height);
+        Assert.Equal(360, relativeSize.Width);
+        Assert.Equal(373, relativeSize.Height);
     }
 
     [Fact]
     public void ContentColumnsKeepCompactOverlayHeadersAndHumanSettingsLabels()
     {
         var settings = new ApplicationSettings();
-        var standings = settings.GetOrAddOverlay("standings", 780, 520);
-        var relative = settings.GetOrAddOverlay("relative", 520, 360);
+        var standings = settings.GetOrAddOverlay(
+            "standings",
+            StandingsOverlayDefinition.Definition.DefaultWidth,
+            StandingsOverlayDefinition.Definition.DefaultHeight);
+        var relative = settings.GetOrAddOverlay(
+            "relative",
+            RelativeOverlayDefinition.Definition.DefaultWidth,
+            RelativeOverlayDefinition.Definition.DefaultHeight);
 
         var standingsColumns = OverlayContentColumnSettings.ColumnsFor(standings, OverlayContentColumnSettings.Standings);
         var relativeColumns = OverlayContentColumnSettings.ColumnsFor(relative, OverlayContentColumnSettings.Relative);
@@ -114,6 +134,14 @@ public sealed class OverlayContentColumnSettingsTests
             column.Id == OverlayContentColumnSettings.StandingsIntervalColumnId
             && column.Label == "INT"
             && column.SettingsLabel == "Focus interval");
+        Assert.Contains(standingsColumns, column =>
+            column.Id == OverlayContentColumnSettings.StandingsFastestLapColumnId
+            && column.Label == "FAST"
+            && column.SettingsLabel == "Fastest lap");
+        Assert.Contains(standingsColumns, column =>
+            column.Id == OverlayContentColumnSettings.StandingsLastLapColumnId
+            && column.Label == "LAST"
+            && column.SettingsLabel == "Last lap");
         Assert.Contains(standingsColumns, column =>
             column.Id == OverlayContentColumnSettings.StandingsPitColumnId
             && column.Label == "PIT"
@@ -143,30 +171,36 @@ public sealed class OverlayContentColumnSettingsTests
             BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(method);
 
-        var standings = new ApplicationSettings().GetOrAddOverlay("standings", 780, 520);
+        var standings = new ApplicationSettings().GetOrAddOverlay(
+            "standings",
+            StandingsOverlayDefinition.Definition.DefaultWidth,
+            StandingsOverlayDefinition.Definition.DefaultHeight);
         standings.Scale = 1.25d;
 
         var size = (Size)method.Invoke(null, [StandingsOverlayDefinition.Definition, standings])!;
 
-        Assert.Equal(736, size.Width);
-        Assert.Equal(650, size.Height);
+        Assert.Equal(824, size.Width);
+        Assert.Equal(418, size.Height);
     }
 
     [Fact]
     public void TargetOverlayClientSizeForApply_DoesNotPreserveExpandedStandingsPreviewHeight()
     {
-        var standings = new ApplicationSettings().GetOrAddOverlay("standings", 780, 520);
+        var standings = new ApplicationSettings().GetOrAddOverlay(
+            "standings",
+            StandingsOverlayDefinition.Definition.DefaultWidth,
+            StandingsOverlayDefinition.Definition.DefaultHeight);
         standings.Height = 2160;
 
         var size = OverlayManager.TargetOverlayClientSizeForApply(
             StandingsOverlayDefinition.Definition,
             standings,
-            currentSize: new Size(780, 2160),
+            currentSize: new Size(StandingsOverlayDefinition.Definition.DefaultWidth, 2160),
             sessionPreviewActive: true);
 
-        Assert.Equal(new Size(589, 520), size);
-        Assert.Equal(589, standings.Width);
-        Assert.Equal(520, standings.Height);
+        Assert.Equal(new Size(659, 334), size);
+        Assert.Equal(659, standings.Width);
+        Assert.Equal(334, standings.Height);
     }
 
     [Fact]
@@ -203,21 +237,21 @@ public sealed class OverlayContentColumnSettingsTests
     {
         Assert.True(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             StandingsOverlayDefinition.Definition,
-            new Size(780, 720),
-            new Size(780, 520)));
+            new Size(659, 720),
+            new Size(659, 334)));
         Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             StandingsOverlayDefinition.Definition,
-            new Size(780, 720),
-            new Size(780, 520),
+            new Size(659, 720),
+            new Size(659, 334),
             sessionPreviewActive: true));
         Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             StandingsOverlayDefinition.Definition,
-            new Size(760, 720),
-            new Size(780, 520)));
+            new Size(500, 720),
+            new Size(659, 334)));
         Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             RelativeOverlayDefinition.Definition,
-            new Size(520, 520),
-            new Size(520, 360)));
+            new Size(360, 520),
+            new Size(360, 373)));
     }
 
     [Theory]
@@ -263,6 +297,8 @@ public sealed class OverlayContentColumnSettingsTests
             width => Assert.Equal(250, width),
             width => Assert.Equal(60, width),
             width => Assert.Equal(60, width),
+            width => Assert.Equal(70, width),
+            width => Assert.Equal(70, width),
             width => Assert.Equal(30, width));
         Assert.Collection(
             OverlayContentColumnSettings.Relative.Columns.Select(column => column.DefaultWidth),

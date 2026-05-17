@@ -50,6 +50,8 @@ internal static class AppSettingsMigrator
         OverlayOptionKeys.StandingsColumnDriverWidth,
         OverlayOptionKeys.StandingsColumnGapWidth,
         OverlayOptionKeys.StandingsColumnIntervalWidth,
+        OverlayOptionKeys.StandingsColumnFastestLapWidth,
+        OverlayOptionKeys.StandingsColumnLastLapWidth,
         OverlayOptionKeys.StandingsColumnPitWidth,
         OverlayOptionKeys.RelativeCarsEachSide,
         OverlayOptionKeys.RelativeCarsAhead,
@@ -149,7 +151,11 @@ internal static class AppSettingsMigrator
                 overlay.Opacity = 1d;
             }
 
-            overlay.Opacity = ClampFinite(overlay.Opacity, 0.2d, 1d, 1d);
+            overlay.Opacity = ClampFinite(
+                overlay.Opacity,
+                string.Equals(overlay.Id, "track-map", StringComparison.OrdinalIgnoreCase) ? 0d : 0.2d,
+                1d,
+                1d);
             NormalizeFlagsOverlay(overlay);
             overlay.LegacyProperties = null;
         }
@@ -209,6 +215,8 @@ internal static class AppSettingsMigrator
                 EnsureOption(overlay, OverlayOptionKeys.StandingsColumnDriverWidth, defaultValue: 300, minimum: 180, maximum: 520);
                 EnsureOption(overlay, OverlayOptionKeys.StandingsColumnGapWidth, defaultValue: 92, minimum: 64, maximum: 160);
                 EnsureOption(overlay, OverlayOptionKeys.StandingsColumnIntervalWidth, defaultValue: 92, minimum: 64, maximum: 160);
+                EnsureOption(overlay, OverlayOptionKeys.StandingsColumnFastestLapWidth, defaultValue: 86, minimum: 56, maximum: 150);
+                EnsureOption(overlay, OverlayOptionKeys.StandingsColumnLastLapWidth, defaultValue: 86, minimum: 56, maximum: 150);
                 EnsureOption(overlay, OverlayOptionKeys.StandingsColumnPitWidth, defaultValue: 46, minimum: 34, maximum: 90);
                 break;
             case "relative":
@@ -290,6 +298,8 @@ internal static class AppSettingsMigrator
                 or OverlayOptionKeys.StandingsColumnDriverWidth
                 or OverlayOptionKeys.StandingsColumnGapWidth
                 or OverlayOptionKeys.StandingsColumnIntervalWidth
+                or OverlayOptionKeys.StandingsColumnFastestLapWidth
+                or OverlayOptionKeys.StandingsColumnLastLapWidth
                 or OverlayOptionKeys.StandingsColumnPitWidth,
             "relative" => key is
                 OverlayOptionKeys.RelativeCarsEachSide

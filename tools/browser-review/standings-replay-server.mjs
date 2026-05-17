@@ -4802,7 +4802,7 @@ function settings(overlayId, frame, searchParams = null) {
     return {
       trackMap: null,
       trackMapSettings: {
-        internalOpacity: 1,
+        internalOpacity: 0,
         showSectorBoundaries: true
       }
     };

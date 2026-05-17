@@ -1,6 +1,7 @@
 using System.Drawing;
 using TmrOverlay.App.Overlays.Content;
 using TmrOverlay.App.Overlays.InputState;
+using TmrOverlay.App.Overlays.Relative;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
 
@@ -24,12 +25,19 @@ internal static class BrowserOverlayRecommendedSize
         if (OverlayContentColumnSettings.TryGetContentDefinition(definition.Id, out var contentDefinition)
             && contentDefinition.Columns.Count > 0)
         {
+            if (string.Equals(definition.Id, RelativeOverlayDefinition.Definition.Id, StringComparison.Ordinal))
+            {
+                return new Size(
+                    Math.Max(definition.DefaultWidth, baseSize.Width),
+                    Math.Max(definition.DefaultHeight, Math.Max(baseSize.Height, contentDefinition.BrowserMinimumHeight)));
+            }
+
             var contentWidth = OverlayContentColumnSettings.TotalVisibleTableWidth(
                 settings,
                 contentDefinition);
             return new Size(
-                Math.Max(1, contentWidth + contentDefinition.BrowserWidthPadding),
-                Math.Max(baseSize.Height, contentDefinition.BrowserMinimumHeight));
+                Math.Max(definition.DefaultWidth, Math.Max(1, contentWidth + contentDefinition.BrowserWidthPadding)),
+                Math.Max(definition.DefaultHeight, Math.Max(baseSize.Height, contentDefinition.BrowserMinimumHeight)));
         }
 
         return baseSize;

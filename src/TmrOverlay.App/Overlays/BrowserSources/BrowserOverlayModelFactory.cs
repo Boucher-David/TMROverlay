@@ -226,7 +226,10 @@ internal sealed class BrowserOverlayModelFactory
                 IsPendingGrid: row.IsPendingGrid,
                 CarClassColorHex: row.CarClassColorHex,
                 HeaderTitle: row.IsClassHeader ? row.Driver : null,
-                HeaderDetail: row.IsClassHeader ? ClassHeaderDetail(row.Gap, row.Interval) : null))
+                HeaderDetail: row.IsClassHeader ? ClassHeaderDetail(row.Gap, row.Interval) : null,
+                CellTones: browserSettings.Columns
+                    .Select(column => StandingsCellTone(row, column.DataKey))
+                    .ToArray()))
             .ToArray();
         var headerItems = HeaderItems(overlay, snapshot, viewModel.Status);
 
@@ -249,9 +252,36 @@ internal sealed class BrowserOverlayModelFactory
             OverlayContentColumnSettings.DataDriver => row.Driver,
             OverlayContentColumnSettings.DataGap => row.IsClassHeader ? row.Gap : row.Gap,
             OverlayContentColumnSettings.DataInterval => row.Interval,
+            OverlayContentColumnSettings.DataFastestLap => row.FastestLap,
+            OverlayContentColumnSettings.DataLastLap => row.LastLap,
             OverlayContentColumnSettings.DataPit => row.Pit,
             _ => string.Empty
         };
+    }
+
+    private static string? StandingsCellTone(StandingsOverlayRowViewModel row, string dataKey)
+    {
+        if (string.Equals(dataKey, OverlayContentColumnSettings.DataFastestLap, StringComparison.Ordinal))
+        {
+            if (row.IsClassFastestLap)
+            {
+                return "best-lap";
+            }
+
+            return row.IsRecentCarBestLap ? "personal-best" : null;
+        }
+
+        if (string.Equals(dataKey, OverlayContentColumnSettings.DataLastLap, StringComparison.Ordinal))
+        {
+            if (row.IsClassFastestLastLap)
+            {
+                return "best-lap";
+            }
+
+            return row.IsRecentCarBestLastLap ? "personal-best" : null;
+        }
+
+        return null;
     }
 
     private BrowserOverlayDisplayModel BuildRelative(
@@ -609,7 +639,7 @@ internal sealed class BrowserOverlayModelFactory
         var trackMap = ReadTrackMap(snapshot.Context.Track, includeUserMaps, now);
         var viewModel = TrackMapOverlayViewModel.From(snapshot, now, overlay, trackMap);
         var renderModel = _trackMapRenderBuilder.Build(viewModel, now);
-        var status = viewModel.IsAvailable ? "live | track map" : viewModel.Status;
+        var status = viewModel.IsAvailable ? "live" : viewModel.Status;
         var headerItems = HeaderItems(overlay, snapshot, status);
         return new BrowserOverlayDisplayModel(
             TrackMapOverlayDefinition.Definition.Id,
@@ -2232,7 +2262,10 @@ internal sealed class BrowserOverlayModelFactory
         {
             Id = definition.Id,
             Width = definition.DefaultWidth,
-            Height = definition.DefaultHeight
+            Height = definition.DefaultHeight,
+            Opacity = string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+                ? TrackMapBrowserSettings.Default.InternalOpacity
+                : 1d
         };
     }
 
@@ -2771,7 +2804,8 @@ internal sealed record BrowserOverlayDisplayRow(
     string? HeaderTitle,
     string? HeaderDetail,
     bool IsPlaceholder = false,
-    int? RelativeLapDelta = null);
+    int? RelativeLapDelta = null,
+    IReadOnlyList<string?>? CellTones = null);
 
 internal sealed record BrowserOverlayHeaderItem(
     string Key,

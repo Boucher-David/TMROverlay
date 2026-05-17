@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{TITLE}}</title>
+  <style>{{INSTALLER_CSS}}</style>
+</head>
+<body>
+  <main id="installer-review" class="installer-review" data-menu-id="{{MENU_ID}}">
+    <header class="installer-review-header">
+      <div>
+        <p>Browser review only</p>
+        <h1>Windows MSI Installer Review</h1>
+      </div>
+      <nav class="installer-review-nav" aria-label="Installer menus">
+        {{MENU_LINKS}}
+      </nav>
+    </header>
+    <div class="installer-review-stage">
+      {{INSTALLER_HTML}}
+    </div>
+  </main>
+</body>
+</html>

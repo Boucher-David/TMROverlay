@@ -191,6 +191,7 @@ internal static class OverlayTheme
             ("--tmr-orange-rgb", DesignV2.Orange),
             ("--tmr-error", DesignV2.Error),
             ("--tmr-error-rgb", DesignV2.Error),
+            ("--tmr-best-lap", DesignV2.BestLapSector),
             ("--tmr-text-rgb", DesignV2.TextPrimary),
             ("--tmr-text-secondary-rgb", DesignV2.TextSecondary),
             ("--tmr-text-muted-rgb", DesignV2.TextMuted),

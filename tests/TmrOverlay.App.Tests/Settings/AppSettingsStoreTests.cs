@@ -78,7 +78,7 @@ public sealed class AppSettingsStoreTests
             var standingsGapEnabledKey = $"{standings.Id}.content.{OverlayContentColumnSettings.StandingsGapColumnId}.enabled";
             var standingsDriverOrderKey = $"{standings.Id}.content.{OverlayContentColumnSettings.StandingsDriverColumnId}.order";
             standings.SetBooleanOption(standingsGapEnabledKey, false);
-            standings.SetIntegerOption(standingsDriverOrderKey, 1, 1, 6);
+            standings.SetIntegerOption(standingsDriverOrderKey, 1, 1, 8);
             standings.SetIntegerOption(OverlayOptionKeys.StandingsColumnDriverWidth, 360, 180, 520);
             standings.SetBooleanOption(OverlayOptionKeys.StandingsClassSeparatorsEnabled, false);
             standings.SetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, 0, 0, 6);
@@ -115,7 +115,7 @@ public sealed class AppSettingsStoreTests
             Assert.False(persistedStandings.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, true));
             Assert.False(persistedStandings.GetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, true));
             Assert.False(persistedStandings.GetBooleanOption(standingsGapEnabledKey, true));
-            Assert.Equal(1, persistedStandings.GetIntegerOption(standingsDriverOrderKey, 3, 1, 6));
+            Assert.Equal(1, persistedStandings.GetIntegerOption(standingsDriverOrderKey, 3, 1, 8));
             Assert.Equal(360, persistedStandings.GetIntegerOption(OverlayOptionKeys.StandingsColumnDriverWidth, 250, 180, 520));
             Assert.False(persistedStandings.GetBooleanOption(OverlayOptionKeys.StandingsClassSeparatorsEnabled, true));
             Assert.Equal(0, persistedStandings.GetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, 2, 0, 6));
@@ -517,7 +517,7 @@ public sealed class AppSettingsStoreTests
                 $"{standings.Id}.content.{OverlayContentColumnSettings.StandingsDriverColumnId}.order",
                 defaultValue: 3,
                 minimum: 1,
-                maximum: 6));
+                maximum: 8));
             Assert.Equal(360, standings.GetIntegerOption(OverlayOptionKeys.StandingsColumnDriverWidth, 250, 180, 520));
             Assert.Equal(0, standings.GetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, 2, 0, 6));
 

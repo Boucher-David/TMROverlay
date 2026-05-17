@@ -916,7 +916,7 @@ internal sealed class InputStateOverlayForm : PersistentOverlayForm
         return LiveLocalStrategyContext.ForRequirement(
             snapshot,
             now,
-            OverlayContextRequirement.LocalPlayerInCar).IsAvailable;
+            OverlayContextRequirement.LocalPlayerInCarOrPit).IsAvailable;
     }
 
     private static string FormatGear(int? gear)

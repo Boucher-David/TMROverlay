@@ -11,6 +11,7 @@ import {
   renderOverlayHtml,
   renderOverlayIndexHtml,
   renderAppValidatorReviewHtml,
+  renderInstallerReviewHtml,
   renderSettingsGeneralReviewHtml
 } from '../../tests/browser-overlays/browserOverlayAssets.js';
 
@@ -94,6 +95,13 @@ const server = createServer((request, response) => {
       serveHtml(response, withLiveReload(renderSettingsGeneralReviewHtml({
         previewMode: url.searchParams.get('preview') || 'off',
         reviewState: reviewAppState
+      })));
+      return;
+    }
+
+    if (path === '/review/installer') {
+      serveHtml(response, withLiveReload(renderInstallerReviewHtml({
+        menuId: url.searchParams.get('menu') || 'welcome'
       })));
       return;
     }
@@ -478,7 +486,8 @@ function reviewLiveSnapshot(previewMode = 'off') {
       brake: 0.16,
       clutch: 0,
       steeringWheelAngle: -0.18,
-      gear: 4,
+      gear: sessionKind === 'race' ? 6 : 4,
+      rpm: sessionKind === 'race' ? 7900 : 7120,
       speedMetersPerSecond: sessionKind === 'race' ? 77.889366 : 63.4,
       brakeAbsActive: true,
       trace: reviewInputTrace()
@@ -492,8 +501,8 @@ function reviewLiveSnapshot(previewMode = 'off') {
     },
     reference: {
       hasData: true,
-      playerCarIdx: 71,
-      focusCarIdx: 71,
+      playerCarIdx: 42,
+      focusCarIdx: 42,
       focusIsPlayer: true,
       isOnTrack: true,
       isInGarage: false,
@@ -502,16 +511,16 @@ function reviewLiveSnapshot(previewMode = 'off') {
     },
     driverDirectory: {
       hasData: true,
-      playerCarIdx: 71,
-      focusCarIdx: 71
+      playerCarIdx: 42,
+      focusCarIdx: 42
     },
     spatial: {
       hasData: true,
-      referenceCarIdx: 71,
+      referenceCarIdx: 42,
       referenceLapDistPct: 0.42,
-      hasCarLeft: true,
-      hasCarRight: false,
-      sideStatus: 'left',
+      hasCarLeft: false,
+      hasCarRight: sessionKind === 'race',
+      sideStatus: sessionKind === 'race' ? 'right' : 'clear',
       strongestMulticlassApproach: {
         relativeSeconds: -2.4
       },
@@ -528,6 +537,21 @@ function reviewLiveSnapshot(previewMode = 'off') {
         { startPct: 0.32, endPct: 0.68, highlight: 'none' },
         { startPct: 0.68, endPct: 1, highlight: 'best-lap' }
       ]
+    },
+    timing: {
+      focusCarIdx: 42,
+      focusRow: {
+        carIdx: 42,
+        overallPosition: 24,
+        classPosition: 24,
+        lapDistPct: 0.42,
+        hasSpatialProgress: true,
+        hasTakenGrid: true,
+        isFocus: true,
+        trackSurface: 3
+      },
+      overallRows: reviewTrackMapTimingRows(),
+      classRows: []
     }
   });
 }
@@ -537,7 +561,7 @@ function reviewSettings(overlayId, previewMode = 'off') {
   const unitSystem = reviewAppState.unitSystem;
   const session = sessionKeyFromPreview(previewMode);
   if (overlayId === 'stream-chat') {
-    const provider = overlayState.provider || 'twitch';
+    const provider = overlayState.provider || 'none';
     return {
       provider,
       isConfigured: provider !== 'none',
@@ -561,7 +585,7 @@ function reviewSettings(overlayId, previewMode = 'off') {
     return {
       trackMap: reviewTrackMap(),
       trackMapSettings: {
-        internalOpacity: Math.max(0.2, Math.min(1, Number(overlayState.opacityPercent ?? 100) / 100)),
+        internalOpacity: Math.max(0, Math.min(1, Number(overlayState.opacityPercent ?? 0) / 100)),
         showSectorBoundaries: contentEnabled(overlayState, 'Sector boundaries', true, [], session),
         includeUserMaps: contentEnabled(
           overlayState,
@@ -596,11 +620,7 @@ function reviewSettings(overlayId, previewMode = 'off') {
 
   if (overlayId === 'flags') {
     return {
-      flags: [
-        { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: 'waving', tone: 'warning' },
-        { kind: 'blue', category: 'blue', label: 'Blue', detail: null, tone: 'info' },
-        { kind: 'checkered', category: 'finish', label: 'Checkered', detail: null, tone: 'info' }
-      ],
+      flags: reviewFlagsForSession(session),
       showGreen: contentEnabled(overlayState, 'Green', true),
       showBlue: contentEnabled(overlayState, 'Blue', true),
       showYellow: contentEnabled(overlayState, 'Yellow', true),
@@ -613,6 +633,26 @@ function reviewSettings(overlayId, previewMode = 'off') {
     unitSystem,
     reviewOverlayState: overlayState
   };
+}
+
+function reviewFlagsForSession(session) {
+  const blue = { kind: 'blue', category: 'blue', label: 'Blue', detail: null, tone: 'info' };
+  if (session === 'race') {
+    return [
+      { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: null, tone: 'warning' },
+      blue,
+      { kind: 'checkered', category: 'finish', label: 'Checkered', detail: null, tone: 'info' }
+    ];
+  }
+
+  if (session === 'qualifying') {
+    return [
+      { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: null, tone: 'warning' },
+      blue
+    ];
+  }
+
+  return [blue];
 }
 
 function contentEnabled(overlayState, label, defaultValue = true, aliases = [], session = null) {
@@ -655,6 +695,29 @@ function streamChatContentOptionsFromReviewState(overlayState) {
   };
 }
 
+function reviewTrackMapTimingRows() {
+  return [
+    reviewTimingRow(8, 1, 1, 0.10, '#33CEFF'),
+    reviewTimingRow(17, 2, 1, 0.24, '#33CEFF'),
+    reviewTimingRow(33, 3, 2, 0.64, '#FFAA00'),
+    reviewTimingRow(42, 24, 24, 0.42, '#00E8FF', { isFocus: true })
+  ];
+}
+
+function reviewTimingRow(carIdx, overallPosition, classPosition, lapDistPct, carClassColorHex, extra = {}) {
+  return {
+    carIdx,
+    overallPosition,
+    classPosition,
+    lapDistPct,
+    carClassColorHex,
+    hasSpatialProgress: true,
+    hasTakenGrid: true,
+    trackSurface: 3,
+    ...extra
+  };
+}
+
 function reviewInputTrace() {
   return Array.from({ length: 180 }, (_, index) => {
     const t = index / 10;
@@ -694,7 +757,7 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
     case 'standings':
       return applyReviewChrome(filterTableModelContent(filterStandingsReviewRows(standingsDisplayModel(previewLabel), overlayState), 'standings', overlayState, session), overlayId, previewMode);
     case 'relative':
-      return applyReviewChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel), overlayState), 'relative', overlayState, session), overlayId, previewMode);
+      return applyReviewChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), overlayState), 'relative', overlayState, session), overlayId, previewMode);
     case 'fuel-calculator':
       {
         const showAdvice = contentEnabled(overlayState, 'Advice column', true, [], session);
@@ -752,55 +815,59 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
       }
     case 'session-weather':
       {
+        const sessionType = session === 'qualifying' ? 'Qualify' : sessionDisplayName(session);
         const sessionName = sessionDisplayName(session);
-        const reviewAirTempC = 19;
-        const reviewTrackTempC = 44;
+        const reviewAirTempC = 22;
+        const reviewTrackTempC = 31;
+        const clock = reviewSessionWeatherClock(session);
+        const laps = reviewSessionWeatherLaps(session);
+        const rubber = session === 'race' ? 'Moderate Usage' : 'Clean';
         const sessionRows = [
-          metricRow('Session', `${sessionName} | ${previewLabel} | team`, 'normal', [
-            metricSegment('Type', sessionName, 'normal'),
+          metricRow('Session', `${sessionType} | ${previewLabel} | team`, 'normal', [
+            metricSegment('Type', sessionType, 'normal'),
             metricSegment('Name', previewLabel, 'normal'),
             metricSegment('Mode', 'Team', 'normal')
           ]),
-          metricRow('Event', `${sessionName} | Mercedes-AMG GT3 2020`, 'normal', [
-            metricSegment('Event', sessionName, 'normal'),
-            metricSegment('Car', 'Mercedes-AMG GT3 2020', 'normal')
+          metricRow('Clock', `${clock.elapsed} elapsed | ${clock.left} left | ${clock.total} total`, 'normal', [
+            metricSegment('Elapsed', clock.elapsed, 'normal'),
+            metricSegment('Left', clock.left, 'normal'),
+            metricSegment('Total', clock.total, 'normal')
           ]),
-          metricRow('Clock', '17:22 elapsed | 6:37:08 left', 'normal', [
-            metricSegment('Elapsed', '17:22', 'normal'),
-            metricSegment('Left', '6:37:08', 'normal'),
-            metricSegment('Total', '--', 'waiting')
-          ]),
-          metricRow('Laps', '-- left | 179 total', 'normal', [
-            metricSegment('Remaining', '--', 'waiting'),
-            metricSegment('Total', '179', 'normal')
+          metricRow('Event', `${sessionType} | Aston Martin Vantage GT3 EVO`, 'normal', [
+            metricSegment('Event', sessionType, 'normal'),
+            metricSegment('Car', 'Aston Martin Vantage GT3 EVO', 'normal')
           ]),
           metricRow('Track', `Gesamtstrecke 24h | ${formatDistance(25380)}`, 'normal', [
             metricSegment('Name', 'Gesamtstrecke 24h', 'normal'),
             metricSegment('Length', formatDistance(25380), 'normal')
+          ]),
+          metricRow('Laps', `${laps.remaining} left | ${laps.total} total`, 'normal', [
+            metricSegment('Remaining', laps.remaining, 'normal'),
+            metricSegment('Total', laps.total, 'normal')
           ])
         ];
         const weatherRows = [
-          metricRow('Surface', 'Dry | Rubber Moderate Usage', 'normal', [
-            metricSegment('Wetness', 'Dry', 'normal'),
+          metricRow('Surface', `Unknown | Rubber ${rubber}`, 'normal', [
+            metricSegment('Wetness', 'Unknown', 'waiting'),
             metricSegment('Declared', 'Dry', 'normal'),
-            metricSegment('Rubber', 'Moderate Usage', 'normal')
+            metricSegment('Rubber', rubber, 'normal')
           ]),
-          metricRow('Sky', 'Partly Cloudy | constant | rain:0%', 'normal', [
-            metricSegment('Skies', 'Partly Cloudy', 'normal'),
-            metricSegment('Weather', 'constant', 'normal'),
+          metricRow('Sky', 'Mostly Cloudy | Dynamic | rain:0%', 'normal', [
+            metricSegment('Skies', 'Mostly Cloudy', 'normal'),
+            metricSegment('Weather', 'Dynamic', 'normal'),
             metricSegment('Rain', '0%', 'normal')
           ]),
-          metricRow('Wind', `S | ${formatSpeed(15 / 3.6)} | Head`, 'normal', [
-            metricSegment('Dir', 'S', 'normal'),
-            metricSegment('Speed', formatSpeed(15 / 3.6), 'normal'),
+          metricRow('Wind', `NE | ${formatSpeed(10 / 3.6)} | Head`, 'normal', [
+            metricSegment('Dir', 'NE', 'normal'),
+            metricSegment('Speed', formatSpeed(10 / 3.6), 'normal'),
             metricSegment('Facing', 'Head', 'normal', { rotationDegrees: 0 })
           ]),
           metricRow('Temps', `air ${formatTemperature(reviewAirTempC)} | track ${formatTemperature(reviewTrackTempC)}`, temperatureTone(reviewTrackTempC), [
             metricSegment('Air', formatTemperature(reviewAirTempC), temperatureTone(reviewAirTempC), { accentHex: temperatureAccentHex(reviewAirTempC) }),
             metricSegment('Track', formatTemperature(reviewTrackTempC), temperatureTone(reviewTrackTempC), { accentHex: temperatureAccentHex(reviewTrackTempC) })
           ]),
-          metricRow('Atmosphere', `hum 62% | fog 0% | ${formatAirPressure(101300)}`, 'normal', [
-            metricSegment('Hum', '62%', 'normal'),
+          metricRow('Atmosphere', `hum 48% | fog 0% | ${formatAirPressure(101300)}`, 'normal', [
+            metricSegment('Hum', '48%', 'normal'),
             metricSegment('Fog', '0%', 'normal'),
             metricSegment('Pressure', formatAirPressure(101300), 'normal')
           ])
@@ -809,9 +876,9 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
           { title: 'Session', rows: sessionRows },
           { title: 'Weather', rows: weatherRows }
         ], overlayState, session);
-        return applyReviewChrome(metricsModel('session-weather', 'Session / Weather', sessionName, metricSections.flatMap((section) => section.rows), '', [], metricSections, [
-          { key: 'status', value: sessionName },
-          { key: 'timeRemaining', value: '06:37:08' }
+        return applyReviewChrome(metricsModel('session-weather', 'Session / Weather', sessionType, metricSections.flatMap((section) => section.rows), '', [], metricSections, [
+          { key: 'status', value: sessionType },
+          { key: 'timeRemaining', value: clock.left }
         ]), overlayId, previewMode);
       }
     case 'pit-service':
@@ -929,6 +996,7 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
         rows: [],
         metrics: [],
         points: reviewGapPoints(overlayState),
+        graph: reviewGapGraph(),
         headerItems: [
           { key: 'status', value: 'live | race gap' },
           { key: 'timeRemaining', value: '06:37:08' }
@@ -941,18 +1009,86 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
 }
 
 function reviewGapCarCount(overlayState) {
-  const eachSide = Math.max(
-    clampInteger(overlayState?.carsAhead, 5, 0, 12),
-    clampInteger(overlayState?.carsBehind, 5, 0, 12));
-  return Math.max(1, Math.min(7, eachSide * 2 + 1));
+  if (Number(overlayState?.carsAhead ?? 5) <= 0 && Number(overlayState?.carsBehind ?? 5) <= 0) {
+    return '0/0';
+  }
+
+  return '3/3';
 }
 
 function reviewGapPoints(overlayState) {
-  const eachSide = Math.max(
-    clampInteger(overlayState?.carsAhead, 5, 0, 12),
-    clampInteger(overlayState?.carsBehind, 5, 0, 12));
-  const count = Math.max(4, Math.min(20, eachSide + 8));
-  return Array.from({ length: count }, (_, index) => 74 - index * Math.max(1, eachSide / 4));
+  if (Number(overlayState?.carsAhead ?? 5) <= 0 && Number(overlayState?.carsBehind ?? 5) <= 0) {
+    return [];
+  }
+
+  return [0, 0, 243.63125];
+}
+
+function reviewGapGraph() {
+  const timestampUtc = new Date('2026-05-17T12:00:00.000Z').toISOString();
+  const axisSeconds = 62571.436719;
+  const referenceGap = 243.63124999999854;
+  const point = (carIdx, gapSeconds, isReference, isClassLeader, classPosition) => ({
+    timestampUtc,
+    axisSeconds,
+    gapSeconds,
+    carIdx,
+    isReference,
+    isClassLeader,
+    classPosition,
+    startsSegment: true
+  });
+  const series = [
+    reviewGapSeries(8, false, true, 1, [point(8, 0, false, true, 1)]),
+    reviewGapSeries(17, false, true, 1, [point(17, 0, false, true, 1)]),
+    reviewGapSeries(42, true, false, 24, [point(42, referenceGap, true, false, 24)])
+  ];
+  return {
+    series,
+    weather: [],
+    leaderChanges: [],
+    driverChanges: [],
+    startSeconds: axisSeconds,
+    endSeconds: 63360.136719,
+    maxGapSeconds: 500,
+    lapReferenceSeconds: 525.8,
+    selectedSeriesCount: series.length,
+    trendMetrics: [
+      { label: '5L', focusGapChangeSeconds: null, chaser: null, state: 'warming', stateLabel: '0.0L' },
+      { label: '10L', focusGapChangeSeconds: null, chaser: null, state: 'warming', stateLabel: '0.0L' },
+      { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'pit', stateLabel: null },
+      { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'pitLap', stateLabel: null },
+      { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null },
+      { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null },
+      { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, comparisonText: '8:13.000' },
+      { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track' }
+    ],
+    activeThreat: null,
+    threatCarIdx: null,
+    metricDeadbandSeconds: 0.25,
+    comparisonLabel: 'P1',
+    scale: {
+      maxGapSeconds: 500,
+      isFocusRelative: false,
+      aheadSeconds: 0,
+      behindSeconds: 0,
+      referencePoints: [],
+      latestReferenceGapSeconds: 0
+    }
+  };
+}
+
+function reviewGapSeries(carIdx, isReference, isClassLeader, classPosition, points) {
+  return {
+    carIdx,
+    isReference,
+    isClassLeader,
+    classPosition,
+    alpha: 0.35,
+    isStickyExit: false,
+    isStale: false,
+    points
+  };
 }
 
 function applyReviewChrome(model, overlayId, previewMode) {
@@ -995,6 +1131,30 @@ function sessionDisplayName(session) {
       : 'Practice';
 }
 
+function reviewSessionWeatherClock(session) {
+  if (session === 'race') {
+    return { elapsed: '17:22:51', left: '6:37:09', total: '24:00:00' };
+  }
+
+  if (session === 'qualifying') {
+    return { elapsed: '5:05', left: '14:55', total: '20:00' };
+  }
+
+  return { elapsed: '7:40', left: '12:20', total: '20:00' };
+}
+
+function reviewSessionWeatherLaps(session) {
+  if (session === 'race') {
+    return { remaining: '49.6 est', total: '170 est' };
+  }
+
+  if (session === 'qualifying') {
+    return { remaining: '3.3 est', total: '10 est' };
+  }
+
+  return { remaining: '3.6 est', total: '10 est' };
+}
+
 function chromeEnabled(overlayState, area, label, session, defaultValue) {
   return overlayState?.chrome?.[area]?.[label]?.[session] ?? defaultValue;
 }
@@ -1007,7 +1167,8 @@ function reviewAssetBackedDisplayModel(overlayId, previewMode = 'off') {
   }).model;
 }
 
-function relativeDisplayModel(previewLabel = 'review fixture') {
+function relativeDisplayModel(previewLabel = 'review fixture', session = 'practice') {
+  const showLapRelationship = session === 'race';
   return {
     overlayId: 'relative',
     title: 'Relative',
@@ -1016,14 +1177,14 @@ function relativeDisplayModel(previewLabel = 'review fixture') {
     bodyKind: 'table',
     columns: [
       { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 38, alignment: 'right' },
-      { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 180, alignment: 'left' },
+      { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
       { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
       { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 30, alignment: 'right' }
     ],
     rows: [
-      relativeRow(['3', '#34 Near Ahead', '-2.350', ''], { carClassColorHex: '#33CEFF', relativeLapDelta: 1 }),
-      relativeRow(['5', '#55 Focus Driver', '0.000', ''], { isReference: true, carClassColorHex: '#FFDA59', relativeLapDelta: 0 }),
-      relativeRow(['6', '#61 Near Behind', '+1.200', 'IN'], { carClassColorHex: '#FF4FD8', relativeLapDelta: -2, isPit: true })
+      relativeRow(['3', '#34 Near Ahead', '-2.350', ''], { carClassColorHex: '#33CEFF', relativeLapDelta: showLapRelationship ? 1 : null }),
+      relativeRow(['5', '#55 Focus Driver', '0.000', ''], { isReference: true, carClassColorHex: '#FFDA59', relativeLapDelta: showLapRelationship ? 0 : null }),
+      relativeRow(['6', '#61 Near Behind', '+1.200', 'IN'], { carClassColorHex: '#FF4FD8', relativeLapDelta: showLapRelationship ? -2 : null, isPit: true })
     ],
     metrics: [],
     points: [],
@@ -1130,7 +1291,10 @@ function filterTableModelContent(model, overlayId, overlayState, session = null)
       ? row
       : {
           ...row,
-          cells: retained.map((entry) => row.cells?.[entry.index] ?? '')
+          cells: retained.map((entry) => row.cells?.[entry.index] ?? ''),
+          ...(Array.isArray(row.cellTones)
+            ? { cellTones: retained.map((entry) => row.cellTones?.[entry.index] || null) }
+            : {})
         })
   };
 }
@@ -1144,6 +1308,8 @@ function tableContentLabel(overlayId, column) {
       driver: 'Driver',
       gap: 'Class gap',
       interval: 'Focus interval',
+      'fastest-lap': 'Fastest lap',
+      'last-lap': 'Last lap',
       pit: 'Pit status'
     }[dataKey] || column?.label || dataKey;
   }
@@ -1394,15 +1560,17 @@ function standingsDisplayModel(previewLabel = 'review fixture') {
       { label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
       { label: 'GAP', dataKey: 'gap', width: 60, alignment: 'right' },
       { label: 'INT', dataKey: 'interval', width: 60, alignment: 'right' },
+      { label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
+      { label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
       { label: 'PIT', dataKey: 'pit', width: 30, alignment: 'right' }
     ],
     rows: [
       headerRow('LMP2', '2 cars | ~10 laps', '#33CEFF'),
-      carRow(['1', '#8', 'Kousuke Konishi', 'Leader', '-45.0', '']),
+      carRow(['1', '#8', 'Kousuke Konishi', 'Leader', '-45.0', '1:45.884', '1:46.210', ''], { cellTones: [null, null, null, null, null, 'best-lap', null, null] }),
       headerRow('GT3', '3 cars | ~12.4 laps', '#FFAA00'),
-      carRow(['1', '#000', 'Kauan Vigliazzi Teixeira Lemos', 'Leader', '-2.0', '']),
-      carRow(['24', '#3094', 'Tech Mates Racing', '+3.4', '0.0', ''], { isReference: true }),
-      carRow(['49', '#60', 'Tommie Wittens', '+8.9', '+5.5', 'IN'], { isPit: true })
+      carRow(['1', '#000', 'Kauan Vigliazzi Teixeira Lemos', 'Leader', '-2.0', '1:53.112', '1:53.112', ''], { cellTones: [null, null, null, null, null, 'best-lap', 'best-lap', null] }),
+      carRow(['24', '#3094', 'Tech Mates Racing', '+3.4', '0.0', '1:54.228', '1:54.228', ''], { isReference: true, cellTones: [null, null, null, null, null, 'personal-best', 'personal-best', null] }),
+      carRow(['49', '#60', 'Tommie Wittens', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
     ],
     metrics: [],
     headerItems: [

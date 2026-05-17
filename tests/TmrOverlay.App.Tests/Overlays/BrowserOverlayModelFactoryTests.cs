@@ -342,7 +342,7 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.DoesNotContain(fastRepair.Segments, segment => segment.Label.Contains("used", StringComparison.OrdinalIgnoreCase));
         var tireAnalysis = Assert.Single(response.Model.GridSections!);
         Assert.Contains(tireAnalysis.Rows, row => row.Label == "Change" && row.Cells.Any(cell => cell.Value == "Keep" && cell.Tone == "info"));
-        Assert.Contains(tireAnalysis.Rows, row => row.Label == "Available" && row.Cells.Any(cell => cell.Value == "0" && cell.Tone == "error"));
+        Assert.Contains(tireAnalysis.Rows, row => row.Label == "Available" && row.Cells.All(cell => cell.Value == "2"));
     }
 
     [Fact]

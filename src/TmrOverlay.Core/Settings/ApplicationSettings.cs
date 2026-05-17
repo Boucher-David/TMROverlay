@@ -14,7 +14,8 @@ internal sealed class ApplicationSettings
         int defaultHeight,
         int defaultX = 24,
         int defaultY = 24,
-        bool defaultEnabled = false)
+        bool defaultEnabled = false,
+        double defaultOpacity = 1d)
     {
         var existing = Overlays.FirstOrDefault(overlay => string.Equals(overlay.Id, id, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
@@ -29,7 +30,8 @@ internal sealed class ApplicationSettings
             X = defaultX,
             Y = defaultY,
             Width = defaultWidth,
-            Height = defaultHeight
+            Height = defaultHeight,
+            Opacity = double.IsFinite(defaultOpacity) ? Math.Clamp(defaultOpacity, 0d, 1d) : 1d
         };
         Overlays.Add(overlay);
         return overlay;

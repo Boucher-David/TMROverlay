@@ -26,6 +26,8 @@ internal static class OverlayOptionKeys
     public const string StandingsColumnDriverWidth = "standings.column.driver-width";
     public const string StandingsColumnGapWidth = "standings.column.gap-width";
     public const string StandingsColumnIntervalWidth = "standings.column.interval-width";
+    public const string StandingsColumnFastestLapWidth = "standings.column.fastest-lap-width";
+    public const string StandingsColumnLastLapWidth = "standings.column.last-lap-width";
     public const string StandingsColumnPitWidth = "standings.column.pit-width";
     public const string RelativeCarsEachSide = "relative.cars-each-side";
     public const string RelativeCarsAhead = "relative.cars-ahead";

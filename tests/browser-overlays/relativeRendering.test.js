@@ -37,9 +37,21 @@ describe('relative browser rendering', () => {
     expect(currentOverlay.document.body.textContent).not.toContain('Far Ahead');
     expect(currentOverlay.document.body.textContent).not.toContain('Far Behind');
   });
+
+  it('does not render lap relationship classes when the model omits race-only lap deltas', async () => {
+    currentOverlay = await renderBrowserOverlay('relative', {
+      live: freshLiveSnapshot({}),
+      model: relativeDisplayModel({ includeLapDeltas: false })
+    });
+
+    const rows = [...currentOverlay.document.querySelectorAll('tbody tr')];
+
+    expect(rows.some((row) => row.classList.contains('lap-ahead-1'))).toBe(false);
+    expect(rows.some((row) => row.classList.contains('lap-behind-2'))).toBe(false);
+  });
 });
 
-function relativeDisplayModel() {
+function relativeDisplayModel({ includeLapDeltas = true } = {}) {
   return {
     overlayId: 'relative',
     title: 'Relative',
@@ -48,16 +60,16 @@ function relativeDisplayModel() {
     bodyKind: 'table',
     columns: [
       { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 38, alignment: 'right' },
-      { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 180, alignment: 'left' },
+      { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
       { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
       { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 30, alignment: 'right' }
     ],
     rows: [
       row(['', '', '', ''], { isPlaceholder: true }),
       row(['', '', '', ''], { isPlaceholder: true }),
-      row(['3', '#34 Near Ahead', '-2.350'], { carClassColorHex: '#FFDA59', relativeLapDelta: 1 }),
+      row(['3', '#34 Near Ahead', '-2.350'], { carClassColorHex: '#FFDA59', relativeLapDelta: includeLapDeltas ? 1 : null }),
       row(['5', '#55 Focus Driver', '0.000'], { isReference: true, carClassColorHex: '#33CEFF' }),
-      row(['6', '#61 Near Behind', '+1.200', 'IN'], { isPit: true, carClassColorHex: '#FF4FD8', relativeLapDelta: -2 }),
+      row(['6', '#61 Near Behind', '+1.200', 'IN'], { isPit: true, carClassColorHex: '#FF4FD8', relativeLapDelta: includeLapDeltas ? -2 : null }),
       row(['', '', '', ''], { isPlaceholder: true }),
       row(['', '', '', ''], { isPlaceholder: true })
     ],

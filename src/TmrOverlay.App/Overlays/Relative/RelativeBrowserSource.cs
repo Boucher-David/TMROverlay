@@ -9,5 +9,6 @@ internal static class RelativeBrowserSource
         title: RelativeOverlayDefinition.Definition.DisplayName,
         canonicalRoute: "/overlays/relative",
         fadeWhenTelemetryUnavailable: RelativeOverlayDefinition.Definition.FadeWhenLiveTelemetryUnavailable,
-        moduleAssetName: "relative");
+        moduleAssetName: "relative",
+        bodyClass: "relative-page");
 }

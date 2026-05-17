@@ -102,8 +102,10 @@ internal static class SettingsOverlayTabSections
             return optionsTop;
         }
 
+        var isTrackMap = string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase);
+        var minimumOpacity = isTrackMap ? 0d : 0.2d;
         var opacityLabel = SettingsUi.CreateLabel(
-            string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            isTrackMap
                 ? "Map fill"
                 : "Opacity",
             22,
@@ -115,16 +117,16 @@ internal static class SettingsOverlayTabSections
             Increment = 5,
             Location = new Point(180, optionsTop),
             Maximum = 100,
-            Minimum = 20,
+            Minimum = (decimal)(minimumOpacity * 100d),
             Size = new Size(90, 28),
             TabStop = true,
             TextAlign = HorizontalAlignment.Right,
-            Value = (decimal)Math.Round(Math.Clamp(settings.Opacity, 0.2d, 1d) * 100d)
+            Value = (decimal)Math.Round(Math.Clamp(settings.Opacity, minimumOpacity, 1d) * 100d)
         };
         var percentLabel = SettingsUi.CreateLabel("%", 278, optionsTop + 4, 40);
         opacityInput.ValueChanged += (_, _) =>
         {
-            settings.Opacity = Math.Clamp((double)opacityInput.Value / 100d, 0.2d, 1d);
+            settings.Opacity = Math.Clamp((double)opacityInput.Value / 100d, minimumOpacity, 1d);
             saveAndApply();
         };
 

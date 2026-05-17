@@ -546,14 +546,18 @@ internal sealed class DesignV2SettingsSurface : Control
 
         if (definition.ShowOpacityControl)
         {
+            var opacityPercents = string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+                ? new[] { 0, 20, 30, 40, 50, 60, 70, 80, 90, 100 }
+                : new[] { 20, 30, 40, 50, 60, 70, 80, 90, 100 };
+            var minimumOpacity = opacityPercents[0] / 100d;
             AddDynamic(new V2PercentSliderControl(
                 new Rectangle(454, 408, 180, 28),
-                ClosestPercent(settings.Opacity, [20, 30, 40, 50, 60, 70, 80, 90, 100]),
-                [20, 30, 40, 50, 60, 70, 80, 90, 100],
+                ClosestPercent(settings.Opacity, opacityPercents),
+                opacityPercents,
                 Magenta,
                 percent =>
                 {
-                    settings.Opacity = Math.Clamp(percent / 100d, 0.2d, 1d);
+                    settings.Opacity = Math.Clamp(percent / 100d, minimumOpacity, 1d);
                     _callbacks.SaveAndApply();
                     Invalidate();
                 }));
@@ -941,7 +945,6 @@ internal sealed class DesignV2SettingsSurface : Control
     {
         FillRounded(graphics, new Rectangle(SidebarX, SidebarY, SidebarWidth, SidebarHeight), 14, Rgba(6, 13, 26, 235));
         StrokeRounded(graphics, new Rectangle(SidebarX, SidebarY, SidebarWidth, SidebarHeight), 14, BorderDim, 1f);
-        DrawText(graphics, "SETTINGS", new Rectangle(84, 136, 110, 18), 12f, FontStyle.Bold, Cyan);
 
         for (var index = 0; index < _sidebarTabs.Count; index++)
         {
@@ -1742,7 +1745,10 @@ internal sealed class DesignV2SettingsSurface : Control
             definition.Id,
             definition.DefaultWidth,
             definition.DefaultHeight,
-            defaultEnabled: false);
+            defaultEnabled: false,
+            defaultOpacity: string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+                ? TrackMapBrowserSettings.Default.InternalOpacity
+                : 1d);
     }
 
     private OverlaySettings TrackMapSettings()
@@ -1861,7 +1867,7 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private Rectangle SidebarButtonBounds(int index)
     {
-        return new Rectangle(78, 164 + index * 32, 162, 27);
+        return new Rectangle(78, 136 + index * 32, 162, 27);
     }
 
     private Rectangle ContentBounds()
@@ -2290,6 +2296,7 @@ internal sealed class DesignV2SettingsSurface : Control
             Location = bounds.Location;
             Size = bounds.Size;
             BackColor = Rgb(9, 18, 34);
+            ForeColor = TextPrimary;
         }
 
         protected override void OnPaintBackground(PaintEventArgs e)

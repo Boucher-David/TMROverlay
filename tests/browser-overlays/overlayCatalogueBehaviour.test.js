@@ -258,16 +258,16 @@ function browserScenarios() {
       fixture: () => ({
         live: freshLiveSnapshot({}),
         model: tableModel('standings', 'Standings', 'P2 | 3 shown', standingsColumns(), [
-          row(['1', '#11', 'Class Leader', 'Lap 13', '0.0']),
-          row(['2', '#10', 'Reference Driver', '--', '--'], { isReference: true }),
-          row(['3', '#12', 'Chase Driver', '--', '--'])
+          row(['1', '#11', 'Class Leader', 'Lap 13', '0.0', '1:22.123', '1:23.400', '']),
+          row(['2', '#10', 'Reference Driver', '--', '--', '1:23.456', '1:23.456', ''], { isReference: true, cellTones: [null, null, null, null, null, 'personal-best', 'personal-best', null] }),
+          row(['3', '#12', 'Chase Driver', '--', '--', '--', '--', ''])
         ])
       }),
       assert: ({ document }) => {
         expect(rowText(document)).toEqual([
-          '1 #11 Class Leader Lap 13 0.0',
-          '2 #10 Reference Driver -- --',
-          '3 #12 Chase Driver -- --'
+          '1 #11 Class Leader Lap 13 0.0 1:22.123 1:23.400',
+          '2 #10 Reference Driver -- -- 1:23.456 1:23.456',
+          '3 #12 Chase Driver -- -- -- --'
         ]);
         expect(contentText(document)).not.toMatch(/\d(?:\.\d+)?L\b/i);
       }
@@ -803,7 +803,7 @@ function browserScenarios() {
         expect(document.querySelectorAll('.track circle[fill="rgba(255,218,89,0.961)"]').length).toBe(1);
         expect(document.querySelectorAll('.track circle[fill="rgba(0,232,255,1.000)"]').length).toBe(1);
         expect(document.querySelector('.track text')?.textContent).toBe('5');
-        expect(document.getElementById('status').textContent).toBe('live | track map');
+        expect(document.getElementById('status').textContent).toBe('live');
       }
     },
     {
@@ -918,6 +918,8 @@ function standingsColumns() {
     column('standings.driver', 'Driver', 'driver', 250, 'left'),
     column('standings.gap', 'GAP', 'gap', 60, 'right'),
     column('standings.interval', 'INT', 'interval', 60, 'right'),
+    column('standings.fastest-lap', 'FAST', 'fastest-lap', 70, 'right'),
+    column('standings.last-lap', 'LAST', 'last-lap', 70, 'right'),
     column('standings.pit', 'PIT', 'pit', 30, 'right')
   ];
 }
@@ -925,7 +927,7 @@ function standingsColumns() {
 function relativeColumns() {
   return [
     column('relative.position', 'Pos', 'relative-position', 38, 'right'),
-    column('relative.driver', 'Driver', 'driver', 180, 'left'),
+    column('relative.driver', 'Driver', 'driver', 250, 'left'),
     column('relative.gap', 'Delta', 'gap', 70, 'right'),
     column('relative.pit', 'Pit', 'pit', 30, 'right')
   ];

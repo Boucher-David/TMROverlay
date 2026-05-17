@@ -2,18 +2,11 @@ import AppKit
 import Foundation
 
 private enum SplashTheme {
-    static let background = NSColor(calibratedRed: 244 / 255, green: 248 / 255, blue: 250 / 255, alpha: 1)
-    static let panel = NSColor.white
-    static let darkPanel = NSColor(calibratedRed: 12 / 255, green: 15 / 255, blue: 18 / 255, alpha: 1)
-    static let border = NSColor(calibratedRed: 189 / 255, green: 204 / 255, blue: 212 / 255, alpha: 1)
-    static let text = NSColor(calibratedRed: 16 / 255, green: 24 / 255, blue: 32 / 255, alpha: 1)
-    static let muted = NSColor(calibratedRed: 75 / 255, green: 92 / 255, blue: 102 / 255, alpha: 1)
-    static let accent = NSColor(calibratedRed: 69 / 255, green: 203 / 255, blue: 250 / 255, alpha: 1)
-    static let accentDark = NSColor(calibratedRed: 0 / 255, green: 103 / 255, blue: 150 / 255, alpha: 1)
-
-    static func font(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        NSFont(name: "SF Pro", size: size) ?? NSFont.systemFont(ofSize: size, weight: weight)
-    }
+    static let background = NSColor(calibratedRed: 3 / 255, green: 11 / 255, blue: 24 / 255, alpha: 1)
+    static let content = NSColor(calibratedRed: 248 / 255, green: 250 / 255, blue: 252 / 255, alpha: 1)
+    static let contentLine = NSColor(calibratedRed: 205 / 255, green: 216 / 255, blue: 228 / 255, alpha: 1)
+    static let accent = NSColor(calibratedRed: 0 / 255, green: 232 / 255, blue: 255 / 255, alpha: 1)
+    static let magenta = NSColor(calibratedRed: 255 / 255, green: 42 / 255, blue: 167 / 255, alpha: 1)
 }
 
 private final class SplashCanvas {
@@ -35,23 +28,6 @@ private final class SplashCanvas {
         p.stroke()
     }
 
-    func text(
-        _ value: String,
-        in rect: CGRect,
-        size: CGFloat,
-        weight: NSFont.Weight = .regular,
-        color: NSColor = SplashTheme.text
-    ) {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingTail
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: SplashTheme.font(size, weight: weight),
-            .foregroundColor: color,
-            .paragraphStyle: paragraph
-        ]
-        NSString(string: value).draw(in: rect, withAttributes: attributes)
-    }
-
     func line(from: CGPoint, to: CGPoint, color: NSColor, width: CGFloat = 1) {
         color.setStroke()
         let p = NSBezierPath()
@@ -68,43 +44,32 @@ private final class SplashCanvas {
 
 private func renderSplash(_ canvas: SplashCanvas, logo: NSImage?) {
     let bounds = CGRect(origin: .zero, size: canvas.size)
-    canvas.fill(bounds, SplashTheme.background)
+    let railWidth = CGFloat(192)
+    let rail = CGRect(x: bounds.minX, y: bounds.minY, width: railWidth, height: bounds.height)
+    let content = CGRect(x: rail.maxX, y: bounds.minY, width: bounds.width - railWidth, height: bounds.height)
 
-    for x in stride(from: CGFloat(0), through: bounds.width, by: 64) {
-        canvas.line(from: CGPoint(x: x, y: 0), to: CGPoint(x: x, y: bounds.height), color: NSColor(calibratedRed: 189 / 255, green: 204 / 255, blue: 212 / 255, alpha: 0.18))
+    canvas.fill(bounds, SplashTheme.content)
+    canvas.fill(rail, SplashTheme.background)
+    canvas.fill(content, SplashTheme.content)
+
+    for x in stride(from: CGFloat(0), through: rail.maxX, by: 48) {
+        canvas.line(from: CGPoint(x: x, y: 0), to: CGPoint(x: x, y: bounds.height), color: NSColor(calibratedRed: 0 / 255, green: 232 / 255, blue: 255 / 255, alpha: 0.13))
     }
     for y in stride(from: CGFloat(0), through: bounds.height, by: 64) {
-        canvas.line(from: CGPoint(x: 0, y: y), to: CGPoint(x: bounds.width, y: y), color: NSColor(calibratedRed: 189 / 255, green: 204 / 255, blue: 212 / 255, alpha: 0.18))
+        canvas.line(from: CGPoint(x: 0, y: y), to: CGPoint(x: rail.maxX, y: y), color: NSColor(calibratedRed: 255 / 255, green: 42 / 255, blue: 167 / 255, alpha: 0.11))
     }
 
-    let panel = bounds.insetBy(dx: 34, dy: 32)
-    canvas.fill(panel, SplashTheme.panel, radius: 12)
-    canvas.stroke(panel, SplashTheme.border, width: 1, radius: 12)
-    canvas.fill(CGRect(x: panel.minX, y: panel.maxY - 4, width: panel.width, height: 4), SplashTheme.accent, radius: 12)
+    canvas.fill(CGRect(x: rail.maxX, y: bounds.minY, width: 2, height: bounds.height), SplashTheme.magenta)
+    canvas.fill(CGRect(x: rail.maxX + 2, y: bounds.minY, width: 2, height: bounds.height), SplashTheme.accent)
+    canvas.fill(CGRect(x: content.minX + 40, y: 69, width: content.width - 80, height: 1), SplashTheme.contentLine)
+    canvas.fill(CGRect(x: content.minX + 40, y: 109, width: content.width - 146, height: 1), SplashTheme.contentLine)
+    canvas.fill(CGRect(x: content.minX + 40, y: 149, width: content.width - 190, height: 1), SplashTheme.contentLine)
+    canvas.fill(CGRect(x: content.minX + 40, y: 233, width: 130, height: 5), SplashTheme.magenta)
+    canvas.fill(CGRect(x: content.minX + 170, y: 233, width: 190, height: 5), SplashTheme.accent)
 
     if let logo {
-        logo.draw(in: CGRect(x: panel.minX + 50, y: panel.maxY - 150, width: 205, height: 115), from: .zero, operation: .sourceOver, fraction: 1)
+        logo.draw(in: CGRect(x: 30, y: 244, width: 132, height: 74), from: .zero, operation: .sourceOver, fraction: 1)
     }
-
-    canvas.text(
-        "Tech Mates Racing Overlay",
-        in: CGRect(x: panel.minX + 292, y: panel.maxY - 110, width: 266, height: 32),
-        size: 20,
-        weight: .bold
-    )
-    canvas.text(
-        "Windows installer",
-        in: CGRect(x: panel.minX + 294, y: panel.maxY - 143, width: 230, height: 22),
-        size: 15,
-        weight: .semibold,
-        color: SplashTheme.accent
-    )
-    canvas.text(
-        "Desktop and Start Menu shortcuts.",
-        in: CGRect(x: panel.minX + 294, y: panel.maxY - 176, width: 254, height: 20),
-        size: 13,
-        color: SplashTheme.muted
-    )
 }
 
 private func findRepositoryRoot(startingAt url: URL) -> URL? {
@@ -125,54 +90,42 @@ private func findRepositoryRoot(startingAt url: URL) -> URL? {
 
 private func renderMsiBanner(_ canvas: SplashCanvas, logo: NSImage?) {
     let bounds = CGRect(origin: .zero, size: canvas.size)
-    canvas.fill(bounds, SplashTheme.background)
-    canvas.fill(CGRect(x: bounds.minX, y: bounds.maxY - 4, width: bounds.width, height: 4), SplashTheme.accent)
+    canvas.fill(bounds, SplashTheme.content)
+    canvas.fill(CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: 1), SplashTheme.contentLine)
+    canvas.fill(CGRect(x: bounds.minX, y: bounds.maxY - 5, width: bounds.width, height: 3), SplashTheme.magenta)
+    canvas.fill(CGRect(x: bounds.minX, y: bounds.maxY - 2, width: bounds.width, height: 2), SplashTheme.accent)
 
-    if let logo {
-        logo.draw(in: CGRect(x: 16, y: 9, width: 76, height: 43), from: .zero, operation: .sourceOver, fraction: 1)
-    }
-
-    canvas.text(
-        "Tech Mates Racing Overlay",
-        in: CGRect(x: 112, y: 29, width: 260, height: 19),
-        size: 15,
-        weight: .bold
-    )
-    canvas.text(
-        "Windows installer",
-        in: CGRect(x: 112, y: 12, width: 190, height: 15),
-        size: 10.5,
-        weight: .semibold,
-        color: SplashTheme.accentDark
-    )
+    canvas.fill(CGRect(x: bounds.maxX - 86, y: 11, width: 54, height: 5), SplashTheme.magenta)
+    canvas.fill(CGRect(x: bounds.maxX - 66, y: 21, width: 34, height: 5), SplashTheme.accent)
+    canvas.fill(CGRect(x: bounds.maxX - 104, y: 31, width: 72, height: 5), SplashTheme.contentLine)
 }
 
 private func renderMsiLogo(_ canvas: SplashCanvas, logo: NSImage?) {
     let bounds = CGRect(origin: .zero, size: canvas.size)
-    canvas.fill(bounds, SplashTheme.background)
+    let railWidth = CGFloat(166)
+    let rail = CGRect(x: bounds.minX, y: bounds.minY, width: railWidth, height: bounds.height)
+    let content = CGRect(x: rail.maxX, y: bounds.minY, width: bounds.width - railWidth, height: bounds.height)
 
-    for x in stride(from: CGFloat(0), through: bounds.width, by: 56) {
-        canvas.line(from: CGPoint(x: x, y: 0), to: CGPoint(x: x, y: bounds.height), color: NSColor(calibratedRed: 189 / 255, green: 204 / 255, blue: 212 / 255, alpha: 0.18))
+    canvas.fill(bounds, SplashTheme.content)
+    canvas.fill(rail, SplashTheme.background)
+    canvas.fill(content, SplashTheme.content)
+
+    for x in stride(from: CGFloat(0), through: rail.maxX, by: 42) {
+        canvas.line(from: CGPoint(x: x, y: 0), to: CGPoint(x: x, y: bounds.height), color: NSColor(calibratedRed: 0 / 255, green: 232 / 255, blue: 255 / 255, alpha: 0.13))
     }
     for y in stride(from: CGFloat(0), through: bounds.height, by: 56) {
-        canvas.line(from: CGPoint(x: 0, y: y), to: CGPoint(x: bounds.width, y: y), color: NSColor(calibratedRed: 189 / 255, green: 204 / 255, blue: 212 / 255, alpha: 0.18))
+        canvas.line(from: CGPoint(x: 0, y: y), to: CGPoint(x: rail.maxX, y: y), color: NSColor(calibratedRed: 255 / 255, green: 42 / 255, blue: 167 / 255, alpha: 0.11))
     }
 
-    let brandBlock = CGRect(x: 32, y: 48, width: bounds.width - 64, height: 222)
-    canvas.fill(brandBlock, SplashTheme.panel, radius: 14)
-    canvas.stroke(brandBlock, SplashTheme.border, width: 1, radius: 14)
-    canvas.fill(CGRect(x: brandBlock.minX, y: brandBlock.maxY - 5, width: brandBlock.width, height: 5), SplashTheme.accent, radius: 14)
+    canvas.fill(CGRect(x: rail.maxX, y: bounds.minY, width: 2, height: bounds.height), SplashTheme.magenta)
+    canvas.fill(CGRect(x: rail.maxX + 2, y: bounds.minY, width: 2, height: bounds.height), SplashTheme.accent)
+    canvas.fill(CGRect(x: content.minX + 28, y: 54, width: content.width - 56, height: 1), SplashTheme.contentLine)
+    canvas.fill(CGRect(x: content.minX + 28, y: 91, width: content.width - 102, height: 1), SplashTheme.contentLine)
+    canvas.fill(CGRect(x: content.minX + 28, y: 128, width: content.width - 136, height: 1), SplashTheme.contentLine)
 
     if let logo {
-        logo.draw(in: CGRect(x: 111, y: 122, width: 270, height: 152), from: .zero, operation: .sourceOver, fraction: 1)
+        logo.draw(in: CGRect(x: 25, y: 199, width: 116, height: 65), from: .zero, operation: .sourceOver, fraction: 1)
     }
-
-    canvas.text(
-        "Desktop and Start Menu shortcuts included.",
-        in: CGRect(x: 60, y: 72, width: 378, height: 42),
-        size: 13,
-        color: SplashTheme.muted
-    )
 }
 
 private func renderImage(

@@ -844,7 +844,7 @@ internal sealed class TrackMapForm : PersistentOverlayForm
 
     private Brush TrackInteriorBrush()
     {
-        var opacity = _viewModel.InternalOpacity;
+        var opacity = TrackMapOverlayViewModel.ClampInternalOpacity(_viewModel.InternalOpacity);
         var alpha = (int)Math.Round(TrackInteriorMaximumAlpha * opacity);
         return new SolidBrush(Color.FromArgb(alpha, TrackInteriorColor.R, TrackInteriorColor.G, TrackInteriorColor.B));
     }

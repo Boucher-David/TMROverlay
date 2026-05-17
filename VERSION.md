@@ -13,58 +13,56 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v0.20.0 - Model Completeness Runtime Contract
+### v0.20.1 - Windows Fixes And V1 Candidate Polish
 
 Current branch name:
 
 ```text
-v2-model-completeness
+v0.20.1-windows-fixes
 ```
 
 Release/tag decision:
 
-- Treat this as the `v0.20.0` V1-candidate hardening branch if Windows/CI validates the native runtime.
-- Do not create the release tag until the branch is merged or explicitly designated as the release point.
-- Keep `fixtures/data-contracts/v0.19.0/` as the previous release snapshot; this branch does not change durable user-data schemas.
+- Treat this as a patch hardening branch on top of the tagged `v0.20.0` model-completeness baseline unless the final branch diff deliberately widens into a new milestone.
+- Do not create the `v0.20.1` release tag until the branch is merged or explicitly designated as the release point.
+- `Directory.Build.props` is aligned to `0.20.1` so branch-built MSI and screenshot artifacts are distinguishable from the tagged `v0.20.0` baseline.
+- Keep `fixtures/data-contracts/v0.19.0/` as the previous durable-release snapshot unless this branch deliberately changes a persisted user-data contract.
 
 Planned scope:
 
-- Make completed `LiveTelemetrySnapshot.Models` the only active overlay runtime contract across native, localhost, and browser surfaces.
+- Fix Windows/native, browser review, and localhost parity issues in the current overlay/settings surfaces.
+- Preserve completed `LiveTelemetrySnapshot.Models` as the active native, localhost, and browser overlay runtime contract.
 - Keep `LatestSample` as collector, diagnostics, compatibility, and test evidence rather than an overlay rendering input.
-- Keep localhost overlay pages on `/api/overlay-model/{id}` and remove browser shell runtime dependence on `/api/snapshot`, `latestSample`, or `window.TmrBrowserModel`.
-- Preserve older or partial live snapshot compatibility by completing model families at product boundaries before overlay model builders/renderers run.
-- Keep released v0.19.0 settings snapshot validation mapped through model-only browser, localhost, and native overlay consumers.
+- Keep localhost overlay pages on `/api/overlay-model/{id}` and keep `/api/snapshot` as a diagnostic/compatibility route, not an overlay page runtime dependency.
+- Keep browser review as the primary local development surface, localhost as the OBS/browser-source route surface, and Windows as the production/iRacing behavior gate.
+- Keep the deprecated mac harness out of the V1 parity, screenshot, and release gate.
+- For any overlay/settings/renderer/browser/localhost change, keep screenshot generator and validation-profile coverage aligned across native Windows, browser review, and localhost.
 
-Technical implementation checklist:
+Branch-complete checklist:
 
-1. Bump shared product/version metadata to `0.20.0` for the hardening branch.
-2. Add `LiveTelemetrySnapshot.CompleteModels()` and mark builder-created models so completion is idempotent.
-3. Complete models before active native/localhost/browser overlay rendering, including defensive completion in simple view models.
-4. Remove production browser shell snapshot helpers and update browser/localhost tests to assert `/api/overlay-model/{id}` runtime use.
-5. Preserve diagnostic/compatibility routes such as `/api/snapshot` while keeping them out of active overlay page runtime.
-6. Re-run snapshot validation with special attention to the model-only overlay mapping test and keep the v0.19.0 fixture unchanged.
+1. Re-read the final branch diff before writing the squash title/body; do not reuse the stale v0.20.0 model-completeness text for this patch branch.
+2. Confirm `Directory.Build.props` stays aligned to `0.20.1` before tagging.
+3. Refresh `docs/model-v2-future-branches.md` and any behavior docs touched by the actual fixes.
+4. Run the branch-appropriate browser review, localhost, Windows screenshot, and Windows .NET gates before tagging.
 
-Likely squash title:
-
-```text
-[v0.20.0] Make overlay runtime depend on completed live models
-```
-
-Likely squash body:
+Suggested squash title:
 
 ```text
-- Promoted completed `LiveTelemetrySnapshot.Models` as the active native, localhost, and browser overlay runtime contract, with compatibility completion for older or partial live snapshots.
-- Removed production browser shell dependence on `/api/snapshot`, `latestSample`, and `window.TmrBrowserModel`; localhost overlay pages now render through `/api/overlay-model/{id}` only while legacy snapshot routes remain diagnostic/backcompat endpoints.
-- Completed models before native Design V2, simple telemetry, Gap To Leader, Fuel, Relative, Track Map, Radar, Input, Session/Weather, and Pit Service consumers render, and preserved session-scoped settings behavior across localhost and native paths.
-- Tightened Gap To Leader native runtime and settings parity by removing direct `LatestSample` use and showing race-only chrome controls.
-- Updated browser, localhost, and data-contract mapping tests so the v0.19.0 released settings snapshot maps into model-only browser, localhost, and native overlay consumers.
-- Refreshed model/runtime docs and branch-complete validation notes; no durable user-data schema changes were introduced.
-- Windows .NET data-contract tests, full Windows restore/build/test, and normal PR gates remain required before release.
+[v0.20.1] Harden Windows parity and screenshot validation
 ```
+
+Suggested squash body:
+
+- Aligned native Windows, browser review, and localhost overlay parity for the Design V2 surfaces, including configured overlay sizes, table/metric row geometry, track map defaults/evidence, input graph evidence, Gap To Leader graph evidence, Stream Chat evidence, and review fixture data.
+- Added Standings fastest-lap and last-lap columns, kept race-only Relative lap-down coloring, and preserved native/browser/localhost content-option coverage through shared settings contracts and tests.
+- Expanded screenshot generation and validation so browser review, localhost, native Windows, settings components, installer menus, rows, cells, graph lines, colors, text, and fixture/source metadata can be compared in CI with detailed manifest failures.
+- Added Windows installer screenshot capture and the browser installer review surface, kept MSI capture bundled with the Windows screenshot command, and removed the unresolved welcome placeholder path.
+- Refreshed telemetry and SDK corpora for pit-service tire inventory evidence, NASCAR/PCup tire-set interpretation, and SDK field availability without changing durable user-data schemas.
+- Refreshed branch docs, archived historical/research-only docs under `docs/archive/`, documented local branch MSI/screenshot generation, and aligned shared build metadata to `0.20.1`.
 
 ## Next Planned Milestone
 
-### v0.20.1 - V1 Candidate Polish
+No version number is assigned here yet. After `v0.20.1`, keep the next branch focused on V1-candidate release readiness unless teammate testing or Windows validation forces another patch.
 
 Likely scope:
 
@@ -73,6 +71,25 @@ Likely scope:
 - Keep branch theory, fixture-corpus decisions, and future-product discussion in `docs/model-v2-future-branches.md`.
 
 ## Merged Mainline Milestones
+
+### v0.20.0 - Model Completeness Runtime Contract
+
+Commit: `8ca6a6e`
+
+Squash title:
+
+```text
+[v0.20.0] Make overlay runtime depend on completed live models
+```
+
+Summary:
+
+- Promoted completed `LiveTelemetrySnapshot.Models` as the active native, localhost, and browser overlay runtime contract, with compatibility completion for older or partial live snapshots.
+- Removed production browser shell dependence on `/api/snapshot`, `latestSample`, and `window.TmrBrowserModel`; localhost overlay pages now render through `/api/overlay-model/{id}` only while legacy snapshot routes remain diagnostic/backcompat endpoints.
+- Completed models before native Design V2, simple telemetry, Gap To Leader, Fuel, Relative, Track Map, Radar, Input, Session/Weather, and Pit Service consumers render, and preserved session-scoped settings behavior across localhost and native paths.
+- Tightened Gap To Leader native runtime and settings parity by removing direct `LatestSample` use and showing race-only chrome controls.
+- Updated browser, localhost, and data-contract mapping tests so the v0.19.0 released settings snapshot maps into model-only browser, localhost, and native overlay consumers.
+- Refreshed model/runtime docs and branch-complete validation notes; no durable user-data schema changes were introduced.
 
 ### v0.19.0 - V1 Candidate Overlay Parity And Readiness
 

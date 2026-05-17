@@ -335,7 +335,7 @@ Last updated: 2026-05-15
 - `docs/history-data-evolution.md`
 - `docs/overlay-logic.md`
   - index for human-readable overlay and analysis logic notes; update the matching note whenever overlay derivation, display rules, visibility rules, or analysis rules change
-- `docs/live-overlay-24h-findings.md`
+- `docs/archive/live-overlay-24h-findings.md`
   - live 24-hour race findings mapped to model-v2, fuel, radar, and gap follow-up work
 
 - `tools/validate_overlay_screenshots.py`

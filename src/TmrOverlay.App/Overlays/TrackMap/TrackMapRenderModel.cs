@@ -201,7 +201,7 @@ internal sealed record TrackMapRenderModel(
         DesignHeight,
         IsAvailable: false,
         MapKind: "circle",
-        Primitives: CirclePrimitives([], internalOpacity: 1d, showSectorBoundaries: true),
+        Primitives: CirclePrimitives([], TrackMapBrowserSettings.Default.InternalOpacity, showSectorBoundaries: true),
         Markers: []);
 
     public static TrackMapRenderModel FromViewModel(
@@ -655,10 +655,15 @@ internal sealed record TrackMapRenderModel(
         return ColorOf(color);
     }
 
-    private static TrackMapRenderColor TrackInteriorFill(double opacity)
+    private static TrackMapRenderColor? TrackInteriorFill(double opacity)
     {
         var trackInterior = OverlayTheme.DesignV2.TrackInterior;
-        var alpha = (int)Math.Round(TrackInteriorMaximumAlpha * Math.Clamp(opacity, 0.2d, 1d));
+        var alpha = (int)Math.Round(TrackInteriorMaximumAlpha * TrackMapOverlayViewModel.ClampInternalOpacity(opacity));
+        if (alpha <= 0)
+        {
+            return null;
+        }
+
         return new TrackMapRenderColor(trackInterior.R, trackInterior.G, trackInterior.B, alpha);
     }
 

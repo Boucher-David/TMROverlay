@@ -31,10 +31,15 @@ If local iRacing SDK output exposes fields or declared shapes that are not in th
 - `session-state-signal-availability.md`
   - Human-readable comparison of scoring/results, position, gap, interval, and timing signal availability by `SessionState` across the uploaded race-start capture and local endurance captures.
 - `sdk-field-availability-corpus.json`
-  - Compact redacted SDK availability corpus derived from local four-hour and 24-hour endurance raw captures.
+  - Compact redacted SDK availability corpus derived from local four-hour, 24-hour, NASCAR, and PCup raw captures.
   - Preserves SDK variable names, types, units, descriptions, declared array/storage maximums, primitive type bounds, sampled observed ranges, and identity shape counts without committing raw telemetry frames or full session-info payloads.
 - `sdk-field-availability-corpus.md`
   - Human-readable index for the SDK availability corpus.
+- `pit-service-tire-inventory-corpus.json`
+  - Compact redacted evidence for limited NASCAR tire inventory, PCup unlimited-practice counters, pit-service request transitions, and NASCAR weight-jacker request fields.
+  - Preserves the reasoning behind Pit Service tire remaining visibility without committing raw captures.
+- `pit-service-tire-inventory-corpus.md`
+  - Human-readable summary of the Pit Service tire inventory corpus.
 - `raw-capture-overlay-assumptions.example.json`
   - Compact summary of the long raw-capture assumptions pass for fuel, radar, class-gap, and position-cadence logic.
   - Keeps the important measured risks in git without tracking the multi-GB captures.

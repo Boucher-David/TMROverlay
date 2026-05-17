@@ -22,7 +22,7 @@ Release packaging should include only published runtime output from `src/TmrOver
 
 ## Internal Development Assets
 
-- `docs/` files other than tester release docs are mostly product-engineering notes: overlay logic, capture format, history evolution, IBT analysis, update strategy, and future branches.
+- `docs/` files other than tester release docs are mostly product-engineering notes: overlay logic, capture format, history evolution, IBT analysis, update strategy, and future branches. `docs/archive/` is for historical plans and research notes that still explain decisions but are not current task lists.
 - `fixtures/` contains compact deterministic examples for tests and analysis assumptions.
 - `history/baseline/` contains small tracked sample history for development; the app does not read it by default.
 - `mocks/` contains screenshot and visual-review artifacts. These are validation/design artifacts, not publish output.

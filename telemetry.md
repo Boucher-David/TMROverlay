@@ -217,14 +217,14 @@ Primary source:
 - `PitSvFuel`
 - `PitSvTireCompound`
 - `PitSvFlags`
-- pit request controls such as `dpLFTireChange`, `dpRFTireChange`, `dpLRTireChange`, `dpRRTireChange`, `dpFuelFill`, `dpFuelAddKg`, `dpFastRepair`, `dpWindshieldTearoff`, and cold-pressure adjustment channels
+- pit request controls such as `dpLFTireChange`, `dpRFTireChange`, `dpLRTireChange`, `dpRRTireChange`, `dpFuelFill`, `dpFuelAddKg`, `dpFastRepair`, `dpWindshieldTearoff`, cold-pressure adjustment channels, and car-specific pit setup request channels such as NASCAR `dpWeightJackerLeft`/`dpWeightJackerRight`
 
 #### In-car controls and condition
 
 - `dcBrakeBias`
 - `dcABS`
 - `dcTractionControl`
-- ARB/anti-roll/wing-like `dc*` or `dp*` adjustment channels when a future SDK schema exposes them
+- ARB/anti-roll/wing-like `dc*` or `dp*` adjustment channels when a future SDK schema exposes them; the May 2026 NASCAR/PCup captures did not expose ARB or wing variables, but they did separate in-car `dc*` controls from pit-request `dp*` controls
 - `OilTemp`
 - `OilPress`
 - `WaterTemp`

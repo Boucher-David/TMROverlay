@@ -13,7 +13,7 @@ internal sealed record GapToLeaderOverlayViewModel(
     double? LapReferenceSeconds)
 {
     public static GapToLeaderOverlayViewModel Empty { get; } = new(
-        Title: "Focused Gap Trend",
+        Title: "Gap To Leader",
         Status: "waiting",
         Source: "source: waiting",
         IsAvailable: false,
@@ -27,7 +27,7 @@ internal sealed record GapToLeaderOverlayViewModel(
         var gap = GapToLeaderLiveModelAdapter.Select(snapshot);
         var hasUsableGap = availability.IsAvailable && gap.HasData;
         return new GapToLeaderOverlayViewModel(
-            Title: "Focused Gap Trend",
+            Title: "Gap To Leader",
             Status: !availability.IsAvailable
                 ? availability.StatusText
                 : gap.HasData

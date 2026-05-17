@@ -51,7 +51,7 @@ internal sealed record TrackMapOverlayViewModel(
                 OverlayOptionKeys.TrackMapSectorBoundariesEnabled,
                 defaultEnabled: true,
                 sessionKind),
-            InternalOpacity: Math.Clamp(settings.Opacity, 0.2d, 1d),
+            InternalOpacity: ClampInternalOpacity(settings.Opacity),
             IncludeUserMaps: OverlayContentColumnSettings.ContentEnabledForSession(
                 settings,
                 OverlayOptionKeys.TrackMapBuildFromTelemetry,
@@ -74,7 +74,7 @@ internal sealed record TrackMapOverlayViewModel(
                     OverlayOptionKeys.TrackMapBuildFromTelemetry,
                     defaultEnabled: true,
                     sessionKind),
-            InternalOpacity: Math.Clamp(trackMap?.Opacity ?? TrackMapBrowserSettings.Default.InternalOpacity, 0.2d, 1d),
+            InternalOpacity: ClampInternalOpacity(trackMap?.Opacity ?? TrackMapBrowserSettings.Default.InternalOpacity),
             ShowSectorBoundaries: trackMap is null
                 ? true
                 : OverlayContentColumnSettings.ContentEnabledForSession(
@@ -82,6 +82,11 @@ internal sealed record TrackMapOverlayViewModel(
                     OverlayOptionKeys.TrackMapSectorBoundariesEnabled,
                     defaultEnabled: true,
                     sessionKind));
+    }
+
+    internal static double ClampInternalOpacity(double value)
+    {
+        return double.IsFinite(value) ? Math.Clamp(value, 0d, 1d) : TrackMapBrowserSettings.Default.InternalOpacity;
     }
 
     public static IReadOnlyList<TrackMapOverlayMarker> BuildMarkers(LiveTelemetrySnapshot snapshot)

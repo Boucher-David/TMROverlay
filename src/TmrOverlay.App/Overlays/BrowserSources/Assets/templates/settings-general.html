@@ -326,7 +326,8 @@
         })));
         if (overlay.showOpacity) {
           const opacityLabel = overlay.id === 'track-map' ? 'Map fill' : 'Opacity';
-          controls.push(row(opacityLabel, percentSlider(opacityLabel, overlay.opacityPercent, [20, 30, 40, 50, 60, 70, 80, 90, 100], 'magenta', (percent) => {
+          const opacityValues = overlay.id === 'track-map' ? [0, 20, 30, 40, 50, 60, 70, 80, 90, 100] : [20, 30, 40, 50, 60, 70, 80, 90, 100];
+          controls.push(row(opacityLabel, percentSlider(opacityLabel, overlay.opacityPercent, opacityValues, 'magenta', (percent) => {
             overlay.opacityPercent = percent;
             persistSettings({ kind: 'number', overlayId: overlay.id, key: 'opacityPercent', value: percent });
             render();
@@ -1034,18 +1035,18 @@
 
       function browserSize(overlay) {
         const base = {
-          standings: [780, 520],
-          relative: [520, 360],
-          'gap-to-leader': [720, 360],
+          standings: [659, 334],
+          relative: [360, 373],
+          'gap-to-leader': [654, 357],
           'track-map': [360, 360],
           'stream-chat': [380, 520],
           'garage-cover': [1280, 720],
-          'fuel-calculator': [600, 340],
+          'fuel-calculator': [503, 315],
           'input-state': [520, 260],
           'car-radar': [300, 300],
           flags: [360, 170],
-          'session-weather': [480, 520],
-          'pit-service': [420, 560]
+          'session-weather': [464, 496],
+          'pit-service': [530, 743]
         }[overlay?.id] || [400, 300];
         if (overlay?.id === 'input-state') {
           base[0] = inputStateBaseWidth(overlay, base[0]);

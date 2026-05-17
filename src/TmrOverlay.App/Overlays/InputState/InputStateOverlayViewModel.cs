@@ -72,7 +72,7 @@ internal static class InputStateOverlayViewModel
         return LiveLocalStrategyContext.ForRequirement(
             snapshot,
             now,
-            OverlayContextRequirement.LocalPlayerInCar).IsAvailable;
+            OverlayContextRequirement.LocalPlayerInCarOrPit).IsAvailable;
     }
 
     private static string FormatStatus(LiveInputTelemetryModel inputs)

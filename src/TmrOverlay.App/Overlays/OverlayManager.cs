@@ -520,7 +520,8 @@ internal sealed class OverlayManager : IDisposable
                 definition.DefaultHeight,
                 defaultLocation.X,
                 defaultLocation.Y,
-                defaultEnabled: false);
+                defaultEnabled: false,
+                defaultOpacity: DefaultOverlayOpacity(definition));
             overlay.Scale = Math.Clamp(overlay.Scale, 0.6d, 2d);
             ApplyGapToLeaderRaceOnlyPolicy(definition, overlay);
             ApplyFlagsCompactPolicy(definition, overlay);
@@ -602,6 +603,13 @@ internal sealed class OverlayManager : IDisposable
         return new Point(24, 24);
     }
 
+    private static double DefaultOverlayOpacity(OverlayDefinition definition)
+    {
+        return string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.Ordinal)
+            ? TrackMapBrowserSettings.Default.InternalOpacity
+            : 1d;
+    }
+
     private void ApplyOverlaySettings()
     {
         if (_settings is null)
@@ -664,7 +672,8 @@ internal sealed class OverlayManager : IDisposable
                     registration.Definition.DefaultHeight,
                     registration.DefaultX,
                     registration.DefaultY,
-                    defaultEnabled: false);
+                    defaultEnabled: false,
+                    defaultOpacity: DefaultOverlayOpacity(registration.Definition));
                 var settingsPreview = settings.Enabled
                     && _radarSettingsPreviewVisible
                     && string.Equals(registration.Definition.Id, CarRadarOverlayDefinition.Definition.Id, StringComparison.Ordinal);
@@ -913,7 +922,10 @@ internal sealed class OverlayManager : IDisposable
             return;
         }
 
-        settings.Opacity = Math.Clamp(settings.Opacity, 0.2d, 1d);
+        var minimumOpacity = string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.Ordinal)
+            ? 0d
+            : 0.2d;
+        settings.Opacity = Math.Clamp(settings.Opacity, minimumOpacity, 1d);
         var opacityChanged = !_appliedOpacities.TryGetValue(definition.Id, out var previousOpacity)
             || Math.Abs(previousOpacity - settings.Opacity) > 0.001d;
         if (string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.Ordinal)
@@ -1203,7 +1215,7 @@ internal sealed class OverlayManager : IDisposable
         if (OverlayContentColumnSettings.TryGetContentDefinition(definition.Id, out var contentDefinition)
             && contentDefinition.Columns.Count > 0)
         {
-            var contentSize = OverlayContentBaseSize(settings, contentDefinition);
+            var contentSize = OverlayContentBaseSize(definition, settings, contentDefinition);
             baseWidth = contentSize.Width;
             baseHeight = Math.Max(baseHeight, contentSize.Height);
         }
@@ -1230,15 +1242,17 @@ internal sealed class OverlayManager : IDisposable
     }
 
     private static Size OverlayContentBaseSize(
+        OverlayDefinition overlayDefinition,
         OverlaySettings settings,
         OverlayContentDefinition definition)
     {
         var columns = OverlayContentColumnSettings.VisibleColumnsFor(settings, definition);
         var contentWidth = columns.Sum(column => column.Width);
-        var columnGaps = Math.Max(0, columns.Count - 1) * 8;
         return new Size(
-            contentWidth + columnGaps + 64,
-            definition.NativeMinimumTableHeight + OverlayTheme.Layout.OverlayTableWithFooterReservedHeight);
+            Math.Max(overlayDefinition.DefaultWidth, contentWidth + definition.BrowserWidthPadding),
+            Math.Max(
+                overlayDefinition.DefaultHeight,
+                definition.NativeMinimumTableHeight + OverlayTheme.Layout.OverlayTableWithFooterReservedHeight));
     }
 
     private static bool UsesScaleDerivedSize(OverlayDefinition definition)
@@ -1506,7 +1520,8 @@ internal sealed class OverlayManager : IDisposable
             definition.Id,
             definition.DefaultWidth,
             definition.DefaultHeight,
-            defaultEnabled: false);
+            defaultEnabled: false,
+            defaultOpacity: DefaultOverlayOpacity(definition));
         ApplySettingsWindowInputProtection(form);
         ApplyOverlayTopMost(settings, form);
         if (form is FlagsOverlayForm flags)

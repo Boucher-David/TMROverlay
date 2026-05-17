@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TmrOverlay.App.Tests", "tes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TmrOverlay.WindowsScreenshots", "tools\TmrOverlay.WindowsScreenshots\TmrOverlay.WindowsScreenshots.csproj", "{7F5C8A0D-BF67-4E34-AD37-88FCE685B17E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TmrOverlay.WindowsInstallerScreenshots", "tools\TmrOverlay.WindowsInstallerScreenshots\TmrOverlay.WindowsInstallerScreenshots.csproj", "{B9D42E6B-5C29-4F64-9E0F-E08F9CB5DA64}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TmrOverlay.TrackMapGenerator", "tools\TmrOverlay.TrackMapGenerator\TmrOverlay.TrackMapGenerator.csproj", "{B08A24D6-CB6E-48E3-9DD3-24D0F552B88B}"
 EndProject
 Global
@@ -34,6 +36,10 @@ Global
 		{7F5C8A0D-BF67-4E34-AD37-88FCE685B17E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7F5C8A0D-BF67-4E34-AD37-88FCE685B17E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7F5C8A0D-BF67-4E34-AD37-88FCE685B17E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B9D42E6B-5C29-4F64-9E0F-E08F9CB5DA64}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9D42E6B-5C29-4F64-9E0F-E08F9CB5DA64}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9D42E6B-5C29-4F64-9E0F-E08F9CB5DA64}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9D42E6B-5C29-4F64-9E0F-E08F9CB5DA64}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B08A24D6-CB6E-48E3-9DD3-24D0F552B88B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B08A24D6-CB6E-48E3-9DD3-24D0F552B88B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B08A24D6-CB6E-48E3-9DD3-24D0F552B88B}.Release|Any CPU.ActiveCfg = Release|Any CPU

@@ -1,17 +1,18 @@
 # Update Notification and Self-Update Strategy
 
-Last updated: 2026-05-09
+Last updated: 2026-05-17
 
 ## Current State
 
-The v0.18 release-channel branch makes Velopack the canonical Windows installer/update path while keeping the portable zip as a transitional fallback. The PR/main workflow restores, builds, tests, validates tracked screenshots, checks Windows screenshot expectations, runs a publish dry run with package audit, and dry-runs `vpk pack` including the MSI and update feed. A `vMAJOR.MINOR.PATCH` tag publishes the app as a self-contained `win-x64` package, audits the publish folder, zips it, writes a package manifest and SHA-256 checksum, packs Velopack MSI/update assets, uploads workflow artifacts, and attaches both the portable zip artifacts and Velopack assets to the public GitHub Release.
+Velopack is the canonical Windows installer/update path while the portable zip remains a fallback/support artifact. The PR/main workflow restores, builds, tests, validates browser review and localhost screenshots as separate jobs, checks Windows screenshot expectations, runs a publish dry run with package audit, and dry-runs `vpk pack` including the MSI and update feed. A `vMAJOR.MINOR.PATCH` tag publishes the app as a self-contained `win-x64` package, audits the publish folder, zips it, writes a package manifest and SHA-256 checksum, packs Velopack MSI/update assets, uploads workflow artifacts, and attaches both the portable zip artifacts and Velopack assets to the public GitHub Release.
 
 The public GitHub Release is the Velopack feed. Installed builds use Velopack `GithubSource` against `https://github.com/Boucher-David/TMROverlay` with no embedded token. The active pre-1.0 package id is `TMROverlay`; it intentionally replaces the first tester id, `TechMatesRacing.TmrOverlay`, so installed identity uses the shorter app name. The MSI uses branded WiX welcome/splash/banner/logo assets and creates Desktop plus Start Menu shortcuts. Portable/dev runs skip update checks because they do not have a Velopack install identity. Startup also removes stale legacy `TechMatesRacing.TmrOverlay` package folders and shortcuts so an updated install does not keep launching an old package identity.
 
-Still pending after the MSI and active-update pass:
+Still pending before broader distribution:
 
 - release signing before broader distribution
 - deciding whether to keep the portable zip long term or only as a support fallback
+- validating the final pre-v1 installer/update flow on real Windows teammate machines
 
 ## Recommendation
 

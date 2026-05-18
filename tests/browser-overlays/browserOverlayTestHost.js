@@ -45,10 +45,11 @@ export async function renderBrowserOverlay(name, { live, settings = {}, model = 
   } else {
     await waitFor(() => {
       const contentText = dom.window.document.getElementById('content')?.textContent?.trim();
-      const statusText = dom.window.document.getElementById('status')?.textContent?.trim();
+      const statusElement = dom.window.document.getElementById('status');
+      const statusText = statusElement?.textContent?.trim();
       const opacity = dom.window.document.querySelector('.overlay')?.style?.opacity;
       return fetchCalls.includes(page.modelRoute)
-        && (contentText !== 'Waiting for live telemetry.' || statusText !== 'waiting' || opacity === '0');
+        && (contentText !== 'Waiting for live telemetry.' || (statusElement && statusText !== 'waiting') || opacity === '0');
     });
   }
 

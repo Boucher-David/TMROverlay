@@ -33,7 +33,7 @@ describe('relative browser rendering', () => {
     expect(rows[3].classList.contains('focus')).toBe(true);
     expect(rows[3].classList.contains('class-colored')).toBe(true);
     expect(rows[4].classList.contains('lap-behind-2')).toBe(true);
-    expect(currentOverlay.document.getElementById('status').textContent).toBe('5 - 2/4 cars');
+    expect(currentOverlay.document.getElementById('status')).toBeNull();
     expect(currentOverlay.document.body.textContent).not.toContain('Far Ahead');
     expect(currentOverlay.document.body.textContent).not.toContain('Far Behind');
   });

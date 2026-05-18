@@ -319,6 +319,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     public string DiagnosticBodyKind => BodyName(_model.Body);
 
+    public bool DiagnosticShouldRender => _model.ShouldRender;
+
     public bool? DiagnosticRadarShouldRender => _model.Body is DesignV2RadarBody radar
         ? radar.RenderModel.ShouldRender
         : null;
@@ -443,7 +445,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             {
                 _model = _model with
                 {
-                    HeaderText = "overlay error",
+                    HeaderText = string.Empty,
                     ShowFooter = false,
                     ShowHeader = true
                 };
@@ -493,7 +495,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         {
             return model with
             {
-                HeaderText = model.Status,
+                HeaderText = string.Empty,
                 ShowFooter = false,
                 ShowHeader = true
             };
@@ -518,11 +520,6 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     internal static string BuildHeaderText(OverlaySettings settings, LiveTelemetrySnapshot snapshot, string status)
     {
         var parts = new List<string>(2);
-        if (OverlayChromeSettings.ShowHeaderStatus(settings, snapshot) && !string.IsNullOrWhiteSpace(status))
-        {
-            parts.Add(status);
-        }
-
         if (OverlayChromeSettings.ShowHeaderTimeRemaining(settings, snapshot))
         {
             var timeRemaining = OverlayHeaderTimeFormatter.FormatTimeRemaining(snapshot);
@@ -537,17 +534,13 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     internal static bool ShowFooterForSettings(DesignV2LiveOverlayKind kind, OverlaySettings settings, LiveTelemetrySnapshot snapshot)
     {
-        if (kind == DesignV2LiveOverlayKind.SessionWeather)
-        {
-            return false;
-        }
-
-        return OverlayChromeSettings.ShowFooterSource(settings, snapshot);
+        return false;
     }
 
     private void ApplyModelVisibility(DesignV2OverlayModel model)
     {
-        if (_kind == DesignV2LiveOverlayKind.FuelCalculator)
+        if (_kind is DesignV2LiveOverlayKind.FuelCalculator
+            or DesignV2LiveOverlayKind.GapToLeader)
         {
             SetLiveTelemetryAvailable(model.ShouldRender);
         }
@@ -2792,6 +2785,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             Footer = LayoutRect(footer),
             ShowHeader = model.ShowHeader,
             ShowFooter = model.ShowFooter,
+            HeaderText = model.ShowHeader ? model.HeaderText ?? string.Empty : null,
+            FooterText = model.ShowFooter ? model.Footer : null,
             BodyLayout = BuildBodyLayout(body, model.Body)
         };
     }
@@ -2814,7 +2809,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 Body = LayoutRect(rect),
                 BodyLayout = BuildRadarLayout(rect, radar)
             },
-            DesignV2InputsBody inputs => BuildInputsLayoutDiagnostics(rect, client, constants, inputs),
+            DesignV2InputsBody inputs => BuildInputsLayoutDiagnostics(rect, client, constants, model, inputs),
             DesignV2TrackMapBody trackMap => new DesignV2LayoutDiagnostics(
                 "design-v2-layout/v1",
                 KindName(_kind),
@@ -2841,6 +2836,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         RectangleF rect,
         DesignV2LayoutRect client,
         DesignV2LayoutConstants constants,
+        DesignV2OverlayModel model,
         DesignV2InputsBody inputs)
     {
         var header = new RectangleF(rect.Left, rect.Top, rect.Width, HeaderHeight);
@@ -2856,6 +2852,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             Body = LayoutRect(content),
             ShowHeader = true,
             ShowFooter = false,
+            HeaderText = model.HeaderText ?? string.Empty,
             BodyLayout = BuildInputsLayout(content, inputs)
         };
     }
@@ -3606,7 +3603,10 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 Foreground = ColorHex(TryParseHexColor(row.Row.AuthorColorHex, out var authorColor)
                     ? authorColor
                     : EvidenceColor(row.Row.Evidence)),
-                Background = ColorHex(SurfaceRaised)
+                Background = ColorHex(SurfaceRaised),
+                Metadata = row.Row.Metadata ?? [],
+                Badges = row.Row.Badges ?? [],
+                ChatSegments = StreamChatGdiRenderer.EffectiveSegments(row.Row.Message, row.Row.Segments)
             });
             y += row.Height + 8f;
         }
@@ -3650,7 +3650,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                     body.ShowGear,
                     body.ShowSpeed)
                 .Items
-                .Select(item => new DesignV2LayoutInputItem(item.Kind.ToString(), LayoutRect(item.Bounds)))
+                .Select(item => new DesignV2LayoutInputItem(item.Kind.ToString(), LayoutRect(item.Bounds))
+                {
+                    Label = InputRailLabel(body, item.Kind),
+                    Text = InputRailText(body, item.Kind)
+                })
                 .ToArray();
         }
 
@@ -3658,16 +3662,49 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         {
             Inputs = new DesignV2LayoutInputs(
                 body.HasContent,
+                body.IsAvailable,
                 LayoutRect(graph),
                 LayoutRect(rail),
                 railWidth,
                 body.Trace.Count,
                 inputItems)
             {
+                SampleIntervalMilliseconds = InputStateRenderModelBuilder.RefreshIntervalMilliseconds,
+                MaximumTracePoints = InputStateRenderModelBuilder.MaximumTracePoints,
                 TraceSeries = BuildInputTraceLayouts(graph, body),
                 GridLines = BuildInputGridLines(graph)
             }
         };
+    }
+
+    private static string InputRailLabel(DesignV2InputsBody body, DesignV2InputRailItemKind kind)
+    {
+        return kind switch
+        {
+            DesignV2InputRailItemKind.Throttle => "THR",
+            DesignV2InputRailItemKind.Brake => body.BrakeAbsActive ? "ABS" : "BRK",
+            DesignV2InputRailItemKind.Clutch => "CLT",
+            DesignV2InputRailItemKind.SteeringWheel => "WHEEL",
+            DesignV2InputRailItemKind.Gear => "GEAR",
+            DesignV2InputRailItemKind.Speed => "SPD",
+            _ => kind.ToString()
+        };
+    }
+
+    private static string InputRailText(DesignV2InputsBody body, DesignV2InputRailItemKind kind)
+    {
+        var label = InputRailLabel(body, kind);
+        var value = kind switch
+        {
+            DesignV2InputRailItemKind.Throttle => FormatPercent(body.Throttle),
+            DesignV2InputRailItemKind.Brake => FormatPercent(body.Brake),
+            DesignV2InputRailItemKind.Clutch => FormatPercent(body.Clutch),
+            DesignV2InputRailItemKind.SteeringWheel => body.SteeringText,
+            DesignV2InputRailItemKind.Gear => body.GearText,
+            DesignV2InputRailItemKind.Speed => body.SpeedText,
+            _ => string.Empty
+        };
+        return string.IsNullOrWhiteSpace(value) ? label : $"{label} {value}";
     }
 
     private static IReadOnlyList<DesignV2LayoutInputTraceSeries> BuildInputTraceLayouts(RectangleF? graph, DesignV2InputsBody body)
@@ -3867,6 +3904,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 Items = model.Markers.Select(marker => TrackMapMarkerItem(target, marker, scaleX, scaleY)).ToArray(),
                 Primitives = model.Primitives.Select(primitive => TrackMapPrimitiveLayout(target, primitive, scaleX, scaleY)).ToArray(),
                 Labels = labels,
+                MapKind = model.MapKind,
                 ShouldRender = model.IsAvailable
             }
         };
@@ -3924,7 +3962,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     {
         var primitives = new List<DesignV2LayoutVectorPrimitive>
         {
-            RadarCirclePrimitive("background", target, model.Background, scaleX, scaleY, surfaceAlpha)
+            RadarCirclePrimitive("ellipse", target, model.Background, scaleX, scaleY, surfaceAlpha)
         };
         primitives.AddRange(model.Rings.Select(ring => RadarCirclePrimitive("ring", target, ring, scaleX, scaleY, surfaceAlpha)));
         if (model.MulticlassArc is { } arc)
@@ -4001,7 +4039,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         }
 
         return new DesignV2LayoutVectorItem(
-            marker.IsFocus ? "focus-marker" : "marker",
+            marker.IsFocus ? "focus-marker" : "car-marker",
             marker.CarIdx,
             LayoutRect(markerRect))
         {
@@ -4053,8 +4091,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 : BoundsForPoints(points),
             points,
             primitive.Closed,
-            primitive.Kind == "arc" ? primitive.StartDegrees : null,
-            primitive.Kind == "arc" ? primitive.SweepDegrees : null,
+            primitive.StartDegrees,
+            primitive.SweepDegrees,
             primitive.Fill is { } fill ? ColorHex(RenderTrackMapColor(fill)) : null,
             primitive.Stroke is { } stroke ? ColorHex(RenderTrackMapColor(stroke)) : null,
             primitive.StrokeWidth > 0d ? Math.Max(1f, (float)primitive.StrokeWidth * scale) : 0f);
@@ -4180,7 +4218,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             DrawText(graphics, model.Title, titleFont, TextPrimary, new RectangleF(outer.Left + 14, header.Top + 10, titleWidth, 18));
             DrawText(
                 graphics,
-                model.HeaderText ?? model.Status,
+                model.HeaderText ?? string.Empty,
                 statusFont,
                 EvidenceColor(model.Evidence),
                 new RectangleF(outer.Left + titleWidth + 24, header.Top + 10, Math.Max(1, outer.Width - titleWidth - 38 - closeButtonSpace), 18),
@@ -7274,7 +7312,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             2 => (2, 1),
             <= 4 => (2, 2),
             <= 6 => (3, 2),
-            _ => (4, 2)
+            _ => (4, (int)Math.Ceiling(count / 4d))
         };
     }
 
@@ -7327,7 +7365,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         {
             return WaitingModel(TitleFor(kind), "waiting") with
             {
-                HeaderText = "waiting",
+                HeaderText = string.Empty,
                 ShowFooter = false,
                 ShowHeader = true
             };
@@ -7886,6 +7924,10 @@ internal sealed record DesignV2LayoutDiagnostics(
 
     public bool ShowFooter { get; init; }
 
+    public string? HeaderText { get; init; }
+
+    public string? FooterText { get; init; }
+
     public DesignV2LayoutBody? BodyLayout { get; init; }
 }
 
@@ -7972,6 +8014,12 @@ internal sealed record DesignV2LayoutRow(
     public int? RelativeLapDelta { get; init; }
 
     public IReadOnlyList<DesignV2LayoutCell> Cells { get; init; } = [];
+
+    public IReadOnlyList<string> Metadata { get; init; } = [];
+
+    public IReadOnlyList<string> Badges { get; init; } = [];
+
+    public IReadOnlyList<StreamChatDisplaySegment> ChatSegments { get; init; } = [];
 }
 
 internal sealed record DesignV2LayoutCell(
@@ -8129,18 +8177,28 @@ internal sealed record DesignV2LayoutGraphMarker(
 
 internal sealed record DesignV2LayoutInputs(
     bool HasContent,
+    bool IsAvailable,
     DesignV2LayoutRect? Graph,
     DesignV2LayoutRect? Rail,
     float RailWidth,
     int TracePointCount,
     IReadOnlyList<DesignV2LayoutInputItem> Items)
 {
+    public int? SampleIntervalMilliseconds { get; init; }
+
+    public int? MaximumTracePoints { get; init; }
+
     public IReadOnlyList<DesignV2LayoutLine> GridLines { get; init; } = [];
 
     public IReadOnlyList<DesignV2LayoutInputTraceSeries> TraceSeries { get; init; } = [];
 }
 
-internal sealed record DesignV2LayoutInputItem(string Kind, DesignV2LayoutRect Bounds);
+internal sealed record DesignV2LayoutInputItem(string Kind, DesignV2LayoutRect Bounds)
+{
+    public string? Label { get; init; }
+
+    public string? Text { get; init; }
+}
 
 internal sealed record DesignV2LayoutLine(
     string Kind,
@@ -8181,6 +8239,8 @@ internal sealed record DesignV2LayoutVector(
     public bool ShouldRender { get; init; }
 
     public double? SurfaceAlpha { get; init; }
+
+    public string? MapKind { get; init; }
 
     public IReadOnlyList<DesignV2LayoutVectorItem> Items { get; init; } = [];
 

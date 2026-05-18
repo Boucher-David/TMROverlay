@@ -4,6 +4,7 @@ using TmrOverlay.App.Events;
 using TmrOverlay.App.Storage;
 using TmrOverlay.App.Telemetry;
 using TmrOverlay.Core.History;
+using TmrOverlay.Core.Telemetry.EdgeCases;
 using TmrOverlay.Core.Telemetry.Live;
 using Xunit;
 
@@ -436,6 +437,249 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
     }
 
     [Fact]
+    public void CompleteCollection_TreatsCarLeftRightOneAsClearNotSideSignal()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-diagnostics");
+            Directory.CreateDirectory(captureDirectory);
+            var recorder = CreateRecorder(storage);
+            var context = CreateContext();
+            var capturedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", capturedAtUtc);
+
+            recorder.RecordFrame(CreateSnapshot(
+                context,
+                CreateSample(
+                    capturedAtUtc,
+                    sessionTime: 0d,
+                    focusCarIdx: 10,
+                    carLeftRight: 1,
+                    focusF2TimeSeconds: 500d,
+                    classPosition: 3,
+                    observedPosition: 25,
+                    observedClassPosition: 10,
+                    observedLapDistPct: 0.5d),
+                sequence: 1));
+
+            var path = recorder.CompleteCollection(capturedAtUtc.AddSeconds(1), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var radar = document.RootElement.GetProperty("radar");
+            Assert.Equal(0, radar.GetProperty("sideSignalFrames").GetInt32());
+            Assert.Equal(0, radar.GetProperty("sideSignalWithoutPlacementFrames").GetInt32());
+            Assert.Equal(1, radar.GetProperty("sideStateCounts").GetProperty("clear").GetInt32());
+
+            var sample = document.RootElement.GetProperty("sampleFrames").EnumerateArray().Single();
+            Assert.Equal(1, sample.GetProperty("rawCarLeftRight").GetInt32());
+            Assert.Equal("clear", sample.GetProperty("sideStatus").GetString());
+            Assert.False(sample.GetProperty("hasSideSignal").GetBoolean());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CompleteCollection_CapturesPitWindowFuelBlackFlagAndRawControlEvidence()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-diagnostics");
+            Directory.CreateDirectory(captureDirectory);
+            var recorder = CreateRecorder(storage);
+            var context = CreateContext();
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", startedAtUtc);
+
+            recorder.RecordFrame(
+                CreateSnapshot(
+                    context,
+                    CreateSample(
+                        startedAtUtc,
+                        sessionTime: 0d,
+                        focusCarIdx: 10,
+                        carLeftRight: 1,
+                        focusF2TimeSeconds: 500d,
+                        classPosition: 3,
+                        observedPosition: 25,
+                        observedClassPosition: 10,
+                        observedLapDistPct: 0.5d,
+                        fuelLevelLiters: 20d,
+                        onPitRoad: true,
+                        playerCarInPitStall: true,
+                        pitServiceStatus: 1,
+                        pitServiceFlags: 0x10,
+                        pitServiceFuelLiters: 20d,
+                        sessionFlags: 0x00010000),
+                    sequence: 1),
+                new RawTelemetryWatchSnapshot(new Dictionary<string, double>
+                {
+                    ["dcFrontARB"] = 1d,
+                    ["dpFuelFill"] = 0d,
+                    ["PitSvFuel"] = 20d
+                }));
+            recorder.RecordFrame(
+                CreateSnapshot(
+                    context,
+                    CreateSample(
+                        startedAtUtc.AddSeconds(1),
+                        sessionTime: 1d,
+                        focusCarIdx: 10,
+                        carLeftRight: 1,
+                        focusF2TimeSeconds: 501d,
+                        classPosition: 3,
+                        observedPosition: 25,
+                        observedClassPosition: 10,
+                        observedLapDistPct: 0.5d,
+                        fuelLevelLiters: 45d,
+                        onPitRoad: true,
+                        playerCarInPitStall: true,
+                        pitServiceStatus: 2,
+                        pitServiceFlags: 0x1f,
+                        pitServiceFuelLiters: 45d,
+                        sessionFlags: 0x00010000),
+                    sequence: 2),
+                new RawTelemetryWatchSnapshot(new Dictionary<string, double>
+                {
+                    ["dcFrontARB"] = 2d,
+                    ["dpFuelFill"] = 1d,
+                    ["PitSvFuel"] = 45d
+                }));
+
+            var path = recorder.CompleteCollection(startedAtUtc.AddSeconds(2), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var fuel = document.RootElement.GetProperty("fuel");
+            Assert.Equal(1, fuel.GetProperty("pitWindowCount").GetInt32());
+            Assert.Equal(1, fuel.GetProperty("pitWindowsWithFuelIncrease").GetInt32());
+            Assert.Equal(1, fuel.GetProperty("pitWindowsWithBlackFlag").GetInt32());
+            Assert.Equal(1, fuel.GetProperty("fuelIncreaseEventFrames").GetInt32());
+            Assert.Equal(1, fuel.GetProperty("pitServiceChangeFrames").GetInt32());
+            var pitWindow = fuel.GetProperty("pitWindows").EnumerateArray().Single();
+            Assert.True(pitWindow.GetProperty("sawFuelIncrease").GetBoolean());
+            Assert.True(pitWindow.GetProperty("sawBlackFlag").GetBoolean());
+            Assert.True(pitWindow.GetProperty("sawPlayerPitStall").GetBoolean());
+            Assert.True(pitWindow.GetProperty("sawPitServiceChange").GetBoolean());
+            Assert.Equal(25d, pitWindow.GetProperty("netFuelDeltaLiters").GetDouble(), 3);
+            Assert.Equal("0x00010000", pitWindow.GetProperty("entrySessionFlagsHex").GetString());
+
+            var raw = document.RootElement.GetProperty("rawTelemetry");
+            Assert.Equal(2, raw.GetProperty("driverControlSignalFrames").GetInt32());
+            Assert.Equal(1, raw.GetProperty("driverControlChangeFrames").GetInt32());
+            Assert.Equal(2, raw.GetProperty("pitCommandSignalFrames").GetInt32());
+            Assert.Equal(1, raw.GetProperty("pitCommandChangeFrames").GetInt32());
+            Assert.Equal(2, raw.GetProperty("driverControlFieldCounts").GetProperty("dcFrontARB").GetInt32());
+            Assert.Equal(1, raw.GetProperty("driverControlChangeCounts").GetProperty("dcFrontARB").GetInt32());
+            Assert.Equal(2, raw.GetProperty("pitCommandFieldCounts").GetProperty("dpFuelFill").GetInt32());
+            Assert.Equal(1, raw.GetProperty("pitCommandChangeCounts").GetProperty("dpFuelFill").GetInt32());
+            Assert.Equal(1, raw.GetProperty("pitCommandChangeCounts").GetProperty("PitSvFuel").GetInt32());
+
+            var eventKinds = document.RootElement
+                .GetProperty("eventSamples")
+                .EnumerateArray()
+                .Select(item => item.GetProperty("kind").GetString())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("pit-window.fuel-increase", eventKinds);
+            Assert.Contains("pit-service.changed", eventKinds);
+            Assert.Contains("raw.driver-control.changed", eventKinds);
+            Assert.Contains("raw.pit-command.changed", eventKinds);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CompleteCollection_FlagsNonRaceRaceProjectionWhenModelStillContainsIt()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-diagnostics");
+            Directory.CreateDirectory(captureDirectory);
+            var recorder = CreateRecorder(storage);
+            var context = CreateContext();
+            var capturedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", capturedAtUtc);
+            var snapshot = CreateSnapshot(
+                context,
+                CreateSample(
+                    capturedAtUtc,
+                    sessionTime: 0d,
+                    focusCarIdx: 10,
+                    carLeftRight: 1,
+                    focusF2TimeSeconds: 500d,
+                    classPosition: 3,
+                    observedPosition: 25,
+                    observedClassPosition: 10,
+                    observedLapDistPct: 0.5d),
+                sequence: 1);
+            snapshot = snapshot with
+            {
+                Models = snapshot.Models with
+                {
+                    Session = snapshot.Models.Session with
+                    {
+                        RaceLaps = 12
+                    },
+                    RaceProgress = snapshot.Models.RaceProgress with
+                    {
+                        RaceLapsRemaining = 12d,
+                        RaceLapsRemainingSource = "test-non-race-signal"
+                    },
+                    RaceProjection = LiveRaceProjectionModel.Empty with
+                    {
+                        HasData = true,
+                        Quality = LiveModelQuality.Partial,
+                        EstimatedTeamLapsRemaining = 12d,
+                        EstimatedTeamLapsRemainingSource = "test-non-race-projection"
+                    }
+                }
+            };
+
+            recorder.RecordFrame(snapshot);
+
+            var path = recorder.CompleteCollection(capturedAtUtc.AddSeconds(1), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var raceProjection = document.RootElement.GetProperty("raceProjection");
+            Assert.Equal(1, raceProjection.GetProperty("nonRaceRaceProjectionFrames").GetInt32());
+            Assert.Equal(1, raceProjection.GetProperty("nonRaceRaceLapSignalFrames").GetInt32());
+            Assert.Equal(1, raceProjection.GetProperty("sourceCounts").GetProperty("test-non-race-signal").GetInt32());
+            Assert.Equal(1, raceProjection.GetProperty("sourceCounts").GetProperty("test-non-race-projection").GetInt32());
+
+            var eventKinds = document.RootElement
+                .GetProperty("eventSamples")
+                .EnumerateArray()
+                .Select(item => item.GetProperty("kind").GetString())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("race-projection.non-race-race-laps-signal", eventKinds);
+            Assert.Contains("race-projection.non-race-projection", eventKinds);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void CompleteCollection_SummarizesRelativeLapRelationshipProbe()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
@@ -856,6 +1100,22 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
         };
     }
 
+    private static LiveOverlayDiagnosticsRecorder CreateRecorder(AppStorageOptions storage)
+    {
+        return new LiveOverlayDiagnosticsRecorder(
+            new LiveOverlayDiagnosticsOptions
+            {
+                Enabled = true,
+                MinimumFrameSpacingSeconds = 0.1d,
+                MaxSampleFramesPerSession = 10,
+                MaxEventExamplesPerSession = 40,
+                MaxEventExamplesPerKind = 10
+            },
+            storage,
+            new AppEventRecorder(storage),
+            NullLogger<LiveOverlayDiagnosticsRecorder>.Instance);
+    }
+
     private static HistoricalTelemetrySample CreateSample(
         DateTimeOffset capturedAtUtc,
         double sessionTime,
@@ -874,7 +1134,9 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
         bool isOnTrack = true,
         bool isInGarage = false,
         bool? isGarageVisible = null,
+        double fuelLevelLiters = 0d,
         bool onPitRoad = false,
+        bool playerCarInPitStall = false,
         int? pitServiceStatus = null,
         int? pitServiceFlags = null,
         double? pitServiceFuelLiters = null,
@@ -894,8 +1156,8 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
             IsInGarage: isInGarage,
             OnPitRoad: onPitRoad,
             PitstopActive: false,
-            PlayerCarInPitStall: false,
-            FuelLevelLiters: 0d,
+            PlayerCarInPitStall: playerCarInPitStall,
+            FuelLevelLiters: fuelLevelLiters,
             FuelLevelPercent: 0d,
             FuelUsePerHourKg: 60d,
             SpeedMetersPerSecond: 50d,

@@ -220,7 +220,7 @@
               }))
             ]),
             panel('Updates', 'updates-panel', [
-              row('Status', node('strong', 'field-value muted', {}, [support.updateText])),
+              row('Status', node('strong', 'field-value muted', {}, [support.updateText]), 'general.updates.status'),
               node('div', 'button-row small', {}, [
                 button('Check', () => checkReviewUpdates(), { disabled: support.canCheckUpdates === false }),
                 button(support.updatePendingRestart ? 'Restart' : 'Install', () => runSupportAction(support.updatePendingRestart ? 'restartUpdate' : 'installUpdate', support.updatePendingRestart ? 'Restart requested.' : 'No installable update in review run.'), { disabled: support.updatePendingRestart ? support.canRestartUpdate === false : support.canInstallUpdate !== true })
@@ -269,7 +269,7 @@
             ]),
             node('div', 'support-grid support-bottom-grid', {}, [
               panel('Support Bundle', 'support-bundle', [
-                row('Latest bundle', node('code', 'value-code', {}, [latestBundleDisplayText(support.latestBundlePath)])),
+                row('Latest bundle', node('code', 'value-code', {}, [latestBundleDisplayText(support.latestBundlePath)]), 'support.bundle.latest'),
                 node('div', 'button-row', {}, [
                   button('Create Bundle', () => createReviewDiagnosticsBundle()),
                   button('Copy Path', () => copyLatestReviewBundlePath())
@@ -666,9 +666,14 @@
         ]);
       }
 
-      function row(label, control) {
-        return node('div', 'field-row', {}, [
-          node('span', 'field-label', {}, [label]),
+      function row(label, control, evidenceKey = null) {
+        if (evidenceKey && control instanceof Element) {
+          control.setAttribute('data-evidence-key', `${evidenceKey}.value`);
+          control.setAttribute('data-evidence-role', 'value');
+        }
+
+        return node('div', 'field-row', evidenceKey ? { 'data-evidence-key': evidenceKey } : {}, [
+          node('span', 'field-label', evidenceKey ? { 'data-evidence-key': `${evidenceKey}.label`, 'data-evidence-role': 'label' } : {}, [label]),
           control
         ]);
       }
@@ -1033,9 +1038,9 @@
 
       function browserSize(overlay) {
         const base = {
-          standings: [659, 334],
-          relative: [360, 373],
-          'gap-to-leader': [654, 357],
+          standings: [659, 313],
+          relative: [360, 352],
+          'gap-to-leader': [654, 336],
           'track-map': [360, 360],
           'stream-chat': [380, 520],
           'garage-cover': [1280, 720],
@@ -1044,7 +1049,7 @@
           'car-radar': [300, 300],
           flags: [360, 170],
           'session-weather': [464, 496],
-          'pit-service': [530, 743]
+          'pit-service': [530, 722]
         }[overlay?.id] || [400, 300];
         if (overlay?.id === 'input-state') {
           base[0] = inputStateBaseWidth(overlay, base[0]);

@@ -56,6 +56,7 @@ DriverInfo:
    CarClassShortName: GT3
    CarClassRelSpeed: 50
    CarClassEstLapTime: 90.1234
+   IRating: 2875
  - CarIdx: 12
    UserName: Driver Two
 """);
@@ -65,6 +66,7 @@ DriverInfo:
         Assert.Equal("GT3", driver.CarClassShortName);
         Assert.Equal(50, driver.CarClassRelSpeed);
         Assert.Equal(90.1234d, driver.CarClassEstLapTimeSeconds);
+        Assert.Equal(2875, driver.IRating);
         Assert.Equal("Race", context.Session.SessionType);
         Assert.Equal("RACE", context.Session.SessionName);
         Assert.Collection(

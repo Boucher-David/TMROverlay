@@ -1273,7 +1273,7 @@ internal sealed class OverlayManager : IDisposable
             Math.Max(overlayDefinition.DefaultWidth, contentWidth + definition.BrowserWidthPadding),
             Math.Max(
                 overlayDefinition.DefaultHeight,
-                definition.NativeMinimumTableHeight + OverlayTheme.Layout.OverlayTableWithFooterReservedHeight));
+                definition.NativeMinimumTableHeight + OverlayTheme.Layout.OverlayTableWithoutFooterReservedHeight));
     }
 
     private static bool UsesScaleDerivedSize(OverlayDefinition definition)

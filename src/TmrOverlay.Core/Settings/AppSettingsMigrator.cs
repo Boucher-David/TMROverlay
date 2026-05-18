@@ -21,7 +21,15 @@ internal static class AppSettingsMigrator
         "flags.blue-seconds",
         "flags.yellow-seconds",
         "flags.critical-seconds",
-        "flags.finish-seconds"
+        "flags.finish-seconds",
+        OverlayOptionKeys.ChromeHeaderStatusTest,
+        OverlayOptionKeys.ChromeHeaderStatusPractice,
+        OverlayOptionKeys.ChromeHeaderStatusQualifying,
+        OverlayOptionKeys.ChromeHeaderStatusRace,
+        OverlayOptionKeys.ChromeFooterSourceTest,
+        OverlayOptionKeys.ChromeFooterSourcePractice,
+        OverlayOptionKeys.ChromeFooterSourceQualifying,
+        OverlayOptionKeys.ChromeFooterSourceRace
     ];
 
     private static readonly string[] KnownScopedOptionKeys =
@@ -30,18 +38,10 @@ internal static class AppSettingsMigrator
         OverlayOptionKeys.StatusHealthDetails,
         OverlayOptionKeys.FuelAdvice,
         OverlayOptionKeys.FuelSource,
-        OverlayOptionKeys.ChromeHeaderStatusTest,
-        OverlayOptionKeys.ChromeHeaderStatusPractice,
-        OverlayOptionKeys.ChromeHeaderStatusQualifying,
-        OverlayOptionKeys.ChromeHeaderStatusRace,
         OverlayOptionKeys.ChromeHeaderTimeRemainingTest,
         OverlayOptionKeys.ChromeHeaderTimeRemainingPractice,
         OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying,
         OverlayOptionKeys.ChromeHeaderTimeRemainingRace,
-        OverlayOptionKeys.ChromeFooterSourceTest,
-        OverlayOptionKeys.ChromeFooterSourcePractice,
-        OverlayOptionKeys.ChromeFooterSourceQualifying,
-        OverlayOptionKeys.ChromeFooterSourceRace,
         OverlayOptionKeys.RadarMulticlassWarning,
         OverlayOptionKeys.StandingsClassSeparatorsEnabled,
         OverlayOptionKeys.StandingsOtherClassRows,
@@ -181,22 +181,10 @@ internal static class AppSettingsMigrator
     {
         if (SupportsSharedHeaderChromeSettings(overlay.Id))
         {
-            EnsureOption(overlay, OverlayOptionKeys.ChromeHeaderStatusTest, defaultValue: true);
-            EnsureOption(overlay, OverlayOptionKeys.ChromeHeaderStatusPractice, defaultValue: true);
-            EnsureOption(overlay, OverlayOptionKeys.ChromeHeaderStatusQualifying, defaultValue: true);
-            EnsureOption(overlay, OverlayOptionKeys.ChromeHeaderStatusRace, defaultValue: true);
             EnsureOption(overlay, OverlayOptionKeys.ChromeHeaderTimeRemainingTest, defaultValue: true);
             EnsureOption(overlay, OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, defaultValue: true);
             EnsureOption(overlay, OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying, defaultValue: true);
             EnsureOption(overlay, OverlayOptionKeys.ChromeHeaderTimeRemainingRace, defaultValue: true);
-        }
-
-        if (SupportsFooterSourceChromeSettings(overlay.Id))
-        {
-            EnsureOption(overlay, OverlayOptionKeys.ChromeFooterSourceTest, defaultValue: true);
-            EnsureOption(overlay, OverlayOptionKeys.ChromeFooterSourcePractice, defaultValue: true);
-            EnsureOption(overlay, OverlayOptionKeys.ChromeFooterSourceQualifying, defaultValue: true);
-            EnsureOption(overlay, OverlayOptionKeys.ChromeFooterSourceRace, defaultValue: true);
         }
 
         switch (overlay.Id.Trim().ToLowerInvariant())
@@ -277,11 +265,6 @@ internal static class AppSettingsMigrator
     private static bool OverlayOwnsOption(string overlayId, string key)
     {
         if (SupportsSharedHeaderChromeSettings(overlayId) && IsSharedHeaderChromeOption(key))
-        {
-            return true;
-        }
-
-        if (SupportsFooterSourceChromeSettings(overlayId) && IsFooterSourceChromeOption(key))
         {
             return true;
         }
@@ -369,36 +352,13 @@ internal static class AppSettingsMigrator
             or "pit-service";
     }
 
-    private static bool SupportsFooterSourceChromeSettings(string overlayId)
-    {
-        return overlayId.Trim().ToLowerInvariant() is
-            "standings"
-            or "relative"
-            or "fuel-calculator"
-            or "gap-to-leader"
-            or "pit-service";
-    }
-
     private static bool IsSharedHeaderChromeOption(string key)
     {
         return key is
-            OverlayOptionKeys.ChromeHeaderStatusTest
-            or OverlayOptionKeys.ChromeHeaderStatusPractice
-            or OverlayOptionKeys.ChromeHeaderStatusQualifying
-            or OverlayOptionKeys.ChromeHeaderStatusRace
-            or OverlayOptionKeys.ChromeHeaderTimeRemainingTest
+            OverlayOptionKeys.ChromeHeaderTimeRemainingTest
             or OverlayOptionKeys.ChromeHeaderTimeRemainingPractice
             or OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying
             or OverlayOptionKeys.ChromeHeaderTimeRemainingRace;
-    }
-
-    private static bool IsFooterSourceChromeOption(string key)
-    {
-        return key is
-            OverlayOptionKeys.ChromeFooterSourceTest
-            or OverlayOptionKeys.ChromeFooterSourcePractice
-            or OverlayOptionKeys.ChromeFooterSourceQualifying
-            or OverlayOptionKeys.ChromeFooterSourceRace;
     }
 
     private static void NormalizeFlagsOverlay(OverlaySettings overlay)

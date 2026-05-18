@@ -14,9 +14,11 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
     private readonly HashSet<int> _griddedCarIdxs = [];
     private readonly TrackMapSectorTracker _trackMapSectorTracker = new();
     private readonly LiveRaceProjectionTracker _raceProjectionTracker = new();
+    private readonly LiveIncidentPressureTracker _incidentPressureTracker = new();
     private readonly FuelBurnLapTracker _fuelBurnLapTracker = new();
     private HistoricalSessionContext _context = HistoricalSessionContext.Empty;
     private LiveTelemetrySnapshot _snapshot = LiveTelemetrySnapshot.Empty;
+    private LiveTelemetrySnapshot? _lastActiveSnapshot;
     private int? _lastProximityReferenceCarIdx;
     private int? _griddedSessionNum;
     private long _sequence;
@@ -26,6 +28,14 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
         lock (_sync)
         {
             return _snapshot;
+        }
+    }
+
+    public LiveTelemetrySnapshot? LastActiveSnapshot()
+    {
+        lock (_sync)
+        {
+            return _lastActiveSnapshot;
         }
     }
 
@@ -50,6 +60,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             {
                 _trackMapSectorTracker.Reset();
                 _raceProjectionTracker.Reset();
+                _incidentPressureTracker.Reset();
                 _fuelBurnLapTracker.Reset();
                 ResetGriddingTracker();
             }
@@ -74,6 +85,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             _proximityHistory.Clear();
             _trackMapSectorTracker.Reset();
             _raceProjectionTracker.Reset();
+            _incidentPressureTracker.Reset();
             _fuelBurnLapTracker.Reset();
             ResetGriddingTracker();
             _lastProximityReferenceCarIdx = null;
@@ -100,6 +112,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             _context = context;
             _trackMapSectorTracker.Reset();
             _raceProjectionTracker.Reset();
+            _incidentPressureTracker.Reset();
             _fuelBurnLapTracker.Reset();
             _snapshot = _snapshot with
             {
@@ -132,10 +145,12 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             UpdateGriddingTracker(sample);
             var models = LiveRaceModelBuilder.From(_context, sample, fuel, proximity, leaderGap, trackMap, _griddedCarIdxs);
             var raceProjection = _raceProjectionTracker.Update(_context, sample, models);
+            var incidentPressure = _incidentPressureTracker.Update(sample, models);
             models = models with
             {
                 RaceProjection = raceProjection,
-                RaceProgress = LiveRaceProjectionMapper.ApplyToRaceProgress(models.RaceProgress, raceProjection)
+                RaceProgress = LiveRaceProjectionMapper.ApplyToRaceProgress(models.RaceProgress, raceProjection),
+                IncidentPressure = incidentPressure
             };
 
             _snapshot = new LiveTelemetrySnapshot(
@@ -154,6 +169,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             {
                 Models = models
             };
+            _lastActiveSnapshot = _snapshot;
         }
     }
 

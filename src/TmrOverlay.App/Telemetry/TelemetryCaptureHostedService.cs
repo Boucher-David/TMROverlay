@@ -828,7 +828,24 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return sdk.GetData(variableName) switch
         {
             int[] values when index < values.Length => values[index],
-            Array values when index < values.Length && values.GetValue(index) is not null => Convert.ToInt32(values.GetValue(index)),
+            uint[] values when index < values.Length => unchecked((int)values[index]),
+            Array values when index < values.Length => ToInt32OrNull(values.GetValue(index)),
+            _ => null
+        };
+    }
+
+    private static int? ToInt32OrNull(object? value)
+    {
+        return value switch
+        {
+            int intValue => intValue,
+            uint uintValue => unchecked((int)uintValue),
+            short shortValue => shortValue,
+            ushort ushortValue => ushortValue,
+            byte byteValue => byteValue,
+            sbyte signedByteValue => signedByteValue,
+            long longValue when longValue is >= int.MinValue and <= int.MaxValue => (int)longValue,
+            ulong ulongValue when ulongValue <= int.MaxValue => (int)ulongValue,
             _ => null
         };
     }
@@ -1037,7 +1054,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 CarClass: ReadInt32ArrayElement(sdk, "CarIdxClass", carIdx),
                 TrackSurface: ReadInt32ArrayElement(sdk, "CarIdxTrackSurface", carIdx),
                 OnPitRoad: ReadBooleanArrayElement(sdk, "CarIdxOnPitRoad", carIdx),
-                TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx)));
+                TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx),
+                SessionFlags: ReadInt32ArrayElement(sdk, "CarIdxSessionFlags", carIdx)));
         }
 
         return cars;
@@ -1088,7 +1106,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 CarClass: carClass,
                 TrackSurface: ReadInt32ArrayElement(sdk, "CarIdxTrackSurface", carIdx),
                 OnPitRoad: ReadBooleanArrayElement(sdk, "CarIdxOnPitRoad", carIdx),
-                TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx)));
+                TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx),
+                SessionFlags: ReadInt32ArrayElement(sdk, "CarIdxSessionFlags", carIdx)));
         }
 
         return cars;
@@ -1122,7 +1141,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 CarClass: ReadInt32ArrayElement(sdk, "CarIdxClass", carIdx),
                 TrackSurface: ReadInt32ArrayElement(sdk, "CarIdxTrackSurface", carIdx),
                 OnPitRoad: ReadBooleanArrayElement(sdk, "CarIdxOnPitRoad", carIdx),
-                TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx)));
+                TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx),
+                SessionFlags: ReadInt32ArrayElement(sdk, "CarIdxSessionFlags", carIdx)));
         }
 
         return cars;
@@ -1649,6 +1669,10 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 PitServiceTireRequest: ReadPitServiceTireRequest(sdk),
                 DriversSoFar: ReadInt32(sdk, "DCDriversSoFar"),
                 DriverChangeLapStatus: ReadInt32(sdk, "DCLapStatus"),
+                PlayerCarTeamIncidentCount: ReadNullableInt32(sdk, "PlayerCarTeamIncidentCount"),
+                PlayerCarMyIncidentCount: ReadNullableInt32(sdk, "PlayerCarMyIncidentCount"),
+                PlayerCarDriverIncidentCount: ReadNullableInt32(sdk, "PlayerCarDriverIncidentCount"),
+                PlayerIncidents: ReadNullableInt32(sdk, "PlayerIncidents"),
                 LapCurrentLapTimeSeconds: ReadNullableDouble(sdk, "LapCurrentLapTime"),
                 LapDeltaToBestLapSeconds: ReadNullableFiniteDouble(sdk, "LapDeltaToBestLap"),
                 LapDeltaToBestLapRate: ReadNullableFiniteDouble(sdk, "LapDeltaToBestLap_DD"),
@@ -1716,7 +1740,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             {
                 var liveSnapshot = _liveTelemetrySource.Snapshot();
                 _liveModelParityRecorder.RecordFrame(liveSnapshot);
-                _liveOverlayDiagnosticsRecorder.RecordFrame(liveSnapshot);
+                _liveOverlayDiagnosticsRecorder.RecordFrame(liveSnapshot, rawWatch);
             }
             catch (Exception exception)
             {

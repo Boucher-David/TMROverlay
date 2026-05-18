@@ -145,14 +145,11 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Validate screenshot artifacts
-        run: python tools/validate_overlay_screenshots.py
+      - name: Validate active screenshot contracts
+        run: python tools/validate_overlay_screenshots.py --profile app-static
 
       - name: Validate release tutorial image
         run: python tools/validate_overlay_screenshots.py --profile release-tutorial --root docs/assets
-
-      - name: Check Windows screenshot expectations
-        run: python tools/validate_overlay_screenshots.py --profile windows-expectations
 
   windows_build:
     name: Windows build

@@ -8,7 +8,7 @@ internal static class GapToLeaderOverlayDefinition
         Id: "gap-to-leader",
         DisplayName: "Gap To Leader",
         DefaultWidth: 654,
-        DefaultHeight: 357,
+        DefaultHeight: 336,
         Options:
         [
             OverlaySettingsOptionDescriptor.Integer(

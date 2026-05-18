@@ -16,8 +16,8 @@ public sealed class IbtAnalysisServiceTests
 
         var options = IbtAnalysisOptions.FromConfiguration(configuration);
 
-        Assert.False(options.Enabled);
-        Assert.False(options.TelemetryLoggingEnabled);
+        Assert.True(options.Enabled);
+        Assert.True(options.TelemetryLoggingEnabled);
         Assert.EndsWith(Path.Combine("iRacing", "telemetry"), options.TelemetryRoot);
         Assert.Equal(60, options.MaxIRacingExitWaitSeconds);
         Assert.False(options.CopyIbtIntoCaptureDirectory);

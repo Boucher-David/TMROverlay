@@ -51,9 +51,11 @@ internal sealed record LiveRaceModels(
     LiveTireConditionModel TireCondition,
     LiveCoverageModel Coverage,
     LiveScoringModel Scoring,
+    LiveIRatingProjectionModel IRatingProjection,
     LiveTimingModel Timing,
     LiveRaceProgressModel RaceProgress,
     LiveRaceProjectionModel RaceProjection,
+    LiveIncidentPressureModel IncidentPressure,
     LiveRelativeModel Relative,
     LiveSpatialModel Spatial,
     LiveTrackMapModel TrackMap,
@@ -74,9 +76,11 @@ internal sealed record LiveRaceModels(
         TireCondition: LiveTireConditionModel.Empty,
         Coverage: LiveCoverageModel.Empty,
         Scoring: LiveScoringModel.Empty,
+        IRatingProjection: LiveIRatingProjectionModel.Empty,
         Timing: LiveTimingModel.Empty,
         RaceProgress: LiveRaceProgressModel.Empty,
         RaceProjection: LiveRaceProjectionModel.Empty,
+        IncidentPressure: LiveIncidentPressureModel.Empty,
         Relative: LiveRelativeModel.Empty,
         Spatial: LiveSpatialModel.Empty,
         TrackMap: LiveTrackMapModel.Empty,
@@ -242,7 +246,8 @@ internal sealed record LiveDriverIdentity(
     int? CarClassId,
     string? CarClassName,
     string? CarClassColorHex,
-    bool? IsSpectator);
+    bool? IsSpectator,
+    int? IRating = null);
 
 internal sealed record LiveTireCompoundModel(
     bool HasData,
@@ -414,7 +419,54 @@ internal sealed record LiveScoringRow(
     double? LastLapTimeSeconds,
     double? BestLapTimeSeconds,
     string? ReasonOut,
-    bool HasTakenGrid = false);
+    bool HasTakenGrid = false,
+    int? IRating = null);
+
+internal sealed record LiveIRatingProjectionModel(
+    bool HasData,
+    LiveModelQuality Quality,
+    LiveSignalEvidence Evidence,
+    string ProjectionScope,
+    int? ReferenceCarIdx,
+    int? ReferenceProjectedChange,
+    int? ReferenceProjectedIRating,
+    IReadOnlyList<LiveIRatingProjectionClass> ClassProjections,
+    IReadOnlyList<LiveIRatingProjectionRow> Rows,
+    IReadOnlyList<string> MissingSignals,
+    IReadOnlyList<string> Limitations)
+{
+    public static LiveIRatingProjectionModel Empty { get; } = new(
+        HasData: false,
+        Quality: LiveModelQuality.Unavailable,
+        Evidence: LiveSignalEvidence.Unavailable("iRating projection", "rating_projection_unavailable"),
+        ProjectionScope: "unavailable",
+        ReferenceCarIdx: null,
+        ReferenceProjectedChange: null,
+        ReferenceProjectedIRating: null,
+        ClassProjections: [],
+        Rows: [],
+        MissingSignals: [],
+        Limitations: []);
+}
+
+internal sealed record LiveIRatingProjectionClass(
+    int? CarClass,
+    string ClassName,
+    int FieldSize,
+    int StrengthOfField,
+    IReadOnlyList<LiveIRatingProjectionRow> Rows);
+
+internal sealed record LiveIRatingProjectionRow(
+    int CarIdx,
+    int? CarClass,
+    int ClassPosition,
+    int CurrentIRating,
+    double ExpectedScore,
+    double UnroundedChange,
+    int ProjectedChange,
+    int ProjectedIRating,
+    bool IsPlayer,
+    bool IsFocus);
 
 internal sealed record LiveTimingModel(
     bool HasData,
@@ -1127,6 +1179,58 @@ internal sealed record LiveRaceEventModel(
         DriversSoFar: null,
         DriverChangeLapStatus: null);
 }
+
+internal sealed record LiveIncidentPressureModel(
+    bool HasData,
+    LiveModelQuality Quality,
+    LiveSignalEvidence Evidence,
+    int? PlayerCarIdx,
+    int? FocusCarIdx,
+    int? PlayerCarTeamIncidentCount,
+    int? PlayerCarMyIncidentCount,
+    int? PlayerCarDriverIncidentCount,
+    int? PlayerIncidents,
+    int CurrentFlaggedCarCount,
+    int CurrentOffTrackCarCount,
+    IReadOnlyList<LiveIncidentPressureCar> Cars,
+    IReadOnlyList<string> MissingSignals)
+{
+    public static LiveIncidentPressureModel Empty { get; } = new(
+        HasData: false,
+        Quality: LiveModelQuality.Unavailable,
+        Evidence: LiveSignalEvidence.Unavailable("incident pressure", "incident_pressure_signals_missing"),
+        PlayerCarIdx: null,
+        FocusCarIdx: null,
+        PlayerCarTeamIncidentCount: null,
+        PlayerCarMyIncidentCount: null,
+        PlayerCarDriverIncidentCount: null,
+        PlayerIncidents: null,
+        CurrentFlaggedCarCount: 0,
+        CurrentOffTrackCarCount: 0,
+        Cars: [],
+        MissingSignals: []);
+}
+
+internal sealed record LiveIncidentPressureCar(
+    int CarIdx,
+    string? DriverName,
+    string? TeamName,
+    string? CarNumber,
+    int? CarClass,
+    bool IsPlayer,
+    bool IsFocus,
+    int? SessionFlags,
+    int? TrackSurface,
+    bool? OnPitRoad,
+    bool HasBlackFlag,
+    bool HasDisqualifyFlag,
+    bool HasRepairFlag,
+    bool HasFurledFlag,
+    bool IsCurrentlyOffTrack,
+    int ObservedOffTrackTransitions,
+    double PressureScore,
+    string PressureLevel,
+    LiveSignalEvidence Evidence);
 
 internal sealed record LiveInputTelemetryModel(
     bool HasData,

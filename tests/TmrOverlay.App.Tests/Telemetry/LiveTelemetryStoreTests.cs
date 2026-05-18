@@ -171,6 +171,30 @@ public sealed class LiveTelemetryStoreTests
     }
 
     [Fact]
+    public void MarkDisconnected_PreservesLastActiveSnapshotForDiagnostics()
+    {
+        var store = new LiveTelemetryStore();
+        var startedAtUtc = DateTimeOffset.Parse("2026-05-17T12:00:00Z");
+        var capturedAtUtc = startedAtUtc.AddSeconds(5);
+
+        store.MarkConnected();
+        store.MarkCollectionStarted("session-test", startedAtUtc);
+        store.RecordFrame(CreateSample(capturedAtUtc: capturedAtUtc));
+        store.MarkDisconnected();
+
+        var current = store.Snapshot();
+        var lastActive = store.LastActiveSnapshot();
+
+        Assert.False(current.IsConnected);
+        Assert.NotNull(lastActive);
+        Assert.Equal("session-test", lastActive!.SourceId);
+        Assert.True(lastActive.IsConnected);
+        Assert.True(lastActive.IsCollecting);
+        Assert.Equal(capturedAtUtc, lastActive.LastUpdatedAtUtc);
+        Assert.NotNull(lastActive.LatestSample);
+    }
+
+    [Fact]
     public void RecordFrame_PublishesGarageVisibleRaceEvent()
     {
         var store = new LiveTelemetryStore();
@@ -214,6 +238,7 @@ public sealed class LiveTelemetryStoreTests
     public void RecordFrame_PublishesRaceProgressModel()
     {
         var store = new LiveTelemetryStore();
+        ApplyRaceSession(store);
 
         store.RecordFrame(CreateSample(
             teamLapCompleted: 4,
@@ -273,6 +298,7 @@ DriverInfo:
     public void RecordFrame_PublishesRollingRaceProjectionAfterCleanLeaderWindow()
     {
         var store = new LiveTelemetryStore();
+        ApplyRaceSession(store);
         var startedAtUtc = DateTimeOffset.Parse("2026-05-07T12:00:00Z");
         var leaderFrames = new[]
         {
@@ -309,6 +335,173 @@ DriverInfo:
         Assert.Equal(4.5d, projection.EstimatedTeamLapsRemaining!.Value, precision: 3);
         Assert.Equal(projection.OverallLeaderPaceSeconds, models.RaceProgress.RacePaceSeconds);
         Assert.Equal(projection.EstimatedTeamLapsRemaining, models.RaceProgress.RaceLapsRemaining);
+    }
+
+    [Fact]
+    public void RecordFrame_PublishesSoloIRatingProjectionFromOfficialClassResults()
+    {
+        var store = new LiveTelemetryStore();
+        ApplyIRatingRaceSession(store);
+
+        store.RecordFrame(CreateSample(
+            sessionState: 4,
+            playerCarIdx: 10,
+            focusCarIdx: 10,
+            focusCarClass: 4098));
+
+        var projection = store.Snapshot().Models.IRatingProjection;
+
+        Assert.True(projection.HasData);
+        Assert.Equal("solo-driver", projection.ProjectionScope);
+        Assert.Empty(projection.Limitations);
+        var classProjection = Assert.Single(projection.ClassProjections);
+        Assert.Equal(4098, classProjection.CarClass);
+        Assert.Equal(4, classProjection.FieldSize);
+        Assert.Equal(2183, classProjection.StrengthOfField);
+        Assert.Equal(50, projection.ReferenceProjectedChange);
+        Assert.Equal(3050, projection.ReferenceProjectedIRating);
+        Assert.Collection(
+            classProjection.Rows,
+            row =>
+            {
+                Assert.Equal(10, row.CarIdx);
+                Assert.Equal(1, row.ClassPosition);
+                Assert.Equal(50, row.ProjectedChange);
+            },
+            row =>
+            {
+                Assert.Equal(11, row.CarIdx);
+                Assert.Equal(2, row.ClassPosition);
+                Assert.Equal(15, row.ProjectedChange);
+            },
+            row =>
+            {
+                Assert.Equal(12, row.CarIdx);
+                Assert.Equal(3, row.ClassPosition);
+                Assert.Equal(-17, row.ProjectedChange);
+            },
+            row =>
+            {
+                Assert.Equal(13, row.CarIdx);
+                Assert.Equal(4, row.ClassPosition);
+                Assert.Equal(-48, row.ProjectedChange);
+            });
+    }
+
+    [Fact]
+    public void RecordFrame_PublishesTeamEntryIRatingProjectionWithDistributionLimitations()
+    {
+        var store = new LiveTelemetryStore();
+        ApplyIRatingRaceSession(store, teamRacing: true);
+
+        store.RecordFrame(CreateSample(
+            sessionState: 4,
+            playerCarIdx: 10,
+            focusCarIdx: 10,
+            focusCarClass: 4098));
+
+        var projection = store.Snapshot().Models.IRatingProjection;
+
+        Assert.True(projection.HasData);
+        Assert.Equal("team-entry", projection.ProjectionScope);
+        Assert.Equal(50, projection.ReferenceProjectedChange);
+        Assert.Equal(3050, projection.ReferenceProjectedIRating);
+        Assert.Contains("team_entry_projection_only", projection.Limitations);
+        Assert.Contains("team_weighted_rating_unavailable", projection.Limitations);
+        Assert.Contains("per_driver_lap_share_distribution_unavailable", projection.Limitations);
+        Assert.Contains("driver_eligibility_not_applied", projection.Limitations);
+    }
+
+    [Fact]
+    public void RecordFrame_PublishesIncidentPressureEvidenceWithoutAllCarIncidentCounts()
+    {
+        var store = new LiveTelemetryStore();
+        ApplyIRatingRaceSession(store);
+
+        store.RecordFrame(CreateSample(
+            sessionState: 4,
+            playerCarIdx: 10,
+            focusCarIdx: 10,
+            playerCarTeamIncidentCount: 8,
+            playerCarMyIncidentCount: 3,
+            allCars:
+            [
+                Car(10, 1, 1, 0.5d, 0d, sessionFlags: 0),
+                Car(11, 2, 2, 0.4d, 1d, sessionFlags: 0),
+                Car(12, 3, 3, 0.3d, 2d, sessionFlags: 0)
+            ]));
+        store.RecordFrame(CreateSample(
+            sessionState: 4,
+            playerCarIdx: 10,
+            focusCarIdx: 10,
+            playerCarTeamIncidentCount: 8,
+            playerCarMyIncidentCount: 3,
+            allCars:
+            [
+                Car(10, 1, 1, 0.5d, 0d, sessionFlags: 0),
+                Car(11, 2, 2, 0.4d, 1d, sessionFlags: 0x00010000),
+                Car(12, 3, 3, 0.3d, 2d, trackSurface: 0, sessionFlags: 0)
+            ]));
+
+        var pressure = store.Snapshot().Models.IncidentPressure;
+
+        Assert.True(pressure.HasData);
+        Assert.Equal(8, pressure.PlayerCarTeamIncidentCount);
+        Assert.Equal(3, pressure.PlayerCarMyIncidentCount);
+        Assert.Equal(1, pressure.CurrentFlaggedCarCount);
+        Assert.Equal(1, pressure.CurrentOffTrackCarCount);
+        var blackFlagCar = Assert.Single(pressure.Cars, car => car.CarIdx == 11);
+        Assert.True(blackFlagCar.HasBlackFlag);
+        Assert.Equal("flagged", blackFlagCar.PressureLevel);
+        var offTrackCar = Assert.Single(pressure.Cars, car => car.CarIdx == 12);
+        Assert.Equal(1, offTrackCar.ObservedOffTrackTransitions);
+        Assert.Equal("watch-estimate", offTrackCar.PressureLevel);
+    }
+
+    [Fact]
+    public void RecordFrame_DoesNotPublishRaceLapsOrProjectionInPractice()
+    {
+        var store = new LiveTelemetryStore();
+        store.ApplySessionInfo("""
+WeekendInfo:
+ EventType: Practice
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Practice
+   SessionName: PRACTICE
+   SessionTime: 3600 sec
+   SessionLaps: unlimited
+DriverInfo:
+ DriverCarIdx: 10
+""");
+
+        var startedAtUtc = DateTimeOffset.Parse("2026-05-07T12:00:00Z");
+        for (var index = 0; index < 4; index++)
+        {
+            store.RecordFrame(CreateSample(
+                capturedAtUtc: startedAtUtc.AddSeconds(index * 90),
+                sessionTime: index * 90,
+                sessionState: 4,
+                playerCarIdx: 10,
+                teamLapCompleted: index,
+                teamLapDistPct: 0.25d,
+                teamLastLapTimeSeconds: 90d,
+                leaderCarIdx: 11,
+                leaderLapCompleted: index,
+                leaderLapDistPct: 0.5d,
+                leaderLastLapTimeSeconds: 90d,
+                sessionTimeRemain: 1800d));
+        }
+
+        var models = store.Snapshot().Models;
+
+        Assert.True(models.RaceProgress.HasData);
+        Assert.Null(models.RaceProgress.RaceLapsRemaining);
+        Assert.Equal("non-race session", models.RaceProgress.RaceLapsRemainingSource);
+        Assert.False(models.RaceProjection.HasData);
+        Assert.Null(models.RaceProjection.EstimatedTeamLapsRemaining);
     }
 
     [Fact]
@@ -601,6 +794,82 @@ SplitTimeInfo:
    SectorStartPct: 0.500000
  - SectorNum: 2
    SectorStartPct: 0.750000
+""");
+    }
+
+    private static void ApplyRaceSession(LiveTelemetryStore store)
+    {
+        store.ApplySessionInfo("""
+WeekendInfo:
+ EventType: Race
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Race
+   SessionName: RACE
+   SessionTime: 3600 sec
+   SessionLaps: unlimited
+DriverInfo:
+ DriverCarIdx: 10
+""");
+    }
+
+    private static void ApplyIRatingRaceSession(LiveTelemetryStore store, bool teamRacing = false)
+    {
+        store.ApplySessionInfo($$"""
+WeekendInfo:
+ EventType: Race
+ Official: 1
+ TeamRacing: {{(teamRacing ? 1 : 0)}}
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Race
+   SessionName: RACE
+   SessionTime: 3600 sec
+   SessionLaps: unlimited
+   ResultsPositions:
+   - Position: 0
+     ClassPosition: 0
+     CarIdx: 10
+   - Position: 1
+     ClassPosition: 1
+     CarIdx: 11
+   - Position: 2
+     ClassPosition: 2
+     CarIdx: 12
+   - Position: 3
+     ClassPosition: 3
+     CarIdx: 13
+DriverInfo:
+ DriverCarIdx: 10
+ Drivers:
+ - CarIdx: 10
+   UserName: Driver One
+   CarClassID: 4098
+   CarClassShortName: GT3
+   CarNumber: "10"
+   IRating: 3000
+ - CarIdx: 11
+   UserName: Driver Two
+   CarClassID: 4098
+   CarClassShortName: GT3
+   CarNumber: "11"
+   IRating: 2500
+ - CarIdx: 12
+   UserName: Driver Three
+   CarClassID: 4098
+   CarClassShortName: GT3
+   CarNumber: "12"
+   IRating: 2000
+ - CarIdx: 13
+   UserName: Driver Four
+   CarClassID: 4098
+   CarClassShortName: GT3
+   CarNumber: "13"
+   IRating: 1500
 """);
     }
 
@@ -2805,6 +3074,10 @@ QualifyResultsInfo:
         bool onPitRoad = false,
         bool playerCarInPitStall = false,
         bool? teamOnPitRoad = null,
+        int? playerCarTeamIncidentCount = null,
+        int? playerCarMyIncidentCount = null,
+        int? playerCarDriverIncidentCount = null,
+        int? playerIncidents = null,
         int? playerTrackSurface = null,
         double? precipitationPercent = null,
         double? relativeHumidityPercent = null,
@@ -2871,6 +3144,10 @@ QualifyResultsInfo:
             FocusClassLeaderLastLapTimeSeconds: classLeaderLastLapTimeSeconds,
             FocusClassLeaderTireCompound: classLeaderTireCompound,
             TeamOnPitRoad: teamOnPitRoad,
+            PlayerCarTeamIncidentCount: playerCarTeamIncidentCount,
+            PlayerCarMyIncidentCount: playerCarMyIncidentCount,
+            PlayerCarDriverIncidentCount: playerCarDriverIncidentCount,
+            PlayerIncidents: playerIncidents,
             PlayerTrackSurface: playerTrackSurface,
             LeaderCarIdx: leaderCarIdx,
             LeaderLapCompleted: leaderLapCompleted,
@@ -2896,7 +3173,8 @@ QualifyResultsInfo:
         int lapCompleted = 0,
         double? estimatedTimeSeconds = null,
         int? trackSurface = 3,
-        bool? onPitRoad = false)
+        bool? onPitRoad = false,
+        int? sessionFlags = null)
     {
         return new HistoricalCarProximity(
             CarIdx: carIdx,
@@ -2908,6 +3186,7 @@ QualifyResultsInfo:
             ClassPosition: classPosition,
             CarClass: 4098,
             TrackSurface: trackSurface,
-            OnPitRoad: onPitRoad);
+            OnPitRoad: onPitRoad,
+            SessionFlags: sessionFlags);
     }
 }

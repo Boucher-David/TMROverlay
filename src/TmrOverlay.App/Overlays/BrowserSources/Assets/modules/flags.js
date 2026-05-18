@@ -184,7 +184,7 @@ function gridFor(count) {
   if (count === 2) return { columns: 2, rows: 1 };
   if (count <= 4) return { columns: 2, rows: 2 };
   if (count <= 6) return { columns: 3, rows: 2 };
-  return { columns: 4, rows: 2 };
+  return { columns: 4, rows: Math.ceil(count / 4) };
 }
 
 function className(value) {

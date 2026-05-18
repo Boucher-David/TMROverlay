@@ -58,12 +58,14 @@ describe('browser overlay shell', () => {
       waitForSelector: null
     });
 
-    await waitFor(() => currentOverlay.document.getElementById('status').textContent === 'iRacing disconnected');
+    await waitFor(() => currentOverlay.document.querySelector('.overlay').style.opacity === '0');
 
     expect(currentOverlay.fetchCalls).toContain('/api/overlay-model/standings');
     expect(currentOverlay.fetchCalls).not.toContain('/api/snapshot');
     expect(currentOverlay.document.getElementById('content').textContent).toBe('');
     expect(currentOverlay.document.querySelector('.overlay').style.opacity).toBe('0');
+    expect(currentOverlay.document.getElementById('status')).toBeNull();
+    expect(currentOverlay.document.querySelector('.header-items').textContent).toBe('');
     expect(currentOverlay.dom.window.TmrBrowserModel).toBeUndefined();
   });
 
@@ -89,8 +91,39 @@ describe('browser overlay shell', () => {
       waitForSelector: '.metric'
     });
 
-    expect(currentOverlay.document.getElementById('status').textContent).toBe('');
-    expect(currentOverlay.document.getElementById('status').hidden).toBe(true);
+    expect(currentOverlay.document.getElementById('status')).toBeNull();
+    expect(currentOverlay.document.querySelector('.header-items').textContent).toBe('');
+    expect(currentOverlay.document.getElementById('source').textContent).toBe('');
+    expect(currentOverlay.document.getElementById('source').hidden).toBe(true);
+  });
+
+  it('filters legacy status header items and source footer text from visible chrome', async () => {
+    currentOverlay = await renderBrowserOverlay('fuel-calculator', {
+      live: freshLiveSnapshot({}),
+      model: {
+        overlayId: 'fuel-calculator',
+        title: 'Fuel Calculator',
+        status: 'need fuel',
+        source: 'source: model evidence',
+        bodyKind: 'metrics',
+        columns: [],
+        rows: [],
+        metrics: [
+          { label: 'Plan', value: '31 laps | 3 stints | 2 stops', tone: 'modeled' }
+        ],
+        points: [],
+        headerItems: [
+          { key: 'status', value: 'need fuel' },
+          { key: 'timeRemaining', value: '06:37:08' }
+        ],
+        gridSections: [],
+        metricSections: []
+      },
+      waitForSelector: '.metric'
+    });
+
+    expect(currentOverlay.document.getElementById('status')).toBeNull();
+    expect(currentOverlay.document.querySelector('.header-items').textContent).toBe('06:37:08');
     expect(currentOverlay.document.getElementById('source').textContent).toBe('');
     expect(currentOverlay.document.getElementById('source').hidden).toBe(true);
   });
@@ -119,6 +152,7 @@ describe('browser overlay shell', () => {
     await waitFor(() => currentOverlay.document.querySelector('.overlay').style.opacity === '0');
 
     expect(currentOverlay.document.getElementById('content').textContent).toBe('');
+    expect(currentOverlay.document.getElementById('status')).toBeNull();
     expect(currentOverlay.document.getElementById('source').hidden).toBe(true);
   });
 });

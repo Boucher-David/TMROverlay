@@ -22,7 +22,8 @@ test.describe('browser overlay Playwright integration', () => {
 
     const rows = page.locator('tbody tr');
     await expect(rows).toHaveCount(6);
-    await expect(page.locator('#status')).toHaveText('scoring | 5/5 live');
+    await expect(page.locator('#status')).toHaveCount(0);
+    await expect(page.locator('.header-items')).toHaveText('06:37:08');
     await expect(rows.nth(4)).toHaveClass(/focus/);
 
     const overlayBox = await page.locator('.overlay').boundingBox();
@@ -396,8 +397,9 @@ test.describe('browser overlay Playwright integration', () => {
     await page.getByRole('tab', { name: 'Footer' }).click();
     await expect(page.locator('.region-segment.active')).toHaveText('Footer');
     await expect(page.locator('h2')).toContainText('Footer');
-    await expect(page.getByText('Source')).toBeVisible();
-    await expect(page.locator('.chrome-head')).toHaveText(['Item', 'Practice', 'Qualifying', 'Race']);
+    await expect(page.locator('.chrome-head')).toHaveCount(0);
+    await expect(page.locator('.chrome-check')).toHaveCount(0);
+    await expect(page.getByText('No footer controls for this overlay.')).toBeVisible();
 
     await page.getByRole('link', { name: 'Stream Chat' }).click();
     await expect(page.locator('.region-segment')).toHaveText(['General', 'Content', 'Twitch', 'Streamlabs']);
@@ -634,14 +636,14 @@ test.describe('browser overlay Playwright integration', () => {
     await expect(page.getByText('OBS size 276 x 260')).toBeVisible();
 
     await page.getByRole('link', { name: 'Pit Service' }).click();
-    await page.getByRole('tab', { name: 'Footer' }).click();
+    await page.getByRole('tab', { name: 'Header' }).click();
     await page.locator('.chrome-check').first().getByRole('button').click();
     await expect.poll(() => patches.length).toBeGreaterThan(1);
     expect(patches).toContainEqual({
       kind: 'chrome',
       overlayId: 'pit-service',
-      area: 'footer',
-      label: 'Source',
+      area: 'header',
+      label: 'Time remaining',
       session: 'Practice',
       enabled: false
     });
@@ -1023,7 +1025,8 @@ function standingsDisplayModel() {
       carRow(['2', '#71', 'Focus Racer', '+3.4', '0.0', '1:54.228', '1:54.901', ''], { isReference: true }),
       carRow(['3', '#91', 'Chaser', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
     ],
-    metrics: []
+    metrics: [],
+    headerItems: [{ key: 'timeRemaining', value: '06:37:08' }]
   };
 }
 

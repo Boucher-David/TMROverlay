@@ -17,6 +17,11 @@ internal static class LiveRaceProgressProjector
         double? racePaceSeconds,
         string racePaceSource)
     {
+        if (!IsRaceSession(context, session))
+        {
+            return new LiveRaceLapEstimate(null, "non-race session");
+        }
+
         if (session.SessionState is { } sessionState && sessionState >= 5)
         {
             return new LiveRaceLapEstimate(0d, "session ended");
@@ -108,9 +113,17 @@ internal static class LiveRaceProgressProjector
     private static bool IsRacePreGreen(HistoricalSessionContext context, LiveSessionModel session)
     {
         return session.SessionState is >= 1 and <= 3
-            && (ContainsRace(context.Session.SessionType)
-                || ContainsRace(context.Session.SessionName)
-                || ContainsRace(context.Session.EventType));
+            && IsRaceSession(context, session);
+    }
+
+    private static bool IsRaceSession(HistoricalSessionContext context, LiveSessionModel session)
+    {
+        return ContainsRace(context.Session.SessionType)
+            || ContainsRace(context.Session.SessionName)
+            || ContainsRace(context.Session.EventType)
+            || ContainsRace(session.SessionType)
+            || ContainsRace(session.SessionName)
+            || ContainsRace(session.EventType);
     }
 
     private static bool ContainsUnlimited(string? value)

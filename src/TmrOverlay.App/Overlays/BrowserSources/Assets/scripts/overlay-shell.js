@@ -2,6 +2,7 @@
     const overlayEl = document.querySelector('.overlay');
     const statusEl = document.getElementById('status');
     const timeRemainingEl = document.getElementById('time-remaining');
+    const headerItemsEl = document.querySelector('.header-items');
     const contentEl = document.getElementById('content');
     const sourceEl = document.getElementById('source');
     let modelRootOpacity = 1;
@@ -419,13 +420,29 @@
     function renderHeaderItems(model, fallbackStatus) {
       const hasHeaderItems = Array.isArray(model?.headerItems);
       const items = hasHeaderItems ? model.headerItems : [];
-      const statusItem = items.find((item) => String(item?.key || '').toLowerCase() === 'status');
-      const timeItem = items.find((item) => String(item?.key || '').toLowerCase() === 'timeremaining');
-      const statusValue = statusItem ? String(statusItem.value || '').trim() : hasHeaderItems ? '' : fallbackStatus || '';
-      statusEl.textContent = statusValue;
-      statusEl.hidden = !statusValue;
-      if (timeRemainingEl) {
-        const value = timeItem?.value || '';
+      const visibleItems = items
+        .filter((item) => String(item?.key || '').toLowerCase() !== 'status')
+        .map((item) => ({
+          key: String(item?.key || '').trim(),
+          value: String(item?.value || '').trim()
+        }))
+        .filter((item) => item.value);
+      if (statusEl) {
+        statusEl.textContent = '';
+        statusEl.hidden = true;
+      }
+
+      if (headerItemsEl) {
+        headerItemsEl.innerHTML = visibleItems.map((item) => {
+          const key = item.key.toLowerCase();
+          const id = key === 'timeremaining' ? ' id="time-remaining"' : '';
+          const className = key === 'timeremaining'
+            ? 'header-item time-remaining'
+            : `header-item header-item-${cssClassToken(key || 'item')}`;
+          return `<div${id} class="${className}" data-key="${escapeHtml(item.key)}">${escapeHtml(item.value)}</div>`;
+        }).join('');
+      } else if (timeRemainingEl) {
+        const value = visibleItems.find((item) => item.key.toLowerCase() === 'timeremaining')?.value || '';
         timeRemainingEl.textContent = value;
         timeRemainingEl.hidden = !value;
       }
@@ -433,15 +450,34 @@
 
     function renderFooterSource(model) {
       if (!sourceEl) return;
-      const value = String(model?.source || '').trim();
-      sourceEl.textContent = value;
-      sourceEl.hidden = !value;
+      sourceEl.textContent = '';
+      sourceEl.hidden = true;
     }
 
     function clearFooterSource() {
       if (!sourceEl) return;
       sourceEl.hidden = true;
       sourceEl.textContent = '';
+    }
+
+    function clearHeaderItems() {
+      if (statusEl) {
+        statusEl.textContent = '';
+        statusEl.hidden = true;
+      }
+      if (headerItemsEl) {
+        headerItemsEl.textContent = '';
+      } else if (timeRemainingEl) {
+        timeRemainingEl.hidden = true;
+        timeRemainingEl.textContent = '';
+      }
+    }
+
+    function cssClassToken(value) {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'item';
     }
 
     function drawOverlayGraph(canvas, model) {
@@ -895,20 +931,9 @@
     function drawGapFocusedMetricsTable(ctx, rect, graph) {
       const metrics = Array.isArray(graph?.trendMetrics) && graph.trendMetrics.length > 0
         ? graph.trendMetrics
-        : [
-            { label: '5L', state: 'unavailable' },
-            { label: '10L', state: 'unavailable' },
-            { label: 'Pit', state: 'unavailable' },
-            { label: 'PLap', state: 'unavailable' },
-            { label: 'Stint', state: 'unavailable' },
-            { label: 'Tire', state: 'unavailable' },
-            { label: 'Last', state: 'unavailable' },
-            { label: 'Status', state: 'unavailable' }
-          ];
+        : [];
       const visibleMetrics = metrics.filter(Boolean);
-      const showThreatFooter = visibleMetrics.length <= 6;
-      const rowAreaBottomPadding = showThreatFooter ? 48 : 8;
-      const rowHeight = Math.max(9.5, Math.min(26, (rect.height - rowAreaBottomPadding - 38) / Math.max(1, visibleMetrics.length)));
+      const rowHeight = Math.max(9.5, Math.min(26, (rect.height - 8 - 38) / Math.max(1, visibleMetrics.length)));
       ctx.save();
       ctx.lineWidth = 1;
       drawRoundedRect(
@@ -933,7 +958,7 @@
 
       ctx.font = `${rowHeight < 16 ? '8px' : '9px'} "Segoe UI", Arial, sans-serif`;
       visibleMetrics.forEach((metric, index) => {
-        const y = rect.top + 43 + index * rowHeight;
+        const y = rect.top + 38 + index * rowHeight;
         ctx.fillStyle = themeColor('--tmr-text-secondary', '#cdd8e4');
         ctx.fillText(metric?.label || '--', rect.left + 8, y);
         ctx.fillStyle = gapMetricValueColor(metric, numberOr(graph?.metricDeadbandSeconds, 0.25));
@@ -941,30 +966,6 @@
         ctx.fillStyle = gapMetricChaserColor(metric);
         ctx.fillText(gapMetricChaserText(metric), rect.left + 108, y);
       });
-
-      if (showThreatFooter) {
-        const threat = graph?.activeThreat || metrics.find((metric) => metric?.chaser);
-        const threatY = rect.top + rect.height - 28;
-        const footerStroke = threat?.chaser
-          ? colorWithAlpha(themeColor('--tmr-error', '#ec7063'), 0.34)
-          : 'rgba(255, 255, 255, 0.10)';
-        drawRoundedRect(
-          ctx,
-          rect.left + 8,
-          threatY,
-          rect.width - 16,
-          20,
-          3,
-          threat?.chaser ? 'rgba(236, 112, 99, 0.14)' : 'rgba(255, 255, 255, 0.055)',
-          footerStroke);
-        ctx.font = '700 8px "Segoe UI", Arial, sans-serif';
-        ctx.fillStyle = threat?.chaser
-          ? themeColor('--tmr-error', '#ec7063')
-          : 'rgba(140, 174, 212, 0.72)';
-        ctx.fillText(threat?.chaser
-          ? `Threat ${threat.chaser.label || `#${threat.chaser.carIdx ?? '--'}`} ${formatFocusedTrendChangeSeconds(-threat.chaser.gainSeconds)}`
-          : 'Threat --', rect.left + 14, threatY + 10);
-      }
       ctx.restore();
     }
 
@@ -1354,12 +1355,8 @@
       const module = browserOverlay.module;
       if (!module?.render) {
         contentEl.innerHTML = '<div class="empty">Unknown overlay route.</div>';
-        statusEl.textContent = 'not configured';
+        clearHeaderItems();
         clearFooterSource();
-        if (timeRemainingEl) {
-          timeRemainingEl.hidden = true;
-          timeRemainingEl.textContent = '';
-        }
         return;
       }
 
@@ -1380,12 +1377,8 @@
           return;
         }
 
-        statusEl.textContent = 'localhost offline';
+        clearHeaderItems();
         clearFooterSource();
-        if (timeRemainingEl) {
-          timeRemainingEl.hidden = true;
-          timeRemainingEl.textContent = '';
-        }
         contentEl.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
       }
     }

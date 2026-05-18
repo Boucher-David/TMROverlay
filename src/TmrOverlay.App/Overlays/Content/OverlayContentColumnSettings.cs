@@ -177,8 +177,8 @@ internal static class OverlayContentColumnSettings
     public static OverlayContentDefinition Standings { get; } = new(
         OverlayId: StandingsOverlayDefinition.Definition.Id,
         BrowserWidthPadding: 34,
-        BrowserMinimumHeight: 334,
-        NativeMinimumTableHeight: 258,
+        BrowserMinimumHeight: 313,
+        NativeMinimumTableHeight: 257,
         FallbackColumnId: StandingsDriverColumnId,
         Columns:
     [
@@ -209,7 +209,7 @@ internal static class OverlayContentColumnSettings
     public static OverlayContentDefinition Relative { get; } = new(
         OverlayId: RelativeOverlayDefinition.Definition.Id,
         BrowserWidthPadding: 34,
-        BrowserMinimumHeight: 360,
+        BrowserMinimumHeight: 352,
         NativeMinimumTableHeight: 180,
         FallbackColumnId: RelativeDriverColumnId,
         Columns:

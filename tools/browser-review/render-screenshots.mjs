@@ -38,6 +38,32 @@ const configuredCanvasCaptureBackdrop = {
   scope: 'configured-canvas-screenshot-only'
 };
 const previewModes = ['practice', 'qualifying', 'race'];
+const nonHappyPathOverlayVariants = [
+  { overlayId: 'fuel-calculator', slug: 'waiting', query: 'fixture=fuel-waiting' },
+  { overlayId: 'standings', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'relative', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'fuel-calculator', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'gap-to-leader', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'session-weather', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'pit-service', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'session-weather', slug: 'missing', query: 'fixture=session-weather-missing' },
+  { overlayId: 'pit-service', slug: 'idle', query: 'fixture=pit-service-idle' },
+  { overlayId: 'input-state', slug: 'waiting', query: 'fixture=input-waiting' },
+  { overlayId: 'input-state', slug: 'no-content', query: 'fixture=input-no-content' },
+  { overlayId: 'car-radar', slug: 'left', query: 'fixture=car-radar-left' },
+  { overlayId: 'car-radar', slug: 'right', query: 'fixture=car-radar-right' },
+  { overlayId: 'car-radar', slug: 'both-sides', query: 'fixture=car-radar-both-sides' },
+  { overlayId: 'car-radar', slug: 'clear', query: 'fixture=car-radar-clear' },
+  { overlayId: 'gap-to-leader', slug: 'no-cars', query: 'fixture=gap-no-cars' },
+  { overlayId: 'track-map', slug: 'no-markers', query: 'fixture=track-map-no-markers' },
+  { overlayId: 'flags', slug: 'all-kinds', query: 'fixture=flags-all-kinds' },
+  { overlayId: 'garage-cover', slug: 'hidden', query: 'fixture=garage-hidden' },
+  { overlayId: 'garage-cover', slug: 'garage-visible', query: 'fixture=garage-visible' },
+  { overlayId: 'garage-cover', slug: 'stale', query: 'fixture=garage-stale' },
+  { overlayId: 'garage-cover', slug: 'disconnected', query: 'fixture=garage-disconnected' },
+  { overlayId: 'stream-chat', slug: 'twitch-rich', query: 'fixture=stream-chat-twitch-rich' },
+  { overlayId: 'stream-chat', slug: 'streamlabs-configured', query: 'fixture=stream-chat-streamlabs-configured' }
+];
 
 const args = parseArgs(process.argv.slice(2));
 const outputRoot = resolve(repoRoot, args.output || defaultOutputFor(args.surface));
@@ -123,12 +149,36 @@ function screenshotRoutes(surface) {
         `browser-overlays/${overlayId}.png`,
         withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, 'race'),
         { surface: 'browser-review-overlay', overlayId, previewMode: 'race' }));
+      if (overlayId === 'track-map') {
+        routes.push(overlayRoute(
+          'browser-overlays/track-map-fallback.png',
+          `${withPreview('/review/overlays/track-map', 'race')}&trackMap=fallback`,
+          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: 'circle-fallback' }));
+      }
+      for (const variant of nonHappyPathOverlayVariants.filter((item) => item.overlayId === overlayId)) {
+        routes.push(overlayRoute(
+          `browser-overlays/${overlayId}-${variant.slug}.png`,
+          `${withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
+          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant) }));
+      }
     }
     if (surface === 'localhost' || surface === 'all') {
       routes.push(overlayRoute(
         `localhost-overlays/${overlayId}.png`,
         withPreview(`/overlays/${encodeURIComponent(overlayId)}`, 'race'),
         { surface: 'localhost-overlay', overlayId, previewMode: 'race' }));
+      if (overlayId === 'track-map') {
+        routes.push(overlayRoute(
+          'localhost-overlays/track-map-fallback.png',
+          `${withPreview('/overlays/track-map', 'race')}&trackMap=fallback`,
+          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: 'circle-fallback' }));
+      }
+      for (const variant of nonHappyPathOverlayVariants.filter((item) => item.overlayId === overlayId)) {
+        routes.push(overlayRoute(
+          `localhost-overlays/${overlayId}-${variant.slug}.png`,
+          `${withPreview(`/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
+          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant) }));
+      }
       for (const alias of localhostAliasesForOverlay(overlayId)) {
         routes.push(overlayRoute(
           `localhost-overlays/${overlayId}-alias-${aliasSlug(alias)}.png`,
@@ -194,6 +244,26 @@ function aliasSlug(alias) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'alias';
+}
+
+function variantMinBytes(variant) {
+  const key = `${variant.overlayId}/${variant.slug}`;
+  if ([
+    'input-state/no-content',
+    'gap-to-leader/no-cars'
+  ].includes(key)) {
+    return 100;
+  }
+
+  if ([
+    'input-state/waiting',
+    'car-radar/clear',
+    'track-map/no-markers'
+  ].includes(key)) {
+    return 500;
+  }
+
+  return 1_000;
 }
 
 function settingsRoute(relativePath, urlPath, metadata = {}) {
@@ -333,6 +403,7 @@ async function captureRoute(page, route, manifest) {
     region: route.region || null,
     activeRegion: dom.activeRegion,
     routeAlias: route.routeAlias || null,
+    fixtureVariant: route.fixtureVariant || null,
     previewMode: route.previewMode || null,
     unitSystem: route.unitSystem || screenshotUnitSystem,
     menuId: route.menuId || null,
@@ -453,6 +524,30 @@ async function readDomDiagnostics(element) {
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, limit) || null;
+    const textMetricsFor = (element) => {
+      const text = textFor(element, 500);
+      if (!text) return null;
+
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      const availableWidth = element.clientWidth || rect.width;
+      const availableHeight = element.clientHeight || rect.height;
+      const measuredWidth = element.scrollWidth || rect.width;
+      const measuredHeight = element.scrollHeight || rect.height;
+      const tolerance = 1.5;
+      return {
+        textLength: text.length,
+        availableWidth: round(availableWidth),
+        availableHeight: round(availableHeight),
+        measuredWidth: round(measuredWidth),
+        measuredHeight: round(measuredHeight),
+        fitsWidth: measuredWidth <= availableWidth + tolerance,
+        fitsHeight: measuredHeight <= availableHeight + tolerance,
+        overflowX: style.overflowX || null,
+        overflowY: style.overflowY || null,
+        whiteSpace: style.whiteSpace || null
+      };
+    };
     const styleFor = (element) => {
       const style = window.getComputedStyle(element);
       return {
@@ -492,6 +587,8 @@ async function readDomDiagnostics(element) {
         ariaChecked: element.getAttribute('aria-checked') || null,
         type: element.getAttribute('type') || null,
         href: element.getAttribute('href') || null,
+        evidenceKey: element.getAttribute('data-evidence-key') || null,
+        evidenceRole: element.getAttribute('data-evidence-role') || null,
         value: value || null,
         checked: 'checked' in element ? Boolean(element.checked) : null,
         selected: 'selected' in element ? Boolean(element.selected) : null,
@@ -509,7 +606,10 @@ async function readDomDiagnostics(element) {
       ['settings-content-body', '.content-body'],
       ['settings-region-segment', '.region-segment'],
       ['settings-panel', '.panel, .garage-preview-stage, .cover-preview'],
+      ['settings-panel-title', '.panel h2'],
       ['settings-field-row', '.field-row, .status-row'],
+      ['settings-field-label', '.field-label'],
+      ['settings-field-value', '.field-value, .value-code, .support-status'],
       ['settings-button', 'button'],
       ['settings-segmented', '.segmented'],
       ['settings-choice', '.choice'],
@@ -534,6 +634,8 @@ async function readDomDiagnostics(element) {
       ['header', '.header'],
       ['title', '.title'],
       ['status', '#status'],
+      ['header-items', '.header-items'],
+      ['header-item', '.header-item'],
       ['time-remaining', '#time-remaining'],
       ['content', '#content'],
       ['source', '#source'],
@@ -561,6 +663,8 @@ async function readDomDiagnostics(element) {
       ['radar-shape', '.radar-v2 rect, .radar-v2 circle, .radar-v2 path, .radar-v2 text, .car-radar-v2 rect, .car-radar-v2 circle, .car-radar-v2 path, .car-radar-v2 text'],
       ['track-map', '.track-map-v2, .track'],
       ['track-map-shape', '.track-map-v2 path, .track-map-v2 circle, .track-map-v2 text, .track svg path, .track svg circle, .track svg text'],
+      ['garage-cover', '.garage-cover'],
+      ['garage-cover-image', '.garage-cover img'],
       ['input-shell', '.input-state-v2, .input-layout'],
       ['input-graph', '.input-graph-panel, .input-graph'],
       ['input-rail', '.input-rail'],
@@ -581,7 +685,10 @@ async function readDomDiagnostics(element) {
       ['input-wheel-shape', '.input-wheel svg circle, .input-wheel svg line'],
       ['stream-chat-body', '.stream-chat-body, .chat'],
       ['chat-line', '.chat-line'],
+      ['chat-name', '.chat-name'],
+      ['chat-meta', '.chat-meta, .chat-chip'],
       ['chat-badge', '.chat-badge, .chat-badge.image'],
+      ['chat-emote', '.chat-emote'],
       ['chat-text', '.chat-text']
     ];
     const text = String(node.innerText || node.textContent || '')
@@ -634,6 +741,7 @@ async function readDomDiagnostics(element) {
           text: textFor(element),
           bounds,
           styles: styleFor(element),
+          textMetrics: textMetricsFor(element),
           attributes: attributeEvidence(element)
         });
       });
@@ -730,6 +838,13 @@ function uiEvidence(route, dom) {
         'settings-matrix-cell'
       ].includes(element.role))
       .map(settingElementEvidence),
+    textFields: elements
+      .filter((element) => [
+        'settings-panel-title',
+        'settings-field-label',
+        'settings-field-value'
+      ].includes(element.role))
+      .map(settingElementEvidence),
     preview: settingsPreviewEvidence(elements)
   };
 }
@@ -797,7 +912,9 @@ function settingElementEvidence(element) {
     className: element.className || null,
     text: element.text || null,
     bounds: element.bounds || null,
+    sourceBounds: element.sourceBounds || null,
     styles: element.styles || null,
+    textMetrics: element.textMetrics || null,
     attributes: element.attributes || null
   };
 }
@@ -903,7 +1020,9 @@ function modelLayoutEvidence(model, layout) {
       cells: flagCellEvidence(model.flags, layout)
     } : null,
     carRadar: carRadarVectorEvidence(model.carRadar?.renderModel, layout),
-    trackMap: trackMapVectorEvidence(model.trackMap?.renderModel || model.trackMap, layout)
+    trackMap: trackMapVectorEvidence(model.trackMap?.renderModel || model.trackMap, layout),
+    garageCover: model.garageCover ? garageCoverEvidence(model.garageCover, layout) : null,
+    streamChat: model.streamChat ? streamChatEvidence(model.streamChat, layout) : null
   };
 }
 
@@ -938,6 +1057,7 @@ function tableRowEvidence(row, index, tableRendering) {
     text: rendered?.row?.text || null,
     foreground: rendered?.row?.styles?.color || null,
     background: rendered?.row?.styles?.backgroundColor || null,
+    classList: classListForElement(rendered?.row),
     bounds: rendered?.row?.bounds || null,
     cells: Array.isArray(row?.cells) ? row.cells.map((cell) => String(cell ?? '')) : [],
     renderedCells: (rendered?.cells || []).map((cell, cellIndex) =>
@@ -954,6 +1074,72 @@ function renderedCellEvidence(cell, index, column) {
     foreground: cell?.styles?.color || null,
     background: cell?.styles?.backgroundColor || null,
     bounds: cell?.bounds || null
+  };
+}
+
+function classListForElement(element) {
+  return String(element?.className || '')
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function garageCoverEvidence(garageCover, layout) {
+  const cover = findElementBounds(layout, 'garage-cover', 'garage-cover')
+    || findElementBounds(layout, 'content')
+    || null;
+  const image = findElementBounds(layout, 'garage-cover-image') || null;
+  return {
+    shouldCover: booleanOrNull(garageCover?.shouldCover),
+    settings: garageCover?.browserSettings || null,
+    detection: garageCover?.detection || null,
+    detectionState: stringOrNull(garageCover?.detection?.state),
+    detectionIsFresh: booleanOrNull(garageCover?.detection?.isFresh),
+    detectionText: stringOrNull(garageCover?.detection?.displayText),
+    bounds: cover,
+    imageBounds: image
+  };
+}
+
+function streamChatEvidence(streamChat, layout) {
+  const renderedRows = elementsForRole(layout, 'chat-line').sort(compareBounds);
+  const renderedNames = elementsForRole(layout, 'chat-name').sort(compareBounds);
+  const renderedTexts = elementsForRole(layout, 'chat-text').sort(compareBounds);
+  const renderedBadges = elementsForRole(layout, 'chat-badge').sort(compareBounds);
+  const renderedMetadata = elementsForRole(layout, 'chat-meta').sort(compareBounds);
+  const renderedEmotes = elementsForRole(layout, 'chat-emote').sort(compareBounds);
+  const rows = Array.isArray(streamChat?.rows) ? streamChat.rows : [];
+  return {
+    settings: streamChat?.settings || null,
+    rowCount: rows.length,
+    renderedRowCount: renderedRows.length,
+    firstRenderedText: renderedRows[0]?.text || null,
+    lastRenderedText: renderedRows[renderedRows.length - 1]?.text || null,
+    badgeCount: renderedBadges.length,
+    metadataCount: renderedMetadata.length,
+    emoteCount: renderedEmotes.length,
+    rows: rows.slice(-36).map((row, index) => ({
+      index,
+      name: stringOrNull(row?.name),
+      text: stringOrNull(row?.text),
+      kind: stringOrNull(row?.kind),
+      authorColorHex: stringOrNull(row?.authorColorHex),
+      metadata: Array.isArray(row?.metadata) ? row.metadata.map((item) => String(item ?? '')) : [],
+      badges: Array.isArray(row?.badges) ? row.badges.map((badge) => ({
+        id: stringOrNull(badge?.id),
+        version: stringOrNull(badge?.version),
+        label: stringOrNull(badge?.label),
+        roomId: stringOrNull(badge?.roomId)
+      })) : [],
+      segments: Array.isArray(row?.segments) ? row.segments.map((segment) => ({
+        kind: stringOrNull(segment?.kind),
+        text: stringOrNull(segment?.text),
+        imageUrl: stringOrNull(segment?.imageUrl)
+      })) : [],
+      bounds: renderedRows[index]?.bounds || null,
+      nameBounds: renderedNames[index]?.bounds || null,
+      textBounds: renderedTexts[index]?.bounds || null
+    }))
   };
 }
 
@@ -1093,7 +1279,7 @@ function flagGrid(count) {
   if (count <= 2) return { columns: 2, rows: 1, compact: false };
   if (count <= 4) return { columns: 2, rows: 2, compact: true };
   if (count <= 6) return { columns: 3, rows: 2, compact: true };
-  return { columns: 4, rows: 2, compact: true };
+  return { columns: 4, rows: Math.ceil(count / 4), compact: true };
 }
 
 function computedFlagCells(svgBounds, grid, count) {
@@ -1503,6 +1689,7 @@ function scenarioEvidence(route, model, layout = null) {
     previewMode: route.previewMode || null,
     unitSystem: route.unitSystem || screenshotUnitSystem,
     routeAlias: route.routeAlias || null,
+    fixtureVariant: route.fixtureVariant || null,
     captureMode: route.captureMode || null,
     cropBounds: route.clip || null,
     configuredOverlaySize: route.configuredOverlaySize || null,
@@ -1821,11 +2008,9 @@ function graphMarkers(graph, scale, plot, maxGapSeconds, canvasBounds) {
 function graphMetricRows(metricsRect, graph, canvasBounds) {
   const metrics = Array.isArray(graph?.trendMetrics) ? graph.trendMetrics.filter(Boolean) : [];
   if (!metricsRect || metrics.length === 0) return [];
-  const showThreatFooter = metrics.length <= 6;
-  const rowAreaBottomPadding = showThreatFooter ? 48 : 8;
-  const rowHeight = Math.max(9.5, Math.min(26, (metricsRect.height - rowAreaBottomPadding - 38) / Math.max(1, metrics.length)));
+  const rowHeight = Math.max(9.5, Math.min(26, (metricsRect.height - 8 - 38) / Math.max(1, metrics.length)));
   return metrics.map((metric, index) => {
-    const y = metricsRect.y + 43 + index * rowHeight;
+    const y = metricsRect.y + 38 + index * rowHeight;
     const row = { x: metricsRect.x + 8, y, width: metricsRect.width - 16, height: Math.max(10, Math.min(14, rowHeight)) };
     return {
       index,

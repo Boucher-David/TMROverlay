@@ -40,7 +40,7 @@ python3 tools/validate_overlay_screenshots.py --profile release-tutorial --root 
    ```
 
 3. GitHub Actions runs `.github/workflows/windows-dotnet.yml`.
-4. The PR/main validation job restores, builds, tests, validates tracked screenshots, checks Windows screenshot expectations, generates/validates Windows-rendered overlay screenshots as workflow artifacts, runs a self-contained publish dry run with the same package audit used by release packaging, and dry-runs `vpk pack` including the MSI and update feed.
+4. The PR/main validation job restores, builds, tests, validates active screenshot contracts, generates/validates browser-review, localhost, Windows-rendered overlay, and installer screenshots as workflow artifacts, compares screenshot manifests for browser/localhost/Windows parity, runs a self-contained publish dry run with the same package audit used by release packaging, and dry-runs `vpk pack` including the MSI and update feed.
 5. The tag workflow publishes `src/TmrOverlay.App` for `win-x64`, audits the publish folder, writes a package manifest, zips it, generates a SHA-256 checksum, packs Velopack MSI/update assets, uploads workflow artifacts, and creates or updates the GitHub Release assets.
 
 Manual workflow dispatch can still produce package artifacts for a branch test run, but it does not create a GitHub Release unless the run is for a `vMAJOR.MINOR.PATCH` tag.

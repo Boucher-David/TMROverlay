@@ -15,8 +15,8 @@ TmrBrowserOverlay.register({
     const hasContent = inputs.hasContent ?? (hasGraph || railEnabled);
     applyInputOverlayLayoutClasses(hasGraph, railEnabled, hasContent);
     modelRootOpacity = rootOpacityFromModel(model);
-    if (!inputs.isAvailable || !hasContent) {
-      applyOverlayOpacity(0);
+    if (!hasContent) {
+      applyOverlayOpacity(1);
       contentEl.innerHTML = `<div class="empty">${escapeHtml(model?.status || 'Waiting for player in car.')}</div>`;
       renderHeaderItems(model, '');
       renderFooterSource(model);
@@ -65,8 +65,7 @@ function ensureInputStyle() {
       width: min(380px, calc(100vw - 16px));
     }
 
-    body.input-state-page .overlay.input-rail-only,
-    body.input-state-page .overlay.input-empty {
+    body.input-state-page .overlay.input-rail-only {
       width: min(276px, calc(100vw - 16px));
     }
 

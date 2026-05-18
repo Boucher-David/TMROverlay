@@ -29,8 +29,10 @@ describe('standings browser rendering', () => {
     expect(rows[0].classList.contains('class-header')).toBe(true);
     expect(rows[4].classList.contains('focus')).toBe(true);
     expect(rows[5].classList.contains('pit')).toBe(true);
-    expect(currentOverlay.document.getElementById('status').textContent).toBe('scoring | 5/5 live');
-    expect(currentOverlay.document.getElementById('source').textContent).toBe('source: scoring snapshot + live timing');
+    expect(currentOverlay.document.getElementById('status')).toBeNull();
+    expect(currentOverlay.document.querySelector('.header-items').textContent).toBe('06:37:08');
+    expect(currentOverlay.document.getElementById('source').textContent).toBe('');
+    expect(currentOverlay.document.getElementById('source').hidden).toBe(true);
     expect(contentText(currentOverlay.document)).not.toContain('Proto Two');
   });
 
@@ -69,7 +71,8 @@ function standingsDisplayModel() {
       carRow(['2', '#71', 'Focus Racer', '+3.4', '0.0', '1:54.228', '1:54.901', ''], { isReference: true }),
       carRow(['3', '#91', 'Chaser', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
     ],
-    metrics: []
+    metrics: [],
+    headerItems: [{ key: 'timeRemaining', value: '06:37:08' }]
   };
 }
 
@@ -86,7 +89,8 @@ function placeholderF2StandingsDisplayModel() {
       carRow(['2', '#10', 'Reference Driver', '--', '--', '--', '--', ''], { isReference: true }),
       carRow(['3', '#12', 'Chase Driver', '--', '--', '--', '--', ''])
     ],
-    metrics: []
+    metrics: [],
+    headerItems: [{ key: 'timeRemaining', value: '06:37:08' }]
   };
 }
 

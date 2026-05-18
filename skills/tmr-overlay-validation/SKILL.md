@@ -21,6 +21,32 @@ rg -n "^(<<<<<<<|>>>>>>>|=======)$" --glob '!captures/**' --glob '!captures-late
 python3 tools/validate_overlay_screenshots.py --profile windows-expectations
 ```
 
+## Validation Failure Triage
+
+Treat screenshot, manifest, and data-contract validation failures as product evidence until proven otherwise. Do not assume a failure is a stale assertion, validator bug, or harmless platform difference just because the screenshot "looks close" or another surface passes.
+
+Before relaxing an assertion:
+
+- Classify the failure with concrete evidence from the generated artifact, manifest fields, source fixture, renderer/generator code, or comparison report.
+- If the artifact cannot prove whether browser, localhost, and Windows rendered the intended behavior, add or improve capture/manifest evidence instead of weakening the semantic assertion.
+- Keep assertions strict for user-visible content, data values, row/column presence, session gating, availability/waiting states, and route/native/browser parity until the implementation or evidence clearly proves the intended behavior.
+- Normalize only proven representation differences, such as equivalent color encodings or platform rounding, and keep those normalizations narrow and documented by the surrounding check.
+- When a recent commit relaxed screenshot or manifest assertions, re-audit it against this standard before building on it.
+
+## New UI Forensic Validation
+
+Whenever code adds or materially changes an overlay, settings tab/region, renderer path, preview mode, browser/localhost route, native form, or other user-facing UI, treat screenshot validation as part of the feature implementation.
+
+The same pass should add or update:
+
+- deterministic fixture states for the normal path and important degraded/non-happy-path states;
+- manifest semantics for visible text, row/column data, availability/waiting/error state, session gating, source/evidence labels, and values that must stay hidden;
+- geometry, bounds, primitive, or pixel evidence for layout-sensitive behavior such as row collapse, circular maps, graph overlap, table sizing, color roles, and text fitting;
+- browser review, localhost, and Windows/native screenshot generation plus validation profiles, or a documented reason a surface does not exist on one of those runtimes;
+- parity comparison logic that checks semantic equality across browser, localhost, and Windows/native instead of relying on manually inspected PNGs.
+
+Do not leave new UI validation as a follow-up unless the user explicitly asks to split it out. If the current artifacts cannot prove the intended behavior, add evidence capture first and keep assertions strict.
+
 ## Branch-Complete Release Hygiene
 
 Run this section when a branch is being declared complete, prepared for merge, or promoted to a product milestone.
@@ -33,6 +59,7 @@ Make branch-readiness artifacts current before writing the final squash text:
 - If changing Windows publishing/package contents, verify PR validation runs a publish dry run with the same package audit, the release workflow audits the publish folder for accidental repo/dev-folder leaks, emits a package manifest, and documents which user data stays outside the install folder.
 - For overlay, settings UI, browser route, localhost route, preview fixture, or native renderer changes, update the screenshot generator and `tools/validate_overlay_screenshots.py` coverage expectations in the same pass. A new overlay/settings tab/region/preview state is not complete until native Windows, browser review, and localhost screenshot validation profiles either include it or explicitly justify why it is not a product surface.
 - For overlay or settings UI changes, regenerate browser review screenshots with `npm run screenshots:browser-review -- --output artifacts/browser-review-screenshots`, run `python3 tools/validate_overlay_screenshots.py --profile browser-review-ci --root artifacts/browser-review-screenshots`, and inspect the uploaded `browser-review-screenshots` artifact from CI. Regenerate localhost route screenshots separately with `npm run screenshots:localhost -- --output artifacts/localhost-screenshots`, run `python3 tools/validate_overlay_screenshots.py --profile localhost-ci --root artifacts/localhost-screenshots`, and inspect the uploaded `localhost-screenshots` artifact from CI. Browser review and localhost are separate screenshot authorities; native Windows is still validated separately.
+- After browser-review screenshots are regenerated and validated for branch-complete work, refresh the shareable overlay media packet with `npm run media:packet`. Keep `docs/media-packet/v1-overlay-showcase/` current when overlay visuals, settings product context, or curated fixture choices change. The packet should choose feature-rich data snapshots that show each overlay or app tab doing meaningful work; real-capture or IBT-derived scenarios are preferred when they are deterministic and documented. This packet is teammate-facing product media, not parity proof; validation still comes from browser review, localhost, and Windows artifacts.
 - For live-model, snapshot-reader, data-contract, or overlay data-mapping changes, do not expand the default screenshot generator to every historical snapshot. Add or update a targeted data-snapshot render sweep instead: an allowlisted fixture manifest, a dedicated screenshot command/profile, manifest metadata for snapshot id and model source, and validation that each selected fixture renders through browser and localhost routes. Keep this separate from the always-on deterministic preview matrix until it has proven stable enough to gate PRs.
 - Legacy tracked screenshots under `mocks/` remain validation/design artifacts until retired. Keep `python3 tools/validate_overlay_screenshots.py` passing, but do not treat the deprecated mac harness as the screenshot generator for new V1 parity work.
 - Windows-rendered screenshots are CI artifacts generated from real WinForms forms with `tools/TmrOverlay.WindowsScreenshots`. Run `python3 tools/validate_overlay_screenshots.py --profile screenshot-expectations` before CI to catch stale expected dimensions and missing native/browser/localhost screenshot contracts after overlay or settings changes. On Windows, run `dotnet run --project .\tools\TmrOverlay.WindowsScreenshots\TmrOverlay.WindowsScreenshots.csproj --configuration Release -- artifacts\windows-overlay-screenshots` and `python tools\validate_overlay_screenshots.py --profile windows-ci --root artifacts\windows-overlay-screenshots`; pass an MSI path after the output folder when local installer screenshots should be bundled under `artifacts\windows-overlay-screenshots\installer`. On non-Windows machines, inspect the uploaded PR artifact after CI.

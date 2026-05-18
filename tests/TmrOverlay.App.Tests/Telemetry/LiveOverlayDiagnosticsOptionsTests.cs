@@ -11,7 +11,7 @@ public sealed class LiveOverlayDiagnosticsOptionsTests
     {
         var options = LiveOverlayDiagnosticsOptions.FromConfiguration(BuildConfiguration(new Dictionary<string, string?>()));
 
-        Assert.False(options.Enabled);
+        Assert.True(options.Enabled);
     }
 
     [Fact]

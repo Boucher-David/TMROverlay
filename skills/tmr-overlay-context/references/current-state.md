@@ -40,7 +40,7 @@ Last updated: 2026-05-15
 
 - `src/TmrOverlay.App/Overlays/`
   - overlay modules are separated by type
-  - `Abstractions/` contains Windows overlay form helpers such as `PersistentOverlayForm`, which centralizes frame setup, drag handling, and per-overlay settings persistence; shared table/chrome helpers keep dense readout overlays aligned on header/status/time-remaining/source labels, table borders, cell labels, row sizing, and change-detection setters, with `OverlayChromeState` carrying the common title/status/tone/source/footer/time-remaining contract for normal in-car overlays
+  - `Abstractions/` contains Windows overlay form helpers such as `PersistentOverlayForm`, which centralizes frame setup, drag handling, and per-overlay settings persistence; shared table/chrome helpers keep dense readout overlays aligned on title/time-remaining chrome, table borders, cell labels, row sizing, and change-detection setters, with `OverlayChromeState` still carrying status/source evidence for model diagnostics while rendered header status and footer source chrome stay disabled
   - `Styling/OverlayTheme.cs` contains human-editable shared Windows overlay colors, font helpers, and common layout tokens; data-visualization-specific colors can remain near their drawing code
   - shared durable-settings defaults and Design V2 role colors live in `shared/tmr-overlay-contract.json` with `shared/tmr-overlay-contract.schema.json`; native and localhost rendering read this contract before user-local overrides, and browser review uses the same assets for local validation plus screenshot generation
   - durable user-data release snapshots live under `fixtures/data-contracts/`; `v0.19.0` is the first V1-candidate baseline for settings, compact history, generated track maps, raw-capture metadata, and runtime state, and future schema branches should prove the previous release snapshot loads through current code
@@ -72,7 +72,7 @@ Last updated: 2026-05-15
   - General includes a Show Preview control for Practice, Qualifying, and Race; it swaps native/localhost reads to deterministic session fixtures while leaving normal overlay enabled state, content/header/footer session gates, positions, scale, opacity, topmost, and Stream Chat configuration untouched
   - Support is task-oriented for teammate handoff: visible app version/build metadata, diagnostic telemetry capture first, diagnostics bundle actions, compact current state, and storage shortcuts without exposing advanced collection internals as normal teammate controls
   - first-run/no-iRacing waiting states are worded as expected idle states in Support instead of active failures
-  - per-overlay tabs expose visibility, scale, opacity, descriptor-driven overlay-specific display options, V2 content-toggle matrices, shared header/footer controls, and recommended OBS source sizes when those controls make sense for that overlay; content/header/footer session columns show Practice, Qualifying, and Race, with Practice also writing the Test setting keys
+  - per-overlay tabs expose visibility, scale, opacity, descriptor-driven overlay-specific display options, V2 content-toggle matrices, current shared header controls such as time remaining, empty footer regions where no footer controls are active, and recommended OBS source sizes when those controls make sense for that overlay; content/header/footer session columns show Practice, Qualifying, and Race, with Practice also writing the Test setting keys
   - opening the radar settings tab previews the radar overlay only when the overlay is enabled, so the tab no longer overrides the `Visible` checkbox
   - visibility, scale, opacity, unit, and display-option changes are coalesced briefly before save/apply so checkbox bursts do not recursively rebuild overlays; content/header/footer session gates are rechecked against live session type
 
@@ -82,13 +82,13 @@ Last updated: 2026-05-15
   - browser review is now the primary local overlay parity loop, while localhost route screenshots are a separate route-surface gate: `npm run review:browser` serves `/review/app`, `/review/settings/general`, individual browser pages under `/review/overlays/<overlay-id>`, and localhost pages under `/overlays/<overlay-id>` from the same asset files as localhost routes; `npm run screenshots:browser-review` captures browser review/settings into `artifacts/browser-review-screenshots`, and `npm run screenshots:localhost` captures localhost routes into `artifacts/localhost-screenshots`
   - Playwright integration tests run against managed Chromium by default so browser tests do not launch the user's normal Chrome app; set `TMR_PLAYWRIGHT_CHANNEL=chrome` only when a system Chrome run is intentionally needed
   - treat UI/style v2 as telemetry-first by default: standings, relative, local in-car radar, flags, session/weather context, and timing tables should be dense, stable windows into iRacing telemetry
-  - persistent source footers should be validation/admin chrome, not default end-user overlay furniture
-  - reserve model-v2 source, quality, usability, freshness, and missing-reason chrome for stale, unavailable, modeled, or derived values, especially analysis products like fuel strategy, non-local radar focus/multiclass interpretation, and gap graphs
+  - persistent source footers are removed from current user-facing overlay chrome; source remains model, manifest, and diagnostic evidence
+  - reserve model-v2 source, quality, usability, freshness, and missing-reason evidence for stale, unavailable, modeled, or derived values, especially analysis products like fuel strategy, non-local radar focus/multiclass interpretation, and gap graphs
   - use competitor overlay analysis as the product-shape check: small purpose-built overlays, dense information, low-noise dark styling, and semantic color instead of one monolithic dashboard
   - the Windows settings app uses an additive WinForms Design V2 surface over the same production settings contracts, while browser review mirrors that shape for local inspection
   - the tracked mac harness keeps legacy generated `mocks/design-v2/` artifacts for telemetry-first standings, relative, local in-car radar, flag display, table semantics, and narrower analysis-exception states, but it is deprecated secondary scaffolding rather than the product parity target or screenshot authority
   - Design V2 now has shared role-color tokens for native overlays and localhost CSS, plus live and generated component-review surfaces for overlay shells, buttons, controls, status pills, table rows, graph chrome, localhost blocks, sidebar tabs, section panels, and settings content blocks
-  - future style groundwork should continue promoting reviewed semantic theme tokens and reusable primitives into Windows/browser overlay code for headers, status badges, source footers, metric rows, table cells, graph panels, shared borders, severity colors, class colors, text fitting, and empty/error/waiting states
+  - future style groundwork should continue promoting reviewed semantic theme tokens and reusable primitives into Windows/browser overlay code for headers, optional diagnostic badges/footers, metric rows, table cells, graph panels, shared borders, severity colors, class colors, text fitting, and empty/error/waiting states
   - keep migrations additive and screenshot-validated, with overlay-specific domain layout local
 
 - `src/TmrOverlay.App/Overlays/FuelCalculator/`
@@ -99,7 +99,7 @@ Last updated: 2026-05-15
   - renders whole-lap stint targets, target liters-per-lap, planned stint/stop count, final stint length, laps-per-tank, and min/avg/max burn when history exists
   - keeps the full table row layout visible so strategy changes do not resize or switch the overlay view during live updates
   - hides rhythm optimization and tire-service advice for V1 until pit-service source buckets are strong enough to support those recommendations
-  - accounts for overall leader/reference-class/team projection for timed-race lap count, stores class-leader context, and shows leader/class gaps in the shared source footer when enabled
+  - accounts for overall leader/reference-class/team projection for timed-race lap count and stores class-leader context as model/source evidence without rendering a shared source footer
   - can bias future stint targets toward historical team-stint evidence, currently 8 laps for the 4-hour Nürburgring baseline, without labeling teammate rows in the UI
   - warns when a target such as an 8-lap stint needs realistic fuel saving versus nominal tank range or avoids extra stops over longer races
   - uses blank future rows when no fuel stop is needed or fewer stints are known, instead of hiding rows based on noisy collection thresholds
@@ -162,7 +162,7 @@ Last updated: 2026-05-15
   - writes post-session sidecars after raw capture finalization: `capture-synthesis.json` runs immediately from the closed TmrOverlay capture with a timeout, while `ibt-analysis/*.json` waits only a bounded time for iRacing to stop writing before skipping and leaving the capture eligible for startup recovery
   - IBT analysis now includes `ibt-local-car-summary.json`, a bounded local-car trajectory/fuel/vehicle-dynamics summary with track-map readiness and explicit missing opponent-context fields; source `.ibt` files still stay out of capture directories by default
   - records live model-v2 parity in observer mode; Relative now consumes `LiveTelemetrySnapshot.Models.Relative` directly, while the remaining legacy overlay slices are compared against the additive models and summarized in `live-model-parity.json`
-  - records passive live overlay diagnostics in observer mode; `live-overlay-diagnostics.json` summarizes gap session semantics, large gap/jump evidence, local-only radar suppression, side/focus/placement evidence, fuel source evidence, sampled position cadence, lap-delta channel availability, relative lap-relationship probe counts, derived sector-timing coverage, and track-map sector-highlight coverage
+  - records passive live overlay diagnostics in observer mode by default; `live-overlay-diagnostics.json` summarizes gap session semantics, large gap/jump evidence, local-only radar suppression, clear-vs-active side signal evidence, side/focus/placement evidence, fuel source evidence, pit windows with fuel increases/black-flag overlap, raw ARB/driver-control and pit-command changes, suspicious non-race race-projection signals, sampled position cadence, lap-delta channel availability, relative lap-relationship probe counts, derived sector-timing coverage, and track-map sector-highlight coverage
   - records bounded compact edge-case telemetry artifacts for every live session by combining normalized live samples with selected scalar raw watch channels for fuel, tires, suspension, brakes, wheel speed, pit service, pit-request command changes with viewer/camera context, weather, forecast-like weather variables when present, ARB/anti-roll/wing-like driver-adjustment channels when present, engine/replay/system/network state, incidents, and driver-control changes; artifacts also count observations dropped after the clip cap and include a final sampled context tail so long spectated/parked sessions still have late-session telemetry context
   - isolates raw-capture frame queue/write/read failures from live history, normalized live telemetry, and overlay performance recording so overlays can keep updating while capture diagnostics run
   - logs and records app events for runtime raw-capture start failures instead of silently failing
@@ -179,7 +179,7 @@ Last updated: 2026-05-15
     - post-session `capture-synthesis.json` is written by `CaptureSynthesisService`, not by the live writer
     - post-session `ibt-analysis/*.json` is written by `IbtAnalysisService` when enabled and a candidate `.ibt` can be selected or a skipped/failed status is recorded
     - opt-in post-session `live-model-parity.json` is written by `LiveModelParityRecorder` when model-v2 parity collection is enabled
-    - opt-in post-session `live-overlay-diagnostics.json` is written by `LiveOverlayDiagnosticsRecorder` when overlay diagnostics collection is enabled; without raw capture the same observer artifact is written under `logs/overlay-diagnostics`
+    - default-on post-session `live-overlay-diagnostics.json` is written by `LiveOverlayDiagnosticsRecorder` when overlay diagnostics collection is enabled; without raw capture the same observer artifact is written under `logs/overlay-diagnostics`
   - uses a bounded channel to decouple SDK callbacks from disk writes
   - drops frames when the queue fills instead of blocking the SDK callback path
 
@@ -260,7 +260,7 @@ Last updated: 2026-05-15
   - persists overlay settings under `%LOCALAPPDATA%/TmrOverlay/settings`
   - the disk store remains Windows app-owned; settings models and `AppSettingsMigrator` live in `src/TmrOverlay.Core/Settings/` so other development harnesses can follow the same schema
   - scale-capable overlays keep width/height as compatibility fields, but `OverlayManager` derives those dimensions from overlay defaults plus saved scale instead of treating width/height as independent user-facing controls
-  - settings are versioned, migrate legacy per-overlay boolean/integer fields into the keyed overlay option bag, and prune obsolete option keys when an overlay control is removed; version 6 adds default-on per-session shared chrome options for header status and footer source
+  - settings are versioned, migrate legacy per-overlay boolean/integer fields into the keyed overlay option bag, and prune obsolete option keys when an overlay control is removed; version 6 added per-session shared chrome options and the current migrator now removes the obsolete header-status/footer-source option keys
 
 - `src/TmrOverlay.App/Events/`
   - writes JSONL app-event breadcrumbs under `%LOCALAPPDATA%/TmrOverlay/logs/events`
@@ -270,7 +270,7 @@ Last updated: 2026-05-15
   - includes a local-development build freshness check that warns when source files in the checkout are newer than the running build
 
 - `src/TmrOverlay.App/Diagnostics/`
-  - creates support bundles with app/storage metadata, telemetry state, localhost overlay state/request counters, track-map inventory metadata, lightweight performance snapshots, recent performance logs, runtime state, settings, logs/events, and latest capture metadata plus compact capture/IBT sidecars
+  - creates support bundles with app/storage metadata, telemetry state, evidence-quality warnings, latest-capture evidence summaries, localhost overlay state/request counters, IBT analysis settings/status, track-map inventory plus current-track lookup evidence, lightweight performance snapshots, recent performance logs, runtime state, settings, logs/events, and latest capture metadata plus compact capture/IBT sidecars
   - includes recent compact edge-case telemetry artifacts under `edge-cases/`, including their final context tail when present
   - includes recent model-v2 parity artifacts under `model-parity/` plus the latest capture's `live-model-parity.json` when present
   - includes recent post-race analysis JSON at top-level `analysis/` plus recent user-history summaries and aggregates so collected car/track/session metrics can be inspected for accuracy
@@ -490,8 +490,8 @@ Current default:
 - raw captures default to `%LOCALAPPDATA%/TmrOverlay/captures` but are disabled unless `TelemetryCapture:RawCaptureEnabled=true`; post-session capture synthesis defaults to a 60-second timeout
 - edge-case telemetry is opt-in and writes bounded compact artifacts under `%LOCALAPPDATA%/TmrOverlay/logs/edge-cases`
 - live model-v2 parity is opt-in, samples clean frames at most once per second, keeps up to 600 sampled frames and 200 mismatch summaries, writes `live-model-parity.json` beside raw captures or under `%LOCALAPPDATA%/TmrOverlay/logs/model-parity` when no raw capture exists, and marks a session as a promotion candidate after at least 10,000 frames, mismatch-frame rate at or below 0.1%, and model coverage at or above 98% for observed legacy overlay-input families
-- live overlay diagnostics are opt-in, sample normalized overlay assumptions at most once per second, and write `live-overlay-diagnostics.json` beside raw captures or under `%LOCALAPPDATA%/TmrOverlay/logs/overlay-diagnostics` when no raw capture exists
-- IBT analysis is opt-in for raw captures, can request iRacing telemetry logging with the raw-capture switch, reads candidates from `%USERPROFILE%/Documents/iRacing/telemetry`, waits at most 60 seconds for iRacing to stop writing before skipping, can derive local track-map geometry after successful analysis while the default-on Track Map generation setting remains enabled, ships vetted bundled maps through app assets, and does not copy source `.ibt` files by default
+- live overlay diagnostics are default-on, sample normalized overlay assumptions at most once per second, and write `live-overlay-diagnostics.json` beside raw captures or under `%LOCALAPPDATA%/TmrOverlay/logs/overlay-diagnostics` when no raw capture exists
+- IBT analysis and iRacing telemetry logging default on for raw captures, request iRacing telemetry logging with the raw-capture switch, read candidates from `%USERPROFILE%/Documents/iRacing/telemetry`, wait at most 60 seconds for iRacing to stop writing before skipping, derive local track-map geometry after successful analysis while the default-on Track Map generation setting remains enabled, ship vetted bundled maps through app assets, and do not copy source `.ibt` files by default
 - user history defaults to `%LOCALAPPDATA%/TmrOverlay/history/user`
 - local logs default to `%LOCALAPPDATA%/TmrOverlay/logs`
 - app events default to `%LOCALAPPDATA%/TmrOverlay/logs/events`

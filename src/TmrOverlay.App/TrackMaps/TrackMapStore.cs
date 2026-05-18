@@ -45,7 +45,9 @@ internal sealed class TrackMapStore
         return TryReadBest(track)?.IsCompleteForRuntime == true;
     }
 
-    public TrackMapStoreDiagnosticsSnapshot DiagnosticsSnapshot()
+    public TrackMapStoreDiagnosticsSnapshot DiagnosticsSnapshot(
+        HistoricalTrackIdentity? currentTrack = null,
+        bool includeUserMapsForCurrentTrack = true)
     {
         var userMaps = InspectDirectory(_storageOptions.TrackMapRoot, "user").ToArray();
         var bundledMaps = InspectDirectory(_bundledRoot, "bundled").ToArray();
@@ -57,6 +59,9 @@ internal sealed class TrackMapStore
             BundledMapCount: bundledMaps.Count(item => item.Readable),
             InvalidUserMapCount: userMaps.Count(item => !item.Readable),
             InvalidBundledMapCount: bundledMaps.Count(item => !item.Readable),
+            CurrentTrack: currentTrack is null
+                ? null
+                : CurrentTrackDiagnostics(currentTrack, includeUserMapsForCurrentTrack),
             RecentMaps: userMaps
                 .Concat(bundledMaps)
                 .OrderByDescending(item => item.LastWriteAtUtc)
@@ -103,6 +108,55 @@ internal sealed class TrackMapStore
         }
 
         yield return Path.Combine(_bundledRoot, $"{identity.Key}.json");
+    }
+
+    private TrackMapCurrentTrackDiagnostics CurrentTrackDiagnostics(
+        HistoricalTrackIdentity track,
+        bool includeUserMaps)
+    {
+        var identity = TrackMapIdentity.From(track);
+        var userPath = UserPath(identity);
+        var bundledPath = Path.Combine(_bundledRoot, $"{identity.Key}.json");
+        var candidates = new[]
+            {
+                includeUserMaps
+                    ? new TrackMapLookupCandidate("user", userPath, TryRead(userPath))
+                    : null,
+                new TrackMapLookupCandidate("bundled", bundledPath, TryRead(bundledPath))
+            }
+            .Where(candidate => candidate is not null)
+            .Select(candidate => candidate!)
+            .ToArray();
+        var best = candidates
+            .Where(candidate => candidate.Document is not null)
+            .OrderByDescending(candidate => candidate.Document!.Quality.Confidence)
+            .ThenBy(candidate => candidate.Document!.Quality.MissingBinCount)
+            .ThenByDescending(candidate => candidate.Document!.GeneratedAtUtc)
+            .FirstOrDefault();
+        var document = best?.Document;
+        return new TrackMapCurrentTrackDiagnostics(
+            Identity: identity,
+            IncludeUserMaps: includeUserMaps,
+            UserPath: userPath,
+            BundledPath: bundledPath,
+            UserPathExists: File.Exists(userPath),
+            BundledPathExists: File.Exists(bundledPath),
+            HasReadableMap: document is not null,
+            IsCompleteForRuntime: document?.IsCompleteForRuntime,
+            BestSource: best?.Source,
+            BestFileName: best is null ? null : Path.GetFileName(best.Path),
+            Confidence: document?.Quality.Confidence.ToString(),
+            SchemaVersion: document?.SchemaVersion,
+            GenerationVersion: document?.GenerationVersion,
+            BinCount: document?.Quality.BinCount,
+            MissingBinCount: document?.Quality.MissingBinCount,
+            RacingLinePointCount: document?.RacingLine.Points.Count,
+            SectorCount: document?.Sectors?.Count ?? 0,
+            FallbackReason: document is null
+                ? "no_matching_runtime_map"
+                : document.IsCompleteForRuntime
+                    ? null
+                    : "matching_map_incomplete_for_runtime");
     }
 
     private string UserPath(TrackMapIdentity identity)
@@ -196,7 +250,28 @@ internal sealed record TrackMapStoreDiagnosticsSnapshot(
     int BundledMapCount,
     int InvalidUserMapCount,
     int InvalidBundledMapCount,
+    TrackMapCurrentTrackDiagnostics? CurrentTrack,
     IReadOnlyList<TrackMapDiagnosticsItem> RecentMaps);
+
+internal sealed record TrackMapCurrentTrackDiagnostics(
+    TrackMapIdentity Identity,
+    bool IncludeUserMaps,
+    string UserPath,
+    string BundledPath,
+    bool UserPathExists,
+    bool BundledPathExists,
+    bool HasReadableMap,
+    bool? IsCompleteForRuntime,
+    string? BestSource,
+    string? BestFileName,
+    string? Confidence,
+    int? SchemaVersion,
+    int? GenerationVersion,
+    int? BinCount,
+    int? MissingBinCount,
+    int? RacingLinePointCount,
+    int SectorCount,
+    string? FallbackReason);
 
 internal sealed record TrackMapDiagnosticsItem(
     string Source,
@@ -221,3 +296,8 @@ internal sealed record TrackMapDiagnosticsItem(
     int? RacingLinePointCount,
     int SectorCount,
     bool? HasPitLane);
+
+internal sealed record TrackMapLookupCandidate(
+    string Source,
+    string Path,
+    TrackMapDocument? Document);

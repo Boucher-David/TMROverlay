@@ -55,6 +55,7 @@ internal sealed class DiagnosticsBundleService
     private readonly AppStorageOptions _storageOptions;
     private readonly LiveModelParityOptions _liveModelParityOptions;
     private readonly LiveOverlayDiagnosticsOptions _liveOverlayDiagnosticsOptions;
+    private readonly IbtAnalysisOptions _ibtAnalysisOptions;
     private readonly TelemetryCaptureState _captureState;
     private readonly LocalhostOverlayState _localhostOverlayState;
     private readonly TrackMapStore _trackMapStore;
@@ -80,6 +81,7 @@ internal sealed class DiagnosticsBundleService
         AppStorageOptions storageOptions,
         LiveModelParityOptions liveModelParityOptions,
         LiveOverlayDiagnosticsOptions liveOverlayDiagnosticsOptions,
+        IbtAnalysisOptions ibtAnalysisOptions,
         TelemetryCaptureState captureState,
         LocalhostOverlayState localhostOverlayState,
         TrackMapStore trackMapStore,
@@ -97,6 +99,7 @@ internal sealed class DiagnosticsBundleService
         _storageOptions = storageOptions;
         _liveModelParityOptions = liveModelParityOptions;
         _liveOverlayDiagnosticsOptions = liveOverlayDiagnosticsOptions;
+        _ibtAnalysisOptions = ibtAnalysisOptions;
         _captureState = captureState;
         _localhostOverlayState = localhostOverlayState;
         _trackMapStore = trackMapStore;
@@ -166,7 +169,10 @@ internal sealed class DiagnosticsBundleService
                 AddTextEntry(archive, "metadata/shared-settings-contract.json", JsonSerializer.Serialize(SharedOverlayContract.DiagnosticsSnapshot(), JsonOptions));
                 AddTextEntry(archive, "metadata/release-updates.json", JsonSerializer.Serialize(_releaseUpdates.Snapshot(), JsonOptions));
                 AddTextEntry(archive, "metadata/installer-cleanup.json", JsonSerializer.Serialize(InstallerCleanup.LegacyInstallerCleanupSnapshot(), JsonOptions));
-                AddTextEntry(archive, "metadata/track-maps.json", JsonSerializer.Serialize(_trackMapStore.DiagnosticsSnapshot(), JsonOptions));
+                AddTextEntry(archive, "metadata/evidence-quality.json", JsonSerializer.Serialize(EvidenceQualityDiagnostics(), JsonOptions));
+                AddTextEntry(archive, "metadata/latest-capture-evidence.json", JsonSerializer.Serialize(LatestCaptureEvidenceDiagnostics(), JsonOptions));
+                AddTextEntry(archive, "metadata/ibt-analysis.json", JsonSerializer.Serialize(IbtAnalysisDiagnostics(), JsonOptions));
+                AddTextEntry(archive, "metadata/track-maps.json", JsonSerializer.Serialize(TrackMapDiagnostics(), JsonOptions));
                 AddTextEntry(archive, "metadata/garage-cover.json", JsonSerializer.Serialize(GarageCoverDiagnostics(), JsonOptions));
                 AddTextEntry(archive, "metadata/stream-chat.json", JsonSerializer.Serialize(StreamChatDiagnostics(), JsonOptions));
                 AddTextEntry(archive, "metadata/flags.json", JsonSerializer.Serialize(FlagsDiagnostics(), JsonOptions));
@@ -814,6 +820,422 @@ internal sealed class DiagnosticsBundleService
         return snapshot.CurrentCaptureDirectory ?? snapshot.LastCaptureDirectory;
     }
 
+    private object EvidenceQualityDiagnostics()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var liveSnapshot = _liveTelemetrySource.Snapshot();
+        var lastActiveSnapshot = _liveTelemetrySource.LastActiveSnapshot();
+        var localhost = _localhostOverlayState.Snapshot();
+        var liveOverlays = _liveOverlayWindowCaptureStore.Snapshot();
+        var latestCapture = LatestCaptureDirectory();
+        var warnings = new List<string>();
+
+        if (!liveSnapshot.IsConnected && lastActiveSnapshot is not null)
+        {
+            warnings.Add("current_live_telemetry_disconnected_use_last_active");
+        }
+
+        if (localhost.Enabled && localhost.TotalRequests == 0)
+        {
+            warnings.Add("localhost_enabled_without_route_requests");
+        }
+
+        foreach (var warning in liveOverlays.EvidenceWarnings)
+        {
+            warnings.Add(warning);
+        }
+
+        if (string.IsNullOrWhiteSpace(latestCapture) || !Directory.Exists(latestCapture))
+        {
+            warnings.Add("latest_capture_missing");
+        }
+
+        return new
+        {
+            GeneratedAtUtc = now,
+            Warnings = warnings.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray(),
+            LiveTelemetry = new
+            {
+                CurrentConnected = liveSnapshot.IsConnected,
+                CurrentCollecting = liveSnapshot.IsCollecting,
+                CurrentSourceId = liveSnapshot.SourceId,
+                CurrentSequence = liveSnapshot.Sequence,
+                CurrentLastUpdatedAtUtc = liveSnapshot.LastUpdatedAtUtc,
+                LastActiveAvailable = lastActiveSnapshot is not null,
+                LastActiveSourceId = lastActiveSnapshot?.SourceId,
+                LastActiveSequence = lastActiveSnapshot?.Sequence,
+                LastActiveLastUpdatedAtUtc = lastActiveSnapshot?.LastUpdatedAtUtc,
+                LastActiveAgeSeconds = lastActiveSnapshot?.LastUpdatedAtUtc is { } updatedAt
+                    ? Math.Round(Math.Max(0d, (now - updatedAt).TotalSeconds), 3)
+                    : (double?)null
+            },
+            Localhost = new
+            {
+                localhost.Enabled,
+                localhost.Status,
+                localhost.TotalRequests,
+                localhost.LastRequestAtUtc,
+                localhost.LastRequestRoute,
+                localhost.HasRecentRequests
+            },
+            LiveOverlayWindows = new
+            {
+                liveOverlays.CaptureScreenshotsEnabled,
+                liveOverlays.ScreenshotCoverage,
+                liveOverlays.EvidenceWarnings
+            },
+            LatestCapture = new
+            {
+                CaptureDirectory = latestCapture,
+                Exists = !string.IsNullOrWhiteSpace(latestCapture) && Directory.Exists(latestCapture),
+                CaptureManifestExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, "capture-manifest.json")),
+                CaptureSynthesisExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, "capture-synthesis.json")),
+                LiveOverlayDiagnosticsExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, _liveOverlayDiagnosticsOptions.OutputFileName)),
+                LiveModelParityExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, _liveModelParityOptions.OutputFileName)),
+                IbtStatusExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, IbtAnalysisOutputDirectoryName(), "status.json"))
+            }
+        };
+    }
+
+    private object LatestCaptureEvidenceDiagnostics()
+    {
+        var captureDirectory = LatestCaptureDirectory();
+        if (string.IsNullOrWhiteSpace(captureDirectory) || !Directory.Exists(captureDirectory))
+        {
+            return new
+            {
+                CaptureDirectory = captureDirectory,
+                Exists = false
+            };
+        }
+
+        var manifest = TryReadCaptureManifest(captureDirectory);
+        var latestSessionPath = Path.Combine(captureDirectory, "latest-session.yaml");
+        HistoricalSessionContext? context = null;
+        IReadOnlyList<SessionInfoSetupSignal> setupSignals = [];
+        string? latestSessionReadError = null;
+        if (File.Exists(latestSessionPath))
+        {
+            try
+            {
+                var yaml = File.ReadAllText(latestSessionPath);
+                context = SessionInfoSummaryParser.Parse(yaml);
+                setupSignals = ExtractSetupSignals(yaml);
+            }
+            catch (Exception exception)
+            {
+                latestSessionReadError = exception.GetType().Name;
+            }
+        }
+
+        var synthesisPath = Path.Combine(captureDirectory, "capture-synthesis.json");
+        var synthesis = TryReadJsonObject(synthesisPath);
+        var liveOverlayDiagnosticsPath = Path.Combine(captureDirectory, _liveOverlayDiagnosticsOptions.OutputFileName);
+        var liveOverlayDiagnostics = TryReadJsonObject(liveOverlayDiagnosticsPath);
+
+        return new
+        {
+            CaptureDirectory = captureDirectory,
+            Exists = true,
+            Manifest = manifest is null
+                ? null
+                : new
+                {
+                    manifest.CaptureId,
+                    manifest.CollectionId,
+                    manifest.StartedAtUtc,
+                    manifest.FinishedAtUtc,
+                    manifest.FrameCount,
+                    manifest.DroppedFrameCount,
+                    manifest.SessionInfoSnapshotCount,
+                    manifest.TickRate,
+                    manifest.VariableCount
+                },
+            LatestSession = new
+            {
+                Path = latestSessionPath,
+                Exists = File.Exists(latestSessionPath),
+                ReadError = latestSessionReadError,
+                SessionType = context?.Session.SessionType,
+                SessionName = context?.Session.SessionName,
+                EventType = context?.Session.EventType,
+                CurrentSessionNum = context?.Session.CurrentSessionNum,
+                IsRaceSession = IsRaceSession(context),
+                TrackId = context?.Track.TrackId,
+                TrackName = context?.Track.TrackName,
+                TrackDisplayName = context?.Track.TrackDisplayName,
+                TrackLengthKm = context?.Track.TrackLengthKm,
+                SetupSignalCount = setupSignals.Count,
+                SetupSignals = setupSignals
+            },
+            Synthesis = new
+            {
+                Path = synthesisPath,
+                Exists = File.Exists(synthesisPath),
+                TotalFrameRecords = (int?)synthesis?["frameScan"]?["totalFrameRecords"],
+                SampledFrameCount = (int?)synthesis?["frameScan"]?["sampledFrameCount"],
+                ValidDistanceLaps = (double?)synthesis?["session"]?["metrics"]?["validDistanceLaps"],
+                CompletedValidLaps = (int?)synthesis?["session"]?["metrics"]?["completedValidLaps"]
+            },
+            LiveOverlayDiagnostics = new
+            {
+                Path = liveOverlayDiagnosticsPath,
+                Exists = File.Exists(liveOverlayDiagnosticsPath),
+                FrameCount = (int?)liveOverlayDiagnostics?["totals"]?["frameCount"],
+                PitWindowCount = (int?)liveOverlayDiagnostics?["fuel"]?["pitWindowCount"],
+                PitWindowsWithFuelIncrease = (int?)liveOverlayDiagnostics?["fuel"]?["pitWindowsWithFuelIncrease"],
+                PitWindowsWithBlackFlag = (int?)liveOverlayDiagnostics?["fuel"]?["pitWindowsWithBlackFlag"],
+                NonRaceRaceLapSignalFrames = (int?)liveOverlayDiagnostics?["raceProjection"]?["nonRaceRaceLapSignalFrames"],
+                NonRaceRaceProjectionFrames = (int?)liveOverlayDiagnostics?["raceProjection"]?["nonRaceRaceProjectionFrames"]
+            }
+        };
+    }
+
+    private static CaptureManifest? TryReadCaptureManifest(string captureDirectory)
+    {
+        var path = Path.Combine(captureDirectory, "capture-manifest.json");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<CaptureManifest>(File.ReadAllText(path), JsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static JsonObject? TryReadJsonObject(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonNode.Parse(File.ReadAllText(path)) as JsonObject;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static IReadOnlyList<SessionInfoSetupSignal> ExtractSetupSignals(string yaml)
+    {
+        var signals = new List<SessionInfoSetupSignal>();
+        var stack = new List<(int Indent, string Key)>();
+        foreach (var rawLine in yaml.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r');
+            if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith("#", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var indent = line.TakeWhile(char.IsWhiteSpace).Count();
+            var trimmed = line.Trim();
+            var separator = trimmed.IndexOf(':', StringComparison.Ordinal);
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            var key = trimmed[..separator].Trim();
+            if (string.IsNullOrWhiteSpace(key) || key.StartsWith("-", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            while (stack.Count > 0 && stack[^1].Indent >= indent)
+            {
+                stack.RemoveAt(stack.Count - 1);
+            }
+
+            var value = trimmed[(separator + 1)..].Trim();
+            var path = string.Join(".", stack.Select(item => item.Key).Append(key));
+            if (!string.IsNullOrWhiteSpace(value) && IsSetupSignalPath(path, key))
+            {
+                signals.Add(new SessionInfoSetupSignal(path, key, value));
+                if (signals.Count >= 40)
+                {
+                    break;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                stack.Add((indent, key));
+            }
+        }
+
+        return signals
+            .OrderBy(signal => signal.Path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool IsSetupSignalPath(string path, string key)
+    {
+        if (!path.Contains("CarSetup", StringComparison.OrdinalIgnoreCase)
+            && !path.Contains("Chassis", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return key.Contains("Arb", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("AntiRoll", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("Wing", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(key, "FuelLevel", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRaceSession(HistoricalSessionContext? context)
+    {
+        return ContainsRace(context?.Session.SessionType)
+            || ContainsRace(context?.Session.SessionName)
+            || ContainsRace(context?.Session.EventType);
+    }
+
+    private static bool ContainsRace(string? value)
+    {
+        return value?.IndexOf("race", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private IbtAnalysisDiagnosticsSnapshot IbtAnalysisDiagnostics()
+    {
+        var captureDirectory = LatestCaptureDirectory();
+        var outputDirectoryName = IbtAnalysisOutputDirectoryName();
+        var statusPath = string.IsNullOrWhiteSpace(captureDirectory)
+            ? null
+            : Path.Combine(captureDirectory, outputDirectoryName, "status.json");
+        string? status = null;
+        string? reason = null;
+        string? sourcePath = null;
+        string? statusReadError = null;
+        if (!string.IsNullOrWhiteSpace(statusPath) && File.Exists(statusPath))
+        {
+            try
+            {
+                var node = JsonNode.Parse(File.ReadAllText(statusPath));
+                status = (string?)node?["status"];
+                reason = (string?)node?["reason"];
+                sourcePath = (string?)node?["sourcePath"];
+            }
+            catch (Exception exception)
+            {
+                statusReadError = exception.GetType().Name;
+            }
+        }
+
+        return new IbtAnalysisDiagnosticsSnapshot(
+            Enabled: _ibtAnalysisOptions.Enabled,
+            TelemetryLoggingEnabled: _ibtAnalysisOptions.TelemetryLoggingEnabled,
+            TelemetryRoot: _ibtAnalysisOptions.TelemetryRoot,
+            MaxCandidateAgeMinutes: _ibtAnalysisOptions.MaxCandidateAgeMinutes,
+            MaxCandidateBytes: _ibtAnalysisOptions.MaxCandidateBytes,
+            MaxAnalysisMilliseconds: _ibtAnalysisOptions.MaxAnalysisMilliseconds,
+            MaxSampledRecords: _ibtAnalysisOptions.MaxSampledRecords,
+            MinStableAgeSeconds: _ibtAnalysisOptions.MinStableAgeSeconds,
+            MaxIRacingExitWaitSeconds: _ibtAnalysisOptions.MaxIRacingExitWaitSeconds,
+            MaxCandidateFiles: _ibtAnalysisOptions.MaxCandidateFiles,
+            CopyIbtIntoCaptureDirectory: _ibtAnalysisOptions.CopyIbtIntoCaptureDirectory,
+            OutputDirectoryName: outputDirectoryName,
+            LatestCapture: new LatestCaptureIbtAnalysisDiagnostics(
+                CaptureDirectory: captureDirectory,
+                StatusPath: statusPath,
+                StatusExists: !string.IsNullOrWhiteSpace(statusPath) && File.Exists(statusPath),
+                Status: status,
+                Reason: reason,
+                SourcePath: sourcePath,
+                StatusReadError: statusReadError));
+    }
+
+    private string IbtAnalysisOutputDirectoryName()
+    {
+        return string.IsNullOrWhiteSpace(_ibtAnalysisOptions.OutputDirectoryName)
+            ? "ibt-analysis"
+            : _ibtAnalysisOptions.OutputDirectoryName;
+    }
+
+    private TrackMapStoreDiagnosticsSnapshot TrackMapDiagnostics()
+    {
+        return _trackMapStore.DiagnosticsSnapshot(CurrentTrackIdentity(), TrackMapUserMapLookupEnabled());
+    }
+
+    private HistoricalTrackIdentity? CurrentTrackIdentity()
+    {
+        var latestCaptureContext = LatestCaptureContext();
+        if (HasTrackIdentity(latestCaptureContext?.Track))
+        {
+            return latestCaptureContext!.Track;
+        }
+
+        try
+        {
+            var liveTrack = _liveTelemetrySource.Snapshot().Context.Track;
+            return HasTrackIdentity(liveTrack) ? liveTrack : null;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogDebug(exception, "Failed to read live telemetry track for diagnostics bundle track-map lookup.");
+            return null;
+        }
+    }
+
+    private HistoricalSessionContext? LatestCaptureContext()
+    {
+        var captureDirectory = LatestCaptureDirectory();
+        if (string.IsNullOrWhiteSpace(captureDirectory))
+        {
+            return null;
+        }
+
+        var latestSessionPath = Path.Combine(captureDirectory, "latest-session.yaml");
+        if (!File.Exists(latestSessionPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return SessionInfoSummaryParser.Parse(File.ReadAllText(latestSessionPath));
+        }
+        catch (Exception exception)
+        {
+            _logger.LogDebug(exception, "Failed to parse latest capture session info for diagnostics bundle.");
+            return null;
+        }
+    }
+
+    private bool TrackMapUserMapLookupEnabled()
+    {
+        try
+        {
+            var settings = _settingsStore.Load();
+            var trackMap = settings.Overlays.FirstOrDefault(
+                overlay => string.Equals(overlay.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase));
+            return trackMap?.GetBooleanOption(OverlayOptionKeys.TrackMapBuildFromTelemetry, defaultValue: true) ?? true;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogDebug(exception, "Failed to read track-map user map setting for diagnostics bundle.");
+            return true;
+        }
+    }
+
+    private static bool HasTrackIdentity(HistoricalTrackIdentity? track)
+    {
+        return track is not null
+            && (track.TrackId is not null
+                || !string.IsNullOrWhiteSpace(track.TrackName)
+                || !string.IsNullOrWhiteSpace(track.TrackDisplayName)
+                || !string.IsNullOrWhiteSpace(track.TrackConfigName));
+    }
+
     private void AddLiveOverlayWindows(ZipArchive archive)
     {
         AddTextEntry(
@@ -910,6 +1332,7 @@ internal sealed class DiagnosticsBundleService
         {
             var snapshot = _liveTelemetrySource.Snapshot();
             var now = DateTimeOffset.UtcNow;
+            var lastActiveSnapshot = _liveTelemetrySource.LastActiveSnapshot();
             var availability = OverlayAvailabilityEvaluator.FromSnapshot(snapshot, now);
             var sample = snapshot.LatestSample;
             IReadOnlyList<HistoricalCarProximity> allCars = sample?.AllCars ?? [];
@@ -981,6 +1404,19 @@ internal sealed class DiagnosticsBundleService
             return new
             {
                 GeneratedAtUtc = now,
+                Evidence = new
+                {
+                    CurrentSnapshotConnected = snapshot.IsConnected,
+                    CurrentSnapshotCollecting = snapshot.IsCollecting,
+                    CurrentSnapshotSourceId = snapshot.SourceId,
+                    LastActiveAvailable = lastActiveSnapshot is not null,
+                    LastActiveSourceId = lastActiveSnapshot?.SourceId,
+                    LastActiveSequence = lastActiveSnapshot?.Sequence,
+                    LastActiveLastUpdatedAtUtc = lastActiveSnapshot?.LastUpdatedAtUtc,
+                    LastActiveIsCurrentSnapshot = lastActiveSnapshot is not null && IsSameSnapshot(snapshot, lastActiveSnapshot),
+                    CurrentDisconnectedWithLastActive = !snapshot.IsConnected && lastActiveSnapshot is not null
+                },
+                LastActive = LastActiveLiveTelemetrySummary(lastActiveSnapshot, snapshot, settingsSnapshot, now),
                 Snapshot = new
                 {
                     snapshot.IsConnected,
@@ -1037,6 +1473,8 @@ internal sealed class DiagnosticsBundleService
                 DriverDirectoryModel = DriverDirectoryModelSummary(snapshot.Models.DriverDirectory),
                 RaceProgressModel = RaceProgressModelSummary(snapshot.Models.RaceProgress),
                 RaceProjectionModel = RaceProjectionModelSummary(snapshot.Models.RaceProjection),
+                IRatingProjectionModel = IRatingProjectionModelSummary(snapshot.Models.IRatingProjection),
+                IncidentPressureModel = IncidentPressureModelSummary(snapshot.Models.IncidentPressure),
                 RaceEventsModel = RaceEventsModelSummary(snapshot.Models.RaceEvents),
                 TireCompoundModel = TireCompoundModelSummary(snapshot.Models.TireCompounds),
                 TireConditionModel = TireConditionModelSummary(snapshot.Models.TireCondition),
@@ -1090,6 +1528,83 @@ internal sealed class DiagnosticsBundleService
                 Error = exception.Message
             };
         }
+    }
+
+    private static object? LastActiveLiveTelemetrySummary(
+        LiveTelemetrySnapshot? lastActiveSnapshot,
+        LiveTelemetrySnapshot currentSnapshot,
+        ApplicationSettings settings,
+        DateTimeOffset now)
+    {
+        if (lastActiveSnapshot is null || IsSameSnapshot(lastActiveSnapshot, currentSnapshot))
+        {
+            return null;
+        }
+
+        var availability = OverlayAvailabilityEvaluator.FromSnapshot(lastActiveSnapshot, now);
+        var sample = lastActiveSnapshot.LatestSample;
+        return new
+        {
+            Snapshot = new
+            {
+                lastActiveSnapshot.IsConnected,
+                lastActiveSnapshot.IsCollecting,
+                lastActiveSnapshot.SourceId,
+                lastActiveSnapshot.StartedAtUtc,
+                lastActiveSnapshot.LastUpdatedAtUtc,
+                lastActiveSnapshot.Sequence,
+                TelemetryAgeSeconds = availability.TelemetryAgeSeconds,
+                SessionKind = availability.SessionKind?.ToString(),
+                lastActiveSnapshot.Combo,
+                Session = lastActiveSnapshot.Models.Session
+            },
+            Focus = new
+            {
+                PlayerCarIdx = lastActiveSnapshot.Models.Reference.PlayerCarIdx
+                    ?? lastActiveSnapshot.Models.DriverDirectory.PlayerCarIdx
+                    ?? sample?.PlayerCarIdx,
+                RawCamCarIdx = sample?.RawCamCarIdx,
+                FocusCarIdx = lastActiveSnapshot.Models.Reference.FocusCarIdx
+                    ?? lastActiveSnapshot.Models.DriverDirectory.FocusCarIdx
+                    ?? sample?.FocusCarIdx,
+                LatestSampleFocusCarIdx = sample?.FocusCarIdx,
+                FocusUnavailableReason = lastActiveSnapshot.Models.Reference.FocusUnavailableReason ?? sample?.FocusUnavailableReason,
+                SessionState = sample?.SessionState,
+                SessionStateLabel = SessionStateLabel(sample?.SessionState),
+                Availability = availability
+            },
+            SessionPhase = new
+            {
+                SessionState = sample?.SessionState,
+                Label = SessionStateLabel(sample?.SessionState),
+                IsReplayPlaying = sample?.IsReplayPlaying,
+                SessionTime = sample?.SessionTime
+            },
+            FlagsModel = FlagsModelSummary(lastActiveSnapshot, settings, now),
+            CarFieldCoverage = BuildCarFieldCoverage(sample?.AllCars ?? []),
+            RaceProgressModel = RaceProgressModelSummary(lastActiveSnapshot.Models.RaceProgress),
+            RaceProjectionModel = RaceProjectionModelSummary(lastActiveSnapshot.Models.RaceProjection),
+            IRatingProjectionModel = IRatingProjectionModelSummary(lastActiveSnapshot.Models.IRatingProjection),
+            IncidentPressureModel = IncidentPressureModelSummary(lastActiveSnapshot.Models.IncidentPressure),
+            RaceEventsModel = RaceEventsModelSummary(lastActiveSnapshot.Models.RaceEvents),
+            FuelPitModel = FuelPitModelSummary(lastActiveSnapshot.Models.FuelPit),
+            PitServiceModel = PitServiceModelSummary(lastActiveSnapshot.Models.PitService),
+            SpatialRadarModel = SpatialRadarModelSummary(lastActiveSnapshot.Models.Spatial),
+            TrackMapModel = TrackMapModelSummary(lastActiveSnapshot.Models.TrackMap),
+            LocalContexts = new
+            {
+                FuelCalculator = LiveLocalStrategyContext.ForFuelCalculator(lastActiveSnapshot, now),
+                PitService = LiveLocalStrategyContext.ForPitService(lastActiveSnapshot, now),
+                LocalInCar = LiveLocalStrategyContext.ForRequirement(lastActiveSnapshot, now, OverlayContextRequirement.LocalPlayerInCar)
+            }
+        };
+    }
+
+    private static bool IsSameSnapshot(LiveTelemetrySnapshot first, LiveTelemetrySnapshot second)
+    {
+        return first.Sequence == second.Sequence
+            && string.Equals(first.SourceId, second.SourceId, StringComparison.Ordinal)
+            && first.LastUpdatedAtUtc == second.LastUpdatedAtUtc;
     }
 
     private static object ReferenceModelSummary(LiveReferenceModel reference)
@@ -1216,6 +1731,111 @@ internal sealed class DiagnosticsBundleService
                 .ToArray(),
             MissingSignalCount = projection.MissingSignals.Count,
             projection.MissingSignals
+        };
+    }
+
+    private static object IRatingProjectionModelSummary(LiveIRatingProjectionModel projection)
+    {
+        return new
+        {
+            projection.HasData,
+            projection.Quality,
+            Evidence = EvidenceSummary(projection.Evidence),
+            projection.ProjectionScope,
+            projection.ReferenceCarIdx,
+            projection.ReferenceProjectedChange,
+            projection.ReferenceProjectedIRating,
+            ClassProjectionCount = projection.ClassProjections.Count,
+            RowCount = projection.Rows.Count,
+            ClassProjections = projection.ClassProjections
+                .Select(classProjection => new
+                {
+                    classProjection.CarClass,
+                    classProjection.ClassName,
+                    classProjection.FieldSize,
+                    classProjection.StrengthOfField,
+                    RowCount = classProjection.Rows.Count
+                })
+                .ToArray(),
+            ReferenceRow = projection.ReferenceCarIdx is { } referenceCarIdx
+                ? projection.Rows
+                    .Where(row => row.CarIdx == referenceCarIdx)
+                    .Select(IRatingProjectionRowSummary)
+                    .FirstOrDefault()
+                : null,
+            MissingSignalCount = projection.MissingSignals.Count,
+            projection.MissingSignals,
+            LimitationCount = projection.Limitations.Count,
+            projection.Limitations,
+            EstimationNote = "Live projection is derived from DriverInfo.IRating and current class results. Team races publish a team-entry estimate only; weighted team rating, per-driver lap-share distribution, fair-share eligibility, and zero-lap teammate effects are not applied from live session YAML."
+        };
+    }
+
+    private static object IRatingProjectionRowSummary(LiveIRatingProjectionRow row)
+    {
+        return new
+        {
+            row.CarIdx,
+            row.CarClass,
+            row.ClassPosition,
+            row.CurrentIRating,
+            row.ProjectedChange,
+            row.ProjectedIRating,
+            row.IsPlayer,
+            row.IsFocus
+        };
+    }
+
+    private static object IncidentPressureModelSummary(LiveIncidentPressureModel pressure)
+    {
+        return new
+        {
+            pressure.HasData,
+            pressure.Quality,
+            Evidence = EvidenceSummary(pressure.Evidence),
+            pressure.PlayerCarIdx,
+            pressure.FocusCarIdx,
+            pressure.PlayerCarTeamIncidentCount,
+            pressure.PlayerCarMyIncidentCount,
+            pressure.PlayerCarDriverIncidentCount,
+            pressure.PlayerIncidents,
+            pressure.CurrentFlaggedCarCount,
+            pressure.CurrentOffTrackCarCount,
+            CarCount = pressure.Cars.Count,
+            Cars = pressure.Cars
+                .Take(MaxLiveTelemetryCarExamples)
+                .Select(IncidentPressureCarSummary)
+                .ToArray(),
+            MissingSignalCount = pressure.MissingSignals.Count,
+            pressure.MissingSignals,
+            EstimationNote = "Only local/player incident counters are true counts. Other-car pressure is a low-confidence estimate from per-car flags, current surface state, and observed off-track transitions."
+        };
+    }
+
+    private static object IncidentPressureCarSummary(LiveIncidentPressureCar car)
+    {
+        return new
+        {
+            car.CarIdx,
+            car.DriverName,
+            car.TeamName,
+            car.CarNumber,
+            car.CarClass,
+            car.IsPlayer,
+            car.IsFocus,
+            car.SessionFlags,
+            SessionFlagsHex = FormatRawFlagsHex(car.SessionFlags),
+            car.TrackSurface,
+            car.OnPitRoad,
+            car.HasBlackFlag,
+            car.HasDisqualifyFlag,
+            car.HasRepairFlag,
+            car.HasFurledFlag,
+            car.IsCurrentlyOffTrack,
+            car.ObservedOffTrackTransitions,
+            car.PressureScore,
+            car.PressureLevel,
+            Evidence = EvidenceSummary(car.Evidence)
         };
     }
 
@@ -1719,6 +2339,8 @@ internal sealed class DiagnosticsBundleService
             F2TimePositiveCount = cars.Count(car => car.F2TimeSeconds is > 0d),
             CarClassValidCount = cars.Count(car => car.CarClass is > 0),
             TrackSurfaceValidCount = cars.Count(car => car.TrackSurface is >= 0),
+            SessionFlagsKnownCount = cars.Count(car => car.SessionFlags is not null),
+            SessionFlagsActiveCount = cars.Count(car => car.SessionFlags is not null and not 0),
             OnPitRoadKnownCount = cars.Count(car => car.OnPitRoad is not null),
             FullOfficialTimingCount = cars.Count(car =>
                 HasOfficialPosition(car)
@@ -1747,6 +2369,8 @@ internal sealed class DiagnosticsBundleService
                 car.EstimatedTimeSeconds,
                 car.F2TimeSeconds,
                 car.TrackSurface,
+                car.SessionFlags,
+                SessionFlagsHex = FormatRawFlagsHex(car.SessionFlags),
                 car.OnPitRoad,
                 HasOfficialPosition = HasOfficialPosition(car),
                 HasProgress = HasProgress(car)
@@ -2013,3 +2637,32 @@ internal sealed record DiagnosticsBundleIdentity(
     string CarSlug,
     string TrackSlug,
     string Source);
+
+internal sealed record SessionInfoSetupSignal(
+    string Path,
+    string Key,
+    string Value);
+
+internal sealed record IbtAnalysisDiagnosticsSnapshot(
+    bool Enabled,
+    bool TelemetryLoggingEnabled,
+    string TelemetryRoot,
+    int MaxCandidateAgeMinutes,
+    long MaxCandidateBytes,
+    int MaxAnalysisMilliseconds,
+    int MaxSampledRecords,
+    int MinStableAgeSeconds,
+    int MaxIRacingExitWaitSeconds,
+    int MaxCandidateFiles,
+    bool CopyIbtIntoCaptureDirectory,
+    string OutputDirectoryName,
+    LatestCaptureIbtAnalysisDiagnostics LatestCapture);
+
+internal sealed record LatestCaptureIbtAnalysisDiagnostics(
+    string? CaptureDirectory,
+    string? StatusPath,
+    bool StatusExists,
+    string? Status,
+    string? Reason,
+    string? SourcePath,
+    string? StatusReadError);

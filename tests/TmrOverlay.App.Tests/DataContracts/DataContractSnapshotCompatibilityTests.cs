@@ -111,9 +111,9 @@ public sealed class DataContractSnapshotCompatibilityTests
             Assert.Equal(0.88d, standings.Opacity);
             Assert.False(standings.ShowInQualifying);
             Assert.Equal("primary-screen-default", standings.ScreenId);
-            Assert.False(standings.GetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, defaultValue: true));
+            Assert.False(standings.Options.ContainsKey(OverlayOptionKeys.ChromeHeaderStatusRace));
             Assert.False(standings.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, defaultValue: true));
-            Assert.False(standings.GetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, defaultValue: true));
+            Assert.False(standings.Options.ContainsKey(OverlayOptionKeys.ChromeFooterSourceRace));
             Assert.Equal(0, standings.GetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, 2, 0, 6));
             Assert.Equal(360, standings.GetIntegerOption(OverlayOptionKeys.StandingsColumnDriverWidth, 250, 180, 520));
             Assert.True(standings.GetBooleanOption(OverlayOptionKeys.StandingsClassSeparatorsEnabled, defaultValue: false));

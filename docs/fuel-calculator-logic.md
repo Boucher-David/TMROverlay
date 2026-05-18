@@ -144,7 +144,7 @@ The calculator selects fuel per lap in this order:
 2. Preferred history aggregate mean fuel per lap.
 3. Unavailable.
 
-When measured green-lap fuel per lap is selected, history min/max can still appear as context in the shared source footer when that footer is enabled. `FuelUsePerHour` remains diagnostic and never outranks exact history for V1 strategy.
+When measured green-lap fuel per lap is selected, history min/max remains available as source evidence for diagnostics and manifests, but the current overlay does not render a shared source footer. `FuelUsePerHour` remains diagnostic and never outranks exact history for V1 strategy.
 
 Planned hardening:
 
@@ -328,9 +328,9 @@ Stint row text:
 
 The Windows table always keeps six stint rows visible. Rows with no current content are blank placeholders.
 
-## Source Footer
+## Source Evidence
 
-The shared source footer includes:
+The source evidence includes:
 
 - Selected burn and source.
 - Laps per tank.

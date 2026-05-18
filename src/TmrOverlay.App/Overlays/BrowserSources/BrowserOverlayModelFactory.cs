@@ -367,7 +367,7 @@ internal sealed class BrowserOverlayModelFactory
     {
         var overlay = FindOverlay(settings, FuelCalculatorOverlayDefinition.Definition.Id);
         var effectiveOverlay = OverlayOrDefault(settings, FuelCalculatorOverlayDefinition.Definition);
-        var showFooter = overlay is null || OverlayChromeSettings.ShowFooterSource(overlay, snapshot);
+        const bool showFooter = false;
         var strategyModel = LiveFuelStrategyModel.From(snapshot, now, LookupHistory);
         if (!strategyModel.IsAvailable)
         {
@@ -2309,11 +2309,6 @@ internal sealed class BrowserOverlayModelFactory
         string status)
     {
         var items = new List<BrowserOverlayHeaderItem>();
-        if (overlay is null || OverlayChromeSettings.ShowHeaderStatus(overlay, snapshot))
-        {
-            items.Add(new BrowserOverlayHeaderItem("status", status));
-        }
-
         if (overlay is null || OverlayChromeSettings.ShowHeaderTimeRemaining(overlay, snapshot))
         {
             var timeRemaining = OverlayHeaderTimeFormatter.FormatTimeRemaining(snapshot);
@@ -2328,9 +2323,7 @@ internal sealed class BrowserOverlayModelFactory
 
     private static string SourceText(OverlaySettings? overlay, LiveTelemetrySnapshot snapshot, string source)
     {
-        return overlay is null || OverlayChromeSettings.ShowFooterSource(overlay, snapshot)
-            ? source
-            : string.Empty;
+        return source;
     }
 
     private static bool IsFlagCategoryEnabled(OverlaySettings? overlay, FlagDisplayCategory category)
@@ -2354,9 +2347,7 @@ internal sealed class BrowserOverlayModelFactory
 
     private static string BrowserStatus(IReadOnlyList<BrowserOverlayHeaderItem> headerItems, string fallback)
     {
-        return headerItems.FirstOrDefault(item => string.Equals(item.Key, "status", StringComparison.OrdinalIgnoreCase))?.Value
-            ?? headerItems.FirstOrDefault()?.Value
-            ?? fallback;
+        return fallback;
     }
 
     private static string ClassHeaderDetail(params string[] parts)

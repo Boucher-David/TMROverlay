@@ -59,9 +59,14 @@ public sealed class LiveOverlayWindowCaptureStoreTests
             var manifest = store.Snapshot();
 
             Assert.Equal("live-window-screen-crops", manifest.CaptureKind);
+            Assert.False(manifest.CaptureScreenshotsEnabled);
             Assert.Equal(10, manifest.CaptureCadenceSeconds);
             Assert.Contains("Browser-source fields", manifest.Description);
             Assert.Contains("screenshotAgeSeconds", manifest.ScreenshotFreshnessNote);
+            Assert.Equal(1, manifest.ScreenshotCoverage.TotalOverlayCount);
+            Assert.Equal(0, manifest.ScreenshotCoverage.VisibleOverlayCount);
+            Assert.Equal(0, manifest.ScreenshotCoverage.ScreenshotOverlayCount);
+            Assert.Contains("live_overlay_screenshot_capture_disabled", manifest.EvidenceWarnings);
             var overlay = Assert.Single(manifest.Overlays);
             Assert.Equal(definition.Id, overlay.OverlayId);
             Assert.Equal("native-v2-not-created", overlay.Implementation);
@@ -94,6 +99,69 @@ public sealed class LiveOverlayWindowCaptureStoreTests
             Assert.Contains("\"browserRoute\":\"/overlays/standings\"", json);
             Assert.Contains("\"captureCadenceSeconds\":10", json);
             Assert.DoesNotContain("screenshotSignature", json, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Snapshot_WarnsWhenVisibleOverlayHasNoCurrentPixelEvidence()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-window-capture-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var store = new LiveOverlayWindowCaptureStore(storage);
+            var definition = StandingsOverlayDefinition.Definition;
+            var settings = new OverlaySettings
+            {
+                Id = definition.Id,
+                Enabled = true,
+                X = 44,
+                Y = 55,
+                Width = 580,
+                Height = 340,
+                Scale = 1d,
+                Opacity = 1d
+            };
+
+            store.RecordOverlayWindow(
+                definition,
+                settings,
+                form: null,
+                enabled: true,
+                sessionAllowed: true,
+                settingsPreview: false,
+                desiredVisible: true,
+                actualVisible: true,
+                topMost: true,
+                liveTelemetryAvailable: true,
+                contextRequirement: definition.ContextRequirement.ToString(),
+                contextAvailable: true,
+                contextReason: "not_required",
+                settingsOverlayActive: false,
+                settingsWindowVisible: false,
+                settingsWindowIntersects: false,
+                settingsWindowInputProtected: false,
+                inputTransparent: true,
+                noActivate: true,
+                implementation: "native-v2",
+                nativeFormType: "StandingsForm",
+                nativeRenderer: "winforms",
+                nativeBodyKind: "table");
+
+            var manifest = store.Snapshot();
+
+            Assert.Equal(1, manifest.ScreenshotCoverage.VisibleOverlayCount);
+            Assert.Equal(0, manifest.ScreenshotCoverage.CurrentScreenshotOverlayCount);
+            Assert.Contains("live_overlay_screenshot_capture_disabled", manifest.EvidenceWarnings);
+            Assert.Contains("visible_overlays_without_pixel_evidence", manifest.EvidenceWarnings);
+            Assert.Contains("visible_overlays_without_current_screenshots", manifest.EvidenceWarnings);
         }
         finally
         {

@@ -52,6 +52,7 @@ export const pages = {
     modelRoute: '/api/overlay-model/car-radar'
   }),
   'gap-to-leader': pageDefinition('gap-to-leader', 'Gap To Leader', '/overlays/gap-to-leader', {
+    bodyClass: 'gap-to-leader-page',
     fadeWhenTelemetryUnavailable: true,
     modelRoute: '/api/overlay-model/gap-to-leader'
   }),
@@ -477,8 +478,8 @@ function settingsOverlayDefinition(id, reviewState = null) {
     carsAhead: overlayState.carsAhead ?? 5,
     carsBehind: overlayState.carsBehind ?? 5,
     chrome: overlayState.chrome || {},
-    headerRows: sharedChrome ? ['Status', 'Time remaining'] : [],
-    footerRows: sharedChrome && id !== 'session-weather' ? ['Source'] : [],
+    headerRows: sharedChrome ? ['Time remaining'] : [],
+    footerRows: [],
     contentTitle: settingsContentTitle(id),
     gridColumns: ['session-weather', 'pit-service', 'stream-chat'].includes(id) ? 2 : 1,
     contentRows: settingsContentRows(id, overlayState)
@@ -508,9 +509,9 @@ function settingsOverlaySubtitle(id) {
 
 function settingsBrowserSize(id, overlayState = {}) {
   const base = {
-    standings: [659, 334],
-    relative: [360, 373],
-    'gap-to-leader': [654, 357],
+    standings: [659, 313],
+    relative: [360, 352],
+    'gap-to-leader': [654, 336],
     'track-map': [360, 360],
     'stream-chat': [380, 520],
     'garage-cover': [1280, 720],
@@ -519,7 +520,7 @@ function settingsBrowserSize(id, overlayState = {}) {
     'car-radar': [300, 300],
     flags: [360, 170],
     'session-weather': [464, 496],
-    'pit-service': [530, 743]
+    'pit-service': [530, 722]
   }[id] || [400, 300];
   if (id === 'input-state') {
     base[0] = inputStateBaseWidth(overlayState, base[0]);
@@ -831,7 +832,7 @@ function pageDefinition(id, title, route, options = {}) {
       renderWhenTelemetryUnavailable: options.renderWhenTelemetryUnavailable ?? false,
       fadeWhenTelemetryUnavailable: options.fadeWhenTelemetryUnavailable ?? false,
       refreshIntervalMilliseconds: options.refreshIntervalMilliseconds ?? 250,
-      forwardQueryParameters: options.forwardQueryParameters ?? ['preview', 'frame', 'rel', 'spoofFocus', 'focus', 'pitService', 'streamChatFixture', 'sourceStart', 'sourceEnd', 'frameStart', 'frameEnd', 'replaySpeed']
+      forwardQueryParameters: options.forwardQueryParameters ?? ['preview', 'frame', 'rel', 'spoofFocus', 'focus', 'pitService', 'trackMap', 'fixture', 'streamChatFixture', 'sourceStart', 'sourceEnd', 'frameStart', 'frameEnd', 'replaySpeed']
     }
   };
 }
@@ -911,7 +912,7 @@ function flagsDisplayModel(page, live, settings) {
     status: visibleFlags.length ? visibleFlags.map((flag) => flag.label).join(' + ').toLowerCase() : 'none',
     source: 'source: session flags telemetry',
     bodyKind: 'flags',
-    headerItems: [{ key: 'status', value: visibleFlags.length ? visibleFlags[0].label : 'none' }],
+    headerItems: [],
     flags: {
       flags: visibleFlags,
       isWaiting: false
@@ -1413,10 +1414,6 @@ function validLapTime(value) {
 
 function fuelHeaderItems(status, live, settings) {
   const items = [];
-  if (settings?.showHeaderStatus !== false) {
-    items.push({ key: 'status', value: status });
-  }
-
   if (settings?.showHeaderTimeRemaining !== false) {
     const timeRemaining = formatFuelHeaderTimeRemaining(live?.models?.session);
     if (timeRemaining) {
@@ -1438,7 +1435,7 @@ function formatFuelHeaderTimeRemaining(session) {
 }
 
 function fuelSourceFromSettings(settings, source) {
-  return settings?.showFooterSource === false ? '' : source;
+  return source;
 }
 
 function inputStateDisplayModel(page, live, settings) {
@@ -1446,9 +1443,10 @@ function inputStateDisplayModel(page, live, settings) {
   const unitSystem = normalizeUnitSystem(settings?.unitSystem ?? settings?.general?.unitSystem);
   const inCar = isPlayerInCar(live);
   const isAvailable = inCar && inputs.hasData === true;
-  const brakeAbsActive = inputs.brakeAbsActive === true;
-  const gearText = formatInputGear(inputs.gear);
-  const rpmText = formatInputRpm(inputs.rpm);
+  const displayInputs = isAvailable ? inputs : {};
+  const brakeAbsActive = displayInputs.brakeAbsActive === true;
+  const gearText = formatInputGear(displayInputs.gear);
+  const rpmText = formatInputRpm(displayInputs.rpm);
   const showThrottleTrace = settings.showThrottleTrace ?? true;
   const showBrakeTrace = settings.showBrakeTrace ?? true;
   const showClutchTrace = settings.showClutchTrace ?? true;
@@ -1476,17 +1474,17 @@ function inputStateDisplayModel(page, live, settings) {
     bodyKind: 'inputs',
     inputs: {
       isAvailable,
-      throttle: inputs.throttle,
-      brake: inputs.brake,
-      clutch: inputs.clutch,
-      steeringWheelAngle: inputs.steeringWheelAngle,
-      speedMetersPerSecond: inputs.speedMetersPerSecond,
-      gear: inputs.gear,
-      speedText: formatInputSpeed(inputs.speedMetersPerSecond, unitSystem),
+      throttle: displayInputs.throttle,
+      brake: displayInputs.brake,
+      clutch: displayInputs.clutch,
+      steeringWheelAngle: displayInputs.steeringWheelAngle,
+      speedMetersPerSecond: displayInputs.speedMetersPerSecond,
+      gear: displayInputs.gear,
+      speedText: formatInputSpeed(displayInputs.speedMetersPerSecond, unitSystem),
       gearText,
       rpmText,
-      steeringText: Number.isFinite(inputs.steeringWheelAngle)
-        ? `${Math.round(inputs.steeringWheelAngle * 180 / Math.PI)} deg`
+      steeringText: Number.isFinite(displayInputs.steeringWheelAngle)
+        ? `${Math.round(displayInputs.steeringWheelAngle * 180 / Math.PI)} deg`
         : '--',
       brakeAbsActive,
       showThrottleTrace,
@@ -1507,9 +1505,9 @@ function inputStateDisplayModel(page, live, settings) {
         ? Array.isArray(inputs.trace)
           ? inputs.trace
           : [{
-            throttle: clamp01(inputs.throttle),
-            brake: clamp01(inputs.brake),
-            clutch: clamp01(inputs.clutch),
+            throttle: clamp01(displayInputs.throttle),
+            brake: clamp01(displayInputs.brake),
+            clutch: clamp01(displayInputs.clutch),
             brakeAbsActive
           }]
         : []
@@ -1570,7 +1568,7 @@ function carRadarDisplayModel(page, live, settings = {}) {
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
-    headerItems: [{ key: 'status', value: status }],
+    headerItems: [],
     source: inCar && spatial.hasData !== false ? 'source: spatial telemetry' : 'source: waiting',
     bodyKind: 'car-radar',
     carRadar: {
@@ -2126,11 +2124,14 @@ function rgba(red, green, blue, alpha) {
 
 function trackMapDisplayModel(page, live, settings) {
   const includeUserMaps = settings?.trackMapSettings?.includeUserMaps ?? settings?.includeUserMaps ?? true;
+  const hasGeneratedTrackMap = settings?.trackMap?.racingLine?.points?.length >= 3;
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status: 'live',
-    headerItems: [{ key: 'status', value: 'live' }],
-    source: 'source: live position telemetry',
+    headerItems: [],
+    source: hasGeneratedTrackMap
+      ? 'source: IBT-derived Nurburgring 24h track map | live position telemetry'
+      : 'source: live position telemetry',
     bodyKind: 'track-map',
     trackMap: {
       markers: trackMapMarkers(live),
@@ -2152,7 +2153,7 @@ function garageCoverDisplayModel(page, live, settings) {
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
-    headerItems: [{ key: 'status', value: status }],
+    headerItems: [],
     source: 'source: garage telemetry/settings',
     bodyKind: 'garage-cover',
     garageCover: {
@@ -2198,7 +2199,7 @@ function streamChatDisplayModel(page, live, settings) {
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
-    headerItems: [{ key: 'status', value: status }],
+    headerItems: [],
     source: '',
     bodyKind: 'stream-chat',
     streamChat: {
@@ -2209,9 +2210,7 @@ function streamChatDisplayModel(page, live, settings) {
 }
 
 function browserStatus(headerItems, fallback) {
-  return headerItems.find((item) => String(item.key || '').toLowerCase() === 'status')?.value
-    || headerItems[0]?.value
-    || fallback;
+  return fallback;
 }
 
 function normalizeStreamChatRows(rows) {

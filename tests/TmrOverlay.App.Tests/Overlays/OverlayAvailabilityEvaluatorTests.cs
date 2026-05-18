@@ -100,20 +100,23 @@ public sealed class OverlayAvailabilityEvaluatorTests
     }
 
     [Fact]
-    public void OverlayChromeSettings_HonorsSessionScopedHeaderAndFooterItems()
+    public void OverlayChromeSettings_OnlyHonorsSessionScopedTimeRemainingChrome()
     {
         var settings = new OverlaySettings { Id = "relative" };
-        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusTest, true);
-        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusPractice, false);
-        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingTest, true);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, false);
         var test = SnapshotForSession("Test");
         var practice = SnapshotForSession("Practice");
         var race = SnapshotForSession("Race");
 
         Assert.False(OverlayChromeSettings.ShowHeaderStatus(settings, test));
         Assert.False(OverlayChromeSettings.ShowHeaderStatus(settings, practice));
-        Assert.True(OverlayChromeSettings.ShowFooterSource(settings, practice));
-        Assert.True(OverlayChromeSettings.ShowHeaderStatus(settings, race));
+        Assert.False(OverlayChromeSettings.ShowHeaderStatus(settings, race));
+        Assert.False(OverlayChromeSettings.ShowHeaderTimeRemaining(settings, test));
+        Assert.False(OverlayChromeSettings.ShowHeaderTimeRemaining(settings, practice));
+        Assert.True(OverlayChromeSettings.ShowHeaderTimeRemaining(settings, race));
+        Assert.False(OverlayChromeSettings.ShowFooterSource(settings, test));
+        Assert.False(OverlayChromeSettings.ShowFooterSource(settings, practice));
         Assert.False(OverlayChromeSettings.ShowFooterSource(settings, race));
     }
 

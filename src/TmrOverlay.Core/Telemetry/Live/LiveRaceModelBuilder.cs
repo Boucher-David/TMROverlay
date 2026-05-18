@@ -26,6 +26,7 @@ internal static class LiveRaceModelBuilder
         var reference = BuildReference(sample);
         var timing = BuildTiming(context, sample, leaderGap, drivers, griddedCarIdxs);
         var scoring = BuildScoring(context, sample, drivers, timing);
+        var iRatingProjection = BuildIRatingProjection(context, scoring);
         var spatial = BuildSpatial(context, sample, proximity);
         var coverage = BuildCoverage(context, scoring, timing, spatial, proximity);
         var raceProgress = BuildRaceProgress(context, sample, session);
@@ -39,9 +40,11 @@ internal static class LiveRaceModelBuilder
             TireCondition: BuildTireCondition(sample),
             Coverage: coverage,
             Scoring: scoring,
+            IRatingProjection: iRatingProjection,
             Timing: timing,
             RaceProgress: raceProgress,
             RaceProjection: LiveRaceProjectionModel.Empty,
+            IncidentPressure: LiveIncidentPressureModel.Empty,
             Relative: BuildRelative(context, sample, proximity, timing, reference),
             Spatial: spatial,
             TrackMap: trackMap ?? BuildTrackMap(context),
@@ -856,7 +859,8 @@ internal static class LiveRaceModelBuilder
             LastLapTimeSeconds: ValidPositive(result.LastTimeSeconds),
             BestLapTimeSeconds: ValidPositive(result.FastestTimeSeconds),
             ReasonOut: result.ReasonOut,
-            HasTakenGrid: timingRow?.HasTakenGrid == true);
+            HasTakenGrid: timingRow?.HasTakenGrid == true,
+            IRating: driver?.IRating);
     }
 
     private static LiveScoringClassGroup ToScoringClassGroup(
@@ -878,6 +882,184 @@ internal static class LiveRaceModelBuilder
             IsReferenceClass: referenceClass is not null && group.Key == referenceClass,
             RowCount: rows.Length,
             Rows: rows);
+    }
+
+    private static LiveIRatingProjectionModel BuildIRatingProjection(
+        HistoricalSessionContext context,
+        LiveScoringModel scoring)
+    {
+        var missing = new List<string>();
+        var limitations = new List<string>();
+        var isTeamRace = context.Session.TeamRacing == true;
+        if (!IsRaceSession(context))
+        {
+            missing.Add("race_session_required");
+        }
+
+        if (context.Session.Official != true)
+        {
+            missing.Add("official_race_required");
+        }
+
+        if (isTeamRace)
+        {
+            limitations.Add("team_entry_projection_only");
+            limitations.Add("team_weighted_rating_unavailable");
+            limitations.Add("per_driver_lap_share_distribution_unavailable");
+            limitations.Add("driver_eligibility_not_applied");
+        }
+
+        if (scoring.Source != LiveScoringSource.SessionResults)
+        {
+            missing.Add("session_result_scoring_required");
+        }
+
+        if (missing.Count > 0 || scoring.ClassGroups.Count == 0)
+        {
+            if (scoring.ClassGroups.Count == 0)
+            {
+                missing.Add("scoring_rows_missing");
+            }
+
+            return LiveIRatingProjectionModel.Empty with
+            {
+                ProjectionScope = isTeamRace ? "team-entry" : "solo-driver",
+                ReferenceCarIdx = scoring.ReferenceCarIdx,
+                MissingSignals = missing.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                Limitations = limitations.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            };
+        }
+
+        var classProjections = new List<LiveIRatingProjectionClass>();
+        foreach (var group in scoring.ClassGroups)
+        {
+            var rows = group.Rows
+                .Where(row => row.ClassPosition is > 0)
+                .OrderBy(row => row.ClassPosition!.Value)
+                .ThenBy(row => row.CarIdx)
+                .ToArray();
+            var ratedRows = rows
+                .Where(row => row.IRating is > 0)
+                .ToArray();
+
+            if (rows.Length < 2)
+            {
+                missing.Add($"class_{group.CarClass ?? -1}_needs_multiple_rows");
+                continue;
+            }
+
+            if (ratedRows.Length != rows.Length)
+            {
+                missing.Add($"class_{group.CarClass ?? -1}_rating_missing");
+                continue;
+            }
+
+            var projectedRows = ProjectIRatingRows(group, ratedRows);
+            classProjections.Add(new LiveIRatingProjectionClass(
+                CarClass: group.CarClass,
+                ClassName: group.ClassName,
+                FieldSize: ratedRows.Length,
+                StrengthOfField: CalculateStrengthOfField(ratedRows.Select(row => row.IRating!.Value)),
+                Rows: projectedRows));
+        }
+
+        var allRows = classProjections
+            .SelectMany(group => group.Rows)
+            .OrderBy(row => row.CarClass ?? int.MaxValue)
+            .ThenBy(row => row.ClassPosition)
+            .ThenBy(row => row.CarIdx)
+            .ToArray();
+        var referenceRow = scoring.ReferenceCarIdx is { } referenceCarIdx
+            ? allRows.FirstOrDefault(row => row.CarIdx == referenceCarIdx)
+            : null;
+
+        return new LiveIRatingProjectionModel(
+            HasData: classProjections.Count > 0,
+            Quality: classProjections.Count > 0 ? LiveModelQuality.Inferred : LiveModelQuality.Unavailable,
+            Evidence: classProjections.Count > 0
+                ? LiveSignalEvidence.Inferred("DriverInfo.IRating+ResultsPositions")
+                : LiveSignalEvidence.Unavailable("iRating projection", "rated_class_results_missing"),
+            ProjectionScope: isTeamRace ? "team-entry" : "solo-driver",
+            ReferenceCarIdx: scoring.ReferenceCarIdx,
+            ReferenceProjectedChange: referenceRow?.ProjectedChange,
+            ReferenceProjectedIRating: referenceRow?.ProjectedIRating,
+            ClassProjections: classProjections,
+            Rows: allRows,
+            MissingSignals: missing.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            Limitations: limitations.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
+    private static IReadOnlyList<LiveIRatingProjectionRow> ProjectIRatingRows(
+        LiveScoringClassGroup group,
+        IReadOnlyList<LiveScoringRow> rows)
+    {
+        var fieldSize = rows.Count;
+        var projected = new List<LiveIRatingProjectionRow>(fieldSize);
+        for (var index = 0; index < fieldSize; index++)
+        {
+            var row = rows[index];
+            var currentIRating = row.IRating!.Value;
+            var expectedScore = ExpectedScore(currentIRating, rows.Select(candidate => candidate.IRating!.Value));
+            var classPosition = row.ClassPosition!.Value;
+            var correction = (fieldSize / 2d - classPosition) / 100d;
+            var unroundedChange = (fieldSize - classPosition - expectedScore - correction) * 200d / fieldSize;
+            var projectedChange = (int)Math.Round(unroundedChange, MidpointRounding.AwayFromZero);
+            projected.Add(new LiveIRatingProjectionRow(
+                CarIdx: row.CarIdx,
+                CarClass: group.CarClass,
+                ClassPosition: classPosition,
+                CurrentIRating: currentIRating,
+                ExpectedScore: expectedScore,
+                UnroundedChange: unroundedChange,
+                ProjectedChange: projectedChange,
+                ProjectedIRating: Math.Max(0, currentIRating + projectedChange),
+                IsPlayer: row.IsPlayer,
+                IsFocus: row.IsFocus));
+        }
+
+        return projected;
+    }
+
+    private static double ExpectedScore(int rating, IEnumerable<int> fieldRatings)
+    {
+        return fieldRatings.Sum(opponentRating => ExpectedWinProbability(rating, opponentRating)) - 0.5d;
+    }
+
+    private static int CalculateStrengthOfField(IEnumerable<int> ratings)
+    {
+        var ratingArray = ratings.Where(rating => rating > 0).ToArray();
+        if (ratingArray.Length == 0)
+        {
+            return 0;
+        }
+
+        var scale = IRatingScale();
+        var sum = ratingArray.Sum(rating => Math.Exp(-rating / scale));
+        return sum > 0d
+            ? (int)Math.Round(scale * Math.Log(ratingArray.Length / sum), MidpointRounding.AwayFromZero)
+            : 0;
+    }
+
+    private static double ExpectedWinProbability(int rating, int opponentRating)
+    {
+        if (rating == opponentRating)
+        {
+            return 0.5d;
+        }
+
+        var scale = IRatingScale();
+        var ratingFactor = Math.Exp(-rating / scale);
+        var opponentFactor = Math.Exp(-opponentRating / scale);
+        var numerator = (1d - ratingFactor) * opponentFactor;
+        var denominator = (1d - opponentFactor) * ratingFactor + numerator;
+        return denominator > 0d && double.IsFinite(denominator)
+            ? numerator / denominator
+            : 0.5d;
+    }
+
+    private static double IRatingScale()
+    {
+        return 1600d / Math.Log(2d);
     }
 
     private static int? NormalizeResultPosition(int? rawPosition, bool zeroBased)
@@ -2995,7 +3177,8 @@ internal static class LiveRaceModelBuilder
             CarClassId: driver.CarClassId,
             CarClassName: carClassName,
             CarClassColorHex: driver.CarClassColorHex,
-            IsSpectator: driver.IsSpectator);
+            IsSpectator: driver.IsSpectator,
+            IRating: driver.IRating);
     }
 
     private static int? FocusCarIdx(HistoricalTelemetrySample sample)

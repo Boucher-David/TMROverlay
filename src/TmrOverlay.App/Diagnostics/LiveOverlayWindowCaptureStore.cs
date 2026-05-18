@@ -167,22 +167,26 @@ internal sealed class LiveOverlayWindowCaptureStore
         lock (_sync)
         {
             var generatedAtUtc = DateTimeOffset.UtcNow;
+            var overlays = _states
+                .Values
+                .OrderBy(state => state.OverlayId, StringComparer.OrdinalIgnoreCase)
+                .Select(state => state with
+                {
+                    ScreenshotAgeSeconds = state.ScreenshotCapturedAtUtc is { } capturedAtUtc
+                        ? Math.Round(Math.Max(0d, (generatedAtUtc - capturedAtUtc).TotalSeconds), 3)
+                        : null
+                })
+                .ToArray();
             return new LiveOverlayWindowCaptureManifest(
                 GeneratedAtUtc: generatedAtUtc,
                 CaptureKind: "live-window-screen-crops",
+                CaptureScreenshotsEnabled: _options.CaptureScreenshots,
                 CaptureCadenceSeconds: CaptureCadenceSeconds,
                 Description: "Expected live overlay state plus the latest visible Windows overlay crop captured from the real desktop when possible. A form-render-fallback image is the overlay's own rendered pixels, not a desktop capture. Browser-source fields show the matching localhost route and recommended source size for native/browser parity checks.",
                 ScreenshotFreshnessNote: "screenshotRepresentsCurrentState means the latest PNG still matches the current native window bounds, opacity, native renderer/body identity, visibility, and settings-overlay capture mode. Live telemetry content can still be older than the manifest; use screenshotAgeSeconds for that.",
-                Overlays: _states
-                    .Values
-                    .OrderBy(state => state.OverlayId, StringComparer.OrdinalIgnoreCase)
-                    .Select(state => state with
-                    {
-                        ScreenshotAgeSeconds = state.ScreenshotCapturedAtUtc is { } capturedAtUtc
-                            ? Math.Round(Math.Max(0d, (generatedAtUtc - capturedAtUtc).TotalSeconds), 3)
-                            : null
-                    })
-                    .ToArray());
+                ScreenshotCoverage: BuildScreenshotCoverage(overlays),
+                EvidenceWarnings: BuildEvidenceWarnings(overlays),
+                Overlays: overlays);
         }
     }
 
@@ -379,6 +383,41 @@ internal sealed class LiveOverlayWindowCaptureStore
         return new string(value.Select(character => invalid.Contains(character) ? '-' : character).ToArray());
     }
 
+    private LiveOverlayWindowScreenshotCoverage BuildScreenshotCoverage(IReadOnlyList<LiveOverlayWindowState> overlays)
+    {
+        return new LiveOverlayWindowScreenshotCoverage(
+            TotalOverlayCount: overlays.Count,
+            VisibleOverlayCount: overlays.Count(overlay => overlay.ActualVisible),
+            ScreenshotOverlayCount: overlays.Count(overlay => !string.IsNullOrWhiteSpace(overlay.ScreenshotPath)),
+            CurrentScreenshotOverlayCount: overlays.Count(overlay => overlay.ScreenshotRepresentsCurrentState));
+    }
+
+    private IReadOnlyList<string> BuildEvidenceWarnings(IReadOnlyList<LiveOverlayWindowState> overlays)
+    {
+        var warnings = new List<string>();
+        if (!_options.CaptureScreenshots)
+        {
+            warnings.Add("live_overlay_screenshot_capture_disabled");
+        }
+
+        if (overlays.Any(overlay => overlay.ActualVisible && string.IsNullOrWhiteSpace(overlay.ScreenshotPath)))
+        {
+            warnings.Add("visible_overlays_without_pixel_evidence");
+        }
+
+        if (overlays.Any(overlay => overlay.ActualVisible && !overlay.ScreenshotRepresentsCurrentState))
+        {
+            warnings.Add("visible_overlays_without_current_screenshots");
+        }
+
+        if (overlays.Any(overlay => overlay.InputInterceptRisk))
+        {
+            warnings.Add("input_intercept_risk_present");
+        }
+
+        return warnings;
+    }
+
     private sealed record LiveOverlayCaptureAttempt(
         string? Path,
         string? Source,
@@ -393,10 +432,19 @@ internal sealed class LiveOverlayWindowCaptureStore
 internal sealed record LiveOverlayWindowCaptureManifest(
     DateTimeOffset GeneratedAtUtc,
     string CaptureKind,
+    bool CaptureScreenshotsEnabled,
     int CaptureCadenceSeconds,
     string Description,
     string ScreenshotFreshnessNote,
+    LiveOverlayWindowScreenshotCoverage ScreenshotCoverage,
+    IReadOnlyList<string> EvidenceWarnings,
     IReadOnlyList<LiveOverlayWindowState> Overlays);
+
+internal sealed record LiveOverlayWindowScreenshotCoverage(
+    int TotalOverlayCount,
+    int VisibleOverlayCount,
+    int ScreenshotOverlayCount,
+    int CurrentScreenshotOverlayCount);
 
 internal sealed record LiveOverlayWindowState(
     string OverlayId,

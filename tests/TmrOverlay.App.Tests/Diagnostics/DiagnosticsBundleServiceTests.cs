@@ -660,6 +660,12 @@ public sealed class DiagnosticsBundleServiceTests
                 storage,
                 new LiveModelParityOptions(),
                 new LiveOverlayDiagnosticsOptions(),
+                new IbtAnalysisOptions
+                {
+                    Enabled = true,
+                    TelemetryLoggingEnabled = true,
+                    TelemetryRoot = Path.Combine(root, "ibt")
+                },
                 state,
                 localhostState,
                 trackMapStore,
@@ -691,6 +697,9 @@ public sealed class DiagnosticsBundleServiceTests
             Assert.Contains("metadata/shared-settings-contract.json", entryNames);
             Assert.Contains("metadata/release-updates.json", entryNames);
             Assert.Contains("metadata/installer-cleanup.json", entryNames);
+            Assert.Contains("metadata/evidence-quality.json", entryNames);
+            Assert.Contains("metadata/latest-capture-evidence.json", entryNames);
+            Assert.Contains("metadata/ibt-analysis.json", entryNames);
             Assert.Contains("metadata/track-maps.json", entryNames);
             Assert.Contains("metadata/garage-cover.json", entryNames);
             Assert.Contains("metadata/stream-chat.json", entryNames);
@@ -752,6 +761,37 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.True(((bool?)overlay?["noActivate"]) == true);
                 Assert.False(((bool?)overlay?["inputInterceptRisk"]) ?? true);
                 Assert.Equal("stream-chat", (string?)overlay?["nativeBodyKind"]);
+                Assert.True(((bool?)liveOverlaysJson?["captureScreenshotsEnabled"]) == false);
+                Assert.Equal(1, ((int?)liveOverlaysJson?["screenshotCoverage"]?["visibleOverlayCount"]) ?? -1);
+                Assert.Equal(0, ((int?)liveOverlaysJson?["screenshotCoverage"]?["screenshotOverlayCount"]) ?? -1);
+                var evidenceWarnings = Assert.IsType<JsonArray>(liveOverlaysJson?["evidenceWarnings"]);
+                Assert.Contains(evidenceWarnings, warning =>
+                    string.Equals((string?)warning, "live_overlay_screenshot_capture_disabled", StringComparison.Ordinal));
+                Assert.Contains(evidenceWarnings, warning =>
+                    string.Equals((string?)warning, "visible_overlays_without_pixel_evidence", StringComparison.Ordinal));
+            }
+
+            var evidenceQualityEntry = archive.GetEntry("metadata/evidence-quality.json");
+            Assert.NotNull(evidenceQualityEntry);
+            using (var evidenceQualityReader = new StreamReader(evidenceQualityEntry.Open()))
+            {
+                var evidenceQualityJson = JsonNode.Parse(evidenceQualityReader.ReadToEnd());
+                var warnings = Assert.IsType<JsonArray>(evidenceQualityJson?["warnings"]);
+                Assert.Contains(warnings, warning =>
+                    string.Equals((string?)warning, "live_overlay_screenshot_capture_disabled", StringComparison.Ordinal));
+                Assert.True(((bool?)evidenceQualityJson?["liveTelemetry"]?["currentConnected"]) == true);
+                Assert.True(((bool?)evidenceQualityJson?["latestCapture"]?["captureSynthesisExists"]) == true);
+            }
+
+            var latestCaptureEvidenceEntry = archive.GetEntry("metadata/latest-capture-evidence.json");
+            Assert.NotNull(latestCaptureEvidenceEntry);
+            using (var latestCaptureEvidenceReader = new StreamReader(latestCaptureEvidenceEntry.Open()))
+            {
+                var latestCaptureEvidenceJson = JsonNode.Parse(latestCaptureEvidenceReader.ReadToEnd());
+                Assert.True(((bool?)latestCaptureEvidenceJson?["exists"]) == true);
+                Assert.Equal("Race", (string?)latestCaptureEvidenceJson?["latestSession"]?["sessionType"]);
+                Assert.True(((bool?)latestCaptureEvidenceJson?["latestSession"]?["isRaceSession"]) == true);
+                Assert.True(((bool?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["exists"]) == true);
             }
 
             var windowZOrderEntry = archive.GetEntry("metadata/window-z-order.json");
@@ -853,6 +893,21 @@ public sealed class DiagnosticsBundleServiceTests
             {
                 var trackMapsJson = JsonNode.Parse(trackMapsReader.ReadToEnd());
                 Assert.Equal(storage.TrackMapRoot, (string?)trackMapsJson?["userRoot"]);
+                Assert.Equal("Gesamtstrecke VLN", (string?)trackMapsJson?["currentTrack"]?["identity"]?["trackDisplayName"]);
+                Assert.Equal("no_matching_runtime_map", (string?)trackMapsJson?["currentTrack"]?["fallbackReason"]);
+                Assert.True(((bool?)trackMapsJson?["currentTrack"]?["includeUserMaps"]) == true);
+            }
+
+            var ibtAnalysisEntry = archive.GetEntry("metadata/ibt-analysis.json");
+            Assert.NotNull(ibtAnalysisEntry);
+            using (var ibtAnalysisReader = new StreamReader(ibtAnalysisEntry.Open()))
+            {
+                var ibtAnalysisJson = JsonNode.Parse(ibtAnalysisReader.ReadToEnd());
+                Assert.True(((bool?)ibtAnalysisJson?["enabled"]) == true);
+                Assert.True(((bool?)ibtAnalysisJson?["telemetryLoggingEnabled"]) == true);
+                Assert.Equal(Path.Combine(root, "ibt"), (string?)ibtAnalysisJson?["telemetryRoot"]);
+                Assert.True(((bool?)ibtAnalysisJson?["latestCapture"]?["statusExists"]) == true);
+                Assert.Equal("skipped", (string?)ibtAnalysisJson?["latestCapture"]?["status"]);
             }
 
             var liveTelemetrySynthesisEntry = archive.GetEntry("metadata/live-telemetry-synthesis.json");
@@ -1043,6 +1098,12 @@ public sealed class DiagnosticsBundleServiceTests
                 storage,
                 new LiveModelParityOptions(),
                 new LiveOverlayDiagnosticsOptions(),
+                new IbtAnalysisOptions
+                {
+                    Enabled = true,
+                    TelemetryLoggingEnabled = true,
+                    TelemetryRoot = Path.Combine(root, "ibt")
+                },
                 state,
                 localhostState,
                 trackMapStore,

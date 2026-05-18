@@ -48,19 +48,21 @@ public sealed class DataContractSnapshotOverlayMappingTests
 
         var standings = Build(factory, "standings", live, settings, now).Model;
         Assert.Equal(0.88d, standings.RootOpacity);
-        Assert.Equal(string.Empty, standings.Source);
+        Assert.StartsWith("source:", standings.Source, StringComparison.Ordinal);
         Assert.DoesNotContain(standings.HeaderItems, item => item.Key == "status");
         Assert.Contains(standings.HeaderItems, item => item.Key == "timeRemaining" && item.Value == "00:10:00");
         Assert.Contains(standings.Columns, column => column.DataKey == OverlayContentColumnSettings.DataDriver && column.Width == 360);
         Assert.DoesNotContain(standings.Columns, column => column.DataKey == OverlayContentColumnSettings.DataGap);
 
         var relative = Build(factory, "relative", live, settings, now).Model;
-        Assert.Equal(string.Empty, relative.Source);
+        Assert.StartsWith("source:", relative.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain(relative.HeaderItems, item => item.Key == "status");
         Assert.DoesNotContain(relative.Columns, column => column.DataKey == OverlayContentColumnSettings.DataPit);
         Assert.Equal(7, relative.Rows.Count);
 
         var fuel = Build(factory, "fuel-calculator", live, settings, now).Model;
-        Assert.Equal(string.Empty, fuel.Source);
+        Assert.NotEqual(string.Empty, fuel.Source);
+        Assert.DoesNotContain(fuel.HeaderItems, item => item.Key == "status");
         Assert.Contains(MetricRows(fuel), row => row.Label == "Plan");
 
         var sessionWeather = Build(factory, "session-weather", live, settings, now).Model;
@@ -73,7 +75,8 @@ public sealed class DataContractSnapshotOverlayMappingTests
         Assert.Contains(MetricRows(sessionWeather), row => HasRowSegment(row, "Wind", "Facing"));
 
         var pitService = Build(factory, "pit-service", live, settings, now).Model;
-        Assert.Equal(string.Empty, pitService.Source);
+        Assert.StartsWith("source:", pitService.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain(pitService.HeaderItems, item => item.Key == "status");
         Assert.Contains(MetricRows(pitService), row => HasSegment(row, "Available", "1"));
         Assert.Contains(GridRows(pitService), row => row.Label == "Pressure");
 
@@ -90,7 +93,8 @@ public sealed class DataContractSnapshotOverlayMappingTests
 
         var gap = Build(factory, "gap-to-leader", live, settings, now).Model;
         Assert.True(gap.ShouldRender);
-        Assert.Equal(string.Empty, gap.Source);
+        Assert.StartsWith("source:", gap.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain(gap.HeaderItems, item => item.Key == "status");
         Assert.NotNull(gap.Graph);
 
         var trackMap = Build(factory, "track-map", live, settings, now).Model;

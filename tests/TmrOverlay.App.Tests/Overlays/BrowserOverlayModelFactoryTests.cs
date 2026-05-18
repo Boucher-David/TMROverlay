@@ -29,7 +29,29 @@ public sealed class BrowserOverlayModelFactoryTests
     }
 
     [Fact]
-    public void FuelCalculatorModel_HonorsSharedFooterSourceSetting()
+    public void FuelCalculatorModel_KeepsSourceEvidenceWhenFooterChromeIsRemoved()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        var built = factory.TryBuild("fuel-calculator", LiveTelemetrySnapshot.Empty, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.Equal("source: waiting", response.Model.Source);
+        Assert.DoesNotContain(response.Model.HeaderItems, item => item.Key == "status");
+        Assert.Empty(response.Model.Metrics);
+        Assert.Equal("waiting for iRacing", response.Model.Status);
+        Assert.False(response.Model.ShouldRender);
+    }
+
+    [Fact]
+    public void FuelCalculatorModel_AllSharedChromeOffLeavesNoHeaderItemsOrRenderedFooterContract()
     {
         var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
         {
@@ -39,19 +61,32 @@ public sealed class BrowserOverlayModelFactoryTests
         }));
         var settings = new ApplicationSettings();
         var overlay = settings.GetOrAddOverlay("fuel-calculator", 600, 340);
-        overlay.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceTest, false);
-        overlay.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourcePractice, false);
-        overlay.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceQualifying, false);
-        overlay.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, false);
+        overlay.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingTest, false);
+        overlay.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, false);
+        overlay.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying, false);
+        overlay.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingRace, false);
+        overlay.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, true);
+        overlay.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, true);
         var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            Models = LiveRaceModels.Empty with
+            {
+                Session = LiveSessionModel.Empty with
+                {
+                    HasData = true,
+                    SessionType = "Race",
+                    SessionTimeRemainSeconds = 238d
+                }
+            }
+        };
 
-        var built = factory.TryBuild("fuel-calculator", LiveTelemetrySnapshot.Empty, settings, now, out var response);
+        var built = factory.TryBuild("fuel-calculator", snapshot, settings, now, out var response);
 
         Assert.True(built);
-        Assert.Equal(string.Empty, response.Model.Source);
-        Assert.Empty(response.Model.Metrics);
+        Assert.Empty(response.Model.HeaderItems);
+        Assert.Equal("source: waiting", response.Model.Source);
         Assert.Equal("waiting for iRacing", response.Model.Status);
-        Assert.False(response.Model.ShouldRender);
     }
 
     [Fact]
@@ -64,8 +99,6 @@ public sealed class BrowserOverlayModelFactoryTests
             ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
         }));
         var settings = new ApplicationSettings();
-        var overlay = settings.GetOrAddOverlay("session-weather", 480, 520);
-        overlay.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, true);
         var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
         var snapshot = LiveTelemetrySnapshot.Empty with
         {
@@ -103,6 +136,7 @@ public sealed class BrowserOverlayModelFactoryTests
 
         Assert.True(built);
         Assert.Equal(string.Empty, response.Model.Source);
+        Assert.DoesNotContain(response.Model.HeaderItems, item => item.Key == "status");
         Assert.Contains(response.Model.Metrics, row => row.Label == "Session");
         Assert.DoesNotContain(response.Model.Metrics, row => row.Label == "Source");
     }
@@ -320,7 +354,7 @@ public sealed class BrowserOverlayModelFactoryTests
         var built = factory.TryBuild("pit-service", snapshot, new ApplicationSettings(), now, out var response);
 
         Assert.True(built);
-        Assert.Equal(string.Empty, response.Model.HeaderItems.First(item => item.Key == "status").Value);
+        Assert.DoesNotContain(response.Model.HeaderItems, item => item.Key == "status");
         Assert.Equal("00:03:58", response.Model.HeaderItems.First(item => item.Key == "timeRemaining").Value);
         Assert.DoesNotContain(response.Model.Metrics, row => row.Label == "Location");
         Assert.DoesNotContain(response.Model.Metrics, row => row.Label == "Service");

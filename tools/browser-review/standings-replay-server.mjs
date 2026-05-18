@@ -23,26 +23,17 @@ const replayWindowFrameStart = optionalInteger(process.env.TMR_STANDINGS_REPLAY_
 const replayWindowFrameEnd = optionalInteger(process.env.TMR_STANDINGS_REPLAY_FRAME_END);
 const relativeCarsEachSide = clampInteger(process.env.TMR_RELATIVE_CARS_EACH_SIDE, 3, 0, 8);
 const relativeShowPitColumn = parseBoolean(process.env.TMR_RELATIVE_SHOW_PIT_COLUMN, false);
-const relativeShowHeaderStatus = parseBoolean(process.env.TMR_RELATIVE_SHOW_HEADER_STATUS, true);
 const relativeShowHeaderTimeRemaining = parseBoolean(process.env.TMR_RELATIVE_SHOW_TIME_REMAINING, true);
-const relativeShowFooterSource = parseBoolean(process.env.TMR_RELATIVE_SHOW_FOOTER_SOURCE, true);
 const gapMissingSegmentThresholdSeconds = 10;
 const gapGraphTrendWindowSeconds = positiveNumber(process.env.TMR_GAP_GRAPH_WINDOW_SECONDS, 4 * 60 * 60);
 const gapGraphMaxContexts = clampInteger(process.env.TMR_GAP_GRAPH_MAX_CONTEXTS, 36000, 120, 60000);
 const gapCarsAhead = clampInteger(process.env.TMR_GAP_CARS_AHEAD, 5, 0, 12);
 const gapCarsBehind = clampInteger(process.env.TMR_GAP_CARS_BEHIND, 5, 0, 12);
-const gapShowHeaderStatus = parseBoolean(process.env.TMR_GAP_SHOW_HEADER_STATUS, true);
 const gapShowHeaderTimeRemaining = parseBoolean(process.env.TMR_GAP_SHOW_TIME_REMAINING, true);
-const gapShowFooterSource = parseBoolean(process.env.TMR_GAP_SHOW_FOOTER_SOURCE, true);
-const fuelShowHeaderStatus = parseBoolean(process.env.TMR_FUEL_SHOW_HEADER_STATUS, true);
 const fuelShowHeaderTimeRemaining = parseBoolean(process.env.TMR_FUEL_SHOW_TIME_REMAINING, true);
-const fuelShowFooterSource = parseBoolean(process.env.TMR_FUEL_SHOW_FOOTER_SOURCE, true);
-const sessionWeatherShowHeaderStatus = parseBoolean(process.env.TMR_SESSION_WEATHER_SHOW_HEADER_STATUS, true);
 const sessionWeatherShowHeaderTimeRemaining = parseBoolean(process.env.TMR_SESSION_WEATHER_SHOW_TIME_REMAINING, true);
 const sessionWeatherDisabledContent = csvSet(process.env.TMR_SESSION_WEATHER_DISABLED_CELLS || '');
-const pitServiceShowHeaderStatus = parseBoolean(process.env.TMR_PIT_SERVICE_SHOW_HEADER_STATUS, true);
 const pitServiceShowHeaderTimeRemaining = parseBoolean(process.env.TMR_PIT_SERVICE_SHOW_TIME_REMAINING, true);
-const pitServiceShowFooterSource = parseBoolean(process.env.TMR_PIT_SERVICE_SHOW_FOOTER_SOURCE, true);
 const pitServiceDisabledContent = csvSet(process.env.TMR_PIT_SERVICE_DISABLED_CELLS || '');
 const streamChatProvider = normalizeStreamChatProvider(process.env.TMR_STREAM_CHAT_PROVIDER || process.env.TMR_REVIEW_STREAM_CHAT_PROVIDER || 'live-review');
 const streamChatTwitchChannel = normalizeTwitchChannel(process.env.TMR_STREAM_CHAT_TWITCH_CHANNEL || process.env.TMR_STREAM_CHAT_CHANNEL || 'techmatesracing');
@@ -2151,7 +2142,6 @@ function capturePitServiceModel(models, fallbackStatus, headerItems, searchParam
   const status = pitStatus(pit, release) || fallbackStatus || 'pit ready';
   const effectiveHeaderItems = spoofAllRows
       ? [
-        { key: 'status', value: '' },
         { key: 'timeRemaining', value: formatHeaderSessionTimeRemaining(pitModels.session) || '' }
       ]
     : headerItems;
@@ -2519,6 +2509,7 @@ function captureInputStateModel(models, fallbackStatus, index, searchParams = nu
 }
 
 function inputStateModel(status, headerItems, source, isAvailable, inputs, trace = null) {
+  const displayInputs = isAvailable && inputs ? inputs : {};
   const hasGraph = inputStateReviewSettings.showThrottleTrace
     || inputStateReviewSettings.showBrakeTrace
     || inputStateReviewSettings.showClutchTrace;
@@ -2542,16 +2533,16 @@ function inputStateModel(status, headerItems, source, isAvailable, inputs, trace
     headerItems,
     inputs: {
       isAvailable,
-      throttle: inputs.throttle,
-      brake: inputs.brake,
-      clutch: inputs.clutch,
-      steeringWheelAngle: inputs.steeringWheelAngle,
-      speedMetersPerSecond: inputs.speedMetersPerSecond,
-      gear: inputs.gear,
-      speedText: formatSpeed(inputs.speedMetersPerSecond),
-      gearText: formatGear(inputs.gear),
-      steeringText: formatSteering(inputs.steeringWheelAngle),
-      brakeAbsActive: inputs.brakeAbsActive === true,
+      throttle: displayInputs.throttle,
+      brake: displayInputs.brake,
+      clutch: displayInputs.clutch,
+      steeringWheelAngle: displayInputs.steeringWheelAngle,
+      speedMetersPerSecond: displayInputs.speedMetersPerSecond,
+      gear: displayInputs.gear,
+      speedText: formatSpeed(displayInputs.speedMetersPerSecond),
+      gearText: formatGear(displayInputs.gear),
+      steeringText: formatSteering(displayInputs.steeringWheelAngle),
+      brakeAbsActive: displayInputs.brakeAbsActive === true,
       ...inputStateReviewSettings,
       hasGraph,
       hasRail,
@@ -2561,7 +2552,7 @@ function inputStateModel(status, headerItems, source, isAvailable, inputs, trace
       trace: isAvailable
         ? Array.isArray(trace) && trace.length > 0
           ? trace
-          : [inputTracePoint(inputs)]
+          : [inputTracePoint(displayInputs)]
         : []
     }
   };
@@ -2598,9 +2589,7 @@ function inputTracePoint(inputs) {
 }
 
 function captureHeaderItems(models, status, overlaySettings = null) {
-  const items = overlaySettings?.showHeaderStatus === false
-    ? []
-    : [{ key: 'status', value: status }];
+  const items = [];
   const seconds = models.session?.sessionTimeRemainSeconds;
   if (overlaySettings?.showHeaderTimeRemaining !== false && Number.isFinite(seconds) && seconds >= 0) {
     items.push({ key: 'timeRemaining', value: formatDuration(seconds, models.session?.sessionPhase) });
@@ -4680,7 +4669,7 @@ function flagsModel(flags, status, isWaiting = false) {
     rows: [],
     metrics: [],
     points: [],
-    headerItems: [{ key: 'status', value: status }],
+    headerItems: [],
     flags: {
       flags: visibleFlags,
       isWaiting
@@ -4819,9 +4808,7 @@ function relativeSettings() {
   return {
     carsAhead: relativeCarsEachSide,
     carsBehind: relativeCarsEachSide,
-    showHeaderStatus: relativeShowHeaderStatus,
     showHeaderTimeRemaining: relativeShowHeaderTimeRemaining,
-    showFooterSource: relativeShowFooterSource,
     columns: relativeColumns()
   };
 }
@@ -4830,25 +4817,20 @@ function gapSettingsModel() {
   return {
     carsAhead: gapCarsAhead,
     carsBehind: gapCarsBehind,
-    showHeaderStatus: gapShowHeaderStatus,
-    showHeaderTimeRemaining: gapShowHeaderTimeRemaining,
-    showFooterSource: gapShowFooterSource
+    showHeaderTimeRemaining: gapShowHeaderTimeRemaining
   };
 }
 
 function fuelSettingsModel() {
   return {
     unitSystem: reviewUnitSystem,
-    showHeaderStatus: fuelShowHeaderStatus,
-    showHeaderTimeRemaining: fuelShowHeaderTimeRemaining,
-    showFooterSource: fuelShowFooterSource
+    showHeaderTimeRemaining: fuelShowHeaderTimeRemaining
   };
 }
 
 function sessionWeatherSettingsModel() {
   return {
     unitSystem: reviewUnitSystem,
-    showHeaderStatus: sessionWeatherShowHeaderStatus,
     showHeaderTimeRemaining: sessionWeatherShowHeaderTimeRemaining,
     disabledContent: sessionWeatherDisabledContent
   };
@@ -4857,9 +4839,7 @@ function sessionWeatherSettingsModel() {
 function pitServiceSettingsModel() {
   return {
     unitSystem: reviewUnitSystem,
-    showHeaderStatus: pitServiceShowHeaderStatus,
     showHeaderTimeRemaining: pitServiceShowHeaderTimeRemaining,
-    showFooterSource: pitServiceShowFooterSource,
     disabledContent: pitServiceDisabledContent
   };
 }
@@ -5738,7 +5718,7 @@ function relativeColumns() {
 }
 
 function sourceFromSettings(overlaySettings, source) {
-  return overlaySettings?.showFooterSource === false ? '' : source;
+  return source;
 }
 
 function spatialModel(lapProgress, relativeSeconds) {
@@ -5865,9 +5845,7 @@ function referenceDisplayRow(frame) {
 }
 
 function replayHeaderItems(frame, status, overlaySettings = null) {
-  const items = overlaySettings?.showHeaderStatus === false
-    ? []
-    : [{ key: 'status', value: status }];
+  const items = [];
   const timeRemaining = headerTimeRemaining(frame)?.value;
   if (overlaySettings?.showHeaderTimeRemaining !== false && timeRemaining) {
     items.push({ key: 'timeRemaining', value: timeRemaining });

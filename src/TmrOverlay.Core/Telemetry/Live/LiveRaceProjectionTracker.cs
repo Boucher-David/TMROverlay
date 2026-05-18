@@ -24,6 +24,12 @@ internal sealed class LiveRaceProjectionTracker
         HistoricalTelemetrySample sample,
         LiveRaceModels models)
     {
+        if (!IsRaceSession(context, models.Session))
+        {
+            Reset();
+            return LiveRaceProjectionModel.Empty;
+        }
+
         var timestamp = sample.CapturedAtUtc;
         var session = models.Session;
         var raceProgress = models.RaceProgress;
@@ -299,9 +305,17 @@ internal sealed class LiveRaceProjectionTracker
     private static bool IsRacePreGreen(HistoricalSessionContext context, LiveSessionModel session)
     {
         return session.SessionState is >= 1 and <= 3
-            && (ContainsRace(context.Session.SessionType)
-                || ContainsRace(context.Session.SessionName)
-                || ContainsRace(context.Session.EventType));
+            && IsRaceSession(context, session);
+    }
+
+    private static bool IsRaceSession(HistoricalSessionContext context, LiveSessionModel session)
+    {
+        return ContainsRace(context.Session.SessionType)
+            || ContainsRace(context.Session.SessionName)
+            || ContainsRace(context.Session.EventType)
+            || ContainsRace(session.SessionType)
+            || ContainsRace(session.SessionName)
+            || ContainsRace(session.EventType);
     }
 
     private static bool ContainsRace(string? value)

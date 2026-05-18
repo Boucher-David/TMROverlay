@@ -628,6 +628,12 @@ internal static class Program
             storage,
             new LiveModelParityOptions(),
             new LiveOverlayDiagnosticsOptions(),
+            new IbtAnalysisOptions
+            {
+                Enabled = false,
+                TelemetryLoggingEnabled = false,
+                TelemetryRoot = Path.Combine(storage.AppDataRoot, "ibt-telemetry")
+            },
             captureState,
             localhostState,
             new TrackMapStore(storage),

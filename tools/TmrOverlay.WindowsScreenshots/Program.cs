@@ -4006,7 +4006,7 @@ internal static class Program
                         new
                         {
                             kind = "text",
-                            text = row.Detail,
+                            text = (string?)row.Detail,
                             imageUrl = (string?)null
                         }
                     },

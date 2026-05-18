@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import struct
 import sys
 import zlib
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
+
+MAX_UNFILTERED_PNG_SAMPLE_BYTES = 12_000_000
 
 EXPECTED_PNGS = {
     "design-v2/design-v2-states.png": (5350, 4020),
@@ -308,20 +311,21 @@ OVERLAY_VARIANTS_ALLOW_EMPTY_TEXT_SAMPLE = {
 }
 
 OVERLAY_VARIANT_MIN_UNIQUE_BYTES = {
-    ("fuel-calculator", "waiting"): 4,
-    ("input-state", "waiting"): 4,
+    ("fuel-calculator", "waiting"): 1,
+    ("input-state", "waiting"): 1,
     ("input-state", "no-content"): 1,
-    ("car-radar", "clear"): 4,
+    ("car-radar", "clear"): 3,
     ("gap-to-leader", "no-cars"): 1,
     ("garage-cover", "hidden"): 1,
 }
 
 OVERLAY_VARIANT_MIN_BYTE_RANGE = {
-    ("fuel-calculator", "waiting"): 1,
-    ("input-state", "waiting"): 1,
-    ("input-state", "no-content"): 1,
-    ("gap-to-leader", "no-cars"): 1,
-    ("garage-cover", "hidden"): 1,
+    ("fuel-calculator", "waiting"): 0,
+    ("input-state", "waiting"): 0,
+    ("input-state", "no-content"): 0,
+    ("car-radar", "clear"): 0,
+    ("gap-to-leader", "no-cars"): 0,
+    ("garage-cover", "hidden"): 0,
 }
 
 WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS = {
@@ -513,6 +517,7 @@ def main() -> int:
             "screenshot-manifest-parity",
             "windows-expectations",
             "screenshot-expectations",
+            "validator-mutations",
             "release-tutorial",
         ),
         default="tracked",
@@ -548,6 +553,9 @@ def main() -> int:
         return finish(failures)
     if args.profile in ("windows-expectations", "screenshot-expectations"):
         validate_windows_expectations(failures)
+        return finish(failures)
+    if args.profile == "validator-mutations":
+        validate_validator_mutations(failures)
         return finish(failures)
     if args.profile == "release-tutorial":
         validate_release_tutorial(root, args.min_unique_bytes, failures)
@@ -3839,6 +3847,7 @@ def require_manifest_fields(
 def validate_windows_expectations(failures: list[str]) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     validate_screenshot_coverage_contracts(repo_root, failures)
+    validate_overlay_variant_source_contracts(repo_root, failures)
 
     covered_paths = set(WINDOWS_EXPECTED_SIZE_SOURCES) | set(WINDOWS_GENERATOR_SIZE_SOURCES)
     for relative_path in sorted(set(WINDOWS_EXPECTED_PNGS) - covered_paths):
@@ -3914,6 +3923,526 @@ def validate_screenshot_coverage_contracts(repo_root: Path, failures: list[str])
         expected_browser_review_settings_pngs(overlay_ids),
         failures,
     )
+
+
+def validate_overlay_variant_source_contracts(repo_root: Path, failures: list[str]) -> None:
+    browser_variants = read_browser_review_variant_specs(repo_root, failures)
+    compare_sets(
+        "Browser review overlay fixture variant source specs",
+        set(browser_variants),
+        WEB_OVERLAY_VARIANT_KEYS,
+        failures,
+    )
+    for key in sorted(WEB_OVERLAY_VARIANT_KEYS & set(browser_variants)):
+        expected_query = OVERLAY_VARIANT_QUERY_BY_KEY.get(key)
+        actual_query = browser_variants.get(key)
+        if actual_query != expected_query:
+            failures.append(
+                f"Browser review overlay fixture variant source specs: {key[0]}/{key[1]} "
+                f"expected query {expected_query!r}, got {actual_query!r}"
+            )
+
+    windows_variants = read_windows_native_variant_specs(repo_root, failures)
+    compare_sets(
+        "Windows native overlay fixture variant source specs",
+        set(windows_variants),
+        WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS,
+        failures,
+    )
+
+
+def read_browser_review_variant_specs(repo_root: Path, failures: list[str]) -> dict[tuple[str, str], str]:
+    source_path = repo_root / "tools" / "browser-review" / "render-screenshots.mjs"
+    content = read_text_source(source_path, repo_root, failures)
+    if content is None:
+        return {}
+
+    variants: dict[tuple[str, str], str] = {}
+    pattern = re.compile(
+        r"\{\s*overlayId:\s*'([^']+)',\s*slug:\s*'([^']+)',\s*query:\s*'([^']+)'\s*\}"
+    )
+    for match in pattern.finditer(content):
+        key = (match.group(1), match.group(2))
+        if key in variants:
+            failures.append(f"tools/browser-review/render-screenshots.mjs: duplicate overlay fixture variant {key[0]}/{key[1]}")
+        variants[key] = match.group(3)
+
+    track_map_fallback_markers = (
+        "browser-overlays/track-map-fallback.png",
+        "localhost-overlays/track-map-fallback.png",
+        "trackMap=fallback",
+        "fixtureVariant: 'circle-fallback'",
+    )
+    if all(marker in content for marker in track_map_fallback_markers):
+        variants[("track-map", "circle-fallback")] = "trackMap=fallback"
+
+    return variants
+
+
+def read_windows_native_variant_specs(repo_root: Path, failures: list[str]) -> set[tuple[str, str]]:
+    source_path = repo_root / "tools" / "TmrOverlay.WindowsScreenshots" / "Program.cs"
+    content = read_text_source(source_path, repo_root, failures)
+    if content is None:
+        return set()
+
+    class_ids = discover_overlay_definition_class_ids(repo_root, failures)
+    variants: set[tuple[str, str]] = set()
+    pattern = re.compile(
+        r"new\s+NativeOverlayVariantSpec\(\s*(\w+OverlayDefinition)\.Definition\.Id,\s*\"([^\"]+)\""
+    )
+    for match in pattern.finditer(content):
+        class_name = match.group(1)
+        overlay_id = class_ids.get(class_name)
+        if overlay_id is None:
+            failures.append(f"tools/TmrOverlay.WindowsScreenshots/Program.cs: unknown overlay definition class {class_name}")
+            continue
+        key = (overlay_id, match.group(2))
+        if key in variants:
+            failures.append(f"tools/TmrOverlay.WindowsScreenshots/Program.cs: duplicate native overlay fixture variant {key[0]}/{key[1]}")
+        variants.add(key)
+
+    return variants
+
+
+def discover_overlay_definition_class_ids(repo_root: Path, failures: list[str]) -> dict[str, str]:
+    class_ids: dict[str, str] = {}
+    for path in sorted((repo_root / "src" / "TmrOverlay.App" / "Overlays").glob("*/*OverlayDefinition.cs")):
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(f"{path.relative_to(repo_root)}: {exc}")
+            continue
+
+        class_match = re.search(r"\b(?:internal|public)\s+static\s+class\s+(\w+OverlayDefinition)\b", content)
+        id_match = re.search(r'\bId:\s*"([^"]+)"', content)
+        if class_match is None or id_match is None:
+            failures.append(f"{path.relative_to(repo_root)}: could not find OverlayDefinition class/Id")
+            continue
+        class_ids[class_match.group(1)] = id_match.group(1)
+
+    return class_ids
+
+
+def read_text_source(path: Path, repo_root: Path, failures: list[str]) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        failures.append(f"{path.relative_to(repo_root)}: {exc}")
+        return None
+
+
+def validate_validator_mutations(failures: list[str]) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    validate_overlay_variant_source_contracts(repo_root, failures)
+
+    expect_mutation_failure(
+        name="relative placeholder row collapse",
+        path="browser-overlays/relative.png",
+        base=mutation_relative_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 0, "bounds", "height"), 28),
+        validate=validate_relative_contract,
+        expected_tokens=("relative placeholder row 0 expected 12..16px height",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="track-map fallback stops being circular",
+        path="browser-overlays/track-map-fallback.png",
+        base=mutation_track_map_variant_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "trackMap", "mapKind"), "generated"),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("track-map circle fallback mapKind",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="flags all-kinds row count regression",
+        path="browser-overlays/flags-all-kinds.png",
+        base=mutation_flags_all_kinds_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "flags", "gridRows"), 2),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("flags all-kinds expected gridRows",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="input graph/rail overlap",
+        path="browser-overlays/input-state.png",
+        base=mutation_input_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "inputs", "rail", "bounds", "x"), 300),
+        validate=validate_input_state_contract,
+        expected_tokens=("input-state graph bounds intersect rail bounds",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="input throttle/brake trace no longer overlaps visually",
+        path="browser-overlays/input-state.png",
+        base=mutation_input_screenshot(),
+        mutate=mutate_input_trace_without_visual_overlap,
+        validate=validate_input_state_contract,
+        expected_tokens=("input-state throttle/brake expected at least 24 visually overlapping trace points",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="variant scenario evidence mismatches fixture",
+        path="browser-overlays/fuel-calculator-waiting.png",
+        base=mutation_variant_scenario_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("scenarioEvidence", "fixtureVariant"), "live"),
+        validate=lambda path, screenshot, local_failures: validate_overlay_variant_scenario(
+            path,
+            screenshot,
+            "fuel-calculator",
+            "waiting",
+            local_failures,
+        ),
+        expected_tokens=("expected scenario fixtureVariant 'waiting'",),
+        failures=failures,
+    )
+    expect_validator_failure(
+        name="browser/localhost/native variant parity catches missing native variant",
+        run=lambda local_failures: compare_web_windows_overlay_parity(
+            *mutation_manifest_parity_screenshot_sets(missing_windows_variant=("track-map", "circle-fallback")),
+            local_failures,
+        ),
+        expected_tokens=("Windows native overlay fixture variant manifest parity: missing",),
+        failures=failures,
+    )
+
+
+def expect_mutation_failure(
+    *,
+    name: str,
+    path: str,
+    base: dict[str, object],
+    mutate: Callable[[dict[str, object]], None],
+    validate: Callable[[str, dict[str, object], list[str]], None],
+    expected_tokens: tuple[str, ...],
+    failures: list[str],
+) -> None:
+    baseline_failures: list[str] = []
+    validate(path, copy.deepcopy(base), baseline_failures)
+    if baseline_failures:
+        failures.append(f"validator mutation baseline {name!r} failed unexpectedly: {baseline_failures[:3]!r}")
+        return
+
+    mutated = copy.deepcopy(base)
+    mutate(mutated)
+    expect_validator_failure(
+        name=name,
+        run=lambda local_failures: validate(path, mutated, local_failures),
+        expected_tokens=expected_tokens,
+        failures=failures,
+    )
+
+
+def expect_validator_failure(
+    *,
+    name: str,
+    run: Callable[[list[str]], None],
+    expected_tokens: tuple[str, ...],
+    failures: list[str],
+) -> None:
+    local_failures: list[str] = []
+    run(local_failures)
+    if not local_failures:
+        failures.append(f"validator mutation {name!r} did not fail")
+        return
+
+    for token in expected_tokens:
+        if not any(token in failure for failure in local_failures):
+            failures.append(
+                f"validator mutation {name!r} did not report {token!r}; "
+                f"got {local_failures[:5]!r}"
+            )
+            return
+
+
+def set_nested_value(values: dict[str, object], path: tuple[object, ...], new_value: object) -> None:
+    current: object = values
+    for key in path[:-1]:
+        if isinstance(current, dict) and isinstance(key, str):
+            current = current[key]
+        elif isinstance(current, list) and isinstance(key, int):
+            current = current[key]
+        else:
+            raise KeyError(path)
+
+    final_key = path[-1]
+    if isinstance(current, dict) and isinstance(final_key, str):
+        current[final_key] = new_value
+        return
+    if isinstance(current, list) and isinstance(final_key, int):
+        current[final_key] = new_value
+        return
+    raise KeyError(path)
+
+
+def mutation_relative_screenshot() -> dict[str, object]:
+    columns = [
+        {"label": "Pos", "configuredWidth": 38, "alignment": "right"},
+        {"label": "Driver", "configuredWidth": 250, "alignment": "left"},
+        {"label": "Delta", "configuredWidth": 70, "alignment": "right"},
+    ]
+    populated_cells = {
+        4: ["3", "#34 Near Ahead", "-2.350"],
+        5: ["5", "#55 Focus Driver", "0.000"],
+        6: ["6", "#61 Near Behind", "+1.200"],
+    }
+    row_classes = {
+        4: ["lap-ahead-1"],
+        5: ["focus"],
+        6: ["lap-behind-2"],
+    }
+    relative_deltas = {4: 1, 5: 0, 6: -2}
+    rows: list[dict[str, object]] = []
+    y = 0.0
+    for index in range(11):
+        populated = index in populated_cells
+        height = 28 if populated else 14
+        rows.append(
+            {
+                "cells": populated_cells.get(index, []),
+                "bounds": {"x": 0, "y": y, "width": 360, "height": height},
+                "isReference": index == 5,
+                "classList": row_classes.get(index, []),
+                "relativeLapDelta": relative_deltas.get(index),
+            }
+        )
+        y += height
+    return {
+        "previewMode": "race",
+        "modelEvidence": {
+            "columns": columns,
+            "rows": rows,
+        },
+    }
+
+
+def mutation_track_map_variant_screenshot() -> dict[str, object]:
+    return {
+        "overlayId": "track-map",
+        "fixtureVariant": "circle-fallback",
+        "bodyKind": "track-map",
+        "status": "track map | circle fallback",
+        "shouldRender": True,
+        "scenarioEvidence": mutation_scenario_evidence(
+            slug="circle-fallback",
+            query="trackMap=fallback",
+            body_kind="track-map",
+            status="track map | circle fallback",
+            should_render=True,
+        ),
+        "modelEvidence": {
+            "trackMap": {
+                "mapKind": "circle",
+                "markerCount": 4,
+                "width": 360,
+                "height": 360,
+                "primitives": [
+                    {"kind": "ellipse", "bounds": {"x": 30, "y": 30, "width": 300, "height": 300}},
+                    {"kind": "ellipse", "bounds": {"x": 70, "y": 70, "width": 220, "height": 220}},
+                    {"kind": "ellipse", "bounds": {"x": 110, "y": 110, "width": 140, "height": 140}},
+                    {"kind": "arc", "bounds": {"x": 30, "y": 30, "width": 300, "height": 300}},
+                ],
+            },
+        },
+    }
+
+
+def mutation_flags_all_kinds_screenshot() -> dict[str, object]:
+    kinds = ["green", "blue", "yellow", "caution", "red", "black", "meatball", "white", "checkered"]
+    columns, rows = expected_flag_grid(len(kinds))
+    cells: list[dict[str, object]] = []
+    for index, kind in enumerate(kinds):
+        bounds, cloth_bounds = expected_flag_rects(index, len(kinds))
+        cells.append(
+            {
+                "index": index,
+                "kind": kind,
+                "fill": expected_flag_fill(kind),
+                "row": index // columns,
+                "column": index % columns,
+                "bounds": bounds,
+                "clothBounds": cloth_bounds,
+            }
+        )
+    return {
+        "overlayId": "flags",
+        "fixtureVariant": "all-kinds",
+        "bodyKind": "flags",
+        "flagCount": len(kinds),
+        "status": "all flags",
+        "shouldRender": True,
+        "scenarioEvidence": mutation_scenario_evidence(
+            slug="all-kinds",
+            query="fixture=flags-all-kinds",
+            body_kind="flags",
+            status="all flags",
+            should_render=True,
+            flag_count=len(kinds),
+        ),
+        "modelEvidence": {
+            "flags": {
+                "kinds": kinds,
+                "gridColumns": columns,
+                "gridRows": rows,
+                "count": len(kinds),
+                "grid": {"columns": columns, "rows": rows},
+                "cells": cells,
+            },
+        },
+    }
+
+
+def mutation_input_screenshot() -> dict[str, object]:
+    graph_bounds = {"x": 20, "y": 20, "width": 360, "height": 200}
+    rail_bounds = {"x": 400, "y": 20, "width": 100, "height": 200}
+    throttle_points = [{"x": 24 + index * 1.5, "y": 80 + (index % 10)} for index in range(180)]
+    brake_points = [
+        {"x": point["x"], "y": point["y"] + (5 if index < 40 else 65)}
+        for index, point in enumerate(throttle_points)
+    ]
+    clutch_points = [{"x": 24 + index * 1.5, "y": 130 + (index % 8)} for index in range(180)]
+    return {
+        "status": "trace live | ABS active",
+        "textSample": "Throttle Brake ABS Clutch",
+        "modelEvidence": {
+            "inputs": {
+                "hasContent": True,
+                "hasGraph": True,
+                "hasRail": True,
+                "isAvailable": True,
+                "tracePointCount": 180,
+                "graph": {
+                    "bounds": graph_bounds,
+                    "gridLines": [{}, {}, {}],
+                },
+                "rail": {
+                    "bounds": rail_bounds,
+                    "items": [
+                        {"kind": "Throttle", "text": "Throttle"},
+                        {"kind": "Brake", "text": "Brake ABS"},
+                        {"kind": "Clutch", "text": "Clutch"},
+                        {"kind": "SteeringWheel", "text": "Steering"},
+                        {"kind": "Gear", "text": "Gear"},
+                        {"kind": "Speed", "text": "Speed"},
+                    ],
+                    "groups": [{"kind": "Bars"}, {"kind": "Readouts"}],
+                },
+                "series": [
+                    {"kind": "throttle", "points": throttle_points, "strokeWidth": 2},
+                    {"kind": "brake", "points": brake_points, "strokeWidth": 2},
+                    {"kind": "clutch", "points": clutch_points, "strokeWidth": 2},
+                    {"kind": "brake-abs", "points": [], "pointCount": 0, "curveCount": 2, "strokeWidth": 4},
+                ],
+            },
+        },
+    }
+
+
+def mutate_input_trace_without_visual_overlap(screenshot: dict[str, object]) -> None:
+    series = evidence_list(typed_dict(typed_dict(screenshot.get("modelEvidence")).get("inputs")), "series")
+    brake = next((item for item in series if isinstance(item, dict) and text_value(item, "kind") == "brake"), None)
+    if not isinstance(brake, dict):
+        raise KeyError("brake")
+    for point in evidence_list(brake, "points"):
+        if isinstance(point, dict):
+            point["y"] = 205
+
+
+def mutation_variant_scenario_screenshot() -> dict[str, object]:
+    return {
+        "fixtureVariant": "waiting",
+        "status": "waiting for local fuel context",
+        "bodyKind": "metrics",
+        "shouldRender": False,
+        "rowCount": 0,
+        "metricCount": 0,
+        "scenarioEvidence": mutation_scenario_evidence(
+            slug="waiting",
+            query="fixture=fuel-waiting",
+            body_kind="metrics",
+            status="waiting for local fuel context",
+            should_render=False,
+            row_count=0,
+            metric_count=0,
+        ),
+    }
+
+
+def mutation_scenario_evidence(
+    *,
+    slug: str,
+    query: str,
+    body_kind: str,
+    status: str,
+    should_render: bool,
+    row_count: int | None = None,
+    metric_count: int | None = None,
+    flag_count: int | None = None,
+) -> dict[str, object]:
+    summary: dict[str, object] = {
+        "status": status,
+        "bodyKind": body_kind,
+        "shouldRender": should_render,
+    }
+    if row_count is not None:
+        summary["rowCount"] = row_count
+    if metric_count is not None:
+        summary["metricCount"] = metric_count
+    if flag_count is not None:
+        summary["flagCount"] = flag_count
+    return {
+        "fixtureVariant": slug,
+        "urlPath": f"/review/overlays/example?preview=race&{query}",
+        "modelSummary": summary,
+    }
+
+
+def mutation_manifest_parity_screenshot_sets(
+    *,
+    missing_windows_variant: tuple[str, str],
+) -> tuple[dict[str, dict[str, object]], dict[str, dict[str, object]], dict[str, dict[str, object]]]:
+    browser: dict[str, dict[str, object]] = {}
+    localhost: dict[str, dict[str, object]] = {}
+    windows: dict[str, dict[str, object]] = {}
+
+    for overlay_id, size in WINDOWS_NATIVE_OVERLAY_SIZES.items():
+        for mode in preview_modes_for_overlay(overlay_id):
+            screenshot = mutation_preview_manifest(overlay_id, mode, size)
+            browser[f"browser-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
+            localhost[f"localhost-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
+            windows[f"native-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
+
+    for overlay_id, slug in WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS:
+        size = WINDOWS_NATIVE_OVERLAY_SIZES[overlay_id]
+        screenshot = mutation_variant_manifest(overlay_id, slug, size)
+        browser[f"browser-overlays/{web_variant_stem(overlay_id, slug)}.png"] = copy.deepcopy(screenshot)
+        localhost[f"localhost-overlays/{web_variant_stem(overlay_id, slug)}.png"] = copy.deepcopy(screenshot)
+        windows[f"native-overlays/{overlay_id}-{slug}.png"] = copy.deepcopy(screenshot)
+
+    windows.pop(f"native-overlays/{missing_windows_variant[0]}-{missing_windows_variant[1]}.png")
+    return browser, localhost, windows
+
+
+def mutation_preview_manifest(overlay_id: str, mode: str, size: tuple[int, int]) -> dict[str, object]:
+    return {
+        "overlayId": overlay_id,
+        "previewMode": mode,
+        "bodyKind": WINDOWS_NATIVE_OVERLAY_BODIES.get(overlay_id, "metrics"),
+        "width": size[0],
+        "height": size[1],
+    }
+
+
+def mutation_variant_manifest(overlay_id: str, slug: str, size: tuple[int, int]) -> dict[str, object]:
+    return {
+        "overlayId": overlay_id,
+        "previewMode": "race",
+        "fixtureVariant": slug,
+        "bodyKind": WINDOWS_NATIVE_OVERLAY_BODIES.get(overlay_id, "metrics"),
+        "width": size[0],
+        "height": size[1],
+        "status": "mutation fixture",
+        "shouldRender": True,
+    }
 
 
 def discover_overlay_definition_ids(repo_root: Path, failures: list[str]) -> list[str]:
@@ -4126,8 +4655,13 @@ def inspect_png(path: Path, min_unique_bytes: int) -> dict[str, object]:
     if len(raw) != expected_raw_len:
         raise ValueError(f"unexpected decoded byte length {len(raw)} != {expected_raw_len}")
 
-    sample_stride = max(1, len(raw) // 250_000)
-    sample = raw[::sample_stride]
+    sample_source = (
+        decode_png_pixels(raw, width, height, channels)
+        if len(raw) <= MAX_UNFILTERED_PNG_SAMPLE_BYTES
+        else raw
+    )
+    sample_stride = max(1, len(sample_source) // 250_000)
+    sample = sample_source[::sample_stride]
     unique_bytes = len(set(sample))
 
     return {
@@ -4165,6 +4699,52 @@ def read_png_chunks(path: Path) -> tuple[int, int, int, int, bytes]:
     if not idat_parts:
         raise ValueError("missing IDAT")
     return width, height, bit_depth, color_type, b"".join(idat_parts)
+
+
+def decode_png_pixels(raw: bytes, width: int, height: int, channels: int) -> bytes:
+    row_width = width * channels
+    previous = bytearray(row_width)
+    pixels = bytearray(height * row_width)
+    source_offset = 0
+    target_offset = 0
+    for _row_index in range(height):
+        filter_type = raw[source_offset]
+        source_offset += 1
+        filtered = raw[source_offset:source_offset + row_width]
+        source_offset += row_width
+        row = bytearray(row_width)
+        for index, value in enumerate(filtered):
+            left = row[index - channels] if index >= channels else 0
+            up = previous[index]
+            up_left = previous[index - channels] if index >= channels else 0
+            if filter_type == 0:
+                row[index] = value
+            elif filter_type == 1:
+                row[index] = (value + left) & 0xFF
+            elif filter_type == 2:
+                row[index] = (value + up) & 0xFF
+            elif filter_type == 3:
+                row[index] = (value + ((left + up) // 2)) & 0xFF
+            elif filter_type == 4:
+                row[index] = (value + paeth_predictor(left, up, up_left)) & 0xFF
+            else:
+                raise ValueError(f"unsupported PNG filter type {filter_type}")
+        pixels[target_offset:target_offset + row_width] = row
+        target_offset += row_width
+        previous = row
+    return bytes(pixels)
+
+
+def paeth_predictor(left: int, up: int, up_left: int) -> int:
+    estimate = left + up - up_left
+    left_distance = abs(estimate - left)
+    up_distance = abs(estimate - up)
+    up_left_distance = abs(estimate - up_left)
+    if left_distance <= up_distance and left_distance <= up_left_distance:
+        return left
+    if up_distance <= up_left_distance:
+        return up
+    return up_left
 
 
 def channel_count(color_type: int) -> int:

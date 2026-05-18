@@ -301,6 +301,8 @@ def compare_pair(
         stats,
         strict_geometry=strict_geometry,
         geometry_tolerance=geometry_tolerance,
+        left_should_render=left.get("shouldRender"),
+        right_should_render=right.get("shouldRender"),
     )
     if semantic_checks:
         overlay_id = str(left.get("overlayId") or right.get("overlayId") or "")
@@ -368,6 +370,8 @@ def compare_model_evidence(
     *,
     strict_geometry: bool,
     geometry_tolerance: float,
+    left_should_render: Any = None,
+    right_should_render: Any = None,
 ) -> None:
     compare_field(context, "modelEvidence.bodyKind", left.get("bodyKind"), right.get("bodyKind"), failures, stats)
     if body_kind == "table":
@@ -375,7 +379,16 @@ def compare_model_evidence(
     elif body_kind == "metrics":
         compare_metrics_model(context, left, right, failures, stats, geometry_tolerance)
     elif body_kind == "graph":
-        compare_graph_model(context, left.get("graph"), right.get("graph"), failures, stats, geometry_tolerance)
+        compare_graph_model(
+            context,
+            left.get("graph"),
+            right.get("graph"),
+            failures,
+            stats,
+            geometry_tolerance,
+            left_should_render=left_should_render,
+            right_should_render=right_should_render,
+        )
     elif body_kind == "inputs":
         compare_inputs_model(context, left.get("inputs"), right.get("inputs"), failures, stats, geometry_tolerance)
     elif body_kind == "flags":
@@ -401,7 +414,11 @@ def compare_overlay_semantics(
     elif overlay_id in ("fuel-calculator", "session-weather", "pit-service"):
         compare_metrics_semantics(context, overlay_id, left_model, right_model, failures, stats)
     elif overlay_id == "gap-to-leader":
-        compare_gap_semantics(context, typed_dict(left_model.get("graph")), typed_dict(right_model.get("graph")), failures, stats)
+        left_graph = typed_dict(left_model.get("graph"))
+        right_graph = typed_dict(right_model.get("graph"))
+        if hidden_empty_graph_pair(left_graph, right_graph, left.get("shouldRender"), right.get("shouldRender")):
+            return
+        compare_gap_semantics(context, left_graph, right_graph, failures, stats)
     elif overlay_id == "input-state":
         compare_input_semantics(context, typed_dict(left_model.get("inputs")), typed_dict(right_model.get("inputs")), failures, stats)
     elif overlay_id == "track-map":
@@ -846,9 +863,16 @@ def compare_graph_model(
     failures: list[str],
     stats: ComparisonStats,
     tolerance: float,
+    *,
+    left_should_render: Any = None,
+    right_should_render: Any = None,
 ) -> None:
     if not isinstance(left_graph, dict) or not isinstance(right_graph, dict):
         failures.append(f"{context}: graph evidence missing graph object")
+        return
+    if hidden_empty_graph_pair(left_graph, right_graph, left_should_render, right_should_render):
+        compare_optional_field(context, "graph.selectedSeriesCount", left_graph.get("selectedSeriesCount"), right_graph.get("selectedSeriesCount"), failures, stats)
+        compare_optional_field(context, "graph.trendMetricCount", left_graph.get("trendMetricCount"), right_graph.get("trendMetricCount"), failures, stats)
         return
     left_geometry = left_graph.get("geometry")
     right_geometry = right_graph.get("geometry")
@@ -869,15 +893,36 @@ def compare_graph_model(
 def graph_intentionally_has_no_geometry(graph: dict[str, Any]) -> bool:
     if isinstance(graph.get("geometry"), dict):
         return False
+    return graph_has_no_series_or_metrics(graph)
+
+
+def hidden_empty_graph_pair(left_graph: dict[str, Any], right_graph: dict[str, Any], left_should_render: Any, right_should_render: Any) -> bool:
+    return (
+        left_should_render is False
+        and right_should_render is False
+        and graph_has_no_series_or_metrics(left_graph)
+        and graph_has_no_series_or_metrics(right_graph)
+    )
+
+
+def graph_has_no_series_or_metrics(graph: dict[str, Any]) -> bool:
     series_count = graph.get("selectedSeriesCount")
     trend_metric_count = graph.get("trendMetricCount")
     series = graph.get("series")
     metrics = graph.get("trendMetrics")
+    geometry = graph.get("geometry")
+    geometry_series: Any = None
+    geometry_metrics: Any = None
+    if isinstance(geometry, dict):
+        geometry_series = geometry.get("series")
+        geometry_metrics = geometry.get("metricRows")
     return (
         series_count in (None, 0)
         and trend_metric_count in (None, 0)
         and (not isinstance(series, list) or len(series) == 0)
         and (not isinstance(metrics, list) or len(metrics) == 0)
+        and (not isinstance(geometry_series, list) or len(geometry_series) == 0)
+        and (not isinstance(geometry_metrics, list) or len(geometry_metrics) == 0)
     )
 
 

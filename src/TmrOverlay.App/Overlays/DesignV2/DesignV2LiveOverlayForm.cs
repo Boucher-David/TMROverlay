@@ -549,7 +549,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private void ApplyModelVisibility(DesignV2OverlayModel model)
     {
-        if (_kind == DesignV2LiveOverlayKind.FuelCalculator)
+        if (_kind is DesignV2LiveOverlayKind.FuelCalculator
+            or DesignV2LiveOverlayKind.GapToLeader)
         {
             SetLiveTelemetryAvailable(model.ShouldRender);
         }
@@ -3655,7 +3656,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                     body.ShowGear,
                     body.ShowSpeed)
                 .Items
-                .Select(item => new DesignV2LayoutInputItem(item.Kind.ToString(), LayoutRect(item.Bounds)))
+                .Select(item => new DesignV2LayoutInputItem(item.Kind.ToString(), LayoutRect(item.Bounds))
+                {
+                    Label = InputRailLabel(body, item.Kind),
+                    Text = InputRailText(body, item.Kind)
+                })
                 .ToArray();
         }
 
@@ -3670,10 +3675,42 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 body.Trace.Count,
                 inputItems)
             {
+                SampleIntervalMilliseconds = InputStateRenderModelBuilder.RefreshIntervalMilliseconds,
+                MaximumTracePoints = InputStateRenderModelBuilder.MaximumTracePoints,
                 TraceSeries = BuildInputTraceLayouts(graph, body),
                 GridLines = BuildInputGridLines(graph)
             }
         };
+    }
+
+    private static string InputRailLabel(DesignV2InputsBody body, DesignV2InputRailItemKind kind)
+    {
+        return kind switch
+        {
+            DesignV2InputRailItemKind.Throttle => "THR",
+            DesignV2InputRailItemKind.Brake => body.BrakeAbsActive ? "ABS" : "BRK",
+            DesignV2InputRailItemKind.Clutch => "CLT",
+            DesignV2InputRailItemKind.SteeringWheel => "WHEEL",
+            DesignV2InputRailItemKind.Gear => "GEAR",
+            DesignV2InputRailItemKind.Speed => "SPD",
+            _ => kind.ToString()
+        };
+    }
+
+    private static string InputRailText(DesignV2InputsBody body, DesignV2InputRailItemKind kind)
+    {
+        var label = InputRailLabel(body, kind);
+        var value = kind switch
+        {
+            DesignV2InputRailItemKind.Throttle => FormatPercent(body.Throttle),
+            DesignV2InputRailItemKind.Brake => FormatPercent(body.Brake),
+            DesignV2InputRailItemKind.Clutch => FormatPercent(body.Clutch),
+            DesignV2InputRailItemKind.SteeringWheel => body.SteeringText,
+            DesignV2InputRailItemKind.Gear => body.GearText,
+            DesignV2InputRailItemKind.Speed => body.SpeedText,
+            _ => string.Empty
+        };
+        return string.IsNullOrWhiteSpace(value) ? label : $"{label} {value}";
     }
 
     private static IReadOnlyList<DesignV2LayoutInputTraceSeries> BuildInputTraceLayouts(RectangleF? graph, DesignV2InputsBody body)
@@ -3931,7 +3968,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     {
         var primitives = new List<DesignV2LayoutVectorPrimitive>
         {
-            RadarCirclePrimitive("background", target, model.Background, scaleX, scaleY, surfaceAlpha)
+            RadarCirclePrimitive("ellipse", target, model.Background, scaleX, scaleY, surfaceAlpha)
         };
         primitives.AddRange(model.Rings.Select(ring => RadarCirclePrimitive("ring", target, ring, scaleX, scaleY, surfaceAlpha)));
         if (model.MulticlassArc is { } arc)
@@ -4008,7 +4045,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         }
 
         return new DesignV2LayoutVectorItem(
-            marker.IsFocus ? "focus-marker" : "marker",
+            marker.IsFocus ? "focus-marker" : "car-marker",
             marker.CarIdx,
             LayoutRect(markerRect))
         {
@@ -4060,8 +4097,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 : BoundsForPoints(points),
             points,
             primitive.Closed,
-            primitive.Kind == "arc" ? primitive.StartDegrees : null,
-            primitive.Kind == "arc" ? primitive.SweepDegrees : null,
+            primitive.StartDegrees,
+            primitive.SweepDegrees,
             primitive.Fill is { } fill ? ColorHex(RenderTrackMapColor(fill)) : null,
             primitive.Stroke is { } stroke ? ColorHex(RenderTrackMapColor(stroke)) : null,
             primitive.StrokeWidth > 0d ? Math.Max(1f, (float)primitive.StrokeWidth * scale) : 0f);
@@ -8149,12 +8186,21 @@ internal sealed record DesignV2LayoutInputs(
     int TracePointCount,
     IReadOnlyList<DesignV2LayoutInputItem> Items)
 {
+    public int? SampleIntervalMilliseconds { get; init; }
+
+    public int? MaximumTracePoints { get; init; }
+
     public IReadOnlyList<DesignV2LayoutLine> GridLines { get; init; } = [];
 
     public IReadOnlyList<DesignV2LayoutInputTraceSeries> TraceSeries { get; init; } = [];
 }
 
-internal sealed record DesignV2LayoutInputItem(string Kind, DesignV2LayoutRect Bounds);
+internal sealed record DesignV2LayoutInputItem(string Kind, DesignV2LayoutRect Bounds)
+{
+    public string? Label { get; init; }
+
+    public string? Text { get; init; }
+}
 
 internal sealed record DesignV2LayoutLine(
     string Kind,

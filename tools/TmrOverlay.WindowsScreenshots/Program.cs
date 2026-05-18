@@ -1656,7 +1656,7 @@ internal static class Program
                 HasGraph: false,
                 HasRail: false,
                 HasContent: false,
-                Trace: []),
+                Trace: ReviewInputTrace()),
             HeaderText: string.Empty,
             ShowFooter: false);
     }
@@ -1851,17 +1851,7 @@ internal static class Program
     private static DesignV2OverlayModel ReviewInputModel(OverlaySessionKind previewMode)
     {
         var session = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) ?? previewMode;
-        var trace = Enumerable.Range(0, InputStateRenderModelBuilder.MaximumTracePoints)
-            .Select(index =>
-            {
-                var t = index / 10d;
-                return new InputStateTracePoint(
-                    Throttle: Math.Clamp(0.58d + Math.Sin(t) * 0.32d, 0d, 1d),
-                    Brake: Math.Clamp(0.56d + Math.Sin(t * 0.96d + 0.6d) * 0.32d, 0d, 1d),
-                    Clutch: Math.Clamp(0.08d + Math.Sin(t * 0.35d) * 0.06d, 0d, 1d),
-                    BrakeAbsActive: index is > 112 and < 132);
-            })
-            .ToArray();
+        var trace = ReviewInputTrace();
         return new DesignV2OverlayModel(
             "Inputs",
             session == OverlaySessionKind.Race ? "6 | 7900 rpm | ABS" : "4 | 7120 rpm | ABS",
@@ -1894,6 +1884,21 @@ internal static class Program
                 Trace: trace),
             HeaderText: string.Empty,
             ShowFooter: false);
+    }
+
+    private static IReadOnlyList<InputStateTracePoint> ReviewInputTrace()
+    {
+        return Enumerable.Range(0, InputStateRenderModelBuilder.MaximumTracePoints)
+            .Select(index =>
+            {
+                var t = index / 10d;
+                return new InputStateTracePoint(
+                    Throttle: Math.Clamp(0.58d + Math.Sin(t) * 0.32d, 0d, 1d),
+                    Brake: Math.Clamp(0.56d + Math.Sin(t * 0.96d + 0.6d) * 0.32d, 0d, 1d),
+                    Clutch: Math.Clamp(0.08d + Math.Sin(t * 0.35d) * 0.06d, 0d, 1d),
+                    BrakeAbsActive: index is > 112 and < 132);
+            })
+            .ToArray();
     }
 
     private static DesignV2OverlayModel ReviewStreamChatModel()
@@ -2070,12 +2075,26 @@ internal static class Program
         using var bitmap = new Bitmap(form.ClientSize.Width, form.ClientSize.Height, PixelFormat.Format32bppArgb);
         form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.ClientSize));
         postProcess?.Invoke(bitmap);
+        var completedMetadata = CompleteMetadata(metadata, form, relativeDirectory, null);
+        ApplyNativeShouldRenderVisibility(bitmap, completedMetadata);
 
         var directory = Path.Combine(outputRoot, relativeDirectory);
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, $"{fileStem}.png");
         bitmap.Save(path, ImageFormat.Png);
-        return new RenderedScreenshot(label, path, form.ClientSize.Width, form.ClientSize.Height, CompleteMetadata(metadata, form, relativeDirectory, null));
+        return new RenderedScreenshot(label, path, form.ClientSize.Width, form.ClientSize.Height, completedMetadata);
+    }
+
+    private static void ApplyNativeShouldRenderVisibility(Bitmap bitmap, ScreenshotMetadata metadata)
+    {
+        if (!string.Equals(metadata.Surface, "windows-native-overlay", StringComparison.Ordinal)
+            || metadata.ShouldRender is not false)
+        {
+            return;
+        }
+
+        using var graphics = Graphics.FromImage(bitmap);
+        graphics.Clear(Color.Transparent);
     }
 
     private static RenderedScreenshot RenderFormCrop(
@@ -3607,6 +3626,9 @@ internal static class Program
 
     private static object RowEvidence(DesignV2LayoutRow row)
     {
+        var renderedCells = row.Cells.Count > 0
+            ? row.Cells.Select(CellEvidence).ToArray()
+            : ClassHeaderCellEvidence(row);
         return new
         {
             index = row.Index,
@@ -3623,8 +3645,38 @@ internal static class Program
             background = row.Background,
             bounds = RectEvidence(row.Bounds),
             cells = row.Cells.Select(cell => cell.Text).ToArray(),
-            renderedCells = row.Cells.Select(CellEvidence).ToArray()
+            renderedCells
         };
+    }
+
+    private static object[] ClassHeaderCellEvidence(DesignV2LayoutRow row)
+    {
+        if (!string.Equals(row.Kind, "class-header", StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(row.Text))
+        {
+            return [];
+        }
+
+        var text = string.Join(
+            " ",
+            new[] { row.Text, row.Detail }
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
+        return
+        [
+            new
+            {
+                columnIndex = 0,
+                column = "CLS",
+                text,
+                value = text,
+                alignment = "left",
+                tone = ToneFromEvidence(row.Evidence),
+                evidence = row.Evidence,
+                foreground = row.Foreground,
+                background = row.Background,
+                bounds = RectEvidence(row.Bounds)
+            }
+        ];
     }
 
     private static object CellEvidence(DesignV2LayoutCell cell)
@@ -3902,8 +3954,8 @@ internal static class Program
             hasGraph = inputs.Graph is not null,
             hasRail = inputs.Rail is not null,
             isAvailable = inputs.IsAvailable,
-            sampleIntervalMilliseconds = (int?)null,
-            maximumTracePoints = (int?)null,
+            sampleIntervalMilliseconds = inputs.SampleIntervalMilliseconds,
+            maximumTracePoints = inputs.MaximumTracePoints,
             tracePointCount = inputs.TracePointCount,
             grid = inputs.GridLines.Select(LineEvidence).ToArray(),
             series = inputs.TraceSeries.Select(TraceSeriesEvidence).ToArray(),
@@ -3923,6 +3975,8 @@ internal static class Program
                     items = inputs.Items.Select(item => new
                     {
                         kind = item.Kind,
+                        label = item.Label,
+                        text = item.Text,
                         bounds = RectEvidence(item.Bounds)
                     }).ToArray()
                 }
@@ -4099,6 +4153,7 @@ internal static class Program
             markerCount = vector.ItemCount,
             primitiveCount = vector.PrimitiveCount,
             mapKind = vector.MapKind,
+            isAvailable = vector.ShouldRender,
             width = vector.SourceWidth,
             height = vector.SourceHeight,
             sourceWidth = vector.SourceWidth,

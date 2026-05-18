@@ -1446,9 +1446,10 @@ function inputStateDisplayModel(page, live, settings) {
   const unitSystem = normalizeUnitSystem(settings?.unitSystem ?? settings?.general?.unitSystem);
   const inCar = isPlayerInCar(live);
   const isAvailable = inCar && inputs.hasData === true;
-  const brakeAbsActive = inputs.brakeAbsActive === true;
-  const gearText = formatInputGear(inputs.gear);
-  const rpmText = formatInputRpm(inputs.rpm);
+  const displayInputs = isAvailable ? inputs : {};
+  const brakeAbsActive = displayInputs.brakeAbsActive === true;
+  const gearText = formatInputGear(displayInputs.gear);
+  const rpmText = formatInputRpm(displayInputs.rpm);
   const showThrottleTrace = settings.showThrottleTrace ?? true;
   const showBrakeTrace = settings.showBrakeTrace ?? true;
   const showClutchTrace = settings.showClutchTrace ?? true;
@@ -1476,17 +1477,17 @@ function inputStateDisplayModel(page, live, settings) {
     bodyKind: 'inputs',
     inputs: {
       isAvailable,
-      throttle: inputs.throttle,
-      brake: inputs.brake,
-      clutch: inputs.clutch,
-      steeringWheelAngle: inputs.steeringWheelAngle,
-      speedMetersPerSecond: inputs.speedMetersPerSecond,
-      gear: inputs.gear,
-      speedText: formatInputSpeed(inputs.speedMetersPerSecond, unitSystem),
+      throttle: displayInputs.throttle,
+      brake: displayInputs.brake,
+      clutch: displayInputs.clutch,
+      steeringWheelAngle: displayInputs.steeringWheelAngle,
+      speedMetersPerSecond: displayInputs.speedMetersPerSecond,
+      gear: displayInputs.gear,
+      speedText: formatInputSpeed(displayInputs.speedMetersPerSecond, unitSystem),
       gearText,
       rpmText,
-      steeringText: Number.isFinite(inputs.steeringWheelAngle)
-        ? `${Math.round(inputs.steeringWheelAngle * 180 / Math.PI)} deg`
+      steeringText: Number.isFinite(displayInputs.steeringWheelAngle)
+        ? `${Math.round(displayInputs.steeringWheelAngle * 180 / Math.PI)} deg`
         : '--',
       brakeAbsActive,
       showThrottleTrace,
@@ -1507,9 +1508,9 @@ function inputStateDisplayModel(page, live, settings) {
         ? Array.isArray(inputs.trace)
           ? inputs.trace
           : [{
-            throttle: clamp01(inputs.throttle),
-            brake: clamp01(inputs.brake),
-            clutch: clamp01(inputs.clutch),
+            throttle: clamp01(displayInputs.throttle),
+            brake: clamp01(displayInputs.brake),
+            clutch: clamp01(displayInputs.clutch),
             brakeAbsActive
           }]
         : []

@@ -1023,6 +1023,13 @@ def compare_web_windows_overlay_parity(
             ("overlayId", "previewMode", "bodyKind", "width", "height"),
             failures,
         )
+        compare_manifest_fields(
+            label,
+            browser_screenshot,
+            windows_screenshot,
+            ("overlayId", "previewMode", "bodyKind", "width", "height"),
+            failures,
+        )
 
     browser_variants = {
         key: screenshot
@@ -1061,13 +1068,6 @@ def compare_web_windows_overlay_parity(
             browser_screenshot,
             windows_screenshot,
             windows_fields,
-            failures,
-        )
-        compare_manifest_fields(
-            label,
-            browser_screenshot,
-            windows_screenshot,
-            ("overlayId", "previewMode", "bodyKind", "width", "height"),
             failures,
         )
 
@@ -2901,6 +2901,10 @@ def validate_input_waiting_variant(path: str, values: dict[str, object], failure
         require_rect(path, typed_dict(inputs.get("graph")).get("bounds"), "input waiting graph bounds", failures)
     if inputs.get("rail") not in (None, {}):
         require_rect(path, typed_dict(inputs.get("rail")).get("bounds"), "input waiting rail bounds", failures)
+        rail_text = [text_value(item, "text").upper() for item in evidence_list(typed_dict(inputs.get("rail")), "items")]
+        expected_rail_text = ["THR --", "BRK --", "CLT --", "WHEEL --", "GEAR --", "SPD --"]
+        if rail_text != expected_rail_text:
+            failures.append(f"{path}: input waiting rail should expose placeholder values, got {rail_text!r}")
     for series in evidence_list(inputs, "series"):
         series_dict = typed_dict(series)
         if get_manifest_value(series_dict, "pointCount") not in (None, 0):
@@ -4242,6 +4246,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="input waiting rail leaks stale live values",
+        path="browser-overlays/input-state-waiting.png",
+        base=mutation_input_waiting_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "inputs", "rail", "items", 0, "text"), "THR 78%"),
+        validate=validate_input_waiting_variant,
+        expected_tokens=("input waiting rail should expose placeholder values",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="variant scenario evidence mismatches fixture",
         path="browser-overlays/fuel-calculator-waiting.png",
         base=mutation_variant_scenario_screenshot(),
@@ -4263,6 +4276,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
             local_failures,
         ),
         expected_tokens=("Windows native overlay fixture variant manifest parity: missing",),
+        failures=failures,
+    )
+    expect_validator_failure(
+        name="browser/localhost/native preview parity catches native size mismatch",
+        run=lambda local_failures: compare_web_windows_overlay_parity(
+            *mutation_manifest_parity_screenshot_sets(native_preview_size_mismatch=("gap-to-leader", "race")),
+            local_failures,
+        ),
+        expected_tokens=("native/browser/localhost overlay gap-to-leader race: expected matching width",),
         failures=failures,
     )
 
@@ -4701,6 +4723,39 @@ def mutate_input_trace_without_visual_overlap(screenshot: dict[str, object]) -> 
             point["y"] = 205
 
 
+def mutation_input_waiting_screenshot() -> dict[str, object]:
+    return {
+        "status": "waiting for car telemetry",
+        "bodyKind": "inputs",
+        "modelEvidence": {
+            "inputs": {
+                "hasContent": True,
+                "hasGraph": True,
+                "hasRail": True,
+                "isAvailable": False,
+                "tracePointCount": 0,
+                "graph": {"bounds": {"x": 20, "y": 20, "width": 280, "height": 200}},
+                "rail": {
+                    "bounds": {"x": 320, "y": 20, "width": 180, "height": 200},
+                    "items": [
+                        {"kind": "Throttle", "text": "THR --"},
+                        {"kind": "Brake", "text": "BRK --"},
+                        {"kind": "Clutch", "text": "CLT --"},
+                        {"kind": "SteeringWheel", "text": "WHEEL --"},
+                        {"kind": "Gear", "text": "GEAR --"},
+                        {"kind": "Speed", "text": "SPD --"},
+                    ],
+                },
+                "series": [
+                    {"kind": "throttle", "pointCount": 0},
+                    {"kind": "brake", "pointCount": 0},
+                    {"kind": "clutch", "pointCount": 0},
+                ],
+            },
+        },
+    }
+
+
 def mutation_variant_scenario_screenshot() -> dict[str, object]:
     return {
         "fixtureVariant": "waiting",
@@ -4752,7 +4807,8 @@ def mutation_scenario_evidence(
 
 def mutation_manifest_parity_screenshot_sets(
     *,
-    missing_windows_variant: tuple[str, str],
+    missing_windows_variant: tuple[str, str] | None = None,
+    native_preview_size_mismatch: tuple[str, str] | None = None,
 ) -> tuple[dict[str, dict[str, object]], dict[str, dict[str, object]], dict[str, dict[str, object]]]:
     browser: dict[str, dict[str, object]] = {}
     localhost: dict[str, dict[str, object]] = {}
@@ -4764,6 +4820,8 @@ def mutation_manifest_parity_screenshot_sets(
             browser[f"browser-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
             localhost[f"localhost-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
             windows[f"native-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
+            if native_preview_size_mismatch == (overlay_id, mode):
+                windows[f"native-overlays/{overlay_id}-{mode}.png"]["width"] = size[0] + 17
 
     for overlay_id, slug in WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS:
         size = WINDOWS_NATIVE_OVERLAY_SIZES[overlay_id]
@@ -4772,7 +4830,8 @@ def mutation_manifest_parity_screenshot_sets(
         localhost[f"localhost-overlays/{web_variant_stem(overlay_id, slug)}.png"] = copy.deepcopy(screenshot)
         windows[f"native-overlays/{overlay_id}-{slug}.png"] = copy.deepcopy(screenshot)
 
-    windows.pop(f"native-overlays/{missing_windows_variant[0]}-{missing_windows_variant[1]}.png")
+    if missing_windows_variant is not None:
+        windows.pop(f"native-overlays/{missing_windows_variant[0]}-{missing_windows_variant[1]}.png")
     return browser, localhost, windows
 
 

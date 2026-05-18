@@ -2519,6 +2519,7 @@ function captureInputStateModel(models, fallbackStatus, index, searchParams = nu
 }
 
 function inputStateModel(status, headerItems, source, isAvailable, inputs, trace = null) {
+  const displayInputs = isAvailable && inputs ? inputs : {};
   const hasGraph = inputStateReviewSettings.showThrottleTrace
     || inputStateReviewSettings.showBrakeTrace
     || inputStateReviewSettings.showClutchTrace;
@@ -2542,16 +2543,16 @@ function inputStateModel(status, headerItems, source, isAvailable, inputs, trace
     headerItems,
     inputs: {
       isAvailable,
-      throttle: inputs.throttle,
-      brake: inputs.brake,
-      clutch: inputs.clutch,
-      steeringWheelAngle: inputs.steeringWheelAngle,
-      speedMetersPerSecond: inputs.speedMetersPerSecond,
-      gear: inputs.gear,
-      speedText: formatSpeed(inputs.speedMetersPerSecond),
-      gearText: formatGear(inputs.gear),
-      steeringText: formatSteering(inputs.steeringWheelAngle),
-      brakeAbsActive: inputs.brakeAbsActive === true,
+      throttle: displayInputs.throttle,
+      brake: displayInputs.brake,
+      clutch: displayInputs.clutch,
+      steeringWheelAngle: displayInputs.steeringWheelAngle,
+      speedMetersPerSecond: displayInputs.speedMetersPerSecond,
+      gear: displayInputs.gear,
+      speedText: formatSpeed(displayInputs.speedMetersPerSecond),
+      gearText: formatGear(displayInputs.gear),
+      steeringText: formatSteering(displayInputs.steeringWheelAngle),
+      brakeAbsActive: displayInputs.brakeAbsActive === true,
       ...inputStateReviewSettings,
       hasGraph,
       hasRail,
@@ -2561,7 +2562,7 @@ function inputStateModel(status, headerItems, source, isAvailable, inputs, trace
       trace: isAvailable
         ? Array.isArray(trace) && trace.length > 0
           ? trace
-          : [inputTracePoint(inputs)]
+          : [inputTracePoint(displayInputs)]
         : []
     }
   };

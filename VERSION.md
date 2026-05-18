@@ -13,46 +13,71 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.0.0 - Private Team Release Candidate
+### v1.0.1 - Overlay Parity, Diagnostics, And Media Hardening
 
 Current branch name:
 
 ```text
-v1.0.0-fuel-and-release-handoff
+v1.0.1-fixes
 ```
 
 Release/tag decision:
 
-- Treat this as the V1.0 private-team release candidate branch on top of the tagged `v0.20.1` Windows parity baseline.
-- Do not create the `v1.0.0` release tag until the branch is merged or explicitly designated as the release point.
-- `Directory.Build.props` is aligned to `1.0.0` so branch-built MSI and screenshot artifacts are distinguishable from the tagged `v0.20.1` baseline.
-- Keep `fixtures/data-contracts/v0.19.0/` as the previous durable-release snapshot unless this branch deliberately changes a persisted user-data contract or the final V1 release pass adds a new release snapshot.
+- Treat this as the V1.0.1 hardening branch on top of the tagged `v1.0.0` private-team release.
+- Do not create the `v1.0.1` release tag until the branch is merged or explicitly designated as the release point.
+- `Directory.Build.props` is aligned to `1.0.1` so branch-built MSI and screenshot artifacts are distinguishable from the tagged `v1.0.0` baseline.
+- No durable user-data schema change is intended for this branch. If the final release pass discovers one, add the matching compatibility tests, docs, versioned snapshots, and migration/reader updates before tagging.
 
 Planned scope:
 
-- Narrow Fuel Calculator V1 so it is local in-car/pit only, keeps current fuel live, and waits for measured completed green-lap burn or exact history before showing strategy burn.
-- Add safe practice/qualifying usage rows that show completed green-lap min/avg/max and sample count without turning those observations into strategy advice.
-- Keep instantaneous `FuelUsePerHour` as diagnostic/current-fuel context rather than fuel-per-lap strategy evidence.
-- Hide rhythm optimization, tire-service advice, and fuel advice settings until a V1.x/V2 fuel strategy pass has stronger pit-service source buckets.
-- Preserve completed `LiveTelemetrySnapshot.Models` as the active native, localhost, and browser overlay runtime contract.
-- Keep localhost overlay pages on `/api/overlay-model/{id}` and keep `/api/snapshot` as a diagnostic/compatibility route, not an overlay page runtime dependency.
-- Add first-pass teammate-facing V1 release readiness docs that separate install/test/support flow from internal future-branch planning.
-- Keep browser review as the primary local development surface, localhost as the OBS/browser-source route surface, and Windows as the production/iRacing behavior gate.
+- Harden screenshot and manifest validation so browser review, localhost, and Windows/native parity failures are treated as product evidence until proven otherwise.
+- Add stricter evidence for row collapse, settings text fit, graph geometry, track-map geometry, overlay dimensions, manifest semantics, colors, source labels, degraded states, and native/browser/localhost fixture parity.
+- Fix proven fixture/rendering gaps exposed by the stricter checks, including settings screenshot viewport clamping, Input graph overlap evidence, Gap To Leader graph coverage, Track Map generated-path realism, Stream Chat fixture coverage, and native manifest representation mismatches.
+- Enable IBT analysis by default and improve Track Map generation/diagnostics so realistic generated maps can be produced without a user having to find hidden settings first.
+- Add live overlay diagnostics for pit windows, pit-service evidence gaps, ARB/fuel service observations, capture/diagnostics state, foreground/window capture evidence, iRating projection evidence, and incident-pressure evidence.
+- Add compact live race projection support for estimated iRating gain/loss and incident-pressure signals without adding new standings UI columns in this patch release.
+- Add a shareable media packet under `docs/media-packet/v1-overlay-showcase/` with every app/settings tab and curated overlay screenshots using feature-rich deterministic fixtures, including an IBT-derived Nurburgring track-map scenario.
+- Keep the deprecated tracked macOS harness out of the V1 parity gate; Windows/native, browser review, and localhost remain the active product validation surfaces.
 
 Branch-complete checklist:
 
-1. Re-read the final branch diff before writing the squash title/body; do not reuse stale model-completeness or Windows-parity text for this V1 branch.
-2. Confirm `Directory.Build.props` stays aligned to `1.0.0` before tagging.
-3. Refresh `docs/model-v2-future-branches.md`, `docs/v1-release-readiness.md`, and any behavior docs touched by the actual fixes.
-4. Run the branch-appropriate browser review, localhost, screenshot expectation, Windows screenshot, data-contract, publish dry-run, and Windows .NET gates before tagging.
+1. Re-read the final branch diff before writing the squash title/body; do not reuse stale V1.0 release-candidate text for this patch branch.
+2. Confirm `Directory.Build.props` stays aligned to `1.0.1` before tagging.
+3. Keep `AGENTS.md`, `README.md`, `telemetry.md`, `docs/ibt-analysis.md`, `docs/live-overlay-diagnostics.md`, `docs/media-packet/`, `docs/track-map-overlay-logic.md`, and repo skills aligned with the branch behavior.
+4. Run browser review screenshots, localhost screenshots, media packet generation, screenshot expectation checks, app/static screenshot checks, Windows expectation checks, unit tests, C# compile-shape checks, and Windows .NET/Windows screenshot CI gates before tagging.
+5. Inspect the uploaded CI artifacts for browser review, localhost, and Windows screenshots; a passing validator is not enough if the artifact shows product-regression evidence.
 
 Suggested squash title:
+
+```text
+[v1.0.1] Harden screenshot parity, diagnostics, and media packet
+```
+
+Suggested squash body:
+
+- Rebuilt screenshot validation around evidence-first native/browser/localhost parity, with stricter manifest semantics, pixel/geometry checks, degraded-state coverage, settings text-fit detection, graph/path evidence, and mutation checks for assertion drift.
+- Fixed proven overlay and fixture gaps exposed by the stricter checks, including settings screenshot viewport clamping, native manifest text/label representation, Input graph overlap, Gap To Leader graph coverage, Stream Chat review states, and generated Track Map realism.
+- Added an IBT-derived Nurburgring 24h Track Map screenshot fixture plus browser review and Windows generator support so the normal race showcase renders a realistic generated track instead of the old low-fidelity fallback shape.
+- Expanded live overlay diagnostics for pit-window service evidence, missing ARB/fuel observations, IBT analysis state, capture health, foreground/window capture state, iRating projection evidence, and incident-pressure evidence.
+- Enabled IBT analysis by default and refreshed Track Map storage/docs/tests so realistic generated maps are easier to produce from normal captures.
+- Added compact live race projection support for estimated whole-field iRating gain/loss and incident-pressure telemetry evidence without adding new standings UI columns in this patch release.
+- Added a teammate-facing media packet under `docs/media-packet/v1-overlay-showcase/` with every app/settings tab and curated overlay screenshots backed by feature-rich deterministic data.
+- Updated browser review, localhost, Windows screenshot generation, screenshot validators, compare-manifest tooling, docs, repo skills, and CI expectations so future UI changes carry the same forensic validation standard.
+- Aligned shared build metadata to `1.0.1` for V1.0.1 branch artifacts without introducing a durable user-data schema change.
+
+## Merged Mainline Milestones
+
+### v1.0.0 - Private Team Release Candidate
+
+Commit: `a657c69`
+
+Squash title:
 
 ```text
 [v1.0.0] Prepare private team V1 fuel and release handoff
 ```
 
-Suggested squash body:
+Summary:
 
 - Made Fuel Calculator V1 conservative by rendering only in local in-car/pit context, keeping current fuel live, and using measured completed green-lap fuel deltas before exact history for strategy burn.
 - Added observational practice/qualifying usage rows backed only by completed green-lap min/avg/max samples.
@@ -63,8 +88,6 @@ Suggested squash body:
 - Applied unit-system changes in place for unit-aware overlays so non-unit overlays such as Stream Chat are not recreated on Metric/Imperial toggles; added lifecycle diagnostics and screenshot-manifest unit evidence to catch related regressions.
 - Added teammate-facing V1 release readiness docs covering product scope, install/test/support flow, validation gates, accepted rough edges, and fuel/teammate telemetry caveats.
 - Aligned shared build metadata to `1.0.0` for V1 candidate branch artifacts without introducing a durable user-data schema change.
-
-## Merged Mainline Milestones
 
 ### v0.20.1 - Windows Fixes And V1 Candidate Polish
 

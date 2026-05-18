@@ -397,8 +397,9 @@ test.describe('browser overlay Playwright integration', () => {
     await page.getByRole('tab', { name: 'Footer' }).click();
     await expect(page.locator('.region-segment.active')).toHaveText('Footer');
     await expect(page.locator('h2')).toContainText('Footer');
-    await expect(page.getByText('Source')).toBeVisible();
-    await expect(page.locator('.chrome-head')).toHaveText(['Item', 'Practice', 'Qualifying', 'Race']);
+    await expect(page.locator('.chrome-head')).toHaveCount(0);
+    await expect(page.locator('.chrome-check')).toHaveCount(0);
+    await expect(page.getByText('No footer controls for this overlay.')).toBeVisible();
 
     await page.getByRole('link', { name: 'Stream Chat' }).click();
     await expect(page.locator('.region-segment')).toHaveText(['General', 'Content', 'Twitch', 'Streamlabs']);
@@ -635,14 +636,14 @@ test.describe('browser overlay Playwright integration', () => {
     await expect(page.getByText('OBS size 276 x 260')).toBeVisible();
 
     await page.getByRole('link', { name: 'Pit Service' }).click();
-    await page.getByRole('tab', { name: 'Footer' }).click();
+    await page.getByRole('tab', { name: 'Header' }).click();
     await page.locator('.chrome-check').first().getByRole('button').click();
     await expect.poll(() => patches.length).toBeGreaterThan(1);
     expect(patches).toContainEqual({
       kind: 'chrome',
       overlayId: 'pit-service',
-      area: 'footer',
-      label: 'Source',
+      area: 'header',
+      label: 'Time remaining',
       session: 'Practice',
       enabled: false
     });

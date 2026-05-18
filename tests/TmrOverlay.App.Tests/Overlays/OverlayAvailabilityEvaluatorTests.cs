@@ -112,7 +112,7 @@ public sealed class OverlayAvailabilityEvaluatorTests
         Assert.False(OverlayChromeSettings.ShowHeaderStatus(settings, test));
         Assert.False(OverlayChromeSettings.ShowHeaderStatus(settings, practice));
         Assert.False(OverlayChromeSettings.ShowHeaderStatus(settings, race));
-        Assert.True(OverlayChromeSettings.ShowHeaderTimeRemaining(settings, test));
+        Assert.False(OverlayChromeSettings.ShowHeaderTimeRemaining(settings, test));
         Assert.False(OverlayChromeSettings.ShowHeaderTimeRemaining(settings, practice));
         Assert.True(OverlayChromeSettings.ShowHeaderTimeRemaining(settings, race));
         Assert.False(OverlayChromeSettings.ShowFooterSource(settings, test));

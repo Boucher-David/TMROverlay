@@ -152,6 +152,10 @@
       padding: 12px 16px 14px;
     }
 
+    body.gap-to-leader-page .content {
+      padding-bottom: 9px;
+    }
+
     body.fuel-calculator-page .overlay {
       width: min(503px, calc(100vw - 16px));
       height: min(315px, calc(100vh - 16px));
@@ -766,8 +770,8 @@
     .model-graph-panel {
       min-width: 520px;
       width: min(620px, calc(100vw - 48px));
-      height: min(270px, calc(100vh - 120px));
-      min-height: 250px;
+      height: min(275px, calc(100vh - 120px));
+      min-height: 255px;
       border: 1px solid var(--tmr-border-muted);
       border-radius: 5px;
       background: var(--tmr-surface-inset);

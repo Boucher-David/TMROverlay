@@ -52,6 +52,7 @@ export const pages = {
     modelRoute: '/api/overlay-model/car-radar'
   }),
   'gap-to-leader': pageDefinition('gap-to-leader', 'Gap To Leader', '/overlays/gap-to-leader', {
+    bodyClass: 'gap-to-leader-page',
     fadeWhenTelemetryUnavailable: true,
     modelRoute: '/api/overlay-model/gap-to-leader'
   }),
@@ -2123,11 +2124,14 @@ function rgba(red, green, blue, alpha) {
 
 function trackMapDisplayModel(page, live, settings) {
   const includeUserMaps = settings?.trackMapSettings?.includeUserMaps ?? settings?.includeUserMaps ?? true;
+  const hasGeneratedTrackMap = settings?.trackMap?.racingLine?.points?.length >= 3;
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status: 'live',
     headerItems: [],
-    source: 'source: live position telemetry',
+    source: hasGeneratedTrackMap
+      ? 'source: IBT-derived Nurburgring 24h track map | live position telemetry'
+      : 'source: live position telemetry',
     bodyKind: 'track-map',
     trackMap: {
       markers: trackMapMarkers(live),

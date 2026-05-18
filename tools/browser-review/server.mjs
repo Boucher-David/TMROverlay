@@ -1594,6 +1594,7 @@ function relativeDisplayModel(previewLabel = 'review fixture', session = 'practi
     ],
     metrics: [],
     points: [],
+    shouldRender: true,
     headerItems: [
       { key: 'timeRemaining', value: '06:37:08' }
     ]
@@ -1758,7 +1759,8 @@ function tableModel(overlayId, title, status, rows) {
       headerTitle: null,
       headerDetail: null
     })),
-    metrics: []
+    metrics: [],
+    shouldRender: true
   };
 }
 
@@ -1980,6 +1982,7 @@ function standingsDisplayModel(previewLabel = 'review fixture') {
       carRow(['49', '#60', 'Tommie Wittens', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
     ],
     metrics: [],
+    shouldRender: true,
     headerItems: [
       { key: 'timeRemaining', value: '06:37:08' }
     ]

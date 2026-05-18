@@ -21,6 +21,7 @@ from validate_overlay_screenshots import (
     WINDOWS_NATIVE_OVERLAY_SIZES,
     WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS,
     get_manifest_value,
+    input_rail_item_visible_text,
     preview_modes_for_overlay,
     resolve_windows_installer_root,
     web_overlay_variant_manifest_path_map,
@@ -1468,16 +1469,54 @@ def table_column_signature(column: Any) -> tuple[Any, Any, Any]:
 def table_row_signature(row: Any) -> tuple[Any, Any, Any, tuple[Any, ...], tuple[Any, ...]]:
     if not isinstance(row, dict):
         return ("", "", "", (), ())
-    rendered_cells = as_list(get_manifest_value(row, "renderedCells"))
-    rendered_text = tuple(normalize_scalar(get_manifest_value(cell, "text")) for cell in rendered_cells if isinstance(cell, dict))
-    rendered_values = tuple(normalize_scalar(get_manifest_value(cell, "value")) for cell in rendered_cells if isinstance(cell, dict))
+    row_kind = normalize_table_row_kind(get_manifest_value(row, "kind"))
     return (
-        normalize_table_row_kind(get_manifest_value(row, "kind")),
+        row_kind,
         get_manifest_value(row, "isReference") is True,
         normalize_scalar(get_manifest_value(row, "relativeLapDelta")),
         tuple(normalize_scalar(cell) for cell in as_list(get_manifest_value(row, "cells"))),
-        rendered_text or rendered_values,
+        table_row_visible_text_signature(row, row_kind),
     )
+
+
+def table_row_visible_text_signature(row: dict[str, Any], row_kind: Any) -> tuple[Any, ...]:
+    if row_kind == "class-header":
+        text = class_header_visible_text(row)
+        if text:
+            return (text,)
+
+    rendered_cells = as_list(get_manifest_value(row, "renderedCells"))
+    rendered_text = tuple(
+        normalize_scalar(get_manifest_value(cell, "text"))
+        for cell in rendered_cells
+        if isinstance(cell, dict)
+    )
+    rendered_values = tuple(
+        normalize_scalar(get_manifest_value(cell, "value"))
+        for cell in rendered_cells
+        if isinstance(cell, dict)
+    )
+    return rendered_text or rendered_values
+
+
+def class_header_visible_text(row: dict[str, Any]) -> Any:
+    row_text = semantic_text(
+        " ".join(
+            str(part)
+            for part in (get_manifest_value(row, "text"), get_manifest_value(row, "detail"))
+            if isinstance(part, str) and part.strip()
+        )
+    )
+    if row_text:
+        return row_text
+
+    rendered_cells = as_list(get_manifest_value(row, "renderedCells"))
+    rendered_text = " ".join(
+        str(get_manifest_value(cell, "text") or get_manifest_value(cell, "value") or "")
+        for cell in rendered_cells
+        if isinstance(cell, dict)
+    )
+    return semantic_text(rendered_text)
 
 
 def metric_section_signature(section: Any) -> tuple[Any, tuple[Any, ...]]:
@@ -1570,13 +1609,12 @@ def input_series_signature(series: Any) -> tuple[Any, Any, Any]:
     )
 
 
-def rail_item_signature(item: Any) -> tuple[Any, Any, Any]:
+def rail_item_signature(item: Any) -> tuple[Any, Any]:
     if not isinstance(item, dict):
-        return ("", "", "")
+        return ("", "")
     return (
         normalize_scalar(get_manifest_value(item, "kind")),
-        normalize_scalar(get_manifest_value(item, "label")),
-        normalize_scalar(get_manifest_value(item, "text")),
+        normalize_scalar(input_rail_item_visible_text(item)),
     )
 
 
@@ -1668,6 +1706,12 @@ def normalize_scalar(value: Any) -> Any:
     if isinstance(value, str):
         return value.strip()
     return value
+
+
+def semantic_text(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"\s+", " ", value).strip().upper()
 
 
 def normalize_table_row_kind(value: Any) -> Any:

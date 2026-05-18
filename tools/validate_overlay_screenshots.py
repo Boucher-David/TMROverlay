@@ -2426,6 +2426,8 @@ def require_input_rail_evidence(path: str, rail: object, failures: list[str]) ->
             if item.get("kind") in (None, "") and item.get("role") in (None, ""):
                 failures.append(f"{path}: model input rail item {index} missing kind/role")
             require_rect(path, item.get("bounds"), f"model input rail item {index} bounds", failures)
+            if not input_rail_item_visible_text(item):
+                failures.append(f"{path}: model input rail item {index} missing visible text evidence")
             if path.startswith(("browser-overlays/", "localhost-overlays/")):
                 children = item.get("children")
                 if not isinstance(children, list) or len(children) == 0:
@@ -2448,6 +2450,41 @@ def require_input_rail_evidence(path: str, rail: object, failures: list[str]) ->
 
     if path.startswith(("browser-overlays/", "localhost-overlays/")):
         require_non_empty_list(path, rail, "groups", failures)
+
+
+def input_rail_item_visible_text(item: object) -> str:
+    if not isinstance(item, dict):
+        return ""
+
+    label = text_value(item, "label")
+    text = text_value(item, "text")
+    value = text_value(item, "value")
+    child_label = input_rail_child_text(item, "label")
+    child_value = input_rail_child_text(item, "value")
+
+    label = label or child_label
+    text = text or " ".join(part for part in (child_label, child_value) if part)
+    value = value or child_value
+
+    if label and text:
+        if text.upper().startswith(label.upper()):
+            return text.strip()
+        return f"{label} {text}".strip()
+    if label and value:
+        return f"{label} {value}".strip()
+    return (text or label or value).strip()
+
+
+def input_rail_child_text(item: dict[str, object], child_kind: str) -> str:
+    suffix = f"-{child_kind}"
+    for child in evidence_list(item, "children"):
+        if not isinstance(child, dict):
+            continue
+        kind = text_value(child, "kind").lower()
+        role = text_value(child, "role").lower()
+        if kind == child_kind or role.endswith(suffix):
+            return text_value(child, "text")
+    return ""
 
 
 def require_vector_item_evidence(path: str, items: object, failures: list[str]) -> None:
@@ -3324,10 +3361,26 @@ def validate_input_state_contract(path: str, values: dict[str, object], failures
         failures.append(f"{path}: input-state status/text did not expose ABS")
     rail_items = evidence_list(rail, "items")
     require_sequence(path, "input-state rail item kinds", [text_value(item, "kind") for item in rail_items], ["Throttle", "Brake", "Clutch", "SteeringWheel", "Gear", "Speed"], failures)
+    expected_rail_labels = {
+        "Throttle": "THR",
+        "Brake": "ABS",
+        "Clutch": "CLT",
+        "SteeringWheel": "WHEEL",
+        "Gear": "GEAR",
+        "Speed": "SPD",
+    }
+    for item in rail_items:
+        kind = text_value(item, "kind")
+        expected_label = expected_rail_labels.get(kind)
+        visible_text = input_rail_item_visible_text(item)
+        if not visible_text:
+            failures.append(f"{path}: input-state {kind or 'unknown'} rail item missing visible text")
+        elif expected_label is not None and not visible_text.upper().startswith(f"{expected_label} "):
+            failures.append(f"{path}: input-state {kind} rail visible text expected label {expected_label!r}, got {visible_text!r}")
+    brake_item = next((item for item in rail_items if text_value(item, "kind") == "Brake"), None)
+    if not isinstance(brake_item, dict) or "ABS" not in input_rail_item_visible_text(brake_item).upper():
+        failures.append(f"{path}: input-state brake rail item did not retain ABS label")
     if path.startswith(("browser-overlays/", "localhost-overlays/")):
-        brake_item = next((item for item in rail_items if text_value(item, "kind") == "Brake"), None)
-        if not isinstance(brake_item, dict) or "ABS" not in str(brake_item.get("text") or ""):
-            failures.append(f"{path}: input-state brake rail item did not retain ABS label")
         group_kinds = [text_value(group, "kind") for group in evidence_list(rail, "groups")]
         for kind in ("Bars", "Readouts"):
             if kind not in group_kinds:
@@ -4246,6 +4299,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="input rail visible label disappears",
+        path="browser-overlays/input-state.png",
+        base=mutation_input_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "inputs", "rail", "items", 0, "text"), "78%"),
+        validate=validate_input_state_contract,
+        expected_tokens=("input-state Throttle rail visible text expected label 'THR'",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="input waiting rail leaks stale live values",
         path="browser-overlays/input-state-waiting.png",
         base=mutation_input_waiting_screenshot(),
@@ -4693,12 +4755,12 @@ def mutation_input_screenshot() -> dict[str, object]:
                 "rail": {
                     "bounds": rail_bounds,
                     "items": [
-                        {"kind": "Throttle", "text": "Throttle"},
-                        {"kind": "Brake", "text": "Brake ABS"},
-                        {"kind": "Clutch", "text": "Clutch"},
-                        {"kind": "SteeringWheel", "text": "Steering"},
-                        {"kind": "Gear", "text": "Gear"},
-                        {"kind": "Speed", "text": "Speed"},
+                        {"kind": "Throttle", "text": "THR 78%"},
+                        {"kind": "Brake", "text": "ABS 16%"},
+                        {"kind": "Clutch", "text": "CLT 0%"},
+                        {"kind": "SteeringWheel", "text": "WHEEL -10 deg"},
+                        {"kind": "Gear", "text": "GEAR 6"},
+                        {"kind": "Speed", "text": "SPD 280 km/h"},
                     ],
                     "groups": [{"kind": "Bars"}, {"kind": "Readouts"}],
                 },

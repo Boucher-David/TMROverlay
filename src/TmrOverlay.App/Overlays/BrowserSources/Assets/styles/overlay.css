@@ -958,9 +958,10 @@
 
     .chat-emote {
       display: inline-block;
-      width: auto;
+      width: 21px;
       height: 21px;
       margin: -3px 1px -5px;
+      object-fit: contain;
       vertical-align: middle;
     }
 

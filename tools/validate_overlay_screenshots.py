@@ -258,6 +258,80 @@ BROWSER_ONLY_OVERLAY_IDS = {
 
 BROWSER_FULL_CANVAS_COMPARISON_OVERLAYS: set[str] = set()
 
+OVERLAY_VARIANT_SPECS = (
+    ("fuel-calculator", "waiting", "fixture=fuel-waiting", True, None),
+    ("session-weather", "missing", "fixture=session-weather-missing", True, None),
+    ("pit-service", "idle", "fixture=pit-service-idle", True, None),
+    ("input-state", "waiting", "fixture=input-waiting", True, None),
+    ("input-state", "no-content", "fixture=input-no-content", True, None),
+    ("car-radar", "left", "fixture=car-radar-left", True, None),
+    ("car-radar", "right", "fixture=car-radar-right", True, None),
+    ("car-radar", "both-sides", "fixture=car-radar-both-sides", True, None),
+    ("car-radar", "clear", "fixture=car-radar-clear", True, None),
+    ("gap-to-leader", "no-cars", "fixture=gap-no-cars", True, None),
+    ("track-map", "circle-fallback", "trackMap=fallback", True, "track-map-fallback"),
+    ("track-map", "no-markers", "fixture=track-map-no-markers", True, None),
+    ("flags", "all-kinds", "fixture=flags-all-kinds", True, None),
+    ("garage-cover", "hidden", "fixture=garage-hidden", False, None),
+    ("garage-cover", "garage-visible", "fixture=garage-visible", False, None),
+    ("garage-cover", "stale", "fixture=garage-stale", False, None),
+    ("garage-cover", "disconnected", "fixture=garage-disconnected", False, None),
+    ("stream-chat", "twitch-rich", "fixture=stream-chat-twitch-rich", True, None),
+    ("stream-chat", "streamlabs-configured", "fixture=stream-chat-streamlabs-configured", True, None),
+)
+
+WEB_OVERLAY_VARIANT_KEYS = {
+    (overlay_id, slug)
+    for overlay_id, slug, _query, _windows_enabled, _web_stem in OVERLAY_VARIANT_SPECS
+}
+
+WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS = {
+    (overlay_id, slug)
+    for overlay_id, slug, _query, windows_enabled, _web_stem in OVERLAY_VARIANT_SPECS
+    if windows_enabled
+}
+
+OVERLAY_VARIANT_QUERY_BY_KEY = {
+    (overlay_id, slug): query
+    for overlay_id, slug, query, _windows_enabled, _web_stem in OVERLAY_VARIANT_SPECS
+}
+
+OVERLAY_VARIANTS_ALLOW_EMPTY_TEXT_SAMPLE = {
+    ("input-state", "no-content"),
+    ("car-radar", "left"),
+    ("car-radar", "right"),
+    ("car-radar", "both-sides"),
+    ("car-radar", "clear"),
+    ("gap-to-leader", "no-cars"),
+    ("track-map", "no-markers"),
+    ("flags", "all-kinds"),
+}
+
+OVERLAY_VARIANT_MIN_UNIQUE_BYTES = {
+    ("fuel-calculator", "waiting"): 4,
+    ("input-state", "waiting"): 4,
+    ("input-state", "no-content"): 1,
+    ("car-radar", "clear"): 4,
+    ("gap-to-leader", "no-cars"): 1,
+    ("garage-cover", "hidden"): 1,
+}
+
+OVERLAY_VARIANT_MIN_BYTE_RANGE = {
+    ("fuel-calculator", "waiting"): 1,
+    ("input-state", "waiting"): 1,
+    ("input-state", "no-content"): 1,
+    ("gap-to-leader", "no-cars"): 1,
+    ("garage-cover", "hidden"): 1,
+}
+
+WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS = {
+    ("gap-to-leader", "no-cars"),
+}
+
+WEB_OVERLAY_VARIANT_MINIMUM_SIZES = {
+    ("gap-to-leader", "no-cars"): (300, 60),
+}
+
 WINDOWS_NATIVE_OVERLAY_BODIES = {
     "standings": "table",
     "fuel-calculator": "metric-rows",
@@ -276,14 +350,17 @@ WINDOWS_NATIVE_REVIEW_ALIGNED_OVERLAYS = {
     "standings",
     "relative",
     "fuel-calculator",
+    "track-map",
+    "session-weather",
     "pit-service",
+    "input-state",
+    "stream-chat",
 }
 
 WINDOWS_NATIVE_FULL_CANVAS_COMPARISON_OVERLAYS = {
     "car-radar",
     "track-map",
     "flags",
-    "garage-cover",
 }
 
 WINDOWS_NATIVE_REVIEW_ALIGNED_SOURCE_FILES = {
@@ -572,6 +649,18 @@ def validate_windows_ci(root: Path, min_unique_bytes: int, failures: list[str]) 
                 failures=failures,
             )
 
+    for relative_path, (overlay_id, _slug) in windows_native_variant_manifest_path_map().items():
+        expected_size = WINDOWS_NATIVE_OVERLAY_SIZES.get(overlay_id)
+        validate_png(
+            root=root,
+            relative_path=relative_path,
+            expected_size=expected_size,
+            min_unique_bytes=WINDOWS_MIN_UNIQUE_BYTES.get(relative_path, OVERLAY_VARIANT_MIN_UNIQUE_BYTES.get((overlay_id, _slug), min_unique_bytes)),
+            failures=failures,
+            min_byte_range=OVERLAY_VARIANT_MIN_BYTE_RANGE.get((overlay_id, _slug), 24),
+            minimum_size=None if expected_size is not None else (200, 120),
+        )
+
     for relative_path, expected_size in WINDOWS_NATIVE_SPECIAL_PNGS.items():
         validate_png(
             root=root,
@@ -847,7 +936,7 @@ def compare_browser_localhost_overlay_parity(
             f"web overlay {key}",
             browser_overlays[key],
             localhost_overlays[key],
-            ("overlayId", "previewMode", "bodyKind", "sourceContract", "moduleAsset", "width", "height"),
+            ("overlayId", "previewMode", "fixtureVariant", "bodyKind", "sourceContract", "moduleAsset", "width", "height"),
             failures,
         )
 
@@ -895,6 +984,46 @@ def compare_web_windows_overlay_parity(
             browser_screenshot,
             localhost_screenshot,
             ("overlayId", "previewMode", "bodyKind", "width", "height"),
+            failures,
+        )
+
+    browser_variants = {
+        key: screenshot
+        for key, screenshot in overlay_variant_index(browser, "browser-overlays").items()
+        if key in WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS
+    }
+    localhost_variants = {
+        key: screenshot
+        for key, screenshot in overlay_variant_index(localhost, "localhost-overlays").items()
+        if key in WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS
+    }
+    windows_variants = overlay_variant_index(windows, "native-overlays")
+    compare_sets("Browser/native overlay fixture variant manifest parity", set(browser_variants), WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS, failures)
+    compare_sets("Localhost/native overlay fixture variant manifest parity", set(localhost_variants), WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS, failures)
+    compare_sets("Windows native overlay fixture variant manifest parity", set(windows_variants), WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS, failures)
+
+    for key in sorted(WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS & set(browser_variants) & set(localhost_variants) & set(windows_variants)):
+        label = f"native/browser/localhost overlay fixture {key[0]} {key[1]}"
+        browser_screenshot = browser_variants[key]
+        localhost_screenshot = localhost_variants[key]
+        windows_screenshot = windows_variants[key]
+        compare_manifest_fields(
+            label,
+            browser_screenshot,
+            localhost_screenshot,
+            ("overlayId", "previewMode", "fixtureVariant", "bodyKind", "width", "height", "status", "shouldRender"),
+            failures,
+        )
+        windows_fields = (
+            ("overlayId", "previewMode", "fixtureVariant", "bodyKind", "status", "shouldRender")
+            if key in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS
+            else ("overlayId", "previewMode", "fixtureVariant", "bodyKind", "width", "height", "status", "shouldRender")
+        )
+        compare_manifest_fields(
+            label,
+            browser_screenshot,
+            windows_screenshot,
+            windows_fields,
             failures,
         )
         compare_manifest_fields(
@@ -969,6 +1098,50 @@ def primary_web_overlay_screenshots(
     }
 
 
+def web_overlay_variant_manifest_path_map(prefix: str) -> dict[str, tuple[str, str]]:
+    return {
+        f"{prefix}/{web_variant_stem(overlay_id, slug, web_stem)}.png": (overlay_id, slug)
+        for overlay_id, slug, _query, _windows_enabled, web_stem in OVERLAY_VARIANT_SPECS
+    }
+
+
+def windows_native_variant_manifest_path_map() -> dict[str, tuple[str, str]]:
+    return {
+        f"native-overlays/{overlay_id}-{slug}.png": (overlay_id, slug)
+        for overlay_id, slug, _query, windows_enabled, _web_stem in OVERLAY_VARIANT_SPECS
+        if windows_enabled
+    }
+
+
+def web_variant_stem(overlay_id: str, slug: str, web_stem: object = None) -> str:
+    return str(web_stem) if isinstance(web_stem, str) and web_stem else f"{overlay_id}-{slug}"
+
+
+def screenshot_variant_key(path: str) -> tuple[str, str] | None:
+    for prefix in ("browser-overlays", "localhost-overlays"):
+        match = web_overlay_variant_manifest_path_map(prefix).get(path)
+        if match is not None:
+            return match
+    return windows_native_variant_manifest_path_map().get(path)
+
+
+def overlay_variant_index(
+    screenshots: dict[str, dict[str, object]],
+    prefix: str,
+) -> dict[tuple[str, str], dict[str, object]]:
+    indexed: dict[tuple[str, str], dict[str, object]] = {}
+    prefix_with_slash = f"{prefix}/"
+    for path, screenshot in screenshots.items():
+        if not path.startswith(prefix_with_slash) or "-alias-" in path:
+            continue
+        overlay_id = screenshot.get("overlayId")
+        fixture_variant = screenshot.get("fixtureVariant")
+        if not isinstance(overlay_id, str) or not isinstance(fixture_variant, str):
+            continue
+        indexed[(overlay_id, fixture_variant)] = screenshot
+    return indexed
+
+
 def overlay_preview_index(
     screenshots: dict[str, dict[str, object]],
     prefix: str,
@@ -977,6 +1150,8 @@ def overlay_preview_index(
     prefix_with_slash = f"{prefix}/"
     for path, screenshot in screenshots.items():
         if not path.startswith(prefix_with_slash) or "-alias-" in path:
+            continue
+        if isinstance(screenshot.get("fixtureVariant"), str) and screenshot.get("fixtureVariant"):
             continue
         overlay_id = screenshot.get("overlayId")
         preview_mode = screenshot.get("previewMode")
@@ -1068,6 +1243,20 @@ def validate_web_overlay_pngs(root: Path, prefix: str, min_unique_bytes: int, fa
                 failures=failures,
                 minimum_size=None if expected_size is not None else (200, 120),
             )
+        for relative_path, (variant_overlay_id, _slug) in web_overlay_variant_manifest_path_map(prefix).items():
+            if variant_overlay_id != overlay_id:
+                continue
+            variant_key = (variant_overlay_id, _slug)
+            variant_expected_size = None if variant_key in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS else WINDOWS_NATIVE_OVERLAY_SIZES.get(variant_overlay_id)
+            validate_png(
+                root=root,
+                relative_path=relative_path,
+                expected_size=variant_expected_size,
+                min_unique_bytes=OVERLAY_VARIANT_MIN_UNIQUE_BYTES.get(variant_key, min_unique_bytes),
+                failures=failures,
+                min_byte_range=OVERLAY_VARIANT_MIN_BYTE_RANGE.get(variant_key, 24),
+                minimum_size=None if variant_expected_size is not None else WEB_OVERLAY_VARIANT_MINIMUM_SIZES.get(variant_key, (200, 120)),
+            )
 
 
 def validate_browser_review_installer_pngs(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
@@ -1113,6 +1302,7 @@ def windows_ci_manifest_paths() -> set[str]:
     for overlay_id in WINDOWS_NATIVE_OVERLAY_SIZES:
         for mode in preview_modes_for_overlay(overlay_id):
             paths.add(f"native-overlays/{overlay_id}-{mode}.png")
+    paths.update(windows_native_variant_manifest_path_map())
     return paths
 
 
@@ -1149,6 +1339,9 @@ def web_overlay_manifest_paths(prefix: str) -> set[str]:
         paths.add(f"{prefix}/{overlay_id}.png")
         for mode in preview_modes_for_overlay(overlay_id):
             paths.add(f"{prefix}/{overlay_id}-{mode}.png")
+        if overlay_id == "track-map":
+            paths.add(f"{prefix}/track-map-fallback.png")
+    paths.update(web_overlay_variant_manifest_path_map(prefix))
     return paths
 
 
@@ -1227,6 +1420,7 @@ def validate_windows_manifest(root: Path, expected_paths: set[str], failures: li
                 expected_bodies=BROWSER_REVIEW_OVERLAY_BODIES,
                 failures=failures,
             )
+            validate_overlay_contract(path, screenshot, failures)
         if path.startswith("states/settings-"):
             require_manifest_fields(path, metadata, ["tab", "region", "fixture", "sourceContract"], failures)
 
@@ -1264,6 +1458,7 @@ def validate_browser_review_manifest(
                 expected_bodies=BROWSER_REVIEW_OVERLAY_BODIES,
                 failures=failures,
             )
+            validate_overlay_contract(path, screenshot, failures)
         if path.startswith("review-installer/"):
             require_manifest_fields(path, screenshot, ["menuId", "moduleAsset", "uiEvidence"], failures)
             require_installer_ui_evidence(path, screenshot.get("uiEvidence"), failures)
@@ -1560,12 +1755,14 @@ def require_model_evidence(path: str, value: object, failures: list[str]) -> Non
         failures.append(f"{path}: model layout evidence missing bodyKind")
         return
 
+    variant_key = screenshot_variant_key(path)
     if body_kind == "table":
         require_non_empty_list(path, value, "columns", failures)
         require_rows_with_cells(path, value.get("rows"), "model table rows", failures)
         require_rendered_cell_evidence(path, value.get("rows"), failures)
     elif body_kind == "metrics":
-        if not any(non_empty_list(value.get(field)) for field in ("metrics", "metricSections", "gridSections")):
+        allows_empty_metrics = variant_key == ("fuel-calculator", "waiting")
+        if not allows_empty_metrics and not any(non_empty_list(value.get(field)) for field in ("metrics", "metricSections", "gridSections")):
             failures.append(f"{path}: model metric evidence missing metrics/sections")
         require_metric_text_evidence(path, value.get("metrics"), failures)
         require_metric_section_text_evidence(path, value.get("metricSections"), failures)
@@ -1577,14 +1774,16 @@ def require_model_evidence(path: str, value: object, failures: list[str]) -> Non
         else:
             geometry = graph.get("geometry")
             if not isinstance(geometry, dict):
-                failures.append(f"{path}: model graph evidence missing rendered geometry")
+                if variant_key != ("gap-to-leader", "no-cars"):
+                    failures.append(f"{path}: model graph evidence missing rendered geometry")
             else:
                 require_rect(path, geometry.get("frame"), "model graph frame", failures)
                 require_rect(path, geometry.get("plot"), "model graph plot", failures)
                 require_rect(path, geometry.get("axis"), "model graph axis", failures)
                 require_rect(path, geometry.get("labelLane"), "model graph label lane", failures)
                 require_line_evidence(path, geometry.get("gridLines"), "model graph grid line", failures)
-                require_non_empty_list(path, geometry, "series", failures)
+                if variant_key != ("gap-to-leader", "no-cars"):
+                    require_non_empty_list(path, geometry, "series", failures)
                 for index, series in enumerate(geometry.get("series") if isinstance(geometry.get("series"), list) else []):
                     if not isinstance(series, dict):
                         continue
@@ -1598,15 +1797,18 @@ def require_model_evidence(path: str, value: object, failures: list[str]) -> Non
             if inputs.get("hasGraph") is True:
                 graph = inputs.get("graph")
                 if not isinstance(graph, dict):
-                    failures.append(f"{path}: model input evidence missing graph geometry")
+                    if variant_key != ("input-state", "waiting"):
+                        failures.append(f"{path}: model input evidence missing graph geometry")
                 else:
                     require_rect(path, graph.get("bounds"), "model input graph bounds", failures)
                     require_non_empty_list(path, graph, "gridLines", failures)
-                    require_non_empty_list(path, graph, "series", failures)
+                    if variant_key != ("input-state", "waiting"):
+                        require_non_empty_list(path, graph, "series", failures)
                     require_line_evidence(path, graph.get("gridLines"), "model input graph grid line", failures)
                     require_input_series_evidence(path, graph.get("series"), failures)
             if inputs.get("hasRail") is True:
-                require_input_rail_evidence(path, inputs.get("rail"), failures)
+                if variant_key != ("input-state", "waiting") or isinstance(inputs.get("rail"), dict):
+                    require_input_rail_evidence(path, inputs.get("rail"), failures)
             require_line_evidence(path, inputs.get("grid"), "model input grid line", failures)
             require_input_series_evidence(path, inputs.get("series"), failures)
     elif body_kind in ("car-radar", "track-map"):
@@ -1620,7 +1822,7 @@ def require_model_evidence(path: str, value: object, failures: list[str]) -> Non
             if path.startswith("native-overlays/") or vector.get("height") not in (None, ""):
                 require_positive_number(path, vector.get("height"), f"model {body_kind} source height", failures)
             if body_kind == "car-radar":
-                if vector.get("shouldRender") is not True:
+                if vector.get("shouldRender") is not True and variant_key != ("car-radar", "clear"):
                     failures.append(f"{path}: model car-radar evidence did not prove shouldRender=true")
                 require_non_negative_int(path, vector.get("carCount"), "model car-radar carCount", failures)
                 require_non_negative_int(path, vector.get("labelCount"), "model car-radar labelCount", failures)
@@ -1662,22 +1864,26 @@ def require_native_body_layout_evidence(path: str, body_layout: dict[str, object
         failures.append(f"{path}: native body layout missing kind")
         return
 
+    variant_key = screenshot_variant_key(path)
     if kind == "table":
         require_non_empty_list(path, body_layout, "columns", failures)
         require_rows_with_cells(path, get_manifest_value(body_layout, "rows"), "native table rows", failures)
     elif kind == "metric-rows":
-        if not any(non_empty_list(body_layout.get(field)) for field in ("metricRows", "metricGrids", "MetricRows", "MetricGrids")):
+        allows_empty_metrics = variant_key == ("fuel-calculator", "waiting")
+        if not allows_empty_metrics and not any(non_empty_list(body_layout.get(field)) for field in ("metricRows", "metricGrids", "MetricRows", "MetricGrids")):
             failures.append(f"{path}: native metric layout missing metric rows/grids")
         require_metric_text_evidence(path, get_manifest_value(body_layout, "metricRows"), failures)
     elif kind == "graph":
         graph = body_layout.get("graph") or body_layout.get("Graph")
         if not isinstance(graph, dict):
-            failures.append(f"{path}: native graph layout missing graph object")
+            if variant_key != ("gap-to-leader", "no-cars"):
+                failures.append(f"{path}: native graph layout missing graph object")
             return
         require_rect(path, get_manifest_value(graph, "frame"), "native graph frame", failures)
         require_rect(path, get_manifest_value(graph, "plot"), "native graph plot", failures)
         require_rect(path, get_manifest_value(graph, "labelLane"), "native graph label lane", failures)
-        require_non_empty_list(path, graph, "series", failures)
+        if variant_key != ("gap-to-leader", "no-cars"):
+            require_non_empty_list(path, graph, "series", failures)
         graph_series = get_manifest_value(graph, "series")
         for index, series in enumerate(graph_series if isinstance(graph_series, list) else []):
             if not isinstance(series, dict):
@@ -1695,7 +1901,8 @@ def require_native_body_layout_evidence(path: str, body_layout: dict[str, object
             return
         if inputs.get("graph") is not None or inputs.get("Graph") is not None:
             require_non_empty_list(path, inputs, "gridLines", failures)
-            require_non_empty_list(path, inputs, "traceSeries", failures)
+            if variant_key != ("input-state", "waiting"):
+                require_non_empty_list(path, inputs, "traceSeries", failures)
     elif kind in ("radar", "track-map"):
         vector = body_layout.get("vector") or body_layout.get("Vector")
         if not isinstance(vector, dict):
@@ -1717,7 +1924,7 @@ def require_windows_native_comparison_evidence(path: str, values: dict[str, obje
         failures.append(f"{path}: Windows comparison evidence missing status")
     if values.get("source") in (None, ""):
         failures.append(f"{path}: Windows comparison evidence missing source")
-    if values.get("textSample") in (None, ""):
+    if values.get("textSample") in (None, "") and screenshot_variant_key(path) not in OVERLAY_VARIANTS_ALLOW_EMPTY_TEXT_SAMPLE:
         failures.append(f"{path}: Windows comparison evidence missing textSample")
 
     content_bounds = values.get("contentBounds")
@@ -1787,7 +1994,8 @@ def require_native_model_comparison_evidence(
 
 
 def require_native_metric_model_evidence(path: str, model_evidence: dict[str, object], failures: list[str]) -> None:
-    if not any(non_empty_list(model_evidence.get(field)) for field in ("metrics", "metricSections", "gridSections")):
+    allows_empty_metrics = screenshot_variant_key(path) == ("fuel-calculator", "waiting")
+    if not allows_empty_metrics and not any(non_empty_list(model_evidence.get(field)) for field in ("metrics", "metricSections", "gridSections")):
         failures.append(f"{path}: native flattened metric evidence missing metrics/sections")
     require_metric_text_evidence(path, model_evidence.get("metrics"), failures)
     require_metric_section_text_evidence(path, model_evidence.get("metricSections"), failures)
@@ -1801,7 +2009,8 @@ def require_native_graph_model_evidence(path: str, graph: object, failures: list
 
     geometry = graph.get("geometry")
     if not isinstance(geometry, dict):
-        failures.append(f"{path}: native flattened graph evidence missing geometry")
+        if screenshot_variant_key(path) != ("gap-to-leader", "no-cars"):
+            failures.append(f"{path}: native flattened graph evidence missing geometry")
         return
 
     for key, label in (
@@ -1812,7 +2021,8 @@ def require_native_graph_model_evidence(path: str, graph: object, failures: list
     ):
         require_rect(path, geometry.get(key), label, failures)
     require_list_key(path, geometry, "metricRows", failures)
-    require_non_empty_list(path, geometry, "series", failures)
+    if screenshot_variant_key(path) != ("gap-to-leader", "no-cars"):
+        require_non_empty_list(path, geometry, "series", failures)
 
     for index, series in enumerate(geometry.get("series") if isinstance(geometry.get("series"), list) else []):
         require_native_graph_series_evidence(path, series, index, failures)
@@ -1843,6 +2053,14 @@ def require_native_input_model_evidence(path: str, inputs: object, failures: lis
         failures.append(f"{path}: native flattened input evidence missing inputs object")
         return
 
+    variant_key = screenshot_variant_key(path)
+    if variant_key == ("input-state", "no-content"):
+        if inputs.get("hasGraph") is not False:
+            failures.append(f"{path}: native input no-content expected hasGraph=false")
+        if inputs.get("hasRail") is not False:
+            failures.append(f"{path}: native input no-content expected hasRail=false")
+        return
+
     if inputs.get("hasGraph") is not True:
         failures.append(f"{path}: native input evidence did not prove hasGraph=true")
     if inputs.get("hasRail") is not True:
@@ -1854,7 +2072,8 @@ def require_native_input_model_evidence(path: str, inputs: object, failures: lis
     else:
         require_rect(path, graph.get("bounds"), "native input graph bounds", failures)
         require_non_empty_list(path, graph, "gridLines", failures)
-        require_non_empty_list(path, graph, "series", failures)
+        if variant_key != ("input-state", "waiting"):
+            require_non_empty_list(path, graph, "series", failures)
         require_input_series_evidence(path, graph.get("series"), failures)
         require_line_evidence(path, graph.get("gridLines"), "native input graph grid line", failures)
 
@@ -1996,6 +2215,7 @@ def require_input_series_evidence(path: str, series: object, failures: list[str]
         failures.append(f"{path}: input series evidence is not a list")
         return
 
+    allow_empty_series = screenshot_variant_key(path) == ("input-state", "waiting")
     for index, item in enumerate(series[:8]):
         if not isinstance(item, dict):
             failures.append(f"{path}: input series {index} must be an object")
@@ -2012,7 +2232,7 @@ def require_input_series_evidence(path: str, series: object, failures: list[str]
             failures.append(f"{path}: input series {index} missing pointCount")
         if not isinstance(curve_count, int):
             failures.append(f"{path}: input series {index} missing curveCount")
-        if point_count == 0 and curve_count == 0:
+        if point_count == 0 and curve_count == 0 and not allow_empty_series:
             failures.append(f"{path}: input series {index} has no points or curves")
 
         points = item.get("points")
@@ -2388,26 +2608,27 @@ def validate_overlay_semantics(
     if not isinstance(overlay_id, str) or not overlay_id:
         return
 
+    is_variant = isinstance(values.get("fixtureVariant"), str) and bool(values.get("fixtureVariant"))
     expected_body = expected_bodies.get(overlay_id)
     actual_body = values.get(body_field)
     if expected_body is not None and actual_body != expected_body:
         failures.append(f"{path}: expected {body_field} {expected_body!r}, got {actual_body!r}")
 
     status = str(values.get("status") or "").strip().lower()
-    if overlay_id not in SEMANTIC_WAITING_EXEMPT_OVERLAYS:
+    if not is_variant and overlay_id not in SEMANTIC_WAITING_EXEMPT_OVERLAYS:
         for token in WAITING_STATUS_TOKENS:
             if token in status:
                 failures.append(f"{path}: manifest status {status!r} indicates the preview rendered a waiting state")
                 break
 
-    if overlay_id == "flags":
+    if overlay_id == "flags" and not is_variant:
         if status in ("", "none", "waiting"):
             failures.append(f"{path}: flags preview did not expose any active flags")
         flag_count = values.get("flagCount")
         if isinstance(flag_count, int) and flag_count <= 0:
             failures.append(f"{path}: flags preview model contains no visible flags")
 
-    if overlay_id == "car-radar":
+    if overlay_id == "car-radar" and not is_variant:
         radar_should_render = values.get("radarShouldRender")
         if radar_should_render is False:
             failures.append(f"{path}: car radar preview model reported radarShouldRender=false")
@@ -2418,8 +2639,1157 @@ def validate_overlay_semantics(
             if not isinstance(surface_alpha, (int, float)) or surface_alpha <= 0.1:
                 failures.append(f"{path}: native car radar surface alpha {surface_alpha!r} is too low for screenshot validation")
 
-    if values.get("shouldRender") is False and overlay_id not in SEMANTIC_WAITING_EXEMPT_OVERLAYS:
+    if not is_variant and values.get("shouldRender") is False and overlay_id not in SEMANTIC_WAITING_EXEMPT_OVERLAYS:
         failures.append(f"{path}: preview model reported shouldRender=false")
+
+
+def validate_overlay_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    overlay_id = values.get("overlayId")
+    if isinstance(values.get("fixtureVariant"), str) and values.get("fixtureVariant"):
+        validate_overlay_variant_contract(path, values, failures)
+        return
+
+    if overlay_id == "standings":
+        validate_standings_contract(path, values, failures)
+    elif overlay_id == "relative":
+        validate_relative_contract(path, values, failures)
+    elif overlay_id == "fuel-calculator":
+        validate_fuel_contract(path, values, failures)
+    elif overlay_id == "session-weather":
+        validate_session_weather_contract(path, values, failures)
+    elif overlay_id == "pit-service":
+        validate_pit_service_contract(path, values, failures)
+    elif overlay_id == "input-state":
+        validate_input_state_contract(path, values, failures)
+    elif overlay_id == "car-radar":
+        validate_car_radar_contract(path, values, failures)
+    elif overlay_id == "gap-to-leader":
+        validate_gap_to_leader_contract(path, values, failures)
+    elif overlay_id == "track-map":
+        validate_track_map_contract(path, values, failures)
+    elif overlay_id == "flags":
+        validate_flags_contract(path, values, failures)
+    elif overlay_id == "garage-cover":
+        validate_garage_cover_contract(path, values, failures)
+    elif overlay_id == "stream-chat":
+        validate_stream_chat_contract(path, values, failures)
+
+
+def validate_overlay_variant_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    overlay_id = values.get("overlayId")
+    slug = values.get("fixtureVariant")
+    if not isinstance(overlay_id, str) or not isinstance(slug, str):
+        failures.append(f"{path}: overlay variant missing overlayId/fixtureVariant")
+        return
+
+    expected_keys = WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS if path.startswith("native-overlays/") else WEB_OVERLAY_VARIANT_KEYS
+    if (overlay_id, slug) not in expected_keys:
+        failures.append(f"{path}: unexpected overlay fixture variant {overlay_id}/{slug}")
+        return
+
+    validate_overlay_variant_scenario(path, values, overlay_id, slug, failures)
+
+    if overlay_id == "fuel-calculator" and slug == "waiting":
+        validate_fuel_waiting_variant(path, values, failures)
+    elif overlay_id == "session-weather" and slug == "missing":
+        validate_session_weather_missing_variant(path, values, failures)
+    elif overlay_id == "pit-service" and slug == "idle":
+        validate_pit_service_idle_variant(path, values, failures)
+    elif overlay_id == "input-state" and slug == "waiting":
+        validate_input_waiting_variant(path, values, failures)
+    elif overlay_id == "input-state" and slug == "no-content":
+        validate_input_no_content_variant(path, values, failures)
+    elif overlay_id == "car-radar":
+        validate_car_radar_variant(path, values, slug, failures)
+    elif overlay_id == "gap-to-leader" and slug == "no-cars":
+        validate_gap_no_cars_variant(path, values, failures)
+    elif overlay_id == "track-map":
+        validate_track_map_variant(path, values, slug, failures)
+    elif overlay_id == "flags" and slug == "all-kinds":
+        validate_flags_all_kinds_variant(path, values, failures)
+    elif overlay_id == "garage-cover":
+        validate_garage_cover_variant(path, values, slug, failures)
+    elif overlay_id == "stream-chat":
+        validate_stream_chat_variant(path, values, slug, failures)
+    else:
+        failures.append(f"{path}: no validator for overlay fixture variant {overlay_id}/{slug}")
+
+
+def validate_overlay_variant_scenario(
+    path: str,
+    values: dict[str, object],
+    overlay_id: str,
+    slug: str,
+    failures: list[str],
+) -> None:
+    if values.get("fixtureVariant") != slug:
+        failures.append(f"{path}: expected top-level fixtureVariant {slug!r}, got {values.get('fixtureVariant')!r}")
+
+    scenario = typed_dict(values.get("scenarioEvidence"))
+    if not scenario:
+        failures.append(f"{path}: overlay variant missing scenario evidence")
+        return
+
+    if scenario.get("fixtureVariant") != slug:
+        failures.append(f"{path}: expected scenario fixtureVariant {slug!r}, got {scenario.get('fixtureVariant')!r}")
+
+    model_summary = typed_dict(scenario.get("modelSummary"))
+    if not model_summary:
+        failures.append(f"{path}: overlay variant scenario missing modelSummary")
+    else:
+        for scenario_field, top_field in (
+            ("status", "status"),
+            ("source", "source"),
+            ("bodyKind", "bodyKind"),
+            ("shouldRender", "shouldRender"),
+            ("rowCount", "rowCount"),
+            ("metricCount", "metricCount"),
+            ("flagCount", "flagCount"),
+            ("trackMapMarkerCount", "trackMapMarkerCount"),
+        ):
+            top_value = values.get(top_field)
+            if top_value is None:
+                continue
+            summary_value = model_summary.get(scenario_field)
+            if summary_value != top_value:
+                failures.append(
+                    f"{path}: scenario modelSummary {scenario_field} expected {top_value!r}, got {summary_value!r}"
+                )
+
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        query = OVERLAY_VARIANT_QUERY_BY_KEY.get((overlay_id, slug))
+        url_path = scenario.get("urlPath")
+        if not isinstance(url_path, str) or not query or query not in url_path:
+            failures.append(f"{path}: scenario urlPath missing variant query {query!r}, got {url_path!r}")
+    elif path.startswith("native-overlays/"):
+        if scenario.get("urlPath") is not None:
+            failures.append(f"{path}: native fixture variant scenario must not report browser urlPath")
+        expected_fixture = f"browser-review/static-overlay-model/{slug}"
+        if scenario.get("fixture") != expected_fixture:
+            failures.append(f"{path}: expected native fixture {expected_fixture!r}, got {scenario.get('fixture')!r}")
+
+
+def validate_fuel_waiting_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "fuel waiting bodyKind", values.get("bodyKind"), "metrics", failures)
+    require_equal(path, "fuel waiting status", values.get("status"), "waiting for local fuel context", failures)
+    require_equal(path, "fuel waiting shouldRender", values.get("shouldRender"), False, failures)
+    require_equal(path, "fuel waiting metricCount", values.get("metricCount"), 0, failures)
+    model = model_evidence(values)
+    for field in ("metrics", "metricSections", "gridSections"):
+        if evidence_list(model, field):
+            failures.append(f"{path}: fuel waiting expected empty {field}, got {len(evidence_list(model, field))}")
+
+
+def validate_session_weather_missing_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "session weather missing bodyKind", values.get("bodyKind"), "metrics", failures)
+    require_equal(path, "session weather missing status", values.get("status"), "weather unavailable", failures)
+    sections = section_map(model_evidence(values))
+    require_sequence(path, "session weather missing sections", list(sections), ["Session", "Weather"], failures)
+    require_section_rows(path, sections, "Session", ["Session", "Clock", "Event", "Track", "Laps"], failures)
+    require_section_rows(path, sections, "Weather", ["Surface", "Sky", "Wind", "Temps", "Atmosphere"], failures)
+    require_segments(path, sections, "Session", "Clock", [("Elapsed", "--"), ("Left", "--"), ("Total", "--")], failures)
+    require_segments(path, sections, "Session", "Laps", [("Remaining", "--"), ("Total", "--")], failures)
+    require_segments(path, sections, "Weather", "Surface", [("Wetness", "Unknown"), ("Declared", "--"), ("Rubber", "--")], failures)
+    require_segments(path, sections, "Weather", "Sky", [("Skies", "Unknown"), ("Weather", "--"), ("Rain", "--")], failures)
+    for section_title, row_label in (
+        ("Session", "Clock"),
+        ("Session", "Laps"),
+        ("Weather", "Surface"),
+        ("Weather", "Sky"),
+        ("Weather", "Wind"),
+        ("Weather", "Temps"),
+        ("Weather", "Atmosphere"),
+    ):
+        row = find_metric_row(sections, section_title, row_label)
+        tone = text_value(row, "tone").lower() if isinstance(row, dict) else ""
+        if tone not in ("waiting", "unavailable"):
+            failures.append(f"{path}: expected {section_title}/{row_label} unavailable tone, got {tone!r}")
+
+
+def validate_pit_service_idle_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "pit-service idle bodyKind", values.get("bodyKind"), "metrics", failures)
+    require_equal(path, "pit-service idle status", values.get("status"), "pit ready", failures)
+    sections = section_map(model_evidence(values))
+    require_sequence(path, "pit-service idle sections", list(sections), ["Session", "Pit Signal", "Service Request"], failures)
+    require_row_value(path, sections, "Pit Signal", "Release", "GREEN - pit ready", failures)
+    require_row_value(path, sections, "Pit Signal", "Pit status", "idle", failures)
+    require_row_color(path, sections, "Pit Signal", "Release", "#62FF9F", failures)
+    require_segments(path, sections, "Service Request", "Fuel request", [("Requested", "No"), ("Selected", "--")], failures)
+    require_segments(path, sections, "Service Request", "Tearoff", [("Requested", "No")], failures)
+    require_segments(path, sections, "Service Request", "Repair", [("Required", "--"), ("Optional", "--")], failures)
+    require_segments(path, sections, "Service Request", "Fast repair", [("Selected", "No"), ("Available", "1")], failures)
+    validate_pit_service_idle_grid_contract(path, model_evidence(values), failures)
+
+
+def validate_pit_service_idle_grid_contract(path: str, model: dict[str, object], failures: list[str]) -> None:
+    grids = evidence_list(model, "gridSections")
+    if len(grids) != 1:
+        failures.append(f"{path}: pit-service idle expected one tire grid, got {len(grids)}")
+        return
+    rows = evidence_list(typed_dict(grids[0]), "rows")
+    expected_values = {
+        "Compound": ["--", "--", "--", "--"],
+        "Change request": ["Keep", "Keep", "Keep", "Keep"],
+        "Sets available": ["2", "2", "2", "2"],
+        "Sets used": ["2", "2", "2", "2"],
+        "Pressure": ["--", "--", "--", "--"],
+        "Temperature": ["--", "--", "--", "--"],
+        "Wear": ["--", "--", "--", "--"],
+        "Distance": ["--", "--", "--", "--"],
+    }
+    for row in rows:
+        row_dict = typed_dict(row)
+        label = text_value(row_dict, "label")
+        values = [text_value(cell, "value") for cell in evidence_list(row_dict, "cells")]
+        if label in expected_values and values != expected_values[label]:
+            failures.append(f"{path}: pit-service idle {label} cells expected {expected_values[label]!r}, got {values!r}")
+        validate_grid_row_geometry(path, f"pit-service idle {label}", row_dict, failures)
+
+
+def validate_input_waiting_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "input waiting bodyKind", values.get("bodyKind"), "inputs", failures)
+    require_equal(path, "input waiting status", values.get("status"), "waiting for car telemetry", failures)
+    inputs = typed_dict(model_evidence(values).get("inputs"))
+    expected = {
+        "hasContent": True,
+        "hasGraph": True,
+        "hasRail": True,
+        "isAvailable": False,
+        "tracePointCount": 0,
+    }
+    for field, expected_value in expected.items():
+        if inputs.get(field) != expected_value:
+            failures.append(f"{path}: input waiting expected {field}={expected_value!r}, got {inputs.get(field)!r}")
+    if inputs.get("graph") not in (None, {}):
+        require_rect(path, typed_dict(inputs.get("graph")).get("bounds"), "input waiting graph bounds", failures)
+    if inputs.get("rail") not in (None, {}):
+        require_rect(path, typed_dict(inputs.get("rail")).get("bounds"), "input waiting rail bounds", failures)
+    for series in evidence_list(inputs, "series"):
+        series_dict = typed_dict(series)
+        if get_manifest_value(series_dict, "pointCount") not in (None, 0):
+            failures.append(f"{path}: input waiting series {series_dict.get('kind')!r} should not expose trace points")
+
+
+def validate_input_no_content_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "input no-content bodyKind", values.get("bodyKind"), "inputs", failures)
+    require_equal(path, "input no-content status", values.get("status"), "no input content enabled", failures)
+    inputs = typed_dict(model_evidence(values).get("inputs"))
+    expected = {
+        "hasContent": False,
+        "hasGraph": False,
+        "hasRail": False,
+        "isAvailable": True,
+    }
+    for field, expected_value in expected.items():
+        if inputs.get(field) != expected_value:
+            failures.append(f"{path}: input no-content expected {field}={expected_value!r}, got {inputs.get(field)!r}")
+    if inputs.get("graph") not in (None, {}):
+        failures.append(f"{path}: input no-content should not expose graph geometry")
+    if inputs.get("rail") not in (None, {}):
+        failures.append(f"{path}: input no-content should not expose rail geometry")
+
+
+def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
+    radar = typed_dict(model_evidence(values).get("carRadar"))
+    expected_status = {
+        "left": "car left",
+        "right": "car right",
+        "both-sides": "cars both sides",
+        "clear": "clear",
+    }.get(slug)
+    if expected_status is None:
+        failures.append(f"{path}: unknown car-radar fixture variant {slug!r}")
+        return
+    require_equal(path, "car-radar variant status", values.get("status"), expected_status, failures)
+    expected_should_render = slug != "clear"
+    if radar.get("shouldRender") != expected_should_render:
+        failures.append(f"{path}: car-radar {slug} expected shouldRender={expected_should_render}, got {radar.get('shouldRender')!r}")
+    if values.get("radarShouldRender") != expected_should_render:
+        failures.append(f"{path}: car-radar {slug} expected radarShouldRender={expected_should_render}, got {values.get('radarShouldRender')!r}")
+    item_kinds = [text_value(item, "kind") for item in evidence_list(radar, "items")]
+    expected_items = {
+        "left": ["side-left"],
+        "right": ["side-right"],
+        "both-sides": ["side-left", "side-right"],
+        "clear": [],
+    }[slug]
+    for kind in expected_items:
+        if kind not in item_kinds:
+            failures.append(f"{path}: car-radar {slug} missing {kind} item in {item_kinds!r}")
+    if slug == "clear" and any(kind.startswith("side-") or kind == "focus" for kind in item_kinds):
+        failures.append(f"{path}: car-radar clear should not expose side/focus items, got {item_kinds!r}")
+    primitive_kinds = [text_value(item, "kind") for item in evidence_list(radar, "primitives")]
+    if "arc" in primitive_kinds:
+        failures.append(f"{path}: car-radar {slug} should not expose multiclass arc primitive")
+
+
+def validate_gap_no_cars_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "gap no-cars bodyKind", values.get("bodyKind"), "graph", failures)
+    require_equal(path, "gap no-cars status", values.get("status"), "hidden | race gap", failures)
+    require_equal(path, "gap no-cars shouldRender", values.get("shouldRender"), False, failures)
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    if geometry:
+        require_rect(path, geometry.get("frame"), "gap no-cars frame", failures)
+    if evidence_list(geometry, "series"):
+        failures.append(f"{path}: gap no-cars expected no graph series")
+    if evidence_list(geometry, "metricRows"):
+        failures.append(f"{path}: gap no-cars expected no metric rows")
+    if graph.get("selectedSeriesCount") not in (None, 0):
+        failures.append(f"{path}: gap no-cars expected selectedSeriesCount=0, got {graph.get('selectedSeriesCount')!r}")
+
+
+def validate_track_map_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
+    track_map = typed_dict(model_evidence(values).get("trackMap"))
+    if slug == "circle-fallback":
+        require_equal(path, "track-map circle fallback mapKind", track_map.get("mapKind"), "circle", failures)
+        require_equal(path, "track-map circle fallback markerCount", track_map.get("markerCount"), 4, failures)
+        primitive_kinds = [text_value(item, "kind") for item in evidence_list(track_map, "primitives")]
+        if primitive_kinds.count("ellipse") < 3 or "arc" not in primitive_kinds:
+            failures.append(f"{path}: track-map circle fallback expected ellipse/arc primitives, got {primitive_kinds!r}")
+    elif slug == "no-markers":
+        require_equal(path, "track-map no-markers mapKind", track_map.get("mapKind"), "generated", failures)
+        require_equal(path, "track-map no-markers markerCount", track_map.get("markerCount"), 0, failures)
+        require_equal(path, "track-map no-markers itemCount", track_map.get("itemCount"), 0, failures)
+        primitive_kinds = [text_value(item, "kind") for item in evidence_list(track_map, "primitives")]
+        if primitive_kinds.count("path") < 4:
+            failures.append(f"{path}: track-map no-markers expected generated path primitives, got {primitive_kinds!r}")
+    else:
+        failures.append(f"{path}: unknown track-map fixture variant {slug!r}")
+    require_size_fields(path, "track-map", track_map, 360, 360, failures)
+
+
+def validate_flags_all_kinds_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    flags = typed_dict(model_evidence(values).get("flags"))
+    expected = ["green", "blue", "yellow", "caution", "red", "black", "meatball", "white", "checkered"]
+    expected_columns, expected_rows = expected_flag_grid(len(expected))
+    require_equal(path, "flags all-kinds bodyKind", values.get("bodyKind"), "flags", failures)
+    require_equal(path, "flags all-kinds flagCount", values.get("flagCount"), len(expected), failures)
+    require_sequence(path, "flags all-kinds kinds", [normalize_flag_kind(kind) for kind in evidence_list(flags, "kinds")], expected, failures)
+    for field, expected_value in (("gridColumns", expected_columns), ("gridRows", expected_rows), ("count", len(expected))):
+        if flags.get(field) != expected_value:
+            failures.append(f"{path}: flags all-kinds expected {field} {expected_value}, got {flags.get(field)!r}")
+    cells = evidence_list(flags, "cells")
+    if len(cells) != len(expected):
+        failures.append(f"{path}: flags all-kinds expected {len(expected)} cells, got {len(cells)}")
+    for index, cell in enumerate(cells):
+        cell_dict = typed_dict(cell)
+        kind = expected[index] if index < len(expected) else ""
+        if normalize_flag_kind(cell_dict.get("kind")) != kind:
+            failures.append(f"{path}: flags all-kinds cell {index} expected kind {kind!r}, got {cell_dict.get('kind')!r}")
+        if cell_dict.get("fill") != expected_flag_fill(kind):
+            failures.append(f"{path}: flags all-kinds cell {index} expected fill {expected_flag_fill(kind)!r}, got {cell_dict.get('fill')!r}")
+        if cell_dict.get("row") != index // expected_columns or cell_dict.get("column") != index % expected_columns:
+            failures.append(f"{path}: flags all-kinds cell {index} grid position mismatch")
+        require_rect(path, get_manifest_value(cell_dict, "bounds"), f"flags all-kinds cell {index} bounds", failures)
+        require_rect(path, get_manifest_value(cell_dict, "clothBounds"), f"flags all-kinds cell {index} cloth bounds", failures)
+
+
+def validate_garage_cover_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
+    garage = typed_dict(model_evidence(values).get("garageCover"))
+    expected = {
+        "hidden": ("garage_hidden", False, True),
+        "garage-visible": ("garage_visible", True, True),
+        "stale": ("telemetry_stale", True, False),
+        "disconnected": ("iracing_disconnected", True, False),
+    }.get(slug)
+    if expected is None:
+        failures.append(f"{path}: unknown garage-cover fixture variant {slug!r}")
+        return
+    expected_state, expected_should_cover, expected_fresh = expected
+    require_equal(path, "garage-cover bodyKind", values.get("bodyKind"), "garage-cover", failures)
+    if garage.get("detectionState") != expected_state:
+        failures.append(f"{path}: garage-cover {slug} expected detectionState {expected_state!r}, got {garage.get('detectionState')!r}")
+    if garage.get("shouldCover") != expected_should_cover:
+        failures.append(f"{path}: garage-cover {slug} expected shouldCover={expected_should_cover}, got {garage.get('shouldCover')!r}")
+    if garage.get("detectionIsFresh") != expected_fresh:
+        failures.append(f"{path}: garage-cover {slug} expected detectionIsFresh={expected_fresh}, got {garage.get('detectionIsFresh')!r}")
+    require_rect(path, garage.get("bounds"), "garage-cover variant bounds", failures)
+    require_size_object(path, "garage-cover configuredOverlaySize", values.get("configuredOverlaySize"), 1280, 720, failures, required=False)
+
+
+def validate_stream_chat_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
+    stream = typed_dict(model_evidence(values).get("streamChat"))
+    if not stream:
+        failures.append(f"{path}: stream-chat variant missing streamChat evidence")
+        return
+    if slug == "twitch-rich":
+        require_equal(path, "stream-chat twitch status", values.get("status"), "replay chat | twitch", failures)
+        if not path.startswith("native-overlays/"):
+            settings = typed_dict(stream.get("settings"))
+            require_equal(path, "stream-chat twitch provider", settings.get("provider"), "twitch", failures)
+            require_equal(path, "stream-chat twitch configured", settings.get("isConfigured"), True, failures)
+        for field in ("rowCount", "renderedRowCount", "badgeCount", "metadataCount", "emoteCount"):
+            value = stream.get(field)
+            if not isinstance(value, int) or value <= 0:
+                failures.append(f"{path}: stream-chat twitch expected positive {field}, got {value!r}")
+        segment_texts = [
+            text_value(segment, "text")
+            for row in evidence_list(stream, "rows")
+            for segment in evidence_list(typed_dict(row), "segments")
+        ]
+        if "Kappa" not in segment_texts:
+            failures.append(f"{path}: stream-chat twitch expected Kappa emote segment")
+    elif slug == "streamlabs-configured":
+        require_equal(path, "stream-chat streamlabs status", values.get("status"), "streamlabs unavailable", failures)
+        if not path.startswith("native-overlays/"):
+            settings = typed_dict(stream.get("settings"))
+            require_equal(path, "stream-chat streamlabs provider", settings.get("provider"), "streamlabs", failures)
+            require_equal(path, "stream-chat streamlabs configured", settings.get("isConfigured"), True, failures)
+        rows = evidence_list(stream, "rows")
+        if len(rows) != 1:
+            failures.append(f"{path}: stream-chat streamlabs expected one status row, got {len(rows)}")
+        if rows:
+            row = typed_dict(rows[0])
+            if text_value(row, "kind") not in ("error", "system"):
+                failures.append(f"{path}: stream-chat streamlabs expected error/system row, got {text_value(row, 'kind')!r}")
+            if "Streamlabs" not in text_value(row, "text"):
+                failures.append(f"{path}: stream-chat streamlabs row missing Streamlabs text")
+    else:
+        failures.append(f"{path}: unknown stream-chat fixture variant {slug!r}")
+
+
+def validate_standings_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    model = model_evidence(values)
+    columns = evidence_list(model, "columns")
+    require_sequence(path, "standings column labels", [text_value(column, "label") for column in columns], ["CLS", "CAR", "Driver", "GAP", "INT", "FAST", "LAST", "PIT"], failures)
+    require_sequence(path, "standings column widths", [get_manifest_value(column, "configuredWidth") for column in columns], [35, 50, 250, 60, 60, 70, 70, 30], failures)
+    require_sequence(path, "standings column alignments", [text_value(column, "alignment") for column in columns], ["right", "right", "left", "right", "right", "right", "right", "right"], failures)
+    rows = evidence_list(model, "rows")
+    if len(rows) < 6:
+        failures.append(f"{path}: standings expected at least 6 table rows, got {len(rows)}")
+    class_headers = [row for row in rows if normalize_row_kind(row) == "class-header"]
+    if len(class_headers) < 2:
+        failures.append(f"{path}: standings expected at least two class headers")
+    row_texts = [combined_row_text(row) for row in rows]
+    for token in ("LMP2", "2 CARS", "GT3", "3 CARS", "#8 Kousuke Konishi", "#000 Kauan Vigliazzi Teixeira Lemos", "#3094 Tech Mates Racing", "#60 Tommie Wittens"):
+        require_any_text(path, f"standings text {token!r}", row_texts, token, failures)
+    reference_rows = [row for row in rows if get_manifest_value(row, "isReference") is True]
+    if len(reference_rows) != 1 or "#3094" not in combined_row_text(reference_rows[0]):
+        failures.append(f"{path}: standings expected exactly one #3094 reference row")
+    pit_rows = [row for row in rows if "IN" in row_cells(row)]
+    if not pit_rows or "#60" not in combined_row_text(pit_rows[0]):
+        failures.append(f"{path}: standings expected #60 pit row with IN marker")
+    validate_rows_monotonic(path, rows, failures)
+    assert_cell_foreground(path, rows, "#8", "FAST", ("182, 92, 255", "#B65CFF"), failures)
+    assert_cell_foreground(path, rows, "#000", "FAST", ("182, 92, 255", "#B65CFF"), failures)
+    assert_cell_foreground(path, rows, "#000", "LAST", ("182, 92, 255", "#B65CFF"), failures)
+    assert_cell_foreground(path, rows, "#3094", "FAST", ("98, 255, 159", "#62FF9F"), failures)
+    assert_cell_foreground(path, rows, "#3094", "LAST", ("98, 255, 159", "#62FF9F"), failures)
+
+
+def validate_relative_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    model = model_evidence(values)
+    columns = evidence_list(model, "columns")
+    require_sequence(path, "relative column labels", [text_value(column, "label") for column in columns], ["Pos", "Driver", "Delta"], failures, casefold=True)
+    require_sequence(path, "relative column widths", [get_manifest_value(column, "configuredWidth") for column in columns], [38, 250, 70], failures)
+    require_sequence(path, "relative column alignments", [text_value(column, "alignment") for column in columns], ["right", "left", "right"], failures)
+    rows = evidence_list(model, "rows")
+    if len(rows) != 11:
+        failures.append(f"{path}: relative expected 11 stable rows, got {len(rows)}")
+        return
+    reference_indices = [index for index, row in enumerate(rows) if get_manifest_value(row, "isReference") is True]
+    if reference_indices != [5]:
+        failures.append(f"{path}: relative expected reference row at index 5, got {reference_indices}")
+    placeholder_indices = [0, 1, 2, 3, 7, 8, 9, 10]
+    populated_indices = [4, 5, 6]
+    for index in placeholder_indices:
+        row = rows[index]
+        if any(str(cell).strip() for cell in row_cells(row)):
+            failures.append(f"{path}: relative placeholder row {index} has non-empty cells {row_cells(row)!r}")
+        height = rect_number(get_manifest_value(row, "bounds"), "height")
+        if height is None or not (12 <= height <= 16):
+            failures.append(f"{path}: relative placeholder row {index} expected 12..16px height, got {height!r}")
+    for index in populated_indices:
+        height = rect_number(get_manifest_value(rows[index], "bounds"), "height")
+        if height is None or not (26 <= height <= 30):
+            failures.append(f"{path}: relative populated row {index} expected 26..30px height, got {height!r}")
+    expected_rows = {
+        4: ["3", "#34 Near Ahead", "-2.350"],
+        5: ["5", "#55 Focus Driver", "0.000"],
+        6: ["6", "#61 Near Behind", "+1.200"],
+    }
+    for index, expected in expected_rows.items():
+        actual = row_cells(rows[index])[:3]
+        if actual != expected:
+            failures.append(f"{path}: relative row {index} expected cells {expected!r}, got {actual!r}")
+    mode = str(values.get("previewMode") or "")
+    expected_deltas = {4: 1, 5: 0, 6: -2} if mode == "race" else {4: None, 5: None, 6: None}
+    for index, expected in expected_deltas.items():
+        actual = get_manifest_value(rows[index], "relativeLapDelta")
+        if actual != expected:
+            failures.append(f"{path}: relative row {index} expected relativeLapDelta {expected!r}, got {actual!r}")
+    if path.startswith(("browser-overlays/", "localhost-overlays/")) and mode == "race":
+        require_row_class(path, rows[4], "lap-ahead-1", failures)
+        require_row_class(path, rows[5], "focus", failures)
+        require_row_class(path, rows[6], "lap-behind-2", failures)
+    validate_rows_monotonic(path, rows, failures)
+
+
+def validate_fuel_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "fuel bodyKind", values.get("bodyKind"), "metrics", failures)
+    require_equal(path, "fuel status", values.get("status"), "3 stints / 2 stops", failures)
+    source = str(values.get("source") or "")
+    for token in ("burn 3.1 L/lap", "34.2 laps/tank", "history user", "gap O0.18 C0.04"):
+        if token not in source:
+            failures.append(f"{path}: fuel source missing {token!r}")
+    model = model_evidence(values)
+    sections = section_map(model)
+    mode = str(values.get("previewMode") or "race")
+    expected_sections = ["Race Information", "Fuel Usage", "Stint Targets"] if mode in ("practice", "qualifying") else ["Race Information", "Stint Targets"]
+    require_sequence(path, "fuel metric sections", list(sections), expected_sections, failures)
+    require_section_rows(path, sections, "Race Information", ["Plan", "Fuel"], failures)
+    if mode == "practice":
+        require_section_rows(path, sections, "Fuel Usage", ["Practice Usage"], failures)
+        require_section_rows(path, sections, "Stint Targets", ["Stint 1"], failures)
+    elif mode == "qualifying":
+        require_section_rows(path, sections, "Fuel Usage", ["Quali Usage"], failures)
+        require_section_rows(path, sections, "Stint Targets", ["Stint 1"], failures)
+    else:
+        require_section_rows(path, sections, "Stint Targets", ["Stint 1", "Stint 2", "Stint 3"], failures)
+    require_row_value(path, sections, "Race Information", "Plan", "31 laps | 3 stints | 2 stops", failures)
+    require_segments(path, sections, "Race Information", "Plan", [("Race", "31 laps"), ("Remain", "30.4 laps"), ("Stints", "3"), ("Stops", "2"), ("Save", "0.2 L/lap")], failures)
+    require_segments(path, sections, "Race Information", "Fuel", [("Current", "74.0 L"), ("Burn", "3.1 L/lap"), ("Tank", "34.2 laps"), ("Need", "Covered")], failures)
+
+
+def validate_session_weather_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "session weather bodyKind", values.get("bodyKind"), "metrics", failures)
+    require_equal(path, "session weather unitSystem", values.get("unitSystem"), "Metric", failures)
+    metric_count = values.get("metricCount")
+    if not isinstance(metric_count, int) or metric_count < 10:
+        failures.append(f"{path}: session weather expected at least 10 metrics, got {metric_count!r}")
+    sections = section_map(model_evidence(values))
+    require_sequence(path, "session weather sections", list(sections), ["Session", "Weather"], failures)
+    require_section_rows(path, sections, "Session", ["Session", "Clock", "Event", "Track", "Laps"], failures)
+    require_section_rows(path, sections, "Weather", ["Surface", "Sky", "Wind", "Temps", "Atmosphere"], failures)
+    mode = str(values.get("previewMode") or "race")
+    expected = {
+        "practice": ("Practice", "practice preview", "7:40", "12:20", "20:00", "3.6 est", "10 est", "Clean"),
+        "qualifying": ("Qualify", "qualifying preview", "5:05", "14:55", "20:00", "3.3 est", "10 est", "Clean"),
+    }.get(mode, ("Race", "race preview", "17:22:51", "6:37:09", "24:00:00", "49.6 est", "170 est", "Moderate Usage"))
+    require_segments(path, sections, "Session", "Session", [("Type", expected[0]), ("Name", expected[1]), ("Mode", "Team")], failures)
+    require_segments(path, sections, "Session", "Clock", [("Elapsed", expected[2]), ("Left", expected[3]), ("Total", expected[4])], failures)
+    require_segments(path, sections, "Session", "Laps", [("Remaining", expected[5]), ("Total", expected[6])], failures)
+    require_segments(path, sections, "Weather", "Surface", [("Wetness", "Unknown"), ("Declared", "Dry"), ("Rubber", expected[7])], failures)
+    require_segments(path, sections, "Weather", "Sky", [("Skies", "Mostly Cloudy"), ("Weather", "Dynamic"), ("Rain", "0%")], failures)
+    text = str(values.get("textSample") or "")
+    for token in (" km", " km/h", " hPa", " C"):
+        if token not in text:
+            failures.append(f"{path}: session weather textSample missing metric unit token {token!r}")
+    for token in (" mi", " mph", " inHg"):
+        if token in text:
+            failures.append(f"{path}: session weather textSample unexpectedly contains imperial unit token {token!r}")
+
+
+def validate_pit_service_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "pit-service bodyKind", values.get("bodyKind"), "metrics", failures)
+    require_equal(path, "pit-service status", values.get("status"), "service active", failures)
+    require_equal(path, "pit-service source", values.get("source"), "source: player/team pit service telemetry", failures)
+    metric_count = values.get("metricCount")
+    if not isinstance(metric_count, int) or metric_count < 11:
+        failures.append(f"{path}: pit-service expected at least 11 metrics/sections/grids, got {metric_count!r}")
+    sections = section_map(model_evidence(values))
+    require_sequence(path, "pit-service sections", list(sections), ["Session", "Pit Signal", "Service Request"], failures)
+    require_section_rows(path, sections, "Session", ["Time / Laps"], failures)
+    require_section_rows(path, sections, "Pit Signal", ["Release", "Pit status"], failures)
+    require_section_rows(path, sections, "Service Request", ["Fuel request", "Tearoff", "Repair", "Fast repair"], failures)
+    require_segments(path, sections, "Session", "Time / Laps", [("Time", "03:58"), ("Laps", "148/179 laps")], failures)
+    require_row_value(path, sections, "Pit Signal", "Release", "RED - service active", failures)
+    require_row_value(path, sections, "Pit Signal", "Pit status", "in progress", failures)
+    require_row_tone(path, sections, "Pit Signal", "Release", "error", failures)
+    require_row_tone(path, sections, "Pit Signal", "Pit status", "error", failures)
+    require_row_color(path, sections, "Pit Signal", "Release", "#FF6274", failures)
+    require_row_color(path, sections, "Pit Signal", "Pit status", "#FF6274", failures)
+    require_segments(path, sections, "Service Request", "Fuel request", [("Requested", "Yes"), ("Selected", "31.6 L")], failures)
+    require_segments(path, sections, "Service Request", "Tearoff", [("Requested", "Yes")], failures)
+    require_segments(path, sections, "Service Request", "Repair", [("Required", "12s"), ("Optional", "18s")], failures)
+    require_segments(path, sections, "Service Request", "Fast repair", [("Selected", "Yes"), ("Available", "1")], failures)
+    validate_pit_service_grid_contract(path, model_evidence(values), failures)
+
+
+def validate_pit_service_grid_contract(path: str, model: dict[str, object], failures: list[str]) -> None:
+    grids = evidence_list(model, "gridSections")
+    if len(grids) != 1:
+        failures.append(f"{path}: pit-service expected one tire grid, got {len(grids)}")
+        return
+    grid = typed_dict(grids[0])
+    require_equal(path, "pit-service grid title", text_value(grid, "title"), "Tire Analysis", failures)
+    require_sequence(path, "pit-service tire headers", [str(item) for item in evidence_list(grid, "headers")], ["Info", "FL", "FR", "RL", "RR"], failures)
+    rows = evidence_list(grid, "rows")
+    expected_labels = ["Compound", "Change request", "Set limit", "Sets available", "Sets used", "Pressure", "Temperature", "Wear", "Distance"]
+    require_sequence(path, "pit-service tire rows", [text_value(row, "label") for row in rows], expected_labels, failures)
+    expected_values = {
+        "Compound": ["S", "S", "S", "S"],
+        "Change request": ["Change", "Change", "Keep", "Change"],
+        "Set limit": ["4 sets", "4 sets", "4 sets", "4 sets"],
+        "Sets available": ["2", "2", "0", "2"],
+        "Sets used": ["2", "2", "3", "2"],
+    }
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        label = text_value(row, "label")
+        cells = evidence_list(row, "cells")
+        values = [text_value(cell, "value") for cell in cells]
+        if label in expected_values and values != expected_values[label]:
+            failures.append(f"{path}: pit-service {label} cells expected {expected_values[label]!r}, got {values!r}")
+        if label == "Wear" and not all("%" in value for value in values):
+            failures.append(f"{path}: pit-service Wear cells must expose percentages, got {values!r}")
+        if label == "Distance" and not all(value.endswith("km") for value in values):
+            failures.append(f"{path}: pit-service Distance cells must expose km values, got {values!r}")
+        validate_grid_row_geometry(path, f"pit-service {label}", row, failures)
+
+
+def validate_input_state_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    inputs = typed_dict(model_evidence(values).get("inputs"))
+    for field in ("hasContent", "hasGraph", "hasRail", "isAvailable"):
+        if inputs.get(field) is not True:
+            failures.append(f"{path}: input-state expected {field}=true, got {inputs.get(field)!r}")
+    if inputs.get("tracePointCount") not in (None, 180):
+        failures.append(f"{path}: input-state expected 180 trace points, got {inputs.get('tracePointCount')!r}")
+    graph = typed_dict(inputs.get("graph"))
+    rail = typed_dict(inputs.get("rail"))
+    graph_bounds = typed_dict(graph.get("bounds"))
+    rail_bounds = typed_dict(rail.get("bounds"))
+    if rects_intersect(graph_bounds, rail_bounds):
+        failures.append(f"{path}: input-state graph bounds intersect rail bounds")
+    if rect_number(rail_bounds, "x") is not None and rect_number(graph_bounds, "x") is not None:
+        gap = rect_number(rail_bounds, "x") - (rect_number(graph_bounds, "x") + rect_number(graph_bounds, "width"))
+        if gap < 10:
+            failures.append(f"{path}: input-state graph/rail gap expected at least 10px, got {gap:g}")
+    series = evidence_list(inputs, "series")
+    kinds = [text_value(item, "kind") for item in series]
+    require_sequence(path, "input-state series kinds", kinds, ["throttle", "brake", "clutch", "brake-abs"], failures)
+    if len(evidence_list(graph, "gridLines")) != 3:
+        failures.append(f"{path}: input-state expected exactly 3 graph grid lines")
+    for item in series:
+        if text_value(item, "kind") in ("throttle", "brake", "clutch"):
+            for point in evidence_list(item, "points"):
+                if not point_in_rect(point, graph_bounds):
+                    failures.append(f"{path}: input-state {text_value(item, 'kind')} point outside graph bounds")
+                    break
+    brake = next((item for item in series if text_value(item, "kind") == "brake"), None)
+    abs_series = next((item for item in series if text_value(item, "kind") == "brake-abs"), None)
+    throttle = next((item for item in series if text_value(item, "kind") == "throttle"), None)
+    if isinstance(throttle, dict) and isinstance(brake, dict):
+        require_trace_overlap(path, throttle, brake, "throttle/brake", failures)
+    if isinstance(brake, dict) and isinstance(abs_series, dict):
+        if get_manifest_value(abs_series, "pointCount") != 0 or not isinstance(get_manifest_value(abs_series, "curveCount"), int) or get_manifest_value(abs_series, "curveCount") <= 0:
+            failures.append(f"{path}: input-state ABS series must be curve-only and non-empty")
+        if numeric(abs_series.get("strokeWidth")) <= numeric(brake.get("strokeWidth")):
+            failures.append(f"{path}: input-state ABS stroke should be thicker than brake stroke")
+    if "ABS" not in str(values.get("status") or "") or "ABS" not in str(values.get("textSample") or ""):
+        failures.append(f"{path}: input-state status/text did not expose ABS")
+    rail_items = evidence_list(rail, "items")
+    require_sequence(path, "input-state rail item kinds", [text_value(item, "kind") for item in rail_items], ["Throttle", "Brake", "Clutch", "SteeringWheel", "Gear", "Speed"], failures)
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        brake_item = next((item for item in rail_items if text_value(item, "kind") == "Brake"), None)
+        if not isinstance(brake_item, dict) or "ABS" not in str(brake_item.get("text") or ""):
+            failures.append(f"{path}: input-state brake rail item did not retain ABS label")
+        group_kinds = [text_value(group, "kind") for group in evidence_list(rail, "groups")]
+        for kind in ("Bars", "Readouts"):
+            if kind not in group_kinds:
+                failures.append(f"{path}: input-state rail missing {kind} group")
+
+
+def validate_car_radar_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        require_equal(path, "car-radar captureMode", values.get("captureMode"), "configured-browser-source-canvas", failures)
+        require_size_object(path, "car-radar configuredOverlaySize", values.get("configuredOverlaySize"), 300, 300, failures)
+        require_equal(path, "car-radar compositingMode", values.get("compositingMode"), "solid-review-backdrop", failures)
+    radar = typed_dict(model_evidence(values).get("carRadar"))
+    if radar.get("shouldRender") is not True:
+        failures.append(f"{path}: car-radar evidence did not prove shouldRender=true")
+    require_size_fields(path, "car-radar", radar, 300, 300, failures)
+    if radar.get("ringCount") != 2:
+        failures.append(f"{path}: car-radar expected ringCount 2, got {radar.get('ringCount')!r}")
+    primitive_kinds = [text_value(item, "kind") for item in evidence_list(radar, "primitives")]
+    item_kinds = [text_value(item, "kind") for item in evidence_list(radar, "items")]
+    label_texts = [text_value(item, "text") for item in evidence_list(radar, "labels")]
+    for kind in ("focus",):
+        if kind not in item_kinds:
+            failures.append(f"{path}: car-radar missing {kind} item")
+    if "arc" not in primitive_kinds:
+        failures.append(f"{path}: car-radar missing multiclass arc primitive")
+    if "Faster class approaching 2.4s" not in label_texts:
+        failures.append(f"{path}: car-radar missing faster-class warning label")
+    if values.get("previewMode") == "race" and "side-right" not in item_kinds:
+        failures.append(f"{path}: race car-radar missing side-right item")
+
+
+def validate_gap_to_leader_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    for rect_key in ("frame", "plot", "axis", "labelLane"):
+        require_rect(path, geometry.get(rect_key), f"gap graph {rect_key}", failures)
+    if geometry.get("scale") not in ("leader", "focus-relative"):
+        failures.append(f"{path}: gap graph missing explicit leader/focus-relative scale")
+    series = evidence_list(geometry, "series")
+    if len(series) < 2:
+        failures.append(f"{path}: gap graph expected at least two rendered series")
+    if not any(item.get("isClassLeader") is True for item in series):
+        failures.append(f"{path}: gap graph missing class leader series")
+    if sum(1 for item in series if item.get("isReference") is True) != 1:
+        failures.append(f"{path}: gap graph expected exactly one reference series")
+    labels = [text_value(row, "text") for row in evidence_list(geometry, "metricRows")]
+    for label in ("5L", "10L", "Pit", "PLap", "Stint", "Tire", "Last", "Status"):
+        if label not in labels:
+            failures.append(f"{path}: gap graph missing metric row {label!r}")
+
+
+def validate_track_map_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    track_map = typed_dict(model_evidence(values).get("trackMap"))
+    expected_kind = "circle" if "fallback" in path or "placeholder" in path else "generated"
+    actual_kind = track_map.get("mapKind")
+    if actual_kind is None:
+        failures.append(f"{path}: track-map model evidence missing mapKind")
+    elif actual_kind != expected_kind:
+        failures.append(f"{path}: expected track map mapKind {expected_kind!r}, got {actual_kind!r}")
+    require_size_fields(path, "track-map", track_map, 360, 360, failures)
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        require_equal(path, "track-map captureMode", values.get("captureMode"), "configured-browser-source-canvas", failures)
+        require_size_object(path, "track-map configuredOverlaySize", values.get("configuredOverlaySize"), 360, 360, failures)
+    marker_count = track_map.get("markerCount")
+    if marker_count != 4:
+        failures.append(f"{path}: track-map expected 4 markers, got {marker_count!r}")
+    primitive_kinds = [text_value(item, "kind") for item in evidence_list(track_map, "primitives")]
+    if expected_kind == "generated":
+        if "ellipse" in primitive_kinds or "arc" in primitive_kinds:
+            failures.append(f"{path}: generated track-map unexpectedly contains circle fallback primitives {primitive_kinds!r}")
+        if primitive_kinds.count("path") < 4:
+            failures.append(f"{path}: generated track-map expected multiple path primitives, got {primitive_kinds!r}")
+    else:
+        if primitive_kinds.count("ellipse") < 3 or "arc" not in primitive_kinds:
+            failures.append(f"{path}: circle track-map expected ellipse/arc fallback primitives, got {primitive_kinds!r}")
+    labels = [text_value(item, "text") for item in evidence_list(track_map, "labels")]
+    for label in ("1", "2", "24"):
+        if label not in labels:
+            failures.append(f"{path}: track-map missing marker label {label!r}")
+
+
+def validate_flags_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    flags = typed_dict(model_evidence(values).get("flags"))
+    require_equal(path, "flags bodyKind", values.get("bodyKind"), "flags", failures)
+    if values.get("shouldRender") is not True:
+        failures.append(f"{path}: flags expected shouldRender=true, got {values.get('shouldRender')!r}")
+    kinds = [normalize_flag_kind(kind) for kind in evidence_list(flags, "kinds")]
+    if values.get("previewMode") == "practice":
+        expected = ["blue"]
+    elif values.get("previewMode") == "qualifying":
+        expected = ["yellow", "blue"]
+    else:
+        expected = ["yellow", "blue", "checkered"]
+    expected_columns, expected_rows = expected_flag_grid(len(expected))
+    if values.get("flagCount") != len(expected):
+        failures.append(f"{path}: flags expected flagCount {len(expected)}, got {values.get('flagCount')!r}")
+    if flags.get("count") != len(expected):
+        failures.append(f"{path}: flags evidence expected count {len(expected)}, got {flags.get('count')!r}")
+    if kinds != expected:
+        failures.append(f"{path}: flags expected kinds {expected!r}, got {kinds!r}")
+    for field, expected_value in (("gridColumns", expected_columns), ("gridRows", expected_rows)):
+        if flags.get(field) != expected_value:
+            failures.append(f"{path}: flags expected {field} {expected_value}, got {flags.get(field)!r}")
+    grid = typed_dict(flags.get("grid"))
+    if grid.get("columns") != expected_columns or grid.get("rows") != expected_rows:
+        failures.append(f"{path}: flags expected grid {expected_columns}x{expected_rows}, got {grid.get('columns')!r}x{grid.get('rows')!r}")
+    cells = evidence_list(flags, "cells")
+    if len(cells) != len(expected):
+        failures.append(f"{path}: flags expected {len(expected)} cells, got {len(cells)}")
+    for index, cell in enumerate(cells):
+        cell_dict = typed_dict(cell)
+        kind = expected[index] if index < len(expected) else ""
+        expected_bounds, expected_cloth = expected_flag_rects(index, len(expected))
+        if cell_dict.get("index") != index:
+            failures.append(f"{path}: flags cell {index} expected index {index}, got {cell_dict.get('index')!r}")
+        if cell_dict.get("row") != index // max(1, expected_columns):
+            failures.append(f"{path}: flags cell {index} row mismatch, got {cell_dict.get('row')!r}")
+        if cell_dict.get("column") != index % max(1, expected_columns):
+            failures.append(f"{path}: flags cell {index} column mismatch, got {cell_dict.get('column')!r}")
+        if normalize_flag_kind(cell_dict.get("kind")) != kind:
+            failures.append(f"{path}: flags cell {index} expected kind {kind!r}, got {cell_dict.get('kind')!r}")
+        expected_fill = expected_flag_fill(kind)
+        if cell_dict.get("fill") != expected_fill:
+            failures.append(f"{path}: flags cell {index} expected fill {expected_fill!r}, got {cell_dict.get('fill')!r}")
+        require_rect(path, get_manifest_value(cell_dict, "bounds"), f"flags cell {index} bounds", failures)
+        require_rect(path, get_manifest_value(cell_dict, "clothBounds"), f"flags cell {index} cloth bounds", failures)
+        assert_rect_close(path, f"flags cell {index} bounds", get_manifest_value(cell_dict, "bounds"), expected_bounds, 0.75, failures)
+        assert_rect_close(path, f"flags cell {index} cloth bounds", get_manifest_value(cell_dict, "clothBounds"), expected_cloth, 0.75, failures)
+
+
+def validate_garage_cover_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    if values.get("bodyKind") != "garage-cover":
+        return
+    garage = typed_dict(model_evidence(values).get("garageCover"))
+    if path.startswith(("browser-overlays/", "localhost-overlays/")) and not garage:
+        failures.append(f"{path}: garage-cover model evidence missing garageCover block")
+        return
+    if garage.get("shouldCover") is not True:
+        failures.append(f"{path}: garage-cover preview expected shouldCover=true, got {garage.get('shouldCover')!r}")
+    if text_value(garage, "detectionState") not in ("garage_visible", "garage_hidden", "waiting_for_telemetry", "telemetry_stale", "iracing_disconnected"):
+        failures.append(f"{path}: garage-cover detection state missing or invalid: {garage.get('detectionState')!r}")
+    require_rect(path, garage.get("bounds"), "garage-cover bounds", failures)
+    require_size_object(path, "garage-cover configuredOverlaySize", values.get("configuredOverlaySize"), 1280, 720, failures, required=False)
+
+
+def validate_stream_chat_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    model = model_evidence(values)
+    stream = typed_dict(model.get("streamChat"))
+    if not stream:
+        failures.append(f"{path}: stream-chat model evidence missing streamChat block")
+        return
+    if not isinstance(stream.get("rowCount"), int) or stream.get("rowCount") <= 0:
+        failures.append(f"{path}: stream-chat expected at least one model row")
+    if not isinstance(stream.get("renderedRowCount"), int) or stream.get("renderedRowCount") <= 0:
+        failures.append(f"{path}: stream-chat expected at least one rendered row")
+    for index, row in enumerate(evidence_list(stream, "rows")[:8]):
+        if text_value(row, "name") == "" or text_value(row, "text") == "":
+            failures.append(f"{path}: stream-chat row {index} missing name/text")
+        if text_value(row, "kind") not in ("message", "notice", "system", "error"):
+            failures.append(f"{path}: stream-chat row {index} invalid kind {text_value(row, 'kind')!r}")
+        require_rect(path, get_manifest_value(row, "bounds"), f"stream-chat row {index} bounds", failures)
+
+
+def model_evidence(values: dict[str, object]) -> dict[str, object]:
+    model = values.get("modelEvidence")
+    return model if isinstance(model, dict) else {}
+
+
+def typed_dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def evidence_list(values: dict[str, object], key: str) -> list[object]:
+    value = get_manifest_value(values, key)
+    return value if isinstance(value, list) else []
+
+
+def text_value(values: object, key: str) -> str:
+    if not isinstance(values, dict):
+        return ""
+    value = get_manifest_value(values, key)
+    return "" if value in (None, "") else str(value)
+
+
+def require_equal(path: str, label: str, actual: object, expected: object, failures: list[str]) -> None:
+    if actual != expected:
+        failures.append(f"{path}: expected {label} {expected!r}, got {actual!r}")
+
+
+def require_sequence(path: str, label: str, actual: list[object], expected: list[object], failures: list[str], *, casefold: bool = False) -> None:
+    normalized_actual = [str(item).lower() if casefold else item for item in actual]
+    normalized_expected = [str(item).lower() if casefold else item for item in expected]
+    if normalized_actual != normalized_expected:
+        failures.append(f"{path}: expected {label} {expected!r}, got {actual!r}")
+
+
+def section_map(model: dict[str, object]) -> dict[str, dict[str, object]]:
+    sections: dict[str, dict[str, object]] = {}
+    for section in evidence_list(model, "metricSections"):
+        if isinstance(section, dict):
+            title = text_value(section, "title")
+            if title:
+                sections[title] = section
+    return sections
+
+
+def require_section_rows(path: str, sections: dict[str, dict[str, object]], title: str, expected_labels: list[str], failures: list[str]) -> None:
+    section = sections.get(title)
+    if not isinstance(section, dict):
+        failures.append(f"{path}: missing metric section {title!r}")
+        return
+    actual = [text_value(row, "label") for row in evidence_list(section, "rows")]
+    if actual != expected_labels:
+        failures.append(f"{path}: expected {title} rows {expected_labels!r}, got {actual!r}")
+
+
+def require_row_value(path: str, sections: dict[str, dict[str, object]], section_title: str, row_label: str, expected_value: str, failures: list[str]) -> None:
+    row = find_metric_row(sections, section_title, row_label)
+    if not isinstance(row, dict):
+        failures.append(f"{path}: missing {section_title}/{row_label} metric row")
+        return
+    if text_value(row, "value") != expected_value:
+        failures.append(f"{path}: expected {section_title}/{row_label} value {expected_value!r}, got {text_value(row, 'value')!r}")
+
+
+def require_row_tone(path: str, sections: dict[str, dict[str, object]], section_title: str, row_label: str, expected_tone: str, failures: list[str]) -> None:
+    row = find_metric_row(sections, section_title, row_label)
+    if not isinstance(row, dict):
+        failures.append(f"{path}: missing {section_title}/{row_label} metric row")
+        return
+    if text_value(row, "tone").lower() != expected_tone:
+        failures.append(f"{path}: expected {section_title}/{row_label} tone {expected_tone!r}, got {text_value(row, 'tone')!r}")
+
+
+def require_row_color(path: str, sections: dict[str, dict[str, object]], section_title: str, row_label: str, expected_color: str, failures: list[str]) -> None:
+    row = find_metric_row(sections, section_title, row_label)
+    if not isinstance(row, dict):
+        failures.append(f"{path}: missing {section_title}/{row_label} metric row")
+        return
+    color = text_value(row, "rowColorHex") or text_value(row, "accentHex")
+    if color.lower() != expected_color.lower():
+        failures.append(f"{path}: expected {section_title}/{row_label} color {expected_color!r}, got {color!r}")
+
+
+def require_segments(path: str, sections: dict[str, dict[str, object]], section_title: str, row_label: str, expected: list[tuple[str, str]], failures: list[str]) -> None:
+    row = find_metric_row(sections, section_title, row_label)
+    if not isinstance(row, dict):
+        failures.append(f"{path}: missing {section_title}/{row_label} metric row")
+        return
+    actual = [(text_value(segment, "label"), text_value(segment, "value")) for segment in evidence_list(row, "segments")]
+    if actual != expected:
+        failures.append(f"{path}: expected {section_title}/{row_label} segments {expected!r}, got {actual!r}")
+
+
+def find_metric_row(sections: dict[str, dict[str, object]], section_title: str, row_label: str) -> dict[str, object] | None:
+    section = sections.get(section_title)
+    if not isinstance(section, dict):
+        return None
+    for row in evidence_list(section, "rows"):
+        if isinstance(row, dict) and text_value(row, "label") == row_label:
+            return row
+    return None
+
+
+def normalize_row_kind(row: dict[str, object]) -> str:
+    return str(get_manifest_value(row, "kind") or "").lower()
+
+
+def row_cells(row: dict[str, object]) -> list[str]:
+    return [str(cell) for cell in evidence_list(row, "cells")]
+
+
+def combined_row_text(row: dict[str, object]) -> str:
+    text = text_value(row, "text")
+    return text or " ".join(row_cells(row))
+
+
+def require_any_text(path: str, label: str, values: list[str], token: str, failures: list[str]) -> None:
+    if not any(token.lower() in value.lower() for value in values):
+        failures.append(f"{path}: missing {label}")
+
+
+def validate_rows_monotonic(path: str, rows: list[object], failures: list[str]) -> None:
+    previous_bottom: float | None = None
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        bounds = typed_dict(get_manifest_value(row, "bounds"))
+        y = rect_number(bounds, "y")
+        height = rect_number(bounds, "height")
+        if y is None or height is None:
+            continue
+        if previous_bottom is not None and y < previous_bottom - 0.5:
+            failures.append(f"{path}: row {index} overlaps or moves above previous row")
+            return
+        previous_bottom = y + height
+
+
+def require_row_class(path: str, row: dict[str, object], expected_class: str, failures: list[str]) -> None:
+    classes = evidence_list(row, "classList")
+    if expected_class not in classes:
+        failures.append(f"{path}: expected row class {expected_class!r}, got {classes!r}")
+
+
+def assert_cell_foreground(path: str, rows: list[object], row_token: str, column_label: str, expected_tokens: tuple[str, ...], failures: list[str]) -> None:
+    for row in rows:
+        if not isinstance(row, dict) or row_token not in combined_row_text(row):
+            continue
+        for cell in evidence_list(row, "renderedCells"):
+            if isinstance(cell, dict) and text_value(cell, "column").upper() == column_label:
+                color = str(cell.get("foreground") or "")
+                if not any(token.lower() in color.lower() for token in expected_tokens):
+                    failures.append(f"{path}: {row_token} {column_label} foreground expected {expected_tokens!r}, got {color!r}")
+                return
+        failures.append(f"{path}: {row_token} row missing rendered {column_label} cell")
+        return
+    failures.append(f"{path}: missing row containing {row_token!r}")
+
+
+def rect_number(rect: object, key: str) -> float | None:
+    if not isinstance(rect, dict):
+        return None
+    value = get_manifest_value(rect, key)
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def rects_intersect(first: dict[str, object], second: dict[str, object]) -> bool:
+    fx = rect_number(first, "x")
+    fy = rect_number(first, "y")
+    fw = rect_number(first, "width")
+    fh = rect_number(first, "height")
+    sx = rect_number(second, "x")
+    sy = rect_number(second, "y")
+    sw = rect_number(second, "width")
+    sh = rect_number(second, "height")
+    if None in (fx, fy, fw, fh, sx, sy, sw, sh):
+        return False
+    return fx + fw > sx and fx < sx + sw and fy + fh > sy and fy < sy + sh
+
+
+def point_in_rect(point: object, rect: dict[str, object]) -> bool:
+    if not isinstance(point, dict):
+        return False
+    x = rect_number(point, "x")
+    y = rect_number(point, "y")
+    rx = rect_number(rect, "x")
+    ry = rect_number(rect, "y")
+    rw = rect_number(rect, "width")
+    rh = rect_number(rect, "height")
+    if None in (x, y, rx, ry, rw, rh):
+        return False
+    return rx - 0.5 <= x <= rx + rw + 0.5 and ry - 0.5 <= y <= ry + rh + 0.5
+
+
+def require_trace_overlap(path: str, first: dict[str, object], second: dict[str, object], label: str, failures: list[str]) -> None:
+    first_points = [point for point in evidence_list(first, "points") if isinstance(point, dict)]
+    second_points = [point for point in evidence_list(second, "points") if isinstance(point, dict)]
+    if len(first_points) < 2 or len(second_points) < 2:
+        failures.append(f"{path}: input-state {label} overlap could not be checked without point evidence")
+        return
+    close_points = 0
+    horizontal_pairs = 0
+    for first_point, second_point in zip(first_points, second_points):
+        first_x = rect_number(first_point, "x")
+        first_y = rect_number(first_point, "y")
+        second_x = rect_number(second_point, "x")
+        second_y = rect_number(second_point, "y")
+        if None in (first_x, first_y, second_x, second_y):
+            continue
+        if abs(first_x - second_x) <= 0.75:
+            horizontal_pairs += 1
+            if abs(first_y - second_y) <= 10:
+                close_points += 1
+    if horizontal_pairs < 120:
+        failures.append(f"{path}: input-state {label} expected at least 120 comparable trace points, got {horizontal_pairs}")
+    if close_points < 24:
+        failures.append(f"{path}: input-state {label} expected at least 24 visually overlapping trace points, got {close_points}")
+
+
+def validate_grid_row_geometry(path: str, label: str, row: dict[str, object], failures: list[str]) -> None:
+    bounds = typed_dict(get_manifest_value(row, "bounds"))
+    require_rect(path, bounds, f"{label} row bounds", failures)
+    row_x = rect_number(bounds, "x")
+    row_y = rect_number(bounds, "y")
+    row_width = rect_number(bounds, "width")
+    row_height = rect_number(bounds, "height")
+    if None in (row_x, row_y, row_width, row_height):
+        return
+    previous_x: float | None = None
+    widths: list[float] = []
+    cells = evidence_list(row, "cells")
+    if len(cells) != 4:
+        failures.append(f"{path}: {label} expected four tire cells, got {len(cells)}")
+        return
+    for index, cell in enumerate(cells):
+        cell_bounds = typed_dict(get_manifest_value(typed_dict(cell), "bounds"))
+        require_rect(path, cell_bounds, f"{label} cell {index} bounds", failures)
+        cell_x = rect_number(cell_bounds, "x")
+        cell_y = rect_number(cell_bounds, "y")
+        cell_width = rect_number(cell_bounds, "width")
+        cell_height = rect_number(cell_bounds, "height")
+        if None in (cell_x, cell_y, cell_width, cell_height):
+            continue
+        if previous_x is not None and cell_x <= previous_x:
+            failures.append(f"{path}: {label} cell x positions are not strictly increasing")
+            break
+        previous_x = cell_x
+        widths.append(cell_width)
+        if cell_y + cell_height < row_y + 1 or cell_y > row_y + row_height - 1:
+            failures.append(f"{path}: {label} cell {index} does not overlap row vertically")
+        if cell_x < row_x - 2 or cell_x + cell_width > row_x + row_width + 2:
+            failures.append(f"{path}: {label} cell {index} is outside row horizontally")
+    if widths and max(widths) - min(widths) > 3:
+        failures.append(f"{path}: {label} tire cell widths differ by more than 3px: {widths!r}")
+
+
+def normalize_flag_kind(value: object) -> str:
+    return str(value or "").strip().lower()
+
+
+def expected_flag_grid(count: int) -> tuple[int, int]:
+    if count <= 1:
+        return 1, 1
+    if count <= 2:
+        return 2, 1
+    if count <= 4:
+        return 2, 2
+    if count <= 6:
+        return 3, 2
+    return 4, (count + 3) // 4
+
+
+def expected_flag_fill(kind: str) -> str:
+    return {
+        "green": "rgb(48, 214, 109)",
+        "blue": "rgb(55, 162, 255)",
+        "yellow": "rgb(255, 207, 74)",
+        "caution": "rgb(255, 207, 74)",
+        "red": "rgb(236, 76, 86)",
+        "black": "rgb(8, 10, 12)",
+        "meatball": "rgb(8, 10, 12)",
+        "white": "rgb(246, 248, 250)",
+        "checkered": "checkered",
+    }.get(kind, "")
+
+
+def expected_flag_rects(index: int, count: int) -> tuple[dict[str, float], dict[str, float]]:
+    columns, rows = expected_flag_grid(count)
+    padding = 8.0
+    gap = 8.0
+    grid_width = 360.0 - padding * 2
+    grid_height = 170.0 - padding * 2
+    cell_width = (grid_width - (columns - 1) * gap) / max(1, columns)
+    cell_height = (grid_height - (rows - 1) * gap) / max(1, rows)
+    row = index // max(1, columns)
+    column = index % max(1, columns)
+    cell = {
+        "x": padding + column * (cell_width + gap),
+        "y": padding + row * (cell_height + gap),
+        "width": cell_width,
+        "height": cell_height,
+    }
+    pole_x = cell["x"] + max(12.0, cell["width"] * 0.16)
+    cloth_x = pole_x + 1.0
+    cloth_width = max(48.0, cell["x"] + cell["width"] - cloth_x - 8.0)
+    cloth_height = max(24.0, min(cell["height"] * 0.7, cloth_width * 0.58))
+    cloth_y = cell["y"] + max(4.0, (cell["height"] - cloth_height) * 0.32)
+    cloth = {
+        "x": cloth_x,
+        "y": cloth_y,
+        "width": cloth_width,
+        "height": cloth_height,
+    }
+    return cell, cloth
+
+
+def assert_rect_close(path: str, label: str, actual: object, expected: dict[str, float], tolerance: float, failures: list[str]) -> None:
+    actual_dict = typed_dict(actual)
+    for key, expected_value in expected.items():
+        actual_value = rect_number(actual_dict, key)
+        if actual_value is None or abs(actual_value - expected_value) > tolerance:
+            failures.append(f"{path}: {label} expected {key} {expected_value:g}+/-{tolerance:g}, got {actual_value!r}")
+
+
+def numeric(value: object) -> float:
+    return float(value) if isinstance(value, (int, float)) else 0.0
+
+
+def require_size_fields(path: str, label: str, values: dict[str, object], expected_width: int, expected_height: int, failures: list[str]) -> None:
+    width = get_manifest_value(values, "width")
+    height = get_manifest_value(values, "height")
+    if width != expected_width or height != expected_height:
+        failures.append(f"{path}: expected {label} size {expected_width}x{expected_height}, got {width}x{height}")
+
+
+def require_size_object(path: str, label: str, value: object, expected_width: int, expected_height: int, failures: list[str], *, required: bool = True) -> None:
+    if not isinstance(value, dict):
+        if required:
+            failures.append(f"{path}: missing {label}")
+        return
+    width = get_manifest_value(value, "width")
+    height = get_manifest_value(value, "height")
+    if width != expected_width or height != expected_height:
+        failures.append(f"{path}: expected {label} {expected_width}x{expected_height}, got {width}x{height}")
 
 
 def read_manifest(root: Path, failures: list[str]) -> Optional[dict[str, object]]:
@@ -2704,6 +4074,7 @@ def validate_png(
     min_unique_bytes: int,
     failures: list[str],
     minimum_size: Optional[tuple[int, int]] = None,
+    min_byte_range: int = 24,
 ) -> None:
     path = root / relative_path
     try:
@@ -2728,7 +4099,7 @@ def validate_png(
             f"{relative_path}: only {metadata['unique_bytes']} sampled decoded bytes; "
             "image may be blank"
         )
-    if metadata["byte_range"] < 24:
+    if metadata["byte_range"] < min_byte_range:
         failures.append(
             f"{relative_path}: decoded byte range {metadata['byte_range']}; "
             "image may be blank or unreadable"

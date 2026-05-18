@@ -831,7 +831,7 @@ function pageDefinition(id, title, route, options = {}) {
       renderWhenTelemetryUnavailable: options.renderWhenTelemetryUnavailable ?? false,
       fadeWhenTelemetryUnavailable: options.fadeWhenTelemetryUnavailable ?? false,
       refreshIntervalMilliseconds: options.refreshIntervalMilliseconds ?? 250,
-      forwardQueryParameters: options.forwardQueryParameters ?? ['preview', 'frame', 'rel', 'spoofFocus', 'focus', 'pitService', 'streamChatFixture', 'sourceStart', 'sourceEnd', 'frameStart', 'frameEnd', 'replaySpeed']
+      forwardQueryParameters: options.forwardQueryParameters ?? ['preview', 'frame', 'rel', 'spoofFocus', 'focus', 'pitService', 'trackMap', 'fixture', 'streamChatFixture', 'sourceStart', 'sourceEnd', 'frameStart', 'frameEnd', 'replaySpeed']
     }
   };
 }

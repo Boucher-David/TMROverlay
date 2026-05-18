@@ -65,8 +65,7 @@ function ensureInputStyle() {
       width: min(380px, calc(100vw - 16px));
     }
 
-    body.input-state-page .overlay.input-rail-only,
-    body.input-state-page .overlay.input-empty {
+    body.input-state-page .overlay.input-rail-only {
       width: min(276px, calc(100vw - 16px));
     }
 

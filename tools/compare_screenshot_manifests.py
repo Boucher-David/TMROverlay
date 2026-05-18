@@ -16,11 +16,15 @@ from validate_overlay_screenshots import (
     BROWSER_REVIEW_OVERLAY_IDS,
     BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS,
     LOCALHOST_OVERLAY_ALIASES,
+    WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS,
     WINDOWS_INSTALLER_REQUIRED_PNGS,
     WINDOWS_NATIVE_OVERLAY_SIZES,
+    WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS,
     get_manifest_value,
     preview_modes_for_overlay,
     resolve_windows_installer_root,
+    web_overlay_variant_manifest_path_map,
+    windows_native_variant_manifest_path_map,
 )
 
 
@@ -153,6 +157,24 @@ def compare_browser_and_localhost(
                 strict_geometry=True,
             )
 
+    localhost_variant_paths = {
+        key: path
+        for path, key in web_overlay_variant_manifest_path_map("localhost-overlays").items()
+    }
+    for browser_path, key in sorted(web_overlay_variant_manifest_path_map("browser-overlays").items()):
+        localhost_path = localhost_variant_paths.get(key)
+        compare_pair(
+            "browser vs localhost fixture variant",
+            browser_path,
+            browser.get(browser_path),
+            str(localhost_path or ""),
+            localhost.get(localhost_path or ""),
+            failures,
+            stats,
+            strict_geometry=True,
+            semantic_checks=True,
+        )
+
     for overlay_id, aliases in LOCALHOST_OVERLAY_ALIASES.items():
         for alias_slug, _alias_route in aliases:
             canonical_path = f"localhost-overlays/{overlay_id}.png"
@@ -203,7 +225,30 @@ def compare_browser_and_windows(
                 stats,
                 strict_geometry=False,
                 geometry_tolerance=geometry_tolerance,
+                semantic_checks=True,
             )
+
+    browser_variant_paths = {
+        key: path
+        for path, key in web_overlay_variant_manifest_path_map("browser-overlays").items()
+        if key in WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS
+    }
+    for windows_path, key in sorted(windows_native_variant_manifest_path_map().items()):
+        browser_path = browser_variant_paths.get(key)
+        compare_pair(
+            "browser vs Windows native fixture variant",
+            str(browser_path or ""),
+            browser.get(browser_path or ""),
+            windows_path,
+            windows.get(windows_path),
+            failures,
+            stats,
+            strict_geometry=False,
+            geometry_tolerance=geometry_tolerance,
+            semantic_checks=key not in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS,
+            compare_size=key not in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS,
+            model_checks=key not in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS,
+        )
 
 
 def compare_pair(
@@ -217,6 +262,9 @@ def compare_pair(
     *,
     strict_geometry: bool,
     geometry_tolerance: float = DEFAULT_GEOMETRY_TOLERANCE,
+    semantic_checks: bool = False,
+    compare_size: bool = True,
+    model_checks: bool = True,
 ) -> None:
     context = f"{label}: {left_path} <-> {right_path}"
     if left is None:
@@ -228,13 +276,17 @@ def compare_pair(
 
     stats.overlay_pairs += 1
     body_kind = str(left.get("bodyKind") or nested(left.get("modelEvidence"), "bodyKind") or "")
-    compare_image_size(context, left, right, failures, stats)
+    if compare_size:
+        compare_image_size(context, left, right, failures, stats)
     compare_common_overlay_fields(context, body_kind, left, right, failures, stats)
 
     left_model = left.get("modelEvidence")
     right_model = right.get("modelEvidence")
     if not isinstance(left_model, dict) or not isinstance(right_model, dict):
         failures.append(f"{context}: both manifests must include modelEvidence")
+        return
+
+    if not model_checks:
         return
 
     body_kind = str(left.get("bodyKind") or left_model.get("bodyKind") or "")
@@ -248,6 +300,9 @@ def compare_pair(
         strict_geometry=strict_geometry,
         geometry_tolerance=geometry_tolerance,
     )
+    if semantic_checks:
+        overlay_id = str(left.get("overlayId") or right.get("overlayId") or "")
+        compare_overlay_semantics(context, overlay_id, body_kind, left, right, failures, stats)
 
 
 def compare_image_size(
@@ -275,6 +330,7 @@ def compare_common_overlay_fields(
     required_fields = (
         "overlayId",
         "previewMode",
+        "fixtureVariant",
         "bodyKind",
         "rowCount",
         "metricCount",
@@ -325,6 +381,236 @@ def compare_model_evidence(
     elif body_kind in ("car-radar", "track-map"):
         key = "carRadar" if body_kind == "car-radar" else "trackMap"
         compare_vector_model(context, body_kind, left.get(key), right.get(key), failures, stats, geometry_tolerance)
+
+
+def compare_overlay_semantics(
+    context: str,
+    overlay_id: str,
+    body_kind: str,
+    left: dict[str, Any],
+    right: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    left_model = typed_dict(left.get("modelEvidence"))
+    right_model = typed_dict(right.get("modelEvidence"))
+    if overlay_id in ("relative", "standings"):
+        compare_table_semantics(context, overlay_id, left_model, right_model, failures, stats)
+    elif overlay_id in ("fuel-calculator", "session-weather", "pit-service"):
+        compare_metrics_semantics(context, overlay_id, left_model, right_model, failures, stats)
+    elif overlay_id == "gap-to-leader":
+        compare_gap_semantics(context, typed_dict(left_model.get("graph")), typed_dict(right_model.get("graph")), failures, stats)
+    elif overlay_id == "input-state":
+        compare_input_semantics(context, typed_dict(left_model.get("inputs")), typed_dict(right_model.get("inputs")), failures, stats)
+    elif overlay_id == "track-map":
+        compare_vector_semantics(context, "track-map", typed_dict(left_model.get("trackMap")), typed_dict(right_model.get("trackMap")), failures, stats)
+    elif overlay_id == "car-radar":
+        compare_vector_semantics(context, "car-radar", typed_dict(left_model.get("carRadar")), typed_dict(right_model.get("carRadar")), failures, stats)
+    elif overlay_id == "flags":
+        compare_flags_semantics(context, typed_dict(left_model.get("flags")), typed_dict(right_model.get("flags")), failures, stats)
+    elif overlay_id == "stream-chat" or body_kind == "stream-chat":
+        compare_stream_chat_semantics(context, typed_dict(left_model.get("streamChat")), typed_dict(right_model.get("streamChat")), failures, stats)
+
+
+def compare_table_semantics(
+    context: str,
+    overlay_id: str,
+    left: dict[str, Any],
+    right: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    compare_signature(
+        context,
+        f"{overlay_id}.column semantics",
+        [table_column_signature(column) for column in as_list(left.get("columns"))],
+        [table_column_signature(column) for column in as_list(right.get("columns"))],
+        failures,
+        stats,
+    )
+    compare_signature(
+        context,
+        f"{overlay_id}.row semantics",
+        [table_row_signature(row) for row in as_list(left.get("rows"))],
+        [table_row_signature(row) for row in as_list(right.get("rows"))],
+        failures,
+        stats,
+    )
+
+
+def compare_metrics_semantics(
+    context: str,
+    overlay_id: str,
+    left: dict[str, Any],
+    right: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    compare_signature(
+        context,
+        f"{overlay_id}.metric section semantics",
+        [metric_section_signature(section) for section in as_list(left.get("metricSections"))],
+        [metric_section_signature(section) for section in as_list(right.get("metricSections"))],
+        failures,
+        stats,
+    )
+    compare_signature(
+        context,
+        f"{overlay_id}.metric row semantics",
+        [metric_row_signature(row) for row in as_list(left.get("metrics"))],
+        [metric_row_signature(row) for row in as_list(right.get("metrics"))],
+        failures,
+        stats,
+    )
+    compare_signature(
+        context,
+        f"{overlay_id}.grid section semantics",
+        [grid_section_signature(section) for section in as_list(left.get("gridSections"))],
+        [grid_section_signature(section) for section in as_list(right.get("gridSections"))],
+        failures,
+        stats,
+    )
+
+
+def compare_gap_semantics(
+    context: str,
+    left_graph: dict[str, Any],
+    right_graph: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    left_geometry = typed_dict(left_graph.get("geometry"))
+    right_geometry = typed_dict(right_graph.get("geometry"))
+    for field in ("scale", "lapWindow", "timeWindowSeconds"):
+        compare_optional_field(context, f"gap-to-leader.graph.{field}", left_geometry.get(field), right_geometry.get(field), failures, stats)
+    compare_signature(
+        context,
+        "gap-to-leader.series semantics",
+        [graph_series_signature(series) for series in sorted_series(as_list(left_geometry.get("series")))],
+        [graph_series_signature(series) for series in sorted_series(as_list(right_geometry.get("series")))],
+        failures,
+        stats,
+    )
+    compare_signature(
+        context,
+        "gap-to-leader.metric row semantics",
+        [graph_metric_row_signature(row) for row in as_list(left_geometry.get("metricRows"))],
+        [graph_metric_row_signature(row) for row in as_list(right_geometry.get("metricRows"))],
+        failures,
+        stats,
+    )
+
+
+def compare_input_semantics(
+    context: str,
+    left_inputs: dict[str, Any],
+    right_inputs: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    for field in ("hasContent", "hasGraph", "hasRail", "isAvailable", "tracePointCount", "maximumTracePoints"):
+        compare_optional_field(context, f"input-state.{field}", left_inputs.get(field), right_inputs.get(field), failures, stats)
+    compare_signature(
+        context,
+        "input-state.series semantics",
+        [input_series_signature(series) for series in as_list(left_inputs.get("series"))],
+        [input_series_signature(series) for series in as_list(right_inputs.get("series"))],
+        failures,
+        stats,
+    )
+    compare_signature(
+        context,
+        "input-state.graph series semantics",
+        [input_series_signature(series) for series in as_list(nested(left_inputs, "graph", "series"))],
+        [input_series_signature(series) for series in as_list(nested(right_inputs, "graph", "series"))],
+        failures,
+        stats,
+    )
+    compare_signature(
+        context,
+        "input-state.rail item semantics",
+        [rail_item_signature(item) for item in as_list(nested(left_inputs, "rail", "items"))],
+        [rail_item_signature(item) for item in as_list(nested(right_inputs, "rail", "items"))],
+        failures,
+        stats,
+    )
+
+
+def compare_vector_semantics(
+    context: str,
+    label: str,
+    left_vector: dict[str, Any],
+    right_vector: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    for field in ("shouldRender", "isAvailable", "mapKind", "ringCount", "carCount", "markerCount", "itemCount", "primitiveCount", "labelCount"):
+        compare_optional_field(context, f"{label}.{field}", left_vector.get(field), right_vector.get(field), failures, stats)
+    compare_signature(
+        context,
+        f"{label}.item semantics",
+        [vector_item_signature(item) for item in as_list(left_vector.get("items"))],
+        [vector_item_signature(item) for item in as_list(right_vector.get("items"))],
+        failures,
+        stats,
+    )
+    compare_signature(
+        context,
+        f"{label}.primitive semantics",
+        [vector_primitive_signature(primitive) for primitive in as_list(left_vector.get("primitives"))],
+        [vector_primitive_signature(primitive) for primitive in as_list(right_vector.get("primitives"))],
+        failures,
+        stats,
+    )
+    compare_signature(
+        context,
+        f"{label}.label semantics",
+        [vector_label_signature(label_item) for label_item in as_list(left_vector.get("labels"))],
+        [vector_label_signature(label_item) for label_item in as_list(right_vector.get("labels"))],
+        failures,
+        stats,
+    )
+
+
+def compare_flags_semantics(
+    context: str,
+    left_flags: dict[str, Any],
+    right_flags: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    for field in ("gridColumns", "gridRows"):
+        compare_optional_field(context, f"flags.{field}", left_flags.get(field), right_flags.get(field), failures, stats)
+    compare_signature(
+        context,
+        "flags.cell semantics",
+        [flag_cell_signature(cell) for cell in as_list(left_flags.get("cells"))],
+        [flag_cell_signature(cell) for cell in as_list(right_flags.get("cells"))],
+        failures,
+        stats,
+    )
+
+
+def compare_stream_chat_semantics(
+    context: str,
+    left_stream: dict[str, Any],
+    right_stream: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    if not left_stream or not right_stream:
+        failures.append(f"{context}: stream-chat semantic evidence missing streamChat object")
+        return
+    for field in ("rowCount", "renderedRowCount"):
+        compare_optional_field(context, f"stream-chat.{field}", left_stream.get(field), right_stream.get(field), failures, stats)
+    compare_signature(
+        context,
+        "stream-chat.row semantics",
+        [stream_chat_row_signature(row) for row in as_list(left_stream.get("rows"))],
+        [stream_chat_row_signature(row) for row in as_list(right_stream.get("rows"))],
+        failures,
+        stats,
+    )
 
 
 def compare_table_model(
@@ -904,6 +1190,32 @@ def compare_field(
         failures.append(f"{context}: {field} differs, {left!r} vs {right!r}")
 
 
+def compare_optional_field(
+    context: str,
+    field: str,
+    left: Any,
+    right: Any,
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    if left is None and right is None:
+        return
+    compare_field(context, field, left, right, failures, stats)
+
+
+def compare_signature(
+    context: str,
+    label: str,
+    left: list[Any],
+    right: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    stats.detail_checks += 1
+    if left != right:
+        failures.append(f"{context}: {label} differs, {left!r} vs {right!r}")
+
+
 def compare_count(
     context: str,
     label: str,
@@ -1070,6 +1382,182 @@ def sorted_series(series: list[Any]) -> list[Any]:
         )
 
     return sorted(series, key=key)
+
+
+def table_column_signature(column: Any) -> tuple[Any, Any, Any]:
+    if not isinstance(column, dict):
+        return ("", "", "")
+    return (
+        normalize_scalar(get_manifest_value(column, "label")),
+        normalize_scalar(get_manifest_value(column, "configuredWidth")),
+        normalize_scalar(get_manifest_value(column, "alignment")),
+    )
+
+
+def table_row_signature(row: Any) -> tuple[Any, Any, Any, tuple[Any, ...], tuple[Any, ...]]:
+    if not isinstance(row, dict):
+        return ("", "", "", (), ())
+    rendered_cells = as_list(get_manifest_value(row, "renderedCells"))
+    rendered_text = tuple(normalize_scalar(get_manifest_value(cell, "text")) for cell in rendered_cells if isinstance(cell, dict))
+    rendered_values = tuple(normalize_scalar(get_manifest_value(cell, "value")) for cell in rendered_cells if isinstance(cell, dict))
+    return (
+        normalize_table_row_kind(get_manifest_value(row, "kind")),
+        get_manifest_value(row, "isReference") is True,
+        normalize_scalar(get_manifest_value(row, "relativeLapDelta")),
+        tuple(normalize_scalar(cell) for cell in as_list(get_manifest_value(row, "cells"))),
+        rendered_text or rendered_values,
+    )
+
+
+def metric_section_signature(section: Any) -> tuple[Any, tuple[Any, ...]]:
+    if not isinstance(section, dict):
+        return ("", ())
+    return (
+        title_text(get_manifest_value(section, "title")),
+        tuple(metric_row_signature(row) for row in as_list(get_manifest_value(section, "rows"))),
+    )
+
+
+def metric_row_signature(row: Any) -> tuple[Any, Any, tuple[Any, ...]]:
+    if not isinstance(row, dict):
+        return ("", "", ())
+    return (
+        normalize_scalar(get_manifest_value(row, "label")),
+        normalize_scalar(get_manifest_value(row, "value")),
+        tuple(metric_segment_signature(segment) for segment in as_list(get_manifest_value(row, "segments"))),
+    )
+
+
+def metric_segment_signature(segment: Any) -> tuple[Any, Any]:
+    if not isinstance(segment, dict):
+        return ("", "")
+    return (
+        normalize_scalar(get_manifest_value(segment, "label")),
+        normalize_scalar(get_manifest_value(segment, "value")),
+    )
+
+
+def grid_section_signature(section: Any) -> tuple[Any, tuple[Any, ...], tuple[Any, ...]]:
+    if not isinstance(section, dict):
+        return ("", (), ())
+    return (
+        title_text(get_manifest_value(section, "title")),
+        tuple(normalize_scalar(header) for header in as_list(get_manifest_value(section, "headers"))),
+        tuple(grid_row_signature(row) for row in as_list(get_manifest_value(section, "rows"))),
+    )
+
+
+def grid_row_signature(row: Any) -> tuple[Any, tuple[Any, ...]]:
+    if not isinstance(row, dict):
+        return ("", ())
+    return (
+        normalize_scalar(get_manifest_value(row, "label")),
+        tuple(normalize_scalar(get_manifest_value(cell, "value")) for cell in as_list(get_manifest_value(row, "cells")) if isinstance(cell, dict)),
+    )
+
+
+def graph_series_signature(series: Any) -> tuple[Any, Any, Any, Any, Any, Any, Any]:
+    if not isinstance(series, dict):
+        return ("", "", "", "", "", "", "")
+    return (
+        normalize_scalar(get_manifest_value(series, "carIdx")),
+        normalize_scalar(get_manifest_value(series, "classPosition")),
+        get_manifest_value(series, "isReference") is True,
+        get_manifest_value(series, "isClassLeader") is True,
+        normalize_scalar(get_manifest_value(series, "pointCount")),
+        normalize_scalar(get_manifest_value(series, "endpointLabel")),
+        normalize_scalar(get_manifest_value(series, "isDashed")),
+    )
+
+
+def graph_metric_row_signature(row: Any) -> tuple[Any, Any, tuple[Any, ...]]:
+    if not isinstance(row, dict):
+        return ("", "", ())
+    return (
+        normalize_scalar(get_manifest_value(row, "text")),
+        normalize_scalar(get_manifest_value(row, "state")),
+        tuple(graph_metric_cell_signature(cell) for cell in as_list(get_manifest_value(row, "cells"))),
+    )
+
+
+def graph_metric_cell_signature(cell: Any) -> tuple[Any, Any]:
+    if not isinstance(cell, dict):
+        return ("", "")
+    return (
+        normalize_scalar(get_manifest_value(cell, "column")),
+        normalize_scalar(get_manifest_value(cell, "text")),
+    )
+
+
+def input_series_signature(series: Any) -> tuple[Any, Any, Any]:
+    if not isinstance(series, dict):
+        return ("", "", "")
+    return (
+        normalize_scalar(get_manifest_value(series, "kind")),
+        normalize_scalar(get_manifest_value(series, "pointCount")),
+        normalize_scalar(get_manifest_value(series, "curveCount")),
+    )
+
+
+def rail_item_signature(item: Any) -> tuple[Any, Any, Any]:
+    if not isinstance(item, dict):
+        return ("", "", "")
+    return (
+        normalize_scalar(get_manifest_value(item, "kind")),
+        normalize_scalar(get_manifest_value(item, "label")),
+        normalize_scalar(get_manifest_value(item, "text")),
+    )
+
+
+def vector_item_signature(item: Any) -> tuple[Any, Any, Any, Any]:
+    if not isinstance(item, dict):
+        return ("", "", "", "")
+    return (
+        normalize_scalar(get_manifest_value(item, "kind")),
+        normalize_scalar(get_manifest_value(item, "label")),
+        normalize_scalar(get_manifest_value(item, "alertKind")),
+        normalize_scalar(get_manifest_value(item, "text")),
+    )
+
+
+def vector_primitive_signature(primitive: Any) -> tuple[Any, Any, Any, Any]:
+    if not isinstance(primitive, dict):
+        return ("", "", "", "")
+    return (
+        normalize_scalar(get_manifest_value(primitive, "kind")),
+        get_manifest_value(primitive, "closed") is True,
+        normalize_scalar(get_manifest_value(primitive, "startDegrees")),
+        normalize_scalar(get_manifest_value(primitive, "sweepDegrees")),
+    )
+
+
+def vector_label_signature(label: Any) -> tuple[Any, Any]:
+    if not isinstance(label, dict):
+        return ("", "")
+    return (
+        normalize_scalar(get_manifest_value(label, "text")),
+        normalize_scalar(get_manifest_value(label, "alignment")),
+    )
+
+
+def flag_cell_signature(cell: Any) -> Any:
+    if not isinstance(cell, dict):
+        return ""
+    return normalize_flag_text(get_manifest_value(cell, "kind"))
+
+
+def stream_chat_row_signature(row: Any) -> tuple[Any, Any, Any]:
+    if not isinstance(row, dict):
+        return ("", "", "")
+    return (
+        normalize_scalar(get_manifest_value(row, "kind")),
+        normalize_scalar(get_manifest_value(row, "name")),
+        normalize_scalar(get_manifest_value(row, "text")),
+    )
+
+
+def typed_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def normalize_settings_tab(value: Any) -> Any:

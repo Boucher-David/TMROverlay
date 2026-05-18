@@ -319,6 +319,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     public string DiagnosticBodyKind => BodyName(_model.Body);
 
+    public bool DiagnosticShouldRender => _model.ShouldRender;
+
     public bool? DiagnosticRadarShouldRender => _model.Body is DesignV2RadarBody radar
         ? radar.RenderModel.ShouldRender
         : null;
@@ -3606,7 +3608,10 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 Foreground = ColorHex(TryParseHexColor(row.Row.AuthorColorHex, out var authorColor)
                     ? authorColor
                     : EvidenceColor(row.Row.Evidence)),
-                Background = ColorHex(SurfaceRaised)
+                Background = ColorHex(SurfaceRaised),
+                Metadata = row.Row.Metadata ?? [],
+                Badges = row.Row.Badges ?? [],
+                ChatSegments = StreamChatGdiRenderer.EffectiveSegments(row.Row.Message, row.Row.Segments)
             });
             y += row.Height + 8f;
         }
@@ -3867,6 +3872,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 Items = model.Markers.Select(marker => TrackMapMarkerItem(target, marker, scaleX, scaleY)).ToArray(),
                 Primitives = model.Primitives.Select(primitive => TrackMapPrimitiveLayout(target, primitive, scaleX, scaleY)).ToArray(),
                 Labels = labels,
+                MapKind = model.MapKind,
                 ShouldRender = model.IsAvailable
             }
         };
@@ -7274,7 +7280,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             2 => (2, 1),
             <= 4 => (2, 2),
             <= 6 => (3, 2),
-            _ => (4, 2)
+            _ => (4, (int)Math.Ceiling(count / 4d))
         };
     }
 
@@ -7972,6 +7978,12 @@ internal sealed record DesignV2LayoutRow(
     public int? RelativeLapDelta { get; init; }
 
     public IReadOnlyList<DesignV2LayoutCell> Cells { get; init; } = [];
+
+    public IReadOnlyList<string> Metadata { get; init; } = [];
+
+    public IReadOnlyList<string> Badges { get; init; } = [];
+
+    public IReadOnlyList<StreamChatDisplaySegment> ChatSegments { get; init; } = [];
 }
 
 internal sealed record DesignV2LayoutCell(
@@ -8181,6 +8193,8 @@ internal sealed record DesignV2LayoutVector(
     public bool ShouldRender { get; init; }
 
     public double? SurfaceAlpha { get; init; }
+
+    public string? MapKind { get; init; }
 
     public IReadOnlyList<DesignV2LayoutVectorItem> Items { get; init; } = [];
 

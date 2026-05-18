@@ -358,10 +358,19 @@ function providerFromLabel(value) {
   return 'twitch';
 }
 
+function fixtureVariant(searchParams = new URLSearchParams()) {
+  return String(searchParams.get('fixture') || '').trim().toLowerCase();
+}
+
+function fixtureMatches(searchParams, ...variants) {
+  const fixture = fixtureVariant(searchParams);
+  return variants.includes(fixture);
+}
+
 function reviewApiResponse(path, searchParams = new URLSearchParams()) {
   const previewMode = normalizePreviewMode(searchParams.get('preview'));
   if (path === '/api/snapshot') {
-    return { live: reviewLiveSnapshot(previewMode) };
+    return { live: reviewLiveSnapshot(previewMode, searchParams) };
   }
 
   if (path.startsWith('/api/overlay-model/')) {
@@ -371,7 +380,7 @@ function reviewApiResponse(path, searchParams = new URLSearchParams()) {
     }
 
     const page = browserOverlayPage(overlayId);
-    return { model: reviewDisplayModelWithRootOpacity(page.page.id, previewMode) };
+    return { model: reviewDisplayModelWithRootOpacity(page.page.id, previewMode, searchParams) };
   }
 
   const page = browserOverlayPages().find((candidate) => candidate.settingsRoute === path);
@@ -380,10 +389,10 @@ function reviewApiResponse(path, searchParams = new URLSearchParams()) {
   }
 
   return browserOverlayApiResponse(page.page.id, path, {
-    live: reviewLiveSnapshot(previewMode),
-    settings: reviewSettings(page.page.id, previewMode),
+    live: reviewLiveSnapshot(previewMode, searchParams),
+    settings: reviewSettings(page.page.id, previewMode, searchParams),
     model: productionOverlayModelIds.has(page.page.id)
-      ? reviewDisplayModelWithRootOpacity(page.page.id, previewMode)
+      ? reviewDisplayModelWithRootOpacity(page.page.id, previewMode, searchParams)
       : null
   });
 }
@@ -460,10 +469,10 @@ function overlayIdFromPath(path) {
   return null;
 }
 
-function reviewLiveSnapshot(previewMode = 'off') {
+function reviewLiveSnapshot(previewMode = 'off', searchParams = new URLSearchParams()) {
   const sessionKind = previewMode === 'off' ? 'practice' : previewMode;
   const sessionType = sessionKind === 'qualifying' ? 'Qualify' : titleCase(sessionKind);
-  return freshLiveSnapshot({
+  const live = freshLiveSnapshot({
     session: {
       hasData: true,
       sessionType,
@@ -551,13 +560,126 @@ function reviewLiveSnapshot(previewMode = 'off') {
       classRows: []
     }
   });
+  return applyReviewFixtureToLiveSnapshot(live, fixtureVariant(searchParams));
 }
 
-function reviewSettings(overlayId, previewMode = 'off') {
+function applyReviewFixtureToLiveSnapshot(live, fixture) {
+  if (!fixture || !live?.models) {
+    return live;
+  }
+
+  const models = live.models;
+  if (fixture === 'input-waiting') {
+    models.inputs = {
+      ...(models.inputs || {}),
+      hasData: false,
+      trace: []
+    };
+    return live;
+  }
+
+  if (fixture.startsWith('car-radar-')) {
+    const sides = {
+      left: [true, false],
+      right: [false, true],
+      'both-sides': [true, true],
+      clear: [false, false]
+    }[fixture.replace('car-radar-', '')];
+    if (sides) {
+      const [hasCarLeft, hasCarRight] = sides;
+      models.spatial = {
+        ...(models.spatial || {}),
+        hasData: true,
+        hasCarLeft,
+        hasCarRight,
+        sideStatus: hasCarLeft && hasCarRight
+          ? 'both'
+          : hasCarLeft
+            ? 'left'
+            : hasCarRight
+              ? 'right'
+              : 'clear',
+        cars: [],
+        multiclassApproaches: [],
+        strongestMulticlassApproach: null
+      };
+    }
+    return live;
+  }
+
+  if (fixture === 'track-map-no-markers') {
+    models.timing = {
+      ...(models.timing || {}),
+      focusCarIdx: null,
+      focusRow: null,
+      overallRows: [],
+      classRows: []
+    };
+    models.reference = {
+      ...(models.reference || {}),
+      focusCarIdx: null,
+      lapDistPct: null,
+      playerTrackSurface: 1,
+      trackSurface: 1,
+      onPitRoad: true,
+      playerOnPitRoad: true
+    };
+    return live;
+  }
+
+  if (fixture.startsWith('garage-')) {
+    const variant = fixture.replace('garage-', '');
+    if (variant === 'disconnected') {
+      live.isConnected = false;
+    }
+    if (variant === 'stale') {
+      live.lastUpdatedAtUtc = '2026-05-17T12:00:00.000Z';
+    }
+    const garageVisible = variant === 'visible';
+    models.raceEvents = {
+      ...(models.raceEvents || {}),
+      hasData: variant !== 'disconnected',
+      isGarageVisible: garageVisible,
+      isInGarage: garageVisible,
+      isOnTrack: !garageVisible
+    };
+    models.reference = {
+      ...(models.reference || {}),
+      isInGarage: garageVisible,
+      isOnTrack: !garageVisible
+    };
+  }
+
+  return live;
+}
+
+function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const unitSystem = reviewAppState.unitSystem;
   const session = sessionKeyFromPreview(previewMode);
   if (overlayId === 'stream-chat') {
+    if (fixtureMatches(searchParams, 'stream-chat-twitch-rich')) {
+      return {
+        provider: 'twitch',
+        isConfigured: true,
+        streamlabsWidgetUrl: null,
+        twitchChannel: 'techmatesracing',
+        status: 'connected',
+        replayStatus: 'replay chat | twitch',
+        replayRows: reviewStreamChatRichRows(),
+        contentOptions: streamChatContentOptionsFromReviewState(overlayState)
+      };
+    }
+    if (fixtureMatches(searchParams, 'stream-chat-streamlabs-configured')) {
+      return {
+        provider: 'streamlabs',
+        isConfigured: true,
+        streamlabsWidgetUrl: 'https://streamlabs.com/widgets/chat-box/review-token',
+        twitchChannel: null,
+        status: 'connected',
+        contentOptions: streamChatContentOptionsFromReviewState(overlayState)
+      };
+    }
     const provider = overlayState.provider || 'none';
     return {
       provider,
@@ -570,6 +692,16 @@ function reviewSettings(overlayId, previewMode = 'off') {
   }
 
   if (overlayId === 'garage-cover') {
+    const garageFixture = fixtureVariant(searchParams);
+    if (garageFixture.startsWith('garage-')) {
+      const previewVisible = false;
+      return {
+        hasImage: true,
+        imageVersion: `review-${garageFixture}`,
+        fallbackReason: null,
+        previewVisible
+      };
+    }
     return {
       hasImage: overlayState.garageHasImage === true,
       imageVersion: overlayState.garageHasImage === true ? 'review' : null,
@@ -579,8 +711,9 @@ function reviewSettings(overlayId, previewMode = 'off') {
   }
 
   if (overlayId === 'track-map') {
+    const fallbackMap = String(searchParams.get('trackMap') || '').toLowerCase() === 'fallback';
     return {
-      trackMap: reviewTrackMap(),
+      trackMap: fallbackMap ? null : reviewTrackMap(),
       trackMapSettings: {
         internalOpacity: Math.max(0, Math.min(1, Number(overlayState.opacityPercent ?? 0) / 100)),
         showSectorBoundaries: contentEnabled(overlayState, 'Sector boundaries', true, [], session),
@@ -595,6 +728,20 @@ function reviewSettings(overlayId, previewMode = 'off') {
   }
 
   if (overlayId === 'input-state') {
+    if (fixtureMatches(searchParams, 'input-no-content')) {
+      return {
+        unitSystem,
+        showThrottleTrace: false,
+        showBrakeTrace: false,
+        showClutchTrace: false,
+        showThrottle: false,
+        showBrake: false,
+        showClutch: false,
+        showSteering: false,
+        showGear: false,
+        showSpeed: false
+      };
+    }
     return {
       unitSystem,
       showThrottleTrace: contentEnabled(overlayState, 'Throttle trace', true, [], session),
@@ -616,6 +763,16 @@ function reviewSettings(overlayId, previewMode = 'off') {
   }
 
   if (overlayId === 'flags') {
+    if (fixtureMatches(searchParams, 'flags-all-kinds')) {
+      return {
+        flags: reviewAllFlags(),
+        showGreen: true,
+        showBlue: true,
+        showYellow: true,
+        showCritical: true,
+        showFinish: true
+      };
+    }
     return {
       flags: reviewFlagsForSession(session),
       showGreen: contentEnabled(overlayState, 'Green', true),
@@ -650,6 +807,55 @@ function reviewFlagsForSession(session) {
   }
 
   return [blue];
+}
+
+function reviewAllFlags() {
+  return [
+    { kind: 'green', category: 'green', label: 'Green', detail: null, tone: 'success' },
+    { kind: 'blue', category: 'blue', label: 'Blue', detail: null, tone: 'info' },
+    { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: null, tone: 'warning' },
+    { kind: 'caution', category: 'yellow', label: 'Caution', detail: 'waving', tone: 'warning' },
+    { kind: 'red', category: 'critical', label: 'Red', detail: null, tone: 'error' },
+    { kind: 'black', category: 'critical', label: 'Black', detail: null, tone: 'error' },
+    { kind: 'meatball', category: 'critical', label: 'Repair', detail: null, tone: 'error' },
+    { kind: 'white', category: 'finish', label: 'White', detail: null, tone: 'info' },
+    { kind: 'checkered', category: 'finish', label: 'Checkered', detail: null, tone: 'info' }
+  ];
+}
+
+function reviewStreamChatRichRows() {
+  return [
+    {
+      name: 'RaceCtrl',
+      text: 'Green flag at the line',
+      kind: 'notice',
+      authorColorHex: '#62FF9F',
+      metadata: ['12:04', 'first'],
+      badges: [{ id: 'moderator', version: '1', label: 'mod', roomId: '1234' }],
+      segments: [{ kind: 'text', text: 'Green flag at the line', imageUrl: null }]
+    },
+    {
+      name: 'TechMate',
+      text: 'Brake trace looks clean Kappa',
+      kind: 'message',
+      authorColorHex: '#37A2FF',
+      metadata: ['12:05', 'reply'],
+      badges: [{ id: 'subscriber', version: '12', label: 'sub', roomId: '1234' }],
+      segments: [
+        { kind: 'text', text: 'Brake trace looks clean ', imageUrl: null },
+        { kind: 'emote', text: 'Kappa', imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0' }
+      ]
+    },
+    {
+      name: 'CrewChief',
+      text: 'Box this lap for fuel and tires',
+      kind: 'message',
+      authorColorHex: '#FFDA59',
+      metadata: ['12:06'],
+      badges: [{ id: 'vip', version: '1', label: 'vip', roomId: '1234' }],
+      segments: [{ kind: 'text', text: 'Box this lap for fuel and tires', imageUrl: null }]
+    }
+  ];
 }
 
 function contentEnabled(overlayState, label, defaultValue = true, aliases = [], session = null) {
@@ -719,16 +925,16 @@ function reviewInputTrace() {
   return Array.from({ length: 180 }, (_, index) => {
     const t = index / 10;
     return {
-      throttle: Math.max(0, Math.min(1, 0.68 + Math.sin(t) * 0.28)),
-      brake: Math.max(0, Math.min(1, Math.sin(t * 0.58 + 1.6) - 0.42)),
+      throttle: Math.max(0, Math.min(1, 0.58 + Math.sin(t) * 0.32)),
+      brake: Math.max(0, Math.min(1, 0.56 + Math.sin(t * 0.96 + 0.6) * 0.32)),
       clutch: Math.max(0, Math.min(1, 0.08 + Math.sin(t * 0.35) * 0.06)),
       brakeAbsActive: index > 112 && index < 132
     };
   });
 }
 
-function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off') {
-  const model = reviewDisplayModel(overlayId, previewMode);
+function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
+  const model = reviewDisplayModel(overlayId, previewMode, searchParams);
   if (!model || opacityExcludedOverlayIds.has(overlayId)) {
     return model ? { ...model, rootOpacity: 1 } : model;
   }
@@ -739,13 +945,14 @@ function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off') {
   return { ...model, rootOpacity: opacity };
 }
 
-function reviewDisplayModel(overlayId, previewMode = 'off') {
+function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
   if (assetBackedReviewOverlayModelIds.has(overlayId)) {
-    return applyReviewChrome(reviewAssetBackedDisplayModel(overlayId, previewMode), overlayId, previewMode);
+    return applyReviewChrome(reviewAssetBackedDisplayModel(overlayId, previewMode, searchParams), overlayId, previewMode);
   }
 
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const session = sessionKeyFromPreview(previewMode);
+  const fixture = fixtureVariant(searchParams);
   const previewLabel = previewMode === 'off' ? 'review fixture' : `${previewMode} preview`;
   // BrowserOverlayModelFactory is a C# application service and cannot be executed
   // directly from this Node review server. The fallback builders below emit the
@@ -757,6 +964,21 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
       return applyReviewChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), overlayState), 'relative', overlayState, session), overlayId, previewMode);
     case 'fuel-calculator':
       {
+        if (fixture === 'fuel-waiting') {
+          return applyReviewChrome(metricsModel(
+            'fuel-calculator',
+            'Fuel Calculator',
+            'waiting for local fuel context',
+            [],
+            'source: waiting',
+            [],
+            [],
+            [
+              { key: 'status', value: 'waiting for local fuel context' },
+              { key: 'timeRemaining', value: '--' }
+            ],
+            false), overlayId, previewMode);
+        }
         const raceRows = [
           metricRow('Plan', '31 laps | 3 stints | 2 stops', 'info', [
             metricSegment('Race', '31 laps', 'info'),
@@ -827,6 +1049,66 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
       }
     case 'session-weather':
       {
+        if (fixture === 'session-weather-missing') {
+          const sessionRows = [
+            metricRow('Session', 'Race | race preview | Team', 'normal', [
+              metricSegment('Type', 'Race', 'normal'),
+              metricSegment('Name', 'race preview', 'normal'),
+              metricSegment('Mode', 'Team', 'normal')
+            ]),
+            metricRow('Clock', '-- | -- | --', 'waiting', [
+              metricSegment('Elapsed', '--', 'waiting'),
+              metricSegment('Left', '--', 'waiting'),
+              metricSegment('Total', '--', 'waiting')
+            ]),
+            metricRow('Event', 'Race | Aston Martin Vantage GT3 EVO', 'normal', [
+              metricSegment('Event', 'Race', 'normal'),
+              metricSegment('Car', 'Aston Martin Vantage GT3 EVO', 'normal')
+            ]),
+            metricRow('Track', 'Gesamtstrecke 24h | 25.4 km', 'normal', [
+              metricSegment('Name', 'Gesamtstrecke 24h', 'normal'),
+              metricSegment('Length', formatDistance(25380), 'normal')
+            ]),
+            metricRow('Laps', '-- | --', 'waiting', [
+              metricSegment('Remaining', '--', 'waiting'),
+              metricSegment('Total', '--', 'waiting')
+            ])
+          ];
+          const weatherRows = [
+            metricRow('Surface', 'Unknown | -- | --', 'waiting', [
+              metricSegment('Wetness', 'Unknown', 'waiting'),
+              metricSegment('Declared', '--', 'waiting'),
+              metricSegment('Rubber', '--', 'waiting')
+            ]),
+            metricRow('Sky', 'Unknown | -- | --', 'waiting', [
+              metricSegment('Skies', 'Unknown', 'waiting'),
+              metricSegment('Weather', '--', 'waiting'),
+              metricSegment('Rain', '--', 'waiting')
+            ]),
+            metricRow('Wind', '-- | -- | --', 'waiting', [
+              metricSegment('Dir', '--', 'waiting'),
+              metricSegment('Speed', '--', 'waiting'),
+              metricSegment('Facing', '--', 'waiting', { rotationDegrees: 0 })
+            ]),
+            metricRow('Temps', '-- | --', 'waiting', [
+              metricSegment('Air', '--', 'waiting'),
+              metricSegment('Track', '--', 'waiting')
+            ]),
+            metricRow('Atmosphere', '-- | -- | --', 'waiting', [
+              metricSegment('Hum', '--', 'waiting'),
+              metricSegment('Fog', '--', 'waiting'),
+              metricSegment('Pressure', '--', 'waiting')
+            ])
+          ];
+          const metricSections = [
+            { title: 'Session', rows: sessionRows },
+            { title: 'Weather', rows: weatherRows }
+          ];
+          return applyReviewChrome(metricsModel('session-weather', 'Session / Weather', 'weather unavailable', metricSections.flatMap((section) => section.rows), '', [], metricSections, [
+            { key: 'status', value: 'weather unavailable' },
+            { key: 'timeRemaining', value: '--' }
+          ]), overlayId, previewMode);
+        }
         const sessionType = session === 'qualifying' ? 'Qualify' : sessionDisplayName(session);
         const sessionName = sessionDisplayName(session);
         const reviewAirTempC = 22;
@@ -835,12 +1117,12 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
         const laps = reviewSessionWeatherLaps(session);
         const rubber = session === 'race' ? 'Moderate Usage' : 'Clean';
         const sessionRows = [
-          metricRow('Session', `${sessionType} | ${previewLabel} | team`, 'normal', [
+          metricRow('Session', `${sessionType} | ${previewLabel} | Team`, 'normal', [
             metricSegment('Type', sessionType, 'normal'),
             metricSegment('Name', previewLabel, 'normal'),
             metricSegment('Mode', 'Team', 'normal')
           ]),
-          metricRow('Clock', `${clock.elapsed} elapsed | ${clock.left} left | ${clock.total} total`, 'normal', [
+          metricRow('Clock', `${clock.elapsed} | ${clock.left} | ${clock.total}`, 'normal', [
             metricSegment('Elapsed', clock.elapsed, 'normal'),
             metricSegment('Left', clock.left, 'normal'),
             metricSegment('Total', clock.total, 'normal')
@@ -853,18 +1135,18 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
             metricSegment('Name', 'Gesamtstrecke 24h', 'normal'),
             metricSegment('Length', formatDistance(25380), 'normal')
           ]),
-          metricRow('Laps', `${laps.remaining} left | ${laps.total} total`, 'normal', [
+          metricRow('Laps', `${laps.remaining} | ${laps.total}`, 'normal', [
             metricSegment('Remaining', laps.remaining, 'normal'),
             metricSegment('Total', laps.total, 'normal')
           ])
         ];
         const weatherRows = [
-          metricRow('Surface', `Unknown | Rubber ${rubber}`, 'normal', [
+          metricRow('Surface', `Unknown | Dry | ${rubber}`, 'normal', [
             metricSegment('Wetness', 'Unknown', 'waiting'),
             metricSegment('Declared', 'Dry', 'normal'),
             metricSegment('Rubber', rubber, 'normal')
           ]),
-          metricRow('Sky', 'Mostly Cloudy | Dynamic | rain:0%', 'normal', [
+          metricRow('Sky', 'Mostly Cloudy | Dynamic | 0%', 'normal', [
             metricSegment('Skies', 'Mostly Cloudy', 'normal'),
             metricSegment('Weather', 'Dynamic', 'normal'),
             metricSegment('Rain', '0%', 'normal')
@@ -874,11 +1156,11 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
             metricSegment('Speed', formatSpeed(10 / 3.6), 'normal'),
             metricSegment('Facing', 'Head', 'normal', { rotationDegrees: 0 })
           ]),
-          metricRow('Temps', `air ${formatTemperature(reviewAirTempC)} | track ${formatTemperature(reviewTrackTempC)}`, temperatureTone(reviewTrackTempC), [
+          metricRow('Temps', `${formatTemperature(reviewAirTempC)} | ${formatTemperature(reviewTrackTempC)}`, temperatureTone(reviewTrackTempC), [
             metricSegment('Air', formatTemperature(reviewAirTempC), temperatureTone(reviewAirTempC), { accentHex: temperatureAccentHex(reviewAirTempC) }),
             metricSegment('Track', formatTemperature(reviewTrackTempC), temperatureTone(reviewTrackTempC), { accentHex: temperatureAccentHex(reviewTrackTempC) })
           ]),
-          metricRow('Atmosphere', `hum 48% | fog 0% | ${formatAirPressure(101300)}`, 'normal', [
+          metricRow('Atmosphere', `48% | 0% | ${formatAirPressure(101300)}`, 'normal', [
             metricSegment('Hum', '48%', 'normal'),
             metricSegment('Fog', '0%', 'normal'),
             metricSegment('Pressure', formatAirPressure(101300), 'normal')
@@ -895,6 +1177,67 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
       }
     case 'pit-service':
       {
+        if (fixture === 'pit-service-idle') {
+          const pitSections = [
+            {
+              title: 'Session',
+              rows: [
+                metricRow('Time / Laps', '03:58 | 148/179 laps', 'normal', [
+                  metricSegment('Time', '03:58', 'normal'),
+                  metricSegment('Laps', '148/179 laps', 'normal')
+                ])
+              ]
+            },
+            {
+              title: 'Pit Signal',
+              rows: [
+                metricRow('Release', 'GREEN - pit ready', 'success', undefined, { rowColorHex: '#62FF9F' }),
+                metricRow('Pit status', 'idle', 'normal')
+              ]
+            },
+            {
+              title: 'Service Request',
+              rows: [
+                metricRow('Fuel request', 'No | --', 'normal', [
+                  metricSegment('Requested', 'No', 'normal'),
+                  metricSegment('Selected', '--', 'waiting')
+                ]),
+                metricRow('Tearoff', 'No', 'normal', [
+                  metricSegment('Requested', 'No', 'normal')
+                ]),
+                metricRow('Repair', '-- | --', 'normal', [
+                  metricSegment('Required', '--', 'normal'),
+                  metricSegment('Optional', '--', 'normal')
+                ]),
+                metricRow('Fast repair', 'No | 1', 'normal', [
+                  metricSegment('Selected', 'No', 'normal'),
+                  metricSegment('Available', '1', 'success')
+                ])
+              ]
+            }
+          ];
+          const tireRows = [
+            gridRow('Compound', ['--', '--', '--', '--']),
+            gridRow('Change request', ['Keep', 'Keep', 'Keep', 'Keep']),
+            gridRow('Set limit', ['4 sets', '4 sets', '4 sets', '4 sets']),
+            gridRow('Sets available', ['2', '2', '2', '2']),
+            gridRow('Sets used', ['2', '2', '2', '2']),
+            gridRow('Pressure', ['--', '--', '--', '--']),
+            gridRow('Temperature', ['--', '--', '--', '--']),
+            gridRow('Wear', ['--', '--', '--', '--']),
+            gridRow('Distance', ['--', '--', '--', '--'])
+          ];
+          return applyReviewChrome(metricsModel('pit-service', 'Pit Service', 'pit ready', pitSections.flatMap((section) => section.rows), 'source: player/team pit service telemetry', [
+            {
+              title: 'Tire Analysis',
+              headers: ['Info', 'FL', 'FR', 'RL', 'RR'],
+              rows: tireRows
+            }
+          ], pitSections, [
+            { key: 'status', value: 'pit ready' },
+            { key: 'timeRemaining', value: '00:03:58' }
+          ]), overlayId, previewMode);
+        }
         const pitSections = filterMetricSectionsByContent('pit-service', [
           {
           title: 'Session',
@@ -915,18 +1258,18 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
           {
           title: 'Service Request',
           rows: [
-            metricRow('Fuel request', `requested | ${formatFuelVolume(31.6)}`, 'normal', [
+            metricRow('Fuel request', `Yes | ${formatFuelVolume(31.6)}`, 'normal', [
               metricSegment('Requested', 'Yes', 'success'),
               metricSegment('Selected', formatFuelVolume(31.6), 'info')
             ]),
-            metricRow('Tearoff', 'requested', 'normal', [
+            metricRow('Tearoff', 'Yes', 'normal', [
               metricSegment('Requested', 'Yes', 'success')
             ]),
-            metricRow('Repair', '12s required', 'error', [
+            metricRow('Repair', '12s | 18s', 'error', [
               metricSegment('Required', '12s', 'error'),
               metricSegment('Optional', '18s', 'warning')
             ]),
-            metricRow('Fast repair', 'selected | available 1', 'normal', [
+            metricRow('Fast repair', 'Yes | 1', 'normal', [
               metricSegment('Selected', 'Yes', 'success'),
               metricSegment('Available', '1', 'success')
             ])
@@ -966,6 +1309,22 @@ function reviewDisplayModel(overlayId, previewMode = 'off') {
         ]), overlayId, previewMode);
       }
     case 'gap-to-leader':
+      if (fixture === 'gap-no-cars') {
+        return applyReviewChrome({
+          overlayId,
+          title: 'Gap To Leader',
+          status: 'hidden | race gap',
+          source: '',
+          bodyKind: 'graph',
+          columns: [],
+          rows: [],
+          metrics: [],
+          points: [],
+          graph: reviewEmptyGapGraph(),
+          headerItems: [],
+          shouldRender: false
+        }, overlayId, previewMode);
+      }
       if (session !== 'race') {
         return applyReviewChrome({
           overlayId,
@@ -1034,6 +1393,33 @@ function reviewGapPoints(overlayState) {
   }
 
   return [0, 0, 243.63125];
+}
+
+function reviewEmptyGapGraph() {
+  return {
+    series: [],
+    weather: [],
+    leaderChanges: [],
+    driverChanges: [],
+    startSeconds: 62571.436719,
+    endSeconds: 63360.136719,
+    maxGapSeconds: 500,
+    lapReferenceSeconds: 525.8,
+    selectedSeriesCount: 0,
+    trendMetrics: [],
+    activeThreat: null,
+    threatCarIdx: null,
+    metricDeadbandSeconds: 0.25,
+    comparisonLabel: 'P1',
+    scale: {
+      maxGapSeconds: 500,
+      isFocusRelative: false,
+      aheadSeconds: 0,
+      behindSeconds: 0,
+      referencePoints: [],
+      latestReferenceGapSeconds: 0
+    }
+  };
 }
 
 function reviewGapGraph() {
@@ -1171,11 +1557,11 @@ function chromeEnabled(overlayState, area, label, session, defaultValue) {
   return overlayState?.chrome?.[area]?.[label]?.[session] ?? defaultValue;
 }
 
-function reviewAssetBackedDisplayModel(overlayId, previewMode = 'off') {
+function reviewAssetBackedDisplayModel(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
   const page = browserOverlayPage(overlayId);
   return browserOverlayApiResponse(overlayId, page.modelRoute, {
-    live: reviewLiveSnapshot(previewMode),
-    settings: reviewSettings(overlayId, previewMode)
+    live: reviewLiveSnapshot(previewMode, searchParams),
+    settings: reviewSettings(overlayId, previewMode, searchParams)
   }).model;
 }
 
@@ -1397,7 +1783,8 @@ function metricsModel(
   source = 'source: review fixture',
   gridSections = [],
   metricSections = [],
-  headerItems = [{ key: 'status', value: status }]) {
+  headerItems = [{ key: 'status', value: status }],
+  shouldRender = true) {
   return {
     overlayId,
     title,
@@ -1410,6 +1797,7 @@ function metricsModel(
     points: [],
     headerItems,
     gridSections,
+    shouldRender,
     metricSections: metricSections.map((section) => ({
       title: section.title,
       rows: section.rows.map(metricModelRow)

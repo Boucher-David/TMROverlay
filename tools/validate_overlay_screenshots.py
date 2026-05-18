@@ -976,7 +976,7 @@ def compare_browser_localhost_overlay_parity(
             f"web overlay {key}",
             browser_overlays[key],
             localhost_overlays[key],
-            ("overlayId", "previewMode", "fixtureVariant", "bodyKind", "sourceContract", "moduleAsset", "width", "height"),
+            ("overlayId", "previewMode", "fixtureVariant", "bodyKind", "sourceContract", "moduleAsset", "width", "height", "shouldRender", "rowCount"),
             failures,
         )
 
@@ -1023,14 +1023,14 @@ def compare_web_windows_overlay_parity(
             label,
             browser_screenshot,
             localhost_screenshot,
-            ("overlayId", "previewMode", "bodyKind", "width", "height"),
+            ("overlayId", "previewMode", "bodyKind", "width", "height", "shouldRender", "rowCount"),
             failures,
         )
         compare_manifest_fields(
             label,
             browser_screenshot,
             windows_screenshot,
-            ("overlayId", "previewMode", "bodyKind", "width", "height"),
+            ("overlayId", "previewMode", "bodyKind", "width", "height", "shouldRender", "rowCount"),
             failures,
         )
 
@@ -1576,6 +1576,8 @@ def validate_overlay_chrome_contract(path: str, values: dict[str, object], failu
     if source and source in footer_text:
         failures.append(f"{path}: semantic source {source!r} is still present in rendered footer chrome")
 
+    require_header_item_tone_contract(path, values, elements, failures)
+
 
 def layout_elements(layout: object) -> list[dict[str, object]]:
     if not isinstance(layout, dict):
@@ -1608,6 +1610,52 @@ def require_header_item_fit(path: str, elements: list[dict[str, object]], failur
             failures.append(f"{path}: header chrome element {index} text does not fit width")
         if get_manifest_value(metrics, "fitsHeight") is False:
             failures.append(f"{path}: header chrome element {index} text does not fit height")
+
+
+def require_header_item_tone_contract(
+    path: str,
+    values: dict[str, object],
+    elements: list[dict[str, object]],
+    failures: list[str],
+) -> None:
+    if not path.startswith(("browser-overlays/", "localhost-overlays/")):
+        return
+    if screenshot_variant_key(path) is not None:
+        return
+
+    visible_elements = [
+        element
+        for element in elements
+        if element_role(element) in {"header-item", "time-remaining"} and element_text(element)
+    ]
+    if not visible_elements:
+        return
+
+    header_items = values.get("headerItems")
+    visible_header_items = [
+        item for item in header_items
+        if isinstance(item, dict) and str(item.get("value") or "").strip()
+    ] if isinstance(header_items, list) else []
+    if visible_header_items and not any(str(item.get("tone") or "").strip() for item in visible_header_items):
+        failures.append(f"{path}: V102-027 header items render visible text but expose no tone/color contract")
+
+    for index, element in enumerate(visible_elements):
+        styles = typed_dict(get_manifest_value(element, "styles"))
+        color = str(get_manifest_value(styles, "color") or "").strip()
+        if is_neutral_header_color(color):
+            failures.append(f"{path}: V102-027 header item {index} uses neutral text color {color!r} instead of toned time/status color")
+
+
+def is_neutral_header_color(value: str) -> bool:
+    normalized = value.strip().lower().replace(" ", "")
+    return normalized in {
+        "rgb(255,247,255)",
+        "rgba(255,247,255,1)",
+        "#fff7ff",
+        "#ffffff",
+        "rgb(255,255,255)",
+        "rgba(255,255,255,1)",
+    }
 
 
 def require_scenario_evidence(path: str, value: object, failures: list[str]) -> None:
@@ -2576,11 +2624,36 @@ def require_rendered_cell_evidence(path: str, rows: object, failures: list[str])
             if cell.get("text") not in (None, "") or cell.get("value") not in (None, ""):
                 saw_text = True
             require_rect(path, cell.get("bounds"), f"model row {row_index} rendered cell {cell_index} bounds", failures)
+            require_rendered_text_fit(path, cell, f"model row {row_index} rendered cell {cell_index}", failures)
         if saw_text:
             return
 
     if saw_rendered_cells:
         failures.append(f"{path}: renderedCells did not include any text/value in the sampled rows")
+
+
+def require_rendered_text_fit(
+    path: str,
+    cell: dict[str, object],
+    label: str,
+    failures: list[str],
+) -> None:
+    text = str(cell.get("text") or cell.get("value") or "").strip()
+    if not text:
+        return
+
+    metrics = typed_dict(get_manifest_value(cell, "textMetrics"))
+    if not metrics:
+        if path.startswith(("browser-overlays/", "localhost-overlays/")):
+            failures.append(f"{path}: {label} missing text fit metrics")
+        return
+
+    fits_width = get_manifest_value(metrics, "fitsWidth")
+    fits_height = get_manifest_value(metrics, "fitsHeight")
+    if fits_width is False:
+        failures.append(f"{path}: {label} text {text!r} does not fit width")
+    if fits_height is False:
+        failures.append(f"{path}: {label} text {text!r} does not fit height")
 
 
 def require_metric_text_evidence(path: str, metrics: object, failures: list[str]) -> None:
@@ -3410,6 +3483,7 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
     require_sequence(path, "standings column labels", [text_value(column, "label") for column in columns], ["CLS", "CAR", "Driver", "GAP", "INT", "FAST", "LAST", "PIT"], failures)
     require_sequence(path, "standings column widths", [get_manifest_value(column, "configuredWidth") for column in columns], [35, 50, 250, 60, 60, 70, 70, 30], failures)
     require_sequence(path, "standings column alignments", [text_value(column, "alignment") for column in columns], ["right", "right", "left", "right", "right", "right", "right", "right"], failures)
+    require_pit_column_validation_capacity(path, columns, "standings", failures)
     rows = evidence_list(model, "rows")
     if len(rows) < 6:
         failures.append(f"{path}: standings expected at least 6 table rows, got {len(rows)}")
@@ -3431,6 +3505,7 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
     assert_cell_foreground(path, rows, "#000", "LAST", ("182, 92, 255", "#B65CFF"), failures)
     assert_cell_foreground(path, rows, "#3094", "FAST", ("98, 255, 159", "#62FF9F"), failures)
     assert_cell_foreground(path, rows, "#3094", "LAST", ("98, 255, 159", "#62FF9F"), failures)
+    require_rightmost_column_fit(path, rows, "PIT", "V102-020 standings Pit/rightmost column", failures)
 
 
 def validate_relative_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -3439,6 +3514,10 @@ def validate_relative_contract(path: str, values: dict[str, object], failures: l
     require_sequence(path, "relative column labels", [text_value(column, "label") for column in columns], ["Pos", "Driver", "Delta"], failures, casefold=True)
     require_sequence(path, "relative column widths", [get_manifest_value(column, "configuredWidth") for column in columns], [38, 250, 70], failures)
     require_sequence(path, "relative column alignments", [text_value(column, "alignment") for column in columns], ["right", "left", "right"], failures)
+    if not any(text_value(column, "label").lower() == "pit" for column in columns):
+        failures.append(f"{path}: V102-020 Relative validation fixture does not include the Pit/rightmost column, so clipping cannot be proven")
+    else:
+        require_pit_column_validation_capacity(path, columns, "relative", failures)
     rows = evidence_list(model, "rows")
     if len(rows) != 11:
         failures.append(f"{path}: relative expected 11 stable rows, got {len(rows)}")
@@ -3478,6 +3557,7 @@ def validate_relative_contract(path: str, values: dict[str, object], failures: l
         require_row_class(path, rows[4], "lap-ahead-1", failures)
         require_row_class(path, rows[5], "focus", failures)
         require_row_class(path, rows[6], "lap-behind-2", failures)
+    require_rightmost_column_fit(path, rows, "Pit", "V102-020 relative Pit/rightmost column", failures)
     validate_rows_monotonic(path, rows, failures)
 
 
@@ -3723,6 +3803,122 @@ def validate_gap_to_leader_contract(path: str, values: dict[str, object], failur
     for label in ("5L", "10L", "Pit", "PLap", "Stint", "Tire", "Last", "Status"):
         if label not in labels:
             failures.append(f"{path}: gap graph missing metric row {label!r}")
+    validate_gap_v102_feedback_contract(path, graph, geometry, failures)
+
+
+def validate_gap_v102_feedback_contract(
+    path: str,
+    graph: dict[str, object],
+    geometry: dict[str, object],
+    failures: list[str],
+) -> None:
+    variant_key = screenshot_variant_key(path)
+    if variant_key == ("gap-to-leader", "no-cars"):
+        return
+
+    trend_metrics = evidence_list(graph, "trendMetrics")
+    metrics_by_label = {
+        text_value(metric, "label").lower(): typed_dict(metric)
+        for metric in trend_metrics
+        if isinstance(metric, dict)
+    }
+    for label in ("5l", "10l"):
+        metric = metrics_by_label.get(label)
+        if not metric:
+            failures.append(f"{path}: V102-018 Gap metric {label.upper()} missing trend evidence")
+            continue
+        state_label = text_value(metric, "stateLabel")
+        value_text = text_value(metric, "valueText")
+        chaser_text = text_value(metric, "chaserText")
+        for field_name, text in (("stateLabel", state_label), ("valueText", value_text), ("chaserText", chaser_text)):
+            if is_lap_count_metric_text(text):
+                failures.append(f"{path}: V102-018 Gap {label.upper()} {field_name} uses lap-count text {text!r} instead of time/unavailable evidence")
+        if text_value(metric, "state").lower() == "ready" and not contains_time_delta_text(value_text):
+            failures.append(f"{path}: V102-018 Gap {label.upper()} ready value {value_text!r} does not prove a time delta")
+
+    active_threat = typed_dict(graph.get("activeThreat"))
+    if not active_threat:
+        failures.append(f"{path}: V102-025/V102-026 Gap validation fixture does not expose an active same-lap threat to prove label and red-line semantics")
+    else:
+        chaser = typed_dict(active_threat.get("chaser"))
+        label = text_value(chaser, "label")
+        if label.startswith("#"):
+            failures.append(f"{path}: V102-025 Gap threat label {label!r} uses car number instead of position")
+        if label and not label.upper().startswith("P"):
+            failures.append(f"{path}: V102-025 Gap threat label {label!r} does not expose a position label")
+
+    reference_position = gap_reference_class_position(geometry)
+    comparison_label = text_value(graph, "comparisonLabel").upper()
+    if reference_position is not None and reference_position > 2 and comparison_label in {"P1", "LEADER"}:
+        failures.append(f"{path}: V102-024 Gap Last/comparison label {comparison_label!r} points at leader while reference is P{reference_position}; nearest same-lap car-ahead evidence is missing")
+
+    scale = text_value(geometry, "scale").lower()
+    max_gap_seconds = numeric(graph.get("maxGapSeconds"))
+    if reference_position is not None and reference_position > 8 and scale != "focus-relative":
+        failures.append(f"{path}: V102-021 Gap graph uses {scale or 'unknown'} scale for reference P{reference_position}, so far-behind clipping/focus-window behaviour is unproven")
+    if max_gap_seconds >= 180 and scale != "focus-relative":
+        failures.append(f"{path}: V102-017/V102-021 Gap graph max scale {max_gap_seconds:g}s is too wide for the focused V2 trend validation fixture")
+
+    threat_car_idx = get_manifest_value(graph, "threatCarIdx")
+    for index, series in enumerate(evidence_list(geometry, "series")):
+        if not isinstance(series, dict):
+            continue
+        car_idx = get_manifest_value(series, "carIdx")
+        for color_field in ("renderedColor", "baseColor"):
+            color = str(get_manifest_value(series, color_field) or "")
+            if is_gap_threat_red(color) and car_idx != threat_car_idx:
+                failures.append(f"{path}: V102-026 Gap non-threat series {index} car {car_idx!r} uses threat red {color!r}")
+
+    for row in evidence_list(geometry, "metricRows"):
+        if not isinstance(row, dict) or text_value(row, "text").lower() != "last":
+            continue
+        for cell in evidence_list(row, "cells"):
+            if not isinstance(cell, dict):
+                continue
+            if text_value(cell, "column").lower() in {"metric", ""}:
+                continue
+            require_rendered_text_fit(path, cell, "V102-029 Gap Last metric cell", failures)
+
+
+def is_lap_count_metric_text(text: str) -> bool:
+    return bool(re.fullmatch(r"[+-]?\d+(?:\.\d+)?L", text.strip(), flags=re.IGNORECASE))
+
+
+def contains_time_delta_text(text: str) -> bool:
+    value = text.strip()
+    return bool(re.search(r"[+-]\d+(?:\.\d+)?s", value, flags=re.IGNORECASE))
+
+
+def gap_reference_class_position(geometry: dict[str, object]) -> Optional[int]:
+    for series in evidence_list(geometry, "series"):
+        if isinstance(series, dict) and get_manifest_value(series, "isReference") is True:
+            value = get_manifest_value(series, "classPosition")
+            if isinstance(value, int):
+                return value
+            if isinstance(value, float) and value.is_integer():
+                return int(value)
+    return None
+
+
+def is_gap_threat_red(color: str) -> bool:
+    red, green, blue = parse_css_color_rgb(color)
+    if red is None or green is None or blue is None:
+        return False
+    return red >= 180 and green <= 130 and blue <= 130
+
+
+def parse_css_color_rgb(color: str) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    normalized = color.strip()
+    hex_match = re.fullmatch(r"#([0-9a-fA-F]{6})(?:[0-9a-fA-F]{2})?", normalized)
+    if hex_match:
+        token = hex_match.group(1)
+        return int(token[0:2], 16), int(token[2:4], 16), int(token[4:6], 16)
+
+    rgb_match = re.search(r"rgba?\((\d+),\s*(\d+),\s*(\d+)", normalized)
+    if rgb_match:
+        return int(rgb_match.group(1)), int(rgb_match.group(2)), int(rgb_match.group(3))
+
+    return None, None, None
 
 
 def validate_track_map_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -4033,6 +4229,56 @@ def assert_cell_foreground(path: str, rows: list[object], row_token: str, column
         failures.append(f"{path}: {row_token} row missing rendered {column_label} cell")
         return
     failures.append(f"{path}: missing row containing {row_token!r}")
+
+
+def require_pit_column_validation_capacity(
+    path: str,
+    columns: list[object],
+    overlay_id: str,
+    failures: list[str],
+) -> None:
+    pit_columns = [
+        column for column in columns
+        if isinstance(column, dict)
+        and text_value(column, "label").lower() == "pit"
+    ]
+    if not pit_columns:
+        return
+
+    width = get_manifest_value(pit_columns[0], "configuredWidth")
+    if not isinstance(width, (int, float)):
+        failures.append(f"{path}: V102-020 {overlay_id} Pit column missing configured width evidence")
+    elif width < 36:
+        failures.append(f"{path}: V102-020 {overlay_id} Pit column width {width:g}px is below the validation minimum for unclipped rightmost text")
+
+
+def require_rightmost_column_fit(
+    path: str,
+    rows: list[object],
+    column_label: str,
+    label: str,
+    failures: list[str],
+) -> None:
+    saw_column = False
+    saw_text = False
+    for row in rows:
+        if not isinstance(row, dict) or normalize_row_kind(row) == "class-header":
+            continue
+        for cell in evidence_list(row, "renderedCells"):
+            if not isinstance(cell, dict):
+                continue
+            if text_value(cell, "column").lower() != column_label.lower():
+                continue
+            saw_column = True
+            text = text_value(cell, "text") or text_value(cell, "value")
+            if text:
+                saw_text = True
+                require_rendered_text_fit(path, cell, label, failures)
+
+    if not saw_column:
+        failures.append(f"{path}: {label} missing rendered column evidence")
+    elif not saw_text:
+        failures.append(f"{path}: {label} has no populated rendered cell to prove clipping behaviour")
 
 
 def rect_number(rect: object, key: str) -> float | None:

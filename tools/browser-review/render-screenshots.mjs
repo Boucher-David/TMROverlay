@@ -411,6 +411,7 @@ async function captureRoute(page, route, manifest) {
     source: stringOrNull(model?.source),
     bodyKind: stringOrNull(model?.bodyKind),
     shouldRender: booleanOrNull(model?.shouldRender),
+    headerItems: modelHeaderItems(model),
     rowCount: modelRowCount(model, dom.layout),
     metricCount: arrayLength(model?.metrics) + arrayLength(model?.metricSections) + arrayLength(model?.gridSections),
     flagCount: arrayLength(model?.flags?.flags),
@@ -1073,7 +1074,8 @@ function renderedCellEvidence(cell, index, column) {
     value: cell?.text || null,
     foreground: cell?.styles?.color || null,
     background: cell?.styles?.backgroundColor || null,
-    bounds: cell?.bounds || null
+    bounds: cell?.bounds || null,
+    textMetrics: cell?.textMetrics || null
   };
 }
 
@@ -1810,6 +1812,8 @@ function graphEvidence(graph, layout) {
       endpointLabel: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.endpointLabel || null,
       latestPoint: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.latestPoint || null
     })),
+    threatCarIdx: numberOrNull(graph?.threatCarIdx),
+    activeThreat: graph?.activeThreat ? graphThreatEvidence(graph.activeThreat) : null,
     trendMetricCount: arrayLength(graph?.trendMetrics),
     trendMetrics: (Array.isArray(graph?.trendMetrics) ? graph.trendMetrics : []).map((metric, index) => ({
       index,
@@ -2018,12 +2022,59 @@ function graphMetricRows(metricsRect, graph, canvasBounds) {
       state: stringOrNull(metric?.state),
       bounds: offsetRect(canvasBounds, row),
       cells: [
-        { column: 'Metric', text: stringOrNull(metric?.label), bounds: offsetRect(canvasBounds, { x: metricsRect.x + 8, y, width: 44, height: row.height }) },
-        { column: stringOrNull(graph?.comparisonLabel) || '--', text: graphMetricValueText(metric), bounds: offsetRect(canvasBounds, { x: metricsRect.x + 56, y, width: 46, height: row.height }) },
-        { column: 'Threat', text: graphMetricChaserText(metric), bounds: offsetRect(canvasBounds, { x: metricsRect.x + 108, y, width: metricsRect.width - 114, height: row.height }) }
+        graphMetricCell('Metric', stringOrNull(metric?.label), { x: metricsRect.x + 8, y, width: 44, height: row.height }, canvasBounds),
+        graphMetricCell(stringOrNull(graph?.comparisonLabel) || '--', graphMetricValueText(metric), { x: metricsRect.x + 56, y, width: 46, height: row.height }, canvasBounds),
+        graphMetricCell('Threat', graphMetricChaserText(metric), { x: metricsRect.x + 108, y, width: metricsRect.width - 114, height: row.height }, canvasBounds)
       ]
     };
   });
+}
+
+function graphMetricCell(column, text, bounds, canvasBounds) {
+  return {
+    column,
+    text,
+    bounds: offsetRect(canvasBounds, bounds),
+    textMetrics: estimatedCanvasTextMetrics(text, bounds.width, bounds.height, {
+      fontSize: 8,
+      averageGlyphWidth: 4.9
+    })
+  };
+}
+
+function estimatedCanvasTextMetrics(text, availableWidth, availableHeight, options = {}) {
+  const value = String(text || '');
+  if (!value.trim()) return null;
+  const averageGlyphWidth = Number.isFinite(options.averageGlyphWidth) ? options.averageGlyphWidth : 5;
+  const fontSize = Number.isFinite(options.fontSize) ? options.fontSize : 8;
+  const measuredWidth = value.length * averageGlyphWidth;
+  const measuredHeight = fontSize + 2;
+  const tolerance = 1.5;
+  return {
+    textLength: value.length,
+    availableWidth: round(availableWidth),
+    availableHeight: round(availableHeight),
+    measuredWidth: round(measuredWidth),
+    measuredHeight: round(measuredHeight),
+    fitsWidth: measuredWidth <= availableWidth + tolerance,
+    fitsHeight: measuredHeight <= availableHeight + tolerance,
+    evidence: 'estimated-canvas-text'
+  };
+}
+
+function graphThreatEvidence(metric) {
+  const chaser = metric?.chaser || null;
+  return {
+    label: stringOrNull(metric?.label),
+    state: stringOrNull(metric?.state),
+    stateLabel: stringOrNull(metric?.stateLabel),
+    focusGapChangeSeconds: numberOrNull(metric?.focusGapChangeSeconds),
+    chaser: chaser ? {
+      carIdx: numberOrNull(chaser?.carIdx),
+      label: stringOrNull(chaser?.label),
+      gainSeconds: numberOrNull(chaser?.gainSeconds)
+    } : null
+  };
 }
 
 function inputEvidence(inputs, layout) {
@@ -2514,6 +2565,18 @@ function numberOrNull(value) {
 
 function arrayLength(value) {
   return Array.isArray(value) ? value.length : 0;
+}
+
+function modelHeaderItems(model) {
+  if (!model || !Array.isArray(model.headerItems)) {
+    return [];
+  }
+
+  return model.headerItems.map((item) => ({
+    key: stringOrNull(item?.key),
+    value: stringOrNull(item?.value),
+    tone: stringOrNull(item?.tone)
+  }));
 }
 
 function modelRowCount(model, layout = null) {

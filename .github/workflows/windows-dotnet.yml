@@ -62,6 +62,26 @@ jobs:
       - name: Test localhost overlay routes
         run: npm run test:localhost
 
+  settings_effect_tests:
+    name: Settings effect matrix
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install browser test dependencies
+        run: npm ci
+
+      - name: Validate settings effect matrix
+        run: npm run test:settings-effects
+
   browser_review_screenshots:
     name: Browser review screenshots
     runs-on: ubuntu-latest

@@ -9,7 +9,7 @@ Session / Weather and Pit Service use the shared `SimpleTelemetryOverlayForm` sh
 - disconnected telemetry shows `waiting for iRacing`; connected but not collecting telemetry shows `waiting for telemetry`
 - unexpected refresh/render exceptions show a compact visible error and are logged
 - rows stay table-shaped so the window does not resize as values appear or disappear
-- source footers are validation/admin chrome, not default user-facing overlay furniture
+- source stays available as model/manifest/diagnostic evidence, but shared source footers are not rendered in the current user-facing overlay chrome
 
 ## Flags
 

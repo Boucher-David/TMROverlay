@@ -57,6 +57,7 @@ Suggested squash body:
 
 - Rebuilt screenshot validation around evidence-first native/browser/localhost parity, with stricter manifest semantics, pixel/geometry checks, degraded-state coverage, settings text-fit detection, graph/path evidence, and mutation checks for assertion drift.
 - Fixed proven overlay and fixture gaps exposed by the stricter checks, including settings screenshot viewport clamping, native manifest text/label representation, Input graph overlap, Gap To Leader graph coverage, Stream Chat review states, and generated Track Map realism.
+- Removed rendered header status and footer source chrome from overlays while keeping status/source as model, manifest, and diagnostic evidence; updated settings, browser review, localhost, Windows screenshot generators, and parity assertions for the new chrome shape.
 - Added an IBT-derived Nurburgring 24h Track Map screenshot fixture plus browser review and Windows generator support so the normal race showcase renders a realistic generated track instead of the old low-fidelity fallback shape.
 - Expanded live overlay diagnostics for pit-window service evidence, missing ARB/fuel observations, IBT analysis state, capture health, foreground/window capture state, iRating projection evidence, and incident-pressure evidence.
 - Enabled IBT analysis by default and refreshed Track Map storage/docs/tests so realistic generated maps are easier to produce from normal captures.

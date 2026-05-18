@@ -22,6 +22,48 @@ namespace TmrOverlay.App.Tests.Diagnostics;
 public sealed class DiagnosticsBundleServiceTests
 {
     [Fact]
+    public void LiveTelemetrySynthesisCoverage_TreatsZeroCarClassAsKnownValue()
+    {
+        var method = typeof(DiagnosticsBundleService).GetMethod(
+            "BuildCarFieldCoverage",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+        var coverage = method.Invoke(null, [
+            new[]
+            {
+                new HistoricalCarProximity(
+                    CarIdx: 10,
+                    LapCompleted: 12,
+                    LapDistPct: 0.42d,
+                    F2TimeSeconds: 90d,
+                    EstimatedTimeSeconds: 90d,
+                    Position: 1,
+                    ClassPosition: 1,
+                    CarClass: 0,
+                    TrackSurface: 3,
+                    OnPitRoad: false),
+                new HistoricalCarProximity(
+                    CarIdx: 11,
+                    LapCompleted: 12,
+                    LapDistPct: 0.40d,
+                    F2TimeSeconds: 92d,
+                    EstimatedTimeSeconds: 92d,
+                    Position: 2,
+                    ClassPosition: 2,
+                    CarClass: null,
+                    TrackSurface: 3,
+                    OnPitRoad: false)
+            }
+        ]);
+        var json = System.Text.Json.JsonSerializer.SerializeToNode(coverage);
+
+        Assert.Equal(2, ((int?)json?["rowCount"]) ?? -1);
+        Assert.Equal(1, ((int?)json?["carClassValidCount"]) ?? -1);
+        Assert.Equal(1, ((int?)json?["fullOfficialTimingCount"]) ?? -1);
+        Assert.Equal(1, ((int?)json?["fullProgressTimingCount"]) ?? -1);
+    }
+
+    [Fact]
     public void CreateBundle_IncludesTriageFilesAndExcludesRawTelemetry()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));

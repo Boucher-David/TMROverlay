@@ -183,7 +183,7 @@ public sealed class AppPerformanceStateTests
     }
 
     [Fact]
-    public void OverlayWindowState_FlagsTopMostNoActivateOverlayRiskWhileSettingsVisible()
+    public void OverlayWindowState_DoesNotFlagTopMostNoActivateOverlayBesideSettingsAsInputRisk()
     {
         var state = new AppPerformanceState();
         var timestamp = DateTimeOffset.Parse("2026-05-09T12:00:00Z");
@@ -211,9 +211,47 @@ public sealed class AppPerformanceStateTests
         Assert.Contains(snapshot.OverlayUpdates, metric =>
             metric.Id == "overlay.relative.window.settings_window_visible" && metric.Last == 1d);
         Assert.Contains(snapshot.OverlayUpdates, metric =>
-            metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 1d);
+            metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 0d);
         var window = Assert.Single(snapshot.OverlayWindows);
         Assert.True(window.SettingsWindowVisible);
+        Assert.False(window.SettingsWindowIntersects);
+        Assert.False(window.SettingsWindowInputProtected);
+        Assert.False(window.InputInterceptRisk);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void OverlayWindowState_FlagsSettingsInputRiskWhenOverlapOrInputProtectionIsPresent(
+        bool intersectsSettingsWindow,
+        bool settingsWindowInputProtected)
+    {
+        var state = new AppPerformanceState();
+        var timestamp = DateTimeOffset.Parse("2026-05-09T12:00:00Z");
+
+        state.RecordOverlayWindowState(
+            "relative",
+            timestamp,
+            actualVisible: true,
+            topMost: true,
+            alwaysOnTopSetting: true,
+            inputTransparent: false,
+            noActivate: true,
+            settingsOverlayActive: false,
+            settingsWindowVisible: true,
+            intersectsSettingsWindow,
+            settingsWindowInputProtected,
+            x: 822,
+            y: 18,
+            width: 438,
+            height: 360,
+            opacity: 0.88d);
+
+        var snapshot = state.Snapshot();
+
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 1d);
+        var window = Assert.Single(snapshot.OverlayWindows);
         Assert.True(window.InputInterceptRisk);
     }
 
@@ -251,5 +289,42 @@ public sealed class AppPerformanceStateTests
         Assert.False(window.SettingsOverlayActive);
         Assert.False(window.SettingsWindowVisible);
         Assert.False(window.InputInterceptRisk);
+    }
+
+    [Fact]
+    public void Snapshot_TracksSettingsApplyLocalhostFailuresAndProcessMemorySignals()
+    {
+        var state = new AppPerformanceState();
+
+        state.RecordSettingsSaveApplyQueued(coalescedRequestCount: 5, timerAlreadyPending: true);
+        state.RecordSettingsSaveApplyFlushed(
+            coalescedRequestCount: 5,
+            queuedFor: TimeSpan.FromMilliseconds(180),
+            succeeded: false);
+        state.RecordLocalhostRequest(
+            "gap-to-leader",
+            statusCode: 500,
+            elapsed: TimeSpan.FromMilliseconds(750),
+            succeeded: false);
+
+        var snapshot = state.Snapshot();
+
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.settings.apply.coalesced_request_count" && metric.Last == 5d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.settings.apply.timer_already_pending" && metric.Last == 1d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.settings.apply.flush_success" && metric.Last == 0d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.settings.apply.queued_ms" && metric.Maximum == 180d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "localhost.request.route.gap_to_leader.success" && metric.Last == 0d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "localhost.request.route.gap_to_leader.status_code" && metric.Last == 500d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "localhost.request.route.gap_to_leader.duration_ms" && metric.P95 == 750d);
+        Assert.True(snapshot.Process.WorkingSetBytes > 0);
+        Assert.True(snapshot.Process.PrivateMemoryBytes > 0);
+        Assert.True(snapshot.Process.ManagedHeapBytes > 0);
     }
 }

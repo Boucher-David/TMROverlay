@@ -39,6 +39,38 @@ public sealed class RuntimeStateServiceTests
     }
 
     [Fact]
+    public async Task Start_WritesRunningProcessIdentityEvidence()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-runtime-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            using var service = new RuntimeStateService(
+                storage,
+                new AppEventRecorder(storage),
+                NullLogger<RuntimeStateService>.Instance);
+
+            await service.StartAsync(CancellationToken.None);
+
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(storage.RuntimeStatePath));
+            var state = document.RootElement;
+            Assert.False(state.GetProperty("stoppedCleanly").GetBoolean());
+            Assert.False(state.TryGetProperty("stoppedAtUtc", out var stoppedAtUtc) && stoppedAtUtc.ValueKind != System.Text.Json.JsonValueKind.Null);
+            Assert.True(state.TryGetProperty("processId", out var processId));
+            Assert.Equal(Environment.ProcessId, processId.GetInt32());
+
+            await service.StopAsync(CancellationToken.None);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Start_DetectsPreviousUncleanRun()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-runtime-test", Guid.NewGuid().ToString("N"));

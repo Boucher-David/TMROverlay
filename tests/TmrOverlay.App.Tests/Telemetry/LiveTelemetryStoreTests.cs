@@ -295,6 +295,33 @@ DriverInfo:
     }
 
     [Fact]
+    public void RecordFrame_PrefersPublishedLapsRemainingOverTimedEstimateWhenTelemetryProvidesIt()
+    {
+        var store = new LiveTelemetryStore();
+        ApplyRaceSession(store);
+
+        store.RecordFrame(CreateSample(
+            playerCarIdx: 10,
+            teamLapCompleted: 42,
+            teamLapDistPct: 0.50d,
+            teamPosition: 2,
+            teamClassPosition: 2,
+            teamCarClass: 4098,
+            leaderCarIdx: 11,
+            leaderLapCompleted: 43,
+            leaderLapDistPct: 0.20d,
+            sessionTimeRemain: 18_000d,
+            sessionLapsRemainEx: 4,
+            sessionLapsTotal: 48,
+            teamLastLapTimeSeconds: 91d));
+
+        var progress = store.Snapshot().Models.RaceProgress;
+
+        Assert.Equal(4d, progress.RaceLapsRemaining);
+        Assert.Equal("session laps remain", progress.RaceLapsRemainingSource);
+    }
+
+    [Fact]
     public void RecordFrame_PublishesRollingRaceProjectionAfterCleanLeaderWindow()
     {
         var store = new LiveTelemetryStore();
@@ -456,6 +483,73 @@ DriverInfo:
         var offTrackCar = Assert.Single(pressure.Cars, car => car.CarIdx == 12);
         Assert.Equal(1, offTrackCar.ObservedOffTrackTransitions);
         Assert.Equal("watch-estimate", offTrackCar.PressureLevel);
+    }
+
+    [Fact]
+    public void RecordFrame_ExcludesNonCompetitorDriverRowsFromScoringAndCoverage()
+    {
+        var store = new LiveTelemetryStore();
+        store.ApplySessionInfo("""
+WeekendInfo:
+ EventType: Race
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Race
+   SessionName: RACE
+   ResultsPositions:
+   - Position: 0
+     ClassPosition: 0
+     CarIdx: 10
+   - Position: 1
+     ClassPosition: 1
+     CarIdx: 11
+   - Position: 2
+     ClassPosition: 2
+     CarIdx: 63
+DriverInfo:
+ DriverCarIdx: 10
+ Drivers:
+ - CarIdx: 10
+   UserName: Reference Driver
+   UserID: 1001
+   CarNumber: 10
+   CarClassID: 4098
+ - CarIdx: 11
+   UserName: Competitor Driver
+   UserID: 1002
+   CarNumber: 11
+   CarClassID: 4098
+ - CarIdx: 63
+   UserName: Pace Car
+   UserID: -1
+   CarNumber: PC
+   CarClassID: 4098
+   IsSpectator: 1
+""");
+
+        store.RecordFrame(CreateSample(
+            sessionState: 4,
+            playerCarIdx: 10,
+            focusCarIdx: 10,
+            teamPosition: 1,
+            teamClassPosition: 1,
+            teamCarClass: 4098,
+            teamLapDistPct: 0.5d,
+            teamEstimatedTimeSeconds: 45d,
+            allCars:
+            [
+                Car(10, position: 1, classPosition: 1, lapDistPct: 0.50d, f2TimeSeconds: 45d),
+                Car(11, position: 2, classPosition: 2, lapDistPct: 0.49d, f2TimeSeconds: 46d),
+                Car(63, position: 3, classPosition: 3, lapDistPct: 0.10d, f2TimeSeconds: 120d)
+            ]));
+
+        var models = store.Snapshot().Models;
+
+        Assert.Equal(2, models.Coverage.RosterCount);
+        Assert.DoesNotContain(models.Scoring.Rows, row => row.CarIdx == 63);
+        Assert.DoesNotContain(models.Timing.OverallRows, row => row.CarIdx == 63);
     }
 
     [Fact]
@@ -3063,6 +3157,8 @@ QualifyResultsInfo:
         double? leaderLastLapTimeSeconds = null,
         int? leaderTireCompound = null,
         double? sessionTimeRemain = null,
+        int? sessionLapsRemainEx = null,
+        int? sessionLapsTotal = null,
         int? sessionState = null,
         IReadOnlyList<HistoricalCarProximity>? focusClassCars = null,
         IReadOnlyList<HistoricalCarProximity>? nearbyCars = null,
@@ -3116,6 +3212,8 @@ QualifyResultsInfo:
             RelativeHumidityPercent: relativeHumidityPercent,
             FogLevelPercent: fogLevelPercent,
             SessionTimeRemain: sessionTimeRemain,
+            SessionLapsRemainEx: sessionLapsRemainEx,
+            SessionLapsTotal: sessionLapsTotal,
             SessionState: sessionState,
             IsGarageVisible: isGarageVisible,
             PlayerCarIdx: playerCarIdx,

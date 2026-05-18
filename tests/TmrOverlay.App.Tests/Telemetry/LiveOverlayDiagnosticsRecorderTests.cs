@@ -199,6 +199,76 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
     }
 
     [Fact]
+    public void CompleteCollection_DoesNotTreatAllZeroLapDeltaPlaceholdersAsUsable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-diagnostics");
+            Directory.CreateDirectory(captureDirectory);
+            var recorder = CreateRecorder(storage);
+            var context = CreateContext();
+            var capturedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", capturedAtUtc);
+            var sample = CreateSample(
+                capturedAtUtc,
+                sessionTime: 0d,
+                focusCarIdx: 10,
+                carLeftRight: 1,
+                focusF2TimeSeconds: 500d,
+                classPosition: 3,
+                observedPosition: 25,
+                observedClassPosition: 10,
+                observedLapDistPct: 0.5d) with
+            {
+                LapDeltaToBestLapSeconds = 0d,
+                LapDeltaToBestLapRate = 0d,
+                LapDeltaToBestLapOk = null,
+                LapDeltaToOptimalLapSeconds = 0d,
+                LapDeltaToOptimalLapRate = 0d,
+                LapDeltaToOptimalLapOk = null,
+                LapDeltaToSessionBestLapSeconds = 0d,
+                LapDeltaToSessionBestLapRate = 0d,
+                LapDeltaToSessionBestLapOk = null,
+                LapDeltaToSessionOptimalLapSeconds = 0d,
+                LapDeltaToSessionOptimalLapRate = 0d,
+                LapDeltaToSessionOptimalLapOk = null,
+                LapDeltaToSessionLastLapSeconds = 0d,
+                LapDeltaToSessionLastLapRate = 0d,
+                LapDeltaToSessionLastLapOk = null
+            };
+
+            recorder.RecordFrame(CreateSnapshot(context, sample, sequence: 1));
+
+            var path = recorder.CompleteCollection(capturedAtUtc.AddSeconds(1), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var lapDelta = document.RootElement.GetProperty("lapDelta");
+            Assert.Equal(1, lapDelta.GetProperty("observedFrames").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("framesWithAnyValue").GetInt32());
+            Assert.Equal(0, lapDelta.GetProperty("framesWithAnyUsableValue").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toBestLap").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toOptimalLap").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toSessionBestLap").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toSessionOptimalLap").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toSessionLastLap").GetInt32());
+            Assert.False(lapDelta.GetProperty("usableFrameCounts").TryGetProperty("toBestLap", out _));
+            Assert.False(lapDelta.GetProperty("usableFrameCounts").TryGetProperty("toOptimalLap", out _));
+            Assert.False(lapDelta.GetProperty("usableFrameCounts").TryGetProperty("toSessionBestLap", out _));
+            Assert.False(lapDelta.GetProperty("usableFrameCounts").TryGetProperty("toSessionOptimalLap", out _));
+            Assert.False(lapDelta.GetProperty("usableFrameCounts").TryGetProperty("toSessionLastLap", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void CompleteCollection_SummarizesUnavailableFocusContext()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));

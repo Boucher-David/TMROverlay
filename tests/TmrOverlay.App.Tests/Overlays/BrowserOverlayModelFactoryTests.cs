@@ -520,6 +520,77 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.DoesNotContain(response.Model.Graph.Series, series => series.CarIdx == lappedFocus.CarIdx);
     }
 
+    [Fact]
+    public async Task GapToLeaderModel_BuildsSafelyUnderConcurrentPolling()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var failures = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+
+        var tasks = Enumerable.Range(0, 8)
+            .Select(worker => Task.Run(() =>
+            {
+                for (var index = 0; index < 64; index++)
+                {
+                    var sequence = worker * 1_000 + index + 1;
+                    var snapshot = GapSnapshot(now.AddMilliseconds(sequence * 50), sequence, focusGapSeconds: 4d + worker * 0.1d + index * 0.01d);
+                    try
+                    {
+                        var built = factory.TryBuild("gap-to-leader", snapshot, settings, snapshot.LastUpdatedAtUtc!.Value, out var response);
+
+                        Assert.True(built);
+                        Assert.Equal("gap-to-leader", response.Model.OverlayId);
+                    }
+                    catch (Exception exception)
+                    {
+                        failures.Add(exception);
+                    }
+                }
+            }))
+            .ToArray();
+
+        await Task.WhenAll(tasks);
+
+        Assert.Empty(failures);
+    }
+
+    [Fact]
+    public void GapToLeaderGraph_StaysBoundedAcrossHighFrequencySnapshots()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        BrowserOverlayModelResponse? latestResponse = null;
+
+        for (var sequence = 1; sequence <= 300; sequence++)
+        {
+            var snapshot = GapSnapshot(now.AddMilliseconds(sequence * 100), sequence, focusGapSeconds: 4d + sequence * 0.02d);
+
+            var built = factory.TryBuild("gap-to-leader", snapshot, settings, snapshot.LastUpdatedAtUtc!.Value, out var response);
+
+            Assert.True(built);
+            latestResponse = response;
+        }
+
+        Assert.NotNull(latestResponse);
+        Assert.True(latestResponse!.Model.Points.Count <= 120);
+        Assert.NotNull(latestResponse.Model.Graph);
+        Assert.All(latestResponse.Model.Graph!.Series, series => Assert.True(series.Points.Count <= 300));
+        var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(latestResponse.Model, JsonOptions).Length;
+        Assert.True(payloadBytes < 250_000);
+    }
+
     private static LiveTimingRow TimingRow(
         int carIdx,
         bool isFocus = false,
@@ -567,6 +638,68 @@ public sealed class BrowserOverlayModelFactoryTests
             DeltaSecondsToFocus: deltaSeconds,
             TrackSurface: null,
             OnPitRoad: false);
+    }
+
+    private static LiveTelemetrySnapshot GapSnapshot(
+        DateTimeOffset now,
+        long sequence,
+        double focusGapSeconds)
+    {
+        var leader = TimingRow(
+            carIdx: 11,
+            isClassLeader: true,
+            classPosition: 1,
+            gapSeconds: 0d,
+            gapEvidence: LiveSignalEvidence.Reliable("CarIdxF2Time"));
+        var focus = TimingRow(
+            carIdx: 12,
+            isFocus: true,
+            classPosition: 2,
+            gapSeconds: focusGapSeconds,
+            gapEvidence: LiveSignalEvidence.Reliable("CarIdxF2Time"));
+        var chase = TimingRow(
+            carIdx: 13,
+            classPosition: 3,
+            gapSeconds: focusGapSeconds + 2.5d,
+            gapEvidence: LiveSignalEvidence.Reliable("CarIdxF2Time"));
+
+        return LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Sequence = sequence,
+            Models = LiveRaceModels.Empty with
+            {
+                Session = LiveSessionModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    SessionType = "Race",
+                    SessionTimeSeconds = sequence / 10d,
+                    SessionTimeRemainSeconds = 3600d
+                },
+                Timing = LiveTimingModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    FocusCarIdx = focus.CarIdx,
+                    ClassLeaderCarIdx = leader.CarIdx,
+                    FocusRow = focus,
+                    ClassRows = [leader, focus, chase],
+                    ClassLeaderGapEvidence = LiveSignalEvidence.Reliable("CarIdxF2Time")
+                },
+                RaceProgress = LiveRaceProgressModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    ReferenceClassPosition = 2,
+                    StrategyLapTimeSeconds = 90d,
+                    RacePaceSeconds = 90d,
+                    RacePaceSource = "test"
+                }
+            }
+        };
     }
 
     private static void WriteCarRadarCalibration(

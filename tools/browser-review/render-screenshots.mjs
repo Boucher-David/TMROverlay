@@ -2008,11 +2008,9 @@ function graphMarkers(graph, scale, plot, maxGapSeconds, canvasBounds) {
 function graphMetricRows(metricsRect, graph, canvasBounds) {
   const metrics = Array.isArray(graph?.trendMetrics) ? graph.trendMetrics.filter(Boolean) : [];
   if (!metricsRect || metrics.length === 0) return [];
-  const showThreatFooter = metrics.length <= 6;
-  const rowAreaBottomPadding = showThreatFooter ? 48 : 8;
-  const rowHeight = Math.max(9.5, Math.min(26, (metricsRect.height - rowAreaBottomPadding - 38) / Math.max(1, metrics.length)));
+  const rowHeight = Math.max(9.5, Math.min(26, (metricsRect.height - 8 - 38) / Math.max(1, metrics.length)));
   return metrics.map((metric, index) => {
-    const y = metricsRect.y + 43 + index * rowHeight;
+    const y = metricsRect.y + 38 + index * rowHeight;
     const row = { x: metricsRect.x + 8, y, width: metricsRect.width - 16, height: Math.max(10, Math.min(14, rowHeight)) };
     return {
       index,

@@ -931,20 +931,9 @@
     function drawGapFocusedMetricsTable(ctx, rect, graph) {
       const metrics = Array.isArray(graph?.trendMetrics) && graph.trendMetrics.length > 0
         ? graph.trendMetrics
-        : [
-            { label: '5L', state: 'unavailable' },
-            { label: '10L', state: 'unavailable' },
-            { label: 'Pit', state: 'unavailable' },
-            { label: 'PLap', state: 'unavailable' },
-            { label: 'Stint', state: 'unavailable' },
-            { label: 'Tire', state: 'unavailable' },
-            { label: 'Last', state: 'unavailable' },
-            { label: 'Status', state: 'unavailable' }
-          ];
+        : [];
       const visibleMetrics = metrics.filter(Boolean);
-      const showThreatFooter = visibleMetrics.length <= 6;
-      const rowAreaBottomPadding = showThreatFooter ? 48 : 8;
-      const rowHeight = Math.max(9.5, Math.min(26, (rect.height - rowAreaBottomPadding - 38) / Math.max(1, visibleMetrics.length)));
+      const rowHeight = Math.max(9.5, Math.min(26, (rect.height - 8 - 38) / Math.max(1, visibleMetrics.length)));
       ctx.save();
       ctx.lineWidth = 1;
       drawRoundedRect(
@@ -969,7 +958,7 @@
 
       ctx.font = `${rowHeight < 16 ? '8px' : '9px'} "Segoe UI", Arial, sans-serif`;
       visibleMetrics.forEach((metric, index) => {
-        const y = rect.top + 43 + index * rowHeight;
+        const y = rect.top + 38 + index * rowHeight;
         ctx.fillStyle = themeColor('--tmr-text-secondary', '#cdd8e4');
         ctx.fillText(metric?.label || '--', rect.left + 8, y);
         ctx.fillStyle = gapMetricValueColor(metric, numberOr(graph?.metricDeadbandSeconds, 0.25));
@@ -977,30 +966,6 @@
         ctx.fillStyle = gapMetricChaserColor(metric);
         ctx.fillText(gapMetricChaserText(metric), rect.left + 108, y);
       });
-
-      if (showThreatFooter) {
-        const threat = graph?.activeThreat || metrics.find((metric) => metric?.chaser);
-        const threatY = rect.top + rect.height - 28;
-        const footerStroke = threat?.chaser
-          ? colorWithAlpha(themeColor('--tmr-error', '#ec7063'), 0.34)
-          : 'rgba(255, 255, 255, 0.10)';
-        drawRoundedRect(
-          ctx,
-          rect.left + 8,
-          threatY,
-          rect.width - 16,
-          20,
-          3,
-          threat?.chaser ? 'rgba(236, 112, 99, 0.14)' : 'rgba(255, 255, 255, 0.055)',
-          footerStroke);
-        ctx.font = '700 8px "Segoe UI", Arial, sans-serif';
-        ctx.fillStyle = threat?.chaser
-          ? themeColor('--tmr-error', '#ec7063')
-          : 'rgba(140, 174, 212, 0.72)';
-        ctx.fillText(threat?.chaser
-          ? `Threat ${threat.chaser.label || `#${threat.chaser.carIdx ?? '--'}`} ${formatFocusedTrendChangeSeconds(-threat.chaser.gainSeconds)}`
-          : 'Threat --', rect.left + 14, threatY + 10);
-      }
       ctx.restore();
     }
 

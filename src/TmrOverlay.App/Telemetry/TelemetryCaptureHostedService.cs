@@ -1716,7 +1716,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             {
                 var liveSnapshot = _liveTelemetrySource.Snapshot();
                 _liveModelParityRecorder.RecordFrame(liveSnapshot);
-                _liveOverlayDiagnosticsRecorder.RecordFrame(liveSnapshot);
+                _liveOverlayDiagnosticsRecorder.RecordFrame(liveSnapshot, rawWatch);
             }
             catch (Exception exception)
             {

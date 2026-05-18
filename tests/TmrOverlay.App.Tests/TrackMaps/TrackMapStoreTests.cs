@@ -152,6 +152,7 @@ public sealed class TrackMapStoreTests
             Assert.Equal(1, snapshot.UserMapCount);
             Assert.Equal(0, snapshot.BundledMapCount);
             Assert.Equal(1, snapshot.InvalidBundledMapCount);
+            Assert.Null(snapshot.CurrentTrack);
             Assert.Contains(snapshot.RecentMaps, item =>
                 item.Source == "user"
                 && item.Key == identity.Key
@@ -160,6 +161,45 @@ public sealed class TrackMapStoreTests
                 && item.GenerationVersion == TrackMapDocument.CurrentGenerationVersion
                 && item.SectorCount == 3);
             Assert.Contains(snapshot.RecentMaps, item => item.Source == "bundled" && item.Readable == false && !string.IsNullOrWhiteSpace(item.Error));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void DiagnosticsSnapshot_ReportsCurrentTrackLookupEvidence()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-track-map-store-test", Guid.NewGuid().ToString("N"));
+        var bundledRoot = Path.Combine(root, "bundled");
+        try
+        {
+            var storage = StorageOptionsFor(root);
+            var store = new TrackMapStore(storage, bundledRoot);
+            var identity = TrackMapIdentity.From(TestTrack());
+            Directory.CreateDirectory(storage.TrackMapRoot);
+            Directory.CreateDirectory(bundledRoot);
+            File.WriteAllText(
+                Path.Combine(bundledRoot, $"{identity.Key}.json"),
+                JsonSerializer.Serialize(Document(identity, TrackMapConfidence.Medium)));
+
+            var snapshot = store.DiagnosticsSnapshot(TestTrack(), includeUserMapsForCurrentTrack: true);
+
+            var currentTrack = snapshot.CurrentTrack;
+            Assert.NotNull(currentTrack);
+            Assert.Equal(identity.Key, currentTrack!.Identity.Key);
+            Assert.True(currentTrack.IncludeUserMaps);
+            Assert.False(currentTrack.UserPathExists);
+            Assert.True(currentTrack.BundledPathExists);
+            Assert.True(currentTrack.HasReadableMap);
+            Assert.True(currentTrack.IsCompleteForRuntime);
+            Assert.Equal("bundled", currentTrack.BestSource);
+            Assert.Equal(TrackMapConfidence.Medium.ToString(), currentTrack.Confidence);
+            Assert.Null(currentTrack.FallbackReason);
         }
         finally
         {

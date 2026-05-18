@@ -48,7 +48,7 @@ Generation is skipped when a complete map already exists for the normalized trac
 
 Track identity is layout-aware: the map key includes `TrackID` when present, normalized track name, normalized config/layout name, track length, and track version. This avoids treating alternate layouts as the same map when session info provides enough identity.
 
-Diagnostics bundles include `metadata/track-maps.json`, a compact inventory of readable and invalid bundled/user map documents. It includes schema version, generation version, and sector count so support can distinguish stale geometry-only maps from schema-v2 sector-capable maps, and can separate a real map-rendering issue from an expected circle fallback when the current track identity has no matching bundled or user-generated map.
+Diagnostics bundles include `metadata/track-maps.json`, a compact inventory of readable and invalid bundled/user map documents plus a current-track lookup summary when a live or latest-capture track identity is available. The lookup records the normalized map key, whether user maps were eligible under the Track Map setting, expected user/bundled file paths, the selected map source when one exists, and a fallback reason such as `no_matching_runtime_map`. This gives support evidence to separate a real map-rendering issue from an expected circle fallback when the current track identity has no matching bundled or user-generated map.
 
 ## Localhost
 

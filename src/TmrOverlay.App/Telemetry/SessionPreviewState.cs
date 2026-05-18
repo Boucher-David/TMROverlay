@@ -105,6 +105,11 @@ internal sealed class SessionPreviewLiveTelemetrySource : ILiveTelemetrySource
     {
         return _previewState.TryBuildSnapshot(DateTimeOffset.UtcNow) ?? _inner.Snapshot();
     }
+
+    public LiveTelemetrySnapshot? LastActiveSnapshot()
+    {
+        return _inner.LastActiveSnapshot();
+    }
 }
 
 internal sealed record SessionPreviewDiagnosticsSnapshot(

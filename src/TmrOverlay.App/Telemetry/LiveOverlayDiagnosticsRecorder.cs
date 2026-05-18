@@ -7,6 +7,7 @@ using TmrOverlay.App.Overlays.Flags;
 using TmrOverlay.App.Storage;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Overlays;
+using TmrOverlay.Core.Telemetry.EdgeCases;
 using TmrOverlay.Core.Telemetry.Live;
 
 namespace TmrOverlay.App.Telemetry;
@@ -16,6 +17,8 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private const double SectorBoundarySeedThreshold = 0.0125d;
     private const double LapStartSeedThreshold = 0.02d;
     private const double MaximumContinuousSectorProgressDelta = 0.12d;
+    private const int MaxPitWindowSamples = 20;
+    private const int BlackFlagMask = 0x00010000 | 0x00020000 | 0x00080000 | 0x00200000 | 0x00400000;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -41,6 +44,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private readonly Dictionary<string, int> _gapClassSourceCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _gapClassEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _gapOverallEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _radarSideStateCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _radarFocusFrameCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _radarPlacementEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _fuelLevelEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
@@ -54,10 +58,18 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private readonly Dictionary<string, int> _relativeLapRelationshipCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _relativeLapRelationshipPitCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _relativeLapPendingCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _raceProjectionSourceCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _rawDriverControlFieldCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _rawDriverControlChangeCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _rawPitCommandFieldCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _rawPitCommandChangeCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _eventSampleCountsByKind = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _eventSampleKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, double> _lastRawDriverControls = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, double> _lastRawPitCommands = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, PositionState> _positionStates = [];
     private readonly Dictionary<int, SectorTimingState> _sectorStates = [];
+    private readonly List<PitWindowDiagnosticsSample> _pitWindows = [];
     private readonly List<LiveOverlayDiagnosticsFrameSample> _sampleFrames = [];
     private readonly List<LiveOverlayDiagnosticsEventSample> _eventSamples = [];
     private string? _sourceId;
@@ -148,6 +160,18 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private int _relativeLapOfficialDeltaFrames;
     private int _relativeLapPendingFrames;
     private int _maxRelativeLapNearbyCars;
+    private int _raceLapSignalFrames;
+    private int _nonRaceRaceLapSignalFrames;
+    private int _raceProjectionFrames;
+    private int _nonRaceRaceProjectionFrames;
+    private int _rawDriverControlSignalFrames;
+    private int _rawDriverControlChangeFrames;
+    private int _rawPitCommandSignalFrames;
+    private int _rawPitCommandChangeFrames;
+    private int _fuelIncreaseEventFrames;
+    private int _pitWindowsWithFuelIncrease;
+    private int _pitWindowsWithBlackFlag;
+    private PitWindowState? _activePitWindow;
     private IReadOnlyList<HistoricalTrackSector> _sectorDefinitions = [];
     private int _sectorMetadataFrames;
     private int _sectorMissingMetadataFrames;
@@ -288,6 +312,18 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _relativeLapOfficialDeltaFrames = 0;
             _relativeLapPendingFrames = 0;
             _maxRelativeLapNearbyCars = 0;
+            _raceLapSignalFrames = 0;
+            _nonRaceRaceLapSignalFrames = 0;
+            _raceProjectionFrames = 0;
+            _nonRaceRaceProjectionFrames = 0;
+            _rawDriverControlSignalFrames = 0;
+            _rawDriverControlChangeFrames = 0;
+            _rawPitCommandSignalFrames = 0;
+            _rawPitCommandChangeFrames = 0;
+            _fuelIncreaseEventFrames = 0;
+            _pitWindowsWithFuelIncrease = 0;
+            _pitWindowsWithBlackFlag = 0;
+            _activePitWindow = null;
             _sectorDefinitions = [];
             _sectorMetadataFrames = 0;
             _sectorMissingMetadataFrames = 0;
@@ -321,6 +357,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _gapClassSourceCounts.Clear();
             _gapClassEvidenceCounts.Clear();
             _gapOverallEvidenceCounts.Clear();
+            _radarSideStateCounts.Clear();
             _radarFocusFrameCounts.Clear();
             _radarPlacementEvidenceCounts.Clear();
             _fuelLevelEvidenceCounts.Clear();
@@ -334,17 +371,25 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _relativeLapRelationshipCounts.Clear();
             _relativeLapRelationshipPitCounts.Clear();
             _relativeLapPendingCounts.Clear();
+            _raceProjectionSourceCounts.Clear();
+            _rawDriverControlFieldCounts.Clear();
+            _rawDriverControlChangeCounts.Clear();
+            _rawPitCommandFieldCounts.Clear();
+            _rawPitCommandChangeCounts.Clear();
             _trackMapSectorHighlightCounts.Clear();
             _eventSampleCountsByKind.Clear();
             _eventSampleKeys.Clear();
+            _lastRawDriverControls.Clear();
+            _lastRawPitCommands.Clear();
             _positionStates.Clear();
             _sectorStates.Clear();
+            _pitWindows.Clear();
             _sampleFrames.Clear();
             _eventSamples.Clear();
         }
     }
 
-    public void RecordFrame(LiveTelemetrySnapshot snapshot)
+    public void RecordFrame(LiveTelemetrySnapshot snapshot, RawTelemetryWatchSnapshot? rawWatch = null)
     {
         if (!_options.Enabled)
         {
@@ -369,6 +414,8 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             RecordGap(snapshot, capturedAtUtc);
             RecordRadar(snapshot, capturedAtUtc);
             RecordFuel(snapshot, capturedAtUtc);
+            RecordRaceProjection(snapshot, capturedAtUtc);
+            RecordRawTelemetry(rawWatch ?? RawTelemetryWatchSnapshot.Empty, snapshot, capturedAtUtc);
             RecordPositionCadence(snapshot, capturedAtUtc);
             RecordLapDelta(snapshot);
             RecordRelativeLapRelationship(snapshot, capturedAtUtc);
@@ -394,6 +441,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
 
             try
             {
+                FinalizeActivePitWindow(finishedAtUtc);
                 var artifact = new LiveOverlayDiagnosticsArtifact(
                     FormatVersion: 1,
                     SourceId: _sourceId,
@@ -477,6 +525,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                         MaxNearbyCars: _maxRadarNearbyCars,
                         MaxTimingRows: _maxRadarTimingRows,
                         MaxSpatialCars: _maxRadarSpatialCars,
+                        SideStateCounts: Sorted(_radarSideStateCounts),
                         FocusFrameCounts: Sorted(_radarFocusFrameCounts),
                         PlacementEvidenceCounts: Sorted(_radarPlacementEvidenceCounts)),
                     Fuel: new FuelOverlayDiagnosticsSummary(
@@ -493,12 +542,17 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                         PitServiceOffTrackFrames: _fuelPitServiceOffTrackFrames,
                         FuelLocalStrategyUnavailableFrames: _fuelLocalStrategyUnavailableFrames,
                         PitServiceLocalStrategyUnavailableFrames: _pitServiceLocalStrategyUnavailableFrames,
+                        FuelIncreaseEventFrames: _fuelIncreaseEventFrames,
+                        PitWindowCount: _pitWindows.Count,
+                        PitWindowsWithFuelIncrease: _pitWindowsWithFuelIncrease,
+                        PitWindowsWithBlackFlag: _pitWindowsWithBlackFlag,
                         FuelLevelEvidenceCounts: Sorted(_fuelLevelEvidenceCounts),
                         InstantaneousBurnEvidenceCounts: Sorted(_fuelBurnEvidenceCounts),
                         MeasuredBurnEvidenceCounts: Sorted(_fuelMeasuredEvidenceCounts),
                         BaselineEligibilityEvidenceCounts: Sorted(_fuelBaselineEvidenceCounts),
                         FuelLocalStrategyUnavailableReasonCounts: Sorted(_fuelLocalStrategyUnavailableReasonCounts),
-                        PitServiceLocalStrategyUnavailableReasonCounts: Sorted(_pitServiceLocalStrategyUnavailableReasonCounts)),
+                        PitServiceLocalStrategyUnavailableReasonCounts: Sorted(_pitServiceLocalStrategyUnavailableReasonCounts),
+                        PitWindows: _pitWindows.ToArray()),
                     PositionCadence: new PositionCadenceDiagnosticsSummary(
                         ObservedFrames: _positionObservedFrames,
                         OverallPositionChanges: _positionOverallChanges,
@@ -523,6 +577,12 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                         OfficialRelationshipCounts: Sorted(_relativeLapRelationshipCounts),
                         PitRelationshipCounts: Sorted(_relativeLapRelationshipPitCounts),
                         PendingRelationshipCounts: Sorted(_relativeLapPendingCounts)),
+                    RaceProjection: new RaceProjectionDiagnosticsSummary(
+                        RaceLapSignalFrames: _raceLapSignalFrames,
+                        NonRaceRaceLapSignalFrames: _nonRaceRaceLapSignalFrames,
+                        RaceProjectionFrames: _raceProjectionFrames,
+                        NonRaceRaceProjectionFrames: _nonRaceRaceProjectionFrames,
+                        SourceCounts: Sorted(_raceProjectionSourceCounts)),
                     SectorTiming: new SectorTimingDiagnosticsSummary(
                         SectorCount: _sectorDefinitions.Count,
                         SectorStartPcts: _sectorDefinitions.Select(sector => Round(sector.SectorStartPct) ?? sector.SectorStartPct).ToArray(),
@@ -549,6 +609,15 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                         BestLapSectorFrames: _trackMapBestLapSectorFrames,
                         FullLapHighlightFrames: _trackMapFullLapHighlightFrames,
                         SectorHighlightCounts: Sorted(_trackMapSectorHighlightCounts)),
+                    RawTelemetry: new RawTelemetryDiagnosticsSummary(
+                        DriverControlSignalFrames: _rawDriverControlSignalFrames,
+                        DriverControlChangeFrames: _rawDriverControlChangeFrames,
+                        PitCommandSignalFrames: _rawPitCommandSignalFrames,
+                        PitCommandChangeFrames: _rawPitCommandChangeFrames,
+                        DriverControlFieldCounts: Sorted(_rawDriverControlFieldCounts),
+                        DriverControlChangeCounts: Sorted(_rawDriverControlChangeCounts),
+                        PitCommandFieldCounts: Sorted(_rawPitCommandFieldCounts),
+                        PitCommandChangeCounts: Sorted(_rawPitCommandChangeCounts)),
                     SampleFrames: _sampleFrames.ToArray(),
                     EventSamples: _eventSamples.ToArray());
 
@@ -839,7 +908,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                 snapshot,
                 capturedAtUtc);
 
-            if (snapshot.LatestSample?.CarLeftRight is not null)
+            if (HasActiveSideSignal(snapshot.LatestSample?.CarLeftRight))
             {
                 _radarRawSideSuppressedForFocusFrames++;
                 AddEvent(
@@ -879,6 +948,11 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         }
 
         if (snapshot.Proximity.CarLeftRight is not null)
+        {
+            Increment(_radarSideStateCounts, snapshot.Proximity.SideStatus);
+        }
+
+        if (HasActiveSideSignal(snapshot.Proximity.CarLeftRight))
         {
             _radarSideSignalFrames++;
         }
@@ -1002,9 +1076,11 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _fuelPitServiceRequestFrames++;
         }
 
+        var pitServiceChanged = false;
         if (_lastPitServiceState is { } previousPitServiceState
             && !pitServiceState.Equals(previousPitServiceState))
         {
+            pitServiceChanged = true;
             _fuelPitServiceChangeFrames++;
             AddEvent(
                 "pit-service.changed",
@@ -1013,6 +1089,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                 capturedAtUtc);
         }
 
+        RecordPitWindow(snapshot, capturedAtUtc, pitServiceState, pitServiceChanged);
         _lastPitServiceState = pitServiceState;
 
         if (snapshot.LatestSample?.DriversSoFar is { } driversSoFar)
@@ -1028,6 +1105,200 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             }
 
             _lastDriversSoFar = driversSoFar;
+        }
+    }
+
+    private void RecordPitWindow(
+        LiveTelemetrySnapshot snapshot,
+        DateTimeOffset capturedAtUtc,
+        PitServiceTelemetryState pitServiceState,
+        bool pitServiceChanged)
+    {
+        if (!IsPitContext(snapshot))
+        {
+            FinalizeActivePitWindow(capturedAtUtc);
+            return;
+        }
+
+        var sessionTime = snapshot.LatestSample?.SessionTime;
+        var fuelLevel = CurrentFuelLevelLiters(snapshot);
+        var sessionFlags = snapshot.Models.Session.SessionFlags ?? snapshot.LatestSample?.SessionFlags;
+        if (_activePitWindow is null)
+        {
+            _activePitWindow = new PitWindowState(
+                StartCapturedAtUtc: capturedAtUtc,
+                StartSessionTimeSeconds: sessionTime,
+                EntryFuelLiters: fuelLevel,
+                EntrySessionFlagsHex: FormatRawFlagsHex(sessionFlags),
+                EntryPitServiceStatus: pitServiceState.Status,
+                EntryPitServiceFlags: pitServiceState.Flags,
+                EntryPitServiceFuelLiters: pitServiceState.FuelLiters);
+        }
+
+        _activePitWindow.Update(
+            capturedAtUtc,
+            sessionTime,
+            fuelLevel,
+            FormatRawFlagsHex(sessionFlags),
+            HasBlackFlag(sessionFlags),
+            pitServiceState.PitstopActive,
+            pitServiceState.PlayerCarInPitStall,
+            pitServiceChanged,
+            pitServiceState);
+
+        if (_activePitWindow.ConsumedFuelIncreaseEvent)
+        {
+            _fuelIncreaseEventFrames++;
+            AddEvent(
+                "pit-window.fuel-increase",
+                $"fuel increased by {_activePitWindow.LastFuelIncreaseLiters:0.###} L during pit context",
+                snapshot,
+                capturedAtUtc);
+            _activePitWindow.ConsumedFuelIncreaseEvent = false;
+        }
+    }
+
+    private void FinalizeActivePitWindow(DateTimeOffset endedAtUtc)
+    {
+        if (_activePitWindow is not { } window)
+        {
+            return;
+        }
+
+        if (window.SawFuelIncrease)
+        {
+            _pitWindowsWithFuelIncrease++;
+        }
+
+        if (window.SawBlackFlag)
+        {
+            _pitWindowsWithBlackFlag++;
+        }
+
+        if (_pitWindows.Count < MaxPitWindowSamples)
+        {
+            _pitWindows.Add(window.ToSample(endedAtUtc));
+        }
+
+        _activePitWindow = null;
+    }
+
+    private void RecordRaceProjection(LiveTelemetrySnapshot snapshot, DateTimeOffset capturedAtUtc)
+    {
+        var sessionKind = SessionKind(snapshot);
+        var isRace = IsRaceSession(sessionKind);
+        var raceLapSignal = snapshot.Models.Session.RaceLaps is not null
+            || snapshot.LatestSample?.RaceLaps is >= 0;
+        if (raceLapSignal)
+        {
+            _raceLapSignalFrames++;
+            if (!isRace)
+            {
+                _nonRaceRaceLapSignalFrames++;
+                AddEvent(
+                    "race-projection.non-race-race-laps-signal",
+                    $"RaceLaps signal present during {sessionKind}",
+                    snapshot,
+                    capturedAtUtc);
+            }
+        }
+
+        var hasProjection = snapshot.Models.RaceProjection.HasData
+            || snapshot.Models.RaceProgress.RaceLapsRemaining is not null;
+        if (hasProjection)
+        {
+            _raceProjectionFrames++;
+            Increment(_raceProjectionSourceCounts, snapshot.Models.RaceProgress.RaceLapsRemainingSource);
+            Increment(_raceProjectionSourceCounts, snapshot.Models.RaceProjection.EstimatedTeamLapsRemainingSource);
+            if (!isRace)
+            {
+                _nonRaceRaceProjectionFrames++;
+                AddEvent(
+                    "race-projection.non-race-projection",
+                    $"race projection data present during {sessionKind}",
+                    snapshot,
+                    capturedAtUtc);
+            }
+        }
+    }
+
+    private void RecordRawTelemetry(
+        RawTelemetryWatchSnapshot raw,
+        LiveTelemetrySnapshot snapshot,
+        DateTimeOffset capturedAtUtc)
+    {
+        var driverControls = SelectRawWatchGroup(raw, "driver.controls").ToArray();
+        if (driverControls.Length > 0)
+        {
+            _rawDriverControlSignalFrames++;
+            RecordRawWatchValues(
+                driverControls,
+                _lastRawDriverControls,
+                _rawDriverControlFieldCounts,
+                _rawDriverControlChangeCounts,
+                "raw.driver-control.changed",
+                ref _rawDriverControlChangeFrames,
+                snapshot,
+                capturedAtUtc);
+        }
+
+        var pitCommands = SelectRawWatchGroup(raw, "pit.commands").ToArray();
+        if (pitCommands.Length > 0)
+        {
+            _rawPitCommandSignalFrames++;
+            RecordRawWatchValues(
+                pitCommands,
+                _lastRawPitCommands,
+                _rawPitCommandFieldCounts,
+                _rawPitCommandChangeCounts,
+                "raw.pit-command.changed",
+                ref _rawPitCommandChangeFrames,
+                snapshot,
+                capturedAtUtc);
+        }
+    }
+
+    private static IEnumerable<KeyValuePair<string, double>> SelectRawWatchGroup(
+        RawTelemetryWatchSnapshot raw,
+        string group)
+    {
+        return raw.Values
+            .Where(pair => string.Equals(raw.GroupFor(pair.Key), group, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void RecordRawWatchValues(
+        IReadOnlyList<KeyValuePair<string, double>> values,
+        Dictionary<string, double> previousValues,
+        Dictionary<string, int> fieldCounts,
+        Dictionary<string, int> changeCounts,
+        string eventKind,
+        ref int changeFrameCount,
+        LiveTelemetrySnapshot snapshot,
+        DateTimeOffset capturedAtUtc)
+    {
+        var frameHadChange = false;
+        foreach (var pair in values)
+        {
+            Increment(fieldCounts, pair.Key);
+            if (previousValues.TryGetValue(pair.Key, out var previous)
+                && Math.Abs(previous - pair.Value) > 0.000001d)
+            {
+                frameHadChange = true;
+                Increment(changeCounts, pair.Key);
+                AddEvent(
+                    eventKind,
+                    $"{pair.Key} {previous:0.######} -> {pair.Value:0.######}",
+                    snapshot,
+                    capturedAtUtc);
+            }
+
+            previousValues[pair.Key] = pair.Value;
+        }
+
+        if (frameHadChange)
+        {
+            changeFrameCount++;
         }
     }
 
@@ -1823,7 +2094,9 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             NearbyCarCount: snapshot.Proximity.NearbyCars.Count,
             SpatialCarCount: snapshot.Models.Spatial.Cars.Count,
             TimingRowCount: snapshot.Models.Timing.OverallRows.Count,
-            HasSideSignal: snapshot.Proximity.CarLeftRight is not null,
+            RawCarLeftRight: snapshot.LatestSample?.CarLeftRight,
+            SideStatus: snapshot.Proximity.SideStatus,
+            HasSideSignal: HasActiveSideSignal(snapshot.Proximity.CarLeftRight),
             HasFuelLevel: snapshot.Fuel.HasValidFuel,
             HasFuelBurn: IsPositiveFinite(snapshot.Fuel.FuelUsePerHourKg) || IsPositiveFinite(snapshot.Fuel.FuelUsePerHourLiters),
             FuelLevelEvidence: EvidenceKey(snapshot.Models.FuelPit.FuelLevelEvidence),
@@ -1902,9 +2175,10 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             CoverageLiveTimingRowCount: snapshot.Models.Coverage.LiveTimingRowCount,
             CoverageLiveSpatialRowCount: snapshot.Models.Coverage.LiveSpatialRowCount,
             RawCarLeftRight: snapshot.LatestSample?.CarLeftRight,
+            SideStatus: snapshot.Proximity.SideStatus,
             RawNearbyCarCount: snapshot.LatestSample?.NearbyCars?.Count ?? 0,
             HasRadarData: snapshot.Proximity.HasData,
-            HasSideSignal: snapshot.Proximity.CarLeftRight is not null,
+            HasSideSignal: HasActiveSideSignal(snapshot.Proximity.CarLeftRight),
             ClassGapSeconds: Round(snapshot.LeaderGap.ClassLeaderGap.Seconds),
             ClassGapLaps: Round(snapshot.LeaderGap.ClassLeaderGap.Laps),
             NearbyCarCount: snapshot.Proximity.NearbyCars.Count,
@@ -1993,6 +2267,11 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                 : car.RelativeMeters is { } meters && Math.Abs(meters) <= 7.5d);
     }
 
+    private static bool HasActiveSideSignal(int? carLeftRight)
+    {
+        return carLeftRight is 2 or 3 or 4 or 5 or 6;
+    }
+
     private static PositionObservation FromCar(HistoricalCarProximity car)
     {
         return new PositionObservation(
@@ -2011,6 +2290,24 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             || snapshot.Models.FuelPit.TeamOnPitRoad == true
             || snapshot.LatestSample?.FocusOnPitRoad == true
             || snapshot.LatestSample?.TeamOnPitRoad == true;
+    }
+
+    private static double? CurrentFuelLevelLiters(LiveTelemetrySnapshot snapshot)
+    {
+        if (snapshot.Fuel.FuelLevelLiters is { } modelFuel
+            && IsPositiveFinite(modelFuel))
+        {
+            return modelFuel;
+        }
+
+        return IsPositiveFinite(snapshot.LatestSample?.FuelLevelLiters)
+            ? snapshot.LatestSample!.FuelLevelLiters
+            : null;
+    }
+
+    private static bool HasBlackFlag(int? sessionFlags)
+    {
+        return sessionFlags is { } flags && (flags & BlackFlagMask) != 0;
     }
 
     private static bool HasTeamTimingContext(HistoricalTelemetrySample? sample)
@@ -2295,6 +2592,142 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         public bool IsUsable => Ok == true && Seconds is { } seconds && !double.IsNaN(seconds) && !double.IsInfinity(seconds);
     }
 
+    private sealed class PitWindowState
+    {
+        public PitWindowState(
+            DateTimeOffset startCapturedAtUtc,
+            double? startSessionTimeSeconds,
+            double? entryFuelLiters,
+            string entrySessionFlagsHex,
+            int? entryPitServiceStatus,
+            int? entryPitServiceFlags,
+            double? entryPitServiceFuelLiters)
+        {
+            StartCapturedAtUtc = startCapturedAtUtc;
+            StartSessionTimeSeconds = startSessionTimeSeconds;
+            EntryFuelLiters = entryFuelLiters;
+            LastFuelLiters = entryFuelLiters;
+            EntrySessionFlagsHex = entrySessionFlagsHex;
+            LastSessionFlagsHex = entrySessionFlagsHex;
+            EntryPitServiceStatus = entryPitServiceStatus;
+            EntryPitServiceFlags = entryPitServiceFlags;
+            EntryPitServiceFuelLiters = entryPitServiceFuelLiters;
+            LastPitServiceStatus = entryPitServiceStatus;
+            LastPitServiceFlags = entryPitServiceFlags;
+            LastPitServiceFuelLiters = entryPitServiceFuelLiters;
+        }
+
+        public DateTimeOffset StartCapturedAtUtc { get; }
+
+        public double? StartSessionTimeSeconds { get; }
+
+        public double? EntryFuelLiters { get; }
+
+        public double? LastFuelLiters { get; private set; }
+
+        public string EntrySessionFlagsHex { get; }
+
+        public string LastSessionFlagsHex { get; private set; }
+
+        public int? EntryPitServiceStatus { get; }
+
+        public int? EntryPitServiceFlags { get; }
+
+        public double? EntryPitServiceFuelLiters { get; }
+
+        public int? LastPitServiceStatus { get; private set; }
+
+        public int? LastPitServiceFlags { get; private set; }
+
+        public double? LastPitServiceFuelLiters { get; private set; }
+
+        public DateTimeOffset LastCapturedAtUtc { get; private set; }
+
+        public double? LastSessionTimeSeconds { get; private set; }
+
+        public bool SawFuelIncrease { get; private set; }
+
+        public bool SawBlackFlag { get; private set; }
+
+        public bool SawPitstopActive { get; private set; }
+
+        public bool SawPlayerPitStall { get; private set; }
+
+        public bool SawPitServiceChange { get; private set; }
+
+        public double? MaxFuelIncreaseLiters { get; private set; }
+
+        public double? LastFuelIncreaseLiters { get; private set; }
+
+        public bool ConsumedFuelIncreaseEvent { get; set; }
+
+        public void Update(
+            DateTimeOffset capturedAtUtc,
+            double? sessionTimeSeconds,
+            double? fuelLiters,
+            string sessionFlagsHex,
+            bool hasBlackFlag,
+            bool pitstopActive,
+            bool playerCarInPitStall,
+            bool pitServiceChanged,
+            PitServiceTelemetryState pitService)
+        {
+            LastCapturedAtUtc = capturedAtUtc;
+            LastSessionTimeSeconds = sessionTimeSeconds;
+            LastSessionFlagsHex = sessionFlagsHex;
+            SawBlackFlag |= hasBlackFlag;
+            SawPitstopActive |= pitstopActive;
+            SawPlayerPitStall |= playerCarInPitStall;
+            SawPitServiceChange |= pitServiceChanged;
+            LastPitServiceStatus = pitService.Status;
+            LastPitServiceFlags = pitService.Flags;
+            LastPitServiceFuelLiters = pitService.FuelLiters;
+
+            if (fuelLiters is { } currentFuel)
+            {
+                if (LastFuelLiters is { } previousFuel && currentFuel - previousFuel > 0.25d)
+                {
+                    SawFuelIncrease = true;
+                    LastFuelIncreaseLiters = currentFuel - previousFuel;
+                    MaxFuelIncreaseLiters = MaxFuelIncreaseLiters is { } max
+                        ? Math.Max(max, currentFuel - (EntryFuelLiters ?? previousFuel))
+                        : currentFuel - (EntryFuelLiters ?? previousFuel);
+                    ConsumedFuelIncreaseEvent = true;
+                }
+
+                LastFuelLiters = currentFuel;
+            }
+        }
+
+        public PitWindowDiagnosticsSample ToSample(DateTimeOffset fallbackEndedAtUtc)
+        {
+            var endedAtUtc = LastCapturedAtUtc == default ? fallbackEndedAtUtc : LastCapturedAtUtc;
+            return new PitWindowDiagnosticsSample(
+                StartCapturedAtUtc,
+                endedAtUtc,
+                StartSessionTimeSeconds,
+                LastSessionTimeSeconds,
+                Math.Round(Math.Max(0d, (endedAtUtc - StartCapturedAtUtc).TotalSeconds), 3),
+                EntryFuelLiters,
+                LastFuelLiters,
+                EntryFuelLiters is { } entry && LastFuelLiters is { } exit ? exit - entry : null,
+                MaxFuelIncreaseLiters,
+                SawFuelIncrease,
+                SawBlackFlag,
+                SawPitstopActive,
+                SawPlayerPitStall,
+                SawPitServiceChange,
+                EntrySessionFlagsHex,
+                LastSessionFlagsHex,
+                EntryPitServiceStatus,
+                LastPitServiceStatus,
+                EntryPitServiceFlags,
+                LastPitServiceFlags,
+                EntryPitServiceFuelLiters,
+                LastPitServiceFuelLiters);
+        }
+    }
+
     private sealed record PitServiceTelemetryState(
         int? Status,
         int? Flags,
@@ -2445,8 +2878,10 @@ internal sealed record LiveOverlayDiagnosticsArtifact(
     PositionCadenceDiagnosticsSummary PositionCadence,
     LapDeltaDiagnosticsSummary LapDelta,
     RelativeLapRelationshipDiagnosticsSummary RelativeLapRelationship,
+    RaceProjectionDiagnosticsSummary RaceProjection,
     SectorTimingDiagnosticsSummary SectorTiming,
     TrackMapOverlayDiagnosticsSummary TrackMap,
+    RawTelemetryDiagnosticsSummary RawTelemetry,
     IReadOnlyList<LiveOverlayDiagnosticsFrameSample> SampleFrames,
     IReadOnlyList<LiveOverlayDiagnosticsEventSample> EventSamples);
 
@@ -2534,6 +2969,7 @@ internal sealed record RadarOverlayDiagnosticsSummary(
     int MaxNearbyCars,
     int MaxTimingRows,
     int MaxSpatialCars,
+    IReadOnlyDictionary<string, int> SideStateCounts,
     IReadOnlyDictionary<string, int> FocusFrameCounts,
     IReadOnlyDictionary<string, int> PlacementEvidenceCounts);
 
@@ -2551,12 +2987,41 @@ internal sealed record FuelOverlayDiagnosticsSummary(
     int PitServiceOffTrackFrames,
     int FuelLocalStrategyUnavailableFrames,
     int PitServiceLocalStrategyUnavailableFrames,
+    int FuelIncreaseEventFrames,
+    int PitWindowCount,
+    int PitWindowsWithFuelIncrease,
+    int PitWindowsWithBlackFlag,
     IReadOnlyDictionary<string, int> FuelLevelEvidenceCounts,
     IReadOnlyDictionary<string, int> InstantaneousBurnEvidenceCounts,
     IReadOnlyDictionary<string, int> MeasuredBurnEvidenceCounts,
     IReadOnlyDictionary<string, int> BaselineEligibilityEvidenceCounts,
     IReadOnlyDictionary<string, int> FuelLocalStrategyUnavailableReasonCounts,
-    IReadOnlyDictionary<string, int> PitServiceLocalStrategyUnavailableReasonCounts);
+    IReadOnlyDictionary<string, int> PitServiceLocalStrategyUnavailableReasonCounts,
+    IReadOnlyList<PitWindowDiagnosticsSample> PitWindows);
+
+internal sealed record PitWindowDiagnosticsSample(
+    DateTimeOffset StartCapturedAtUtc,
+    DateTimeOffset EndCapturedAtUtc,
+    double? StartSessionTimeSeconds,
+    double? EndSessionTimeSeconds,
+    double DurationSeconds,
+    double? EntryFuelLiters,
+    double? ExitFuelLiters,
+    double? NetFuelDeltaLiters,
+    double? MaxFuelIncreaseLiters,
+    bool SawFuelIncrease,
+    bool SawBlackFlag,
+    bool SawPitstopActive,
+    bool SawPlayerPitStall,
+    bool SawPitServiceChange,
+    string EntrySessionFlagsHex,
+    string LastSessionFlagsHex,
+    int? EntryPitServiceStatus,
+    int? LastPitServiceStatus,
+    int? EntryPitServiceFlags,
+    int? LastPitServiceFlags,
+    double? EntryPitServiceFuelLiters,
+    double? LastPitServiceFuelLiters);
 
 internal sealed record PositionCadenceDiagnosticsSummary(
     int ObservedFrames,
@@ -2585,6 +3050,13 @@ internal sealed record RelativeLapRelationshipDiagnosticsSummary(
     IReadOnlyDictionary<string, int> PitRelationshipCounts,
     IReadOnlyDictionary<string, int> PendingRelationshipCounts);
 
+internal sealed record RaceProjectionDiagnosticsSummary(
+    int RaceLapSignalFrames,
+    int NonRaceRaceLapSignalFrames,
+    int RaceProjectionFrames,
+    int NonRaceRaceProjectionFrames,
+    IReadOnlyDictionary<string, int> SourceCounts);
+
 internal sealed record SectorTimingDiagnosticsSummary(
     int SectorCount,
     IReadOnlyList<double> SectorStartPcts,
@@ -2612,6 +3084,16 @@ internal sealed record TrackMapOverlayDiagnosticsSummary(
     int BestLapSectorFrames,
     int FullLapHighlightFrames,
     IReadOnlyDictionary<string, int> SectorHighlightCounts);
+
+internal sealed record RawTelemetryDiagnosticsSummary(
+    int DriverControlSignalFrames,
+    int DriverControlChangeFrames,
+    int PitCommandSignalFrames,
+    int PitCommandChangeFrames,
+    IReadOnlyDictionary<string, int> DriverControlFieldCounts,
+    IReadOnlyDictionary<string, int> DriverControlChangeCounts,
+    IReadOnlyDictionary<string, int> PitCommandFieldCounts,
+    IReadOnlyDictionary<string, int> PitCommandChangeCounts);
 
 internal sealed record LiveOverlayDiagnosticsFrameSample(
     DateTimeOffset CapturedAtUtc,
@@ -2646,6 +3128,8 @@ internal sealed record LiveOverlayDiagnosticsFrameSample(
     int NearbyCarCount,
     int SpatialCarCount,
     int TimingRowCount,
+    int? RawCarLeftRight,
+    string SideStatus,
     bool HasSideSignal,
     bool HasFuelLevel,
     bool HasFuelBurn,
@@ -2681,6 +3165,7 @@ internal sealed record LiveOverlayDiagnosticsEventSample(
     int CoverageLiveTimingRowCount,
     int CoverageLiveSpatialRowCount,
     int? RawCarLeftRight,
+    string SideStatus,
     int RawNearbyCarCount,
     bool HasRadarData,
     bool HasSideSignal,

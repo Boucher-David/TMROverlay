@@ -171,6 +171,30 @@ public sealed class LiveTelemetryStoreTests
     }
 
     [Fact]
+    public void MarkDisconnected_PreservesLastActiveSnapshotForDiagnostics()
+    {
+        var store = new LiveTelemetryStore();
+        var startedAtUtc = DateTimeOffset.Parse("2026-05-17T12:00:00Z");
+        var capturedAtUtc = startedAtUtc.AddSeconds(5);
+
+        store.MarkConnected();
+        store.MarkCollectionStarted("session-test", startedAtUtc);
+        store.RecordFrame(CreateSample(capturedAtUtc: capturedAtUtc));
+        store.MarkDisconnected();
+
+        var current = store.Snapshot();
+        var lastActive = store.LastActiveSnapshot();
+
+        Assert.False(current.IsConnected);
+        Assert.NotNull(lastActive);
+        Assert.Equal("session-test", lastActive!.SourceId);
+        Assert.True(lastActive.IsConnected);
+        Assert.True(lastActive.IsCollecting);
+        Assert.Equal(capturedAtUtc, lastActive.LastUpdatedAtUtc);
+        Assert.NotNull(lastActive.LatestSample);
+    }
+
+    [Fact]
     public void RecordFrame_PublishesGarageVisibleRaceEvent()
     {
         var store = new LiveTelemetryStore();
@@ -214,6 +238,7 @@ public sealed class LiveTelemetryStoreTests
     public void RecordFrame_PublishesRaceProgressModel()
     {
         var store = new LiveTelemetryStore();
+        ApplyRaceSession(store);
 
         store.RecordFrame(CreateSample(
             teamLapCompleted: 4,
@@ -273,6 +298,7 @@ DriverInfo:
     public void RecordFrame_PublishesRollingRaceProjectionAfterCleanLeaderWindow()
     {
         var store = new LiveTelemetryStore();
+        ApplyRaceSession(store);
         var startedAtUtc = DateTimeOffset.Parse("2026-05-07T12:00:00Z");
         var leaderFrames = new[]
         {
@@ -309,6 +335,52 @@ DriverInfo:
         Assert.Equal(4.5d, projection.EstimatedTeamLapsRemaining!.Value, precision: 3);
         Assert.Equal(projection.OverallLeaderPaceSeconds, models.RaceProgress.RacePaceSeconds);
         Assert.Equal(projection.EstimatedTeamLapsRemaining, models.RaceProgress.RaceLapsRemaining);
+    }
+
+    [Fact]
+    public void RecordFrame_DoesNotPublishRaceLapsOrProjectionInPractice()
+    {
+        var store = new LiveTelemetryStore();
+        store.ApplySessionInfo("""
+WeekendInfo:
+ EventType: Practice
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Practice
+   SessionName: PRACTICE
+   SessionTime: 3600 sec
+   SessionLaps: unlimited
+DriverInfo:
+ DriverCarIdx: 10
+""");
+
+        var startedAtUtc = DateTimeOffset.Parse("2026-05-07T12:00:00Z");
+        for (var index = 0; index < 4; index++)
+        {
+            store.RecordFrame(CreateSample(
+                capturedAtUtc: startedAtUtc.AddSeconds(index * 90),
+                sessionTime: index * 90,
+                sessionState: 4,
+                playerCarIdx: 10,
+                teamLapCompleted: index,
+                teamLapDistPct: 0.25d,
+                teamLastLapTimeSeconds: 90d,
+                leaderCarIdx: 11,
+                leaderLapCompleted: index,
+                leaderLapDistPct: 0.5d,
+                leaderLastLapTimeSeconds: 90d,
+                sessionTimeRemain: 1800d));
+        }
+
+        var models = store.Snapshot().Models;
+
+        Assert.True(models.RaceProgress.HasData);
+        Assert.Null(models.RaceProgress.RaceLapsRemaining);
+        Assert.Equal("non-race session", models.RaceProgress.RaceLapsRemainingSource);
+        Assert.False(models.RaceProjection.HasData);
+        Assert.Null(models.RaceProjection.EstimatedTeamLapsRemaining);
     }
 
     [Fact]
@@ -601,6 +673,24 @@ SplitTimeInfo:
    SectorStartPct: 0.500000
  - SectorNum: 2
    SectorStartPct: 0.750000
+""");
+    }
+
+    private static void ApplyRaceSession(LiveTelemetryStore store)
+    {
+        store.ApplySessionInfo("""
+WeekendInfo:
+ EventType: Race
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Race
+   SessionName: RACE
+   SessionTime: 3600 sec
+   SessionLaps: unlimited
+DriverInfo:
+ DriverCarIdx: 10
 """);
     }
 

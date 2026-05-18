@@ -167,7 +167,7 @@ The settings Support tab and tray menu can create diagnostics bundles under:
 %LOCALAPPDATA%\TmrOverlay\diagnostics
 ```
 
-Bundles include app/storage metadata, telemetry state, release update state, localhost request state, track-map inventory metadata, live telemetry synthesis, performance snapshots, recent logs/events, runtime state, settings, latest capture metadata and compact sidecars, recent history summaries, and advanced collection artifacts when present.
+Bundles include app/storage metadata, telemetry state, evidence-quality warnings, latest-capture evidence summaries, release update state, localhost request state, IBT analysis settings/status, track-map inventory plus current-track lookup evidence, live telemetry synthesis, performance snapshots, recent logs/events, runtime state, settings, latest capture metadata and compact sidecars, recent history summaries, and advanced collection artifacts when present.
 
 If the Settings UI is frozen and a bundle cannot be created, collect `%LOCALAPPDATA%\TmrOverlay\logs` and the latest `%LOCALAPPDATA%\TmrOverlay\captures` folder from the diagnostic patch build.
 

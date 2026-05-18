@@ -17,6 +17,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
     private readonly FuelBurnLapTracker _fuelBurnLapTracker = new();
     private HistoricalSessionContext _context = HistoricalSessionContext.Empty;
     private LiveTelemetrySnapshot _snapshot = LiveTelemetrySnapshot.Empty;
+    private LiveTelemetrySnapshot? _lastActiveSnapshot;
     private int? _lastProximityReferenceCarIdx;
     private int? _griddedSessionNum;
     private long _sequence;
@@ -26,6 +27,14 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
         lock (_sync)
         {
             return _snapshot;
+        }
+    }
+
+    public LiveTelemetrySnapshot? LastActiveSnapshot()
+    {
+        lock (_sync)
+        {
+            return _lastActiveSnapshot;
         }
     }
 
@@ -154,6 +163,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             {
                 Models = models
             };
+            _lastActiveSnapshot = _snapshot;
         }
     }
 

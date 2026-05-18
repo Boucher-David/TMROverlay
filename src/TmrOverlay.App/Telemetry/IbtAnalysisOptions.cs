@@ -35,8 +35,8 @@ internal sealed class IbtAnalysisOptions
         var section = configuration.GetSection("IbtAnalysis");
         return new IbtAnalysisOptions
         {
-            Enabled = ParseBoolean(section["Enabled"], defaultValue: false),
-            TelemetryLoggingEnabled = ParseBoolean(section["TelemetryLoggingEnabled"], defaultValue: false),
+            Enabled = ParseBoolean(section["Enabled"], defaultValue: true),
+            TelemetryLoggingEnabled = ParseBoolean(section["TelemetryLoggingEnabled"], defaultValue: true),
             TelemetryRoot = ResolveTelemetryRoot(section["TelemetryRoot"]),
             MaxCandidateAgeMinutes = ParseInt32(section["MaxCandidateAgeMinutes"], defaultValue: 1440, minimumValue: 5),
             MaxCandidateBytes = ParseInt64(section["MaxCandidateBytes"], defaultValue: DefaultMaxCandidateBytes, minimumValue: 1024 * 1024),

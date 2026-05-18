@@ -7,7 +7,7 @@ internal sealed class LiveOverlayDiagnosticsOptions
 {
     private static readonly char[] WindowsInvalidPathSegmentChars = ['<', '>', ':', '"', '|', '?', '*'];
 
-    public bool Enabled { get; init; }
+    public bool Enabled { get; init; } = true;
 
     public double MinimumFrameSpacingSeconds { get; init; } = 1d;
 
@@ -32,7 +32,7 @@ internal sealed class LiveOverlayDiagnosticsOptions
         var section = configuration.GetSection("LiveOverlayDiagnostics");
         return new LiveOverlayDiagnosticsOptions
         {
-            Enabled = ParseBoolean(section["Enabled"], defaultValue: false),
+            Enabled = ParseBoolean(section["Enabled"], defaultValue: true),
             MinimumFrameSpacingSeconds = ParseDouble(section["MinimumFrameSpacingSeconds"], defaultValue: 1d, minimumValue: 0.1d),
             MaxSampleFramesPerSession = ParseInt32(section["MaxSampleFramesPerSession"], defaultValue: 240, minimumValue: 10),
             MaxEventExamplesPerSession = ParseInt32(section["MaxEventExamplesPerSession"], defaultValue: 80, minimumValue: 5),

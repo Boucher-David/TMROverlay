@@ -93,6 +93,8 @@ class ComparisonStats:
         self.settings_pairs = 0
         self.installer_pairs = 0
         self.detail_checks = 0
+        self.tolerated_numeric_differences = 0
+        self.max_tolerated_delta = 0.0
 
 
 def read_screenshots(root: Path, label: str, failures: list[str]) -> dict[str, dict[str, Any]]:
@@ -245,9 +247,9 @@ def compare_browser_and_windows(
             stats,
             strict_geometry=False,
             geometry_tolerance=geometry_tolerance,
-            semantic_checks=key not in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS,
+            semantic_checks=True,
             compare_size=key not in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS,
-            model_checks=key not in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS,
+            model_checks=True,
         )
 
 
@@ -851,6 +853,10 @@ def compare_graph_model(
     left_geometry = left_graph.get("geometry")
     right_geometry = right_graph.get("geometry")
     if not isinstance(left_geometry, dict) or not isinstance(right_geometry, dict):
+        if graph_intentionally_has_no_geometry(left_graph) and graph_intentionally_has_no_geometry(right_graph):
+            compare_optional_field(context, "graph.selectedSeriesCount", left_graph.get("selectedSeriesCount"), right_graph.get("selectedSeriesCount"), failures, stats)
+            compare_optional_field(context, "graph.trendMetricCount", left_graph.get("trendMetricCount"), right_graph.get("trendMetricCount"), failures, stats)
+            return
         failures.append(f"{context}: graph evidence missing geometry object")
         return
     for field in ("frame", "plot", "axis", "labelLane", "metricsTable"):
@@ -858,6 +864,21 @@ def compare_graph_model(
     compare_graph_lines(context, "graph.gridLines", as_list(left_geometry.get("gridLines")), as_list(right_geometry.get("gridLines")), failures, stats, tolerance)
     compare_graph_metric_rows(context, as_list(left_geometry.get("metricRows")), as_list(right_geometry.get("metricRows")), failures, stats, tolerance)
     compare_graph_series(context, as_list(left_geometry.get("series")), as_list(right_geometry.get("series")), failures, stats, tolerance)
+
+
+def graph_intentionally_has_no_geometry(graph: dict[str, Any]) -> bool:
+    if isinstance(graph.get("geometry"), dict):
+        return False
+    series_count = graph.get("selectedSeriesCount")
+    trend_metric_count = graph.get("trendMetricCount")
+    series = graph.get("series")
+    metrics = graph.get("trendMetrics")
+    return (
+        series_count in (None, 0)
+        and trend_metric_count in (None, 0)
+        and (not isinstance(series, list) or len(series) == 0)
+        and (not isinstance(metrics, list) or len(metrics) == 0)
+    )
 
 
 def compare_graph_lines(
@@ -1303,6 +1324,11 @@ def compare_numeric(
         return
     if abs(float(left) - float(right)) > tolerance:
         failures.append(f"{context}: {field} differs by more than {tolerance:g}px, {left!r} vs {right!r}")
+        return
+    delta = abs(float(left) - float(right))
+    if delta > 0:
+        stats.tolerated_numeric_differences += 1
+        stats.max_tolerated_delta = max(stats.max_tolerated_delta, delta)
 
 
 def compare_color_field(
@@ -1615,6 +1641,8 @@ def write_report(path: str | None, failures: list[str], stats: ComparisonStats) 
         f"- Settings pairs compared: {stats.settings_pairs}",
         f"- Installer pairs compared: {stats.installer_pairs}",
         f"- Detailed checks: {stats.detail_checks}",
+        f"- Tolerated numeric differences: {stats.tolerated_numeric_differences}",
+        f"- Max tolerated numeric delta: {stats.max_tolerated_delta:g}px",
         "",
     ]
     if failures:

@@ -3663,6 +3663,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         {
             Inputs = new DesignV2LayoutInputs(
                 body.HasContent,
+                body.IsAvailable,
                 LayoutRect(graph),
                 LayoutRect(rail),
                 railWidth,
@@ -8141,6 +8142,7 @@ internal sealed record DesignV2LayoutGraphMarker(
 
 internal sealed record DesignV2LayoutInputs(
     bool HasContent,
+    bool IsAvailable,
     DesignV2LayoutRect? Graph,
     DesignV2LayoutRect? Rail,
     float RailWidth,

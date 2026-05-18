@@ -3721,24 +3721,24 @@ internal static class Program
             bounds = RectEvidence(grid.Bounds),
             headers = grid.Headers.Select(header => header.Text).ToArray(),
             renderedHeaders = grid.Headers.Select(CellEvidence).ToArray(),
-            rows = grid.Rows.Select(row => new
+            rows = grid.Rows.Select(row =>
             {
-                index = row.Index,
-                label = row.Text,
-                tone = ToneFromEvidence(row.Evidence),
-                evidence = row.Evidence,
-                foreground = row.Foreground,
-                background = row.Background,
-                bounds = RectEvidence(row.Bounds),
-                cells = row.Cells.Select(cell => new
+                var renderedCells = row.Cells.Select(CellEvidence).ToArray();
+                var dataCells = row.Cells.Skip(1).Select(CellEvidence).ToArray();
+                return new
                 {
-                    value = cell.Text,
-                    tone = ToneFromEvidence(cell.Evidence),
-                    evidence = cell.Evidence,
-                    foreground = cell.Foreground,
-                    background = cell.Background,
-                    bounds = RectEvidence(cell.Bounds)
-                }).ToArray()
+                    index = row.Index,
+                    label = row.Text,
+                    tone = ToneFromEvidence(row.Evidence),
+                    evidence = row.Evidence,
+                    foreground = row.Foreground,
+                    background = row.Background,
+                    bounds = RectEvidence(row.Bounds),
+                    labelCell = renderedCells.FirstOrDefault(),
+                    cells = dataCells,
+                    dataCells,
+                    renderedCells
+                };
             }).ToArray()
         };
     }
@@ -3901,7 +3901,7 @@ internal static class Program
             hasContent = inputs.HasContent,
             hasGraph = inputs.Graph is not null,
             hasRail = inputs.Rail is not null,
-            isAvailable = inputs.HasContent,
+            isAvailable = inputs.IsAvailable,
             sampleIntervalMilliseconds = (int?)null,
             maximumTracePoints = (int?)null,
             tracePointCount = inputs.TracePointCount,

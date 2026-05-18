@@ -21,6 +21,18 @@ rg -n "^(<<<<<<<|>>>>>>>|=======)$" --glob '!captures/**' --glob '!captures-late
 python3 tools/validate_overlay_screenshots.py --profile windows-expectations
 ```
 
+## Validation Failure Triage
+
+Treat screenshot, manifest, and data-contract validation failures as product evidence until proven otherwise. Do not assume a failure is a stale assertion, validator bug, or harmless platform difference just because the screenshot "looks close" or another surface passes.
+
+Before relaxing an assertion:
+
+- Classify the failure with concrete evidence from the generated artifact, manifest fields, source fixture, renderer/generator code, or comparison report.
+- If the artifact cannot prove whether browser, localhost, and Windows rendered the intended behavior, add or improve capture/manifest evidence instead of weakening the semantic assertion.
+- Keep assertions strict for user-visible content, data values, row/column presence, session gating, availability/waiting states, and route/native/browser parity until the implementation or evidence clearly proves the intended behavior.
+- Normalize only proven representation differences, such as equivalent color encodings or platform rounding, and keep those normalizations narrow and documented by the surrounding check.
+- When a recent commit relaxed screenshot or manifest assertions, re-audit it against this standard before building on it.
+
 ## Branch-Complete Release Hygiene
 
 Run this section when a branch is being declared complete, prepared for merge, or promoted to a product milestone.

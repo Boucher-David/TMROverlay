@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 
-MAX_UNFILTERED_PNG_SAMPLE_BYTES = 2_000_000
+MAX_UNFILTERED_PNG_SAMPLE_BYTES = 12_000_000
 
 LEGACY_CONTACT_SHEET_PNGS = {
     "design-v2/design-v2-states.png": (5350, 4020),
@@ -310,10 +310,15 @@ OVERLAY_VARIANTS_ALLOW_EMPTY_TEXT_SAMPLE = {
     ("flags", "all-kinds"),
 }
 
+OVERLAY_VARIANTS_ALLOW_LOW_PIXEL_ENTROPY = {
+    ("fuel-calculator", "waiting"),
+    ("car-radar", "clear"),
+    ("gap-to-leader", "no-cars"),
+    ("garage-cover", "hidden"),
+}
+
 OVERLAY_VARIANT_MIN_UNIQUE_BYTES = {
     ("fuel-calculator", "waiting"): 1,
-    ("input-state", "waiting"): 1,
-    ("input-state", "no-content"): 1,
     ("car-radar", "clear"): 3,
     ("gap-to-leader", "no-cars"): 1,
     ("garage-cover", "hidden"): 1,
@@ -321,8 +326,6 @@ OVERLAY_VARIANT_MIN_UNIQUE_BYTES = {
 
 OVERLAY_VARIANT_MIN_BYTE_RANGE = {
     ("fuel-calculator", "waiting"): 0,
-    ("input-state", "waiting"): 0,
-    ("input-state", "no-content"): 0,
     ("car-radar", "clear"): 0,
     ("gap-to-leader", "no-cars"): 0,
     ("garage-cover", "hidden"): 0,
@@ -579,6 +582,7 @@ def validate_active_screenshot_contracts(failures: list[str]) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     validate_windows_expectations(failures)
     validate_validator_mutations(failures, include_source_contracts=False)
+    validate_low_entropy_variant_exemptions(failures)
     validate_ci_workflow_screenshot_contracts(repo_root, failures)
 
 
@@ -590,6 +594,7 @@ def validate_legacy_contact_sheets(root: Path, min_unique_bytes: int, failures: 
             expected_size=expected_size,
             min_unique_bytes=min_unique_bytes,
             failures=failures,
+            require_decoded_pixels=False,
         )
 
 
@@ -637,6 +642,7 @@ def validate_windows_ci(root: Path, min_unique_bytes: int, failures: list[str]) 
         min_unique_bytes=min_unique_bytes,
         failures=failures,
         minimum_size=(1200, 900),
+        require_decoded_pixels=False,
     )
 
     for relative_path, expected_size in WINDOWS_EXPECTED_PNGS.items():
@@ -728,6 +734,7 @@ def validate_windows_installer_ci(root: Path, min_unique_bytes: int, failures: l
         min_unique_bytes=min_unique_bytes,
         failures=failures,
         minimum_size=WINDOWS_INSTALLER_CONTACT_SHEET_MINIMUM_SIZE,
+        require_decoded_pixels=False,
     )
 
     missing_required = WINDOWS_INSTALLER_REQUIRED_PNGS - {"contact-sheet.png"} - set(screenshots)
@@ -3199,16 +3206,17 @@ def validate_session_weather_contract(path: str, values: dict[str, object], fail
     }.get(mode, ("Race", "race preview", "17:22:51", "6:37:09", "24:00:00", "49.6 est", "170 est", "Moderate Usage"))
     require_segments(path, sections, "Session", "Session", [("Type", expected[0]), ("Name", expected[1]), ("Mode", "Team")], failures)
     require_segments(path, sections, "Session", "Clock", [("Elapsed", expected[2]), ("Left", expected[3]), ("Total", expected[4])], failures)
+    require_segments(path, sections, "Session", "Track", [("Name", "Gesamtstrecke 24h"), ("Length", "25.4 km")], failures)
     require_segments(path, sections, "Session", "Laps", [("Remaining", expected[5]), ("Total", expected[6])], failures)
     require_segments(path, sections, "Weather", "Surface", [("Wetness", "Unknown"), ("Declared", "Dry"), ("Rubber", expected[7])], failures)
     require_segments(path, sections, "Weather", "Sky", [("Skies", "Mostly Cloudy"), ("Weather", "Dynamic"), ("Rain", "0%")], failures)
-    text = str(values.get("textSample") or "")
-    for token in (" km", " km/h", " hPa", " C"):
-        if token not in text:
-            failures.append(f"{path}: session weather textSample missing metric unit token {token!r}")
+    require_segments(path, sections, "Weather", "Wind", [("Dir", "NE"), ("Speed", "10 km/h"), ("Facing", "Head")], failures)
+    require_segments(path, sections, "Weather", "Temps", [("Air", "22 C"), ("Track", "31 C")], failures)
+    require_segments(path, sections, "Weather", "Atmosphere", [("Hum", "48%"), ("Fog", "0%"), ("Pressure", "1013 hPa")], failures)
+    text = metric_evidence_text(sections)
     for token in (" mi", " mph", " inHg"):
         if token in text:
-            failures.append(f"{path}: session weather textSample unexpectedly contains imperial unit token {token!r}")
+            failures.append(f"{path}: session weather metric evidence unexpectedly contains imperial unit token {token!r}")
 
 
 def validate_pit_service_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -3428,7 +3436,7 @@ def validate_flags_contract(path: str, values: dict[str, object], failures: list
     for index, cell in enumerate(cells):
         cell_dict = typed_dict(cell)
         kind = expected[index] if index < len(expected) else ""
-        expected_bounds, expected_cloth = expected_flag_rects(index, len(expected))
+        expected_bounds, expected_cloth = expected_flag_rects_for_values(values, index, len(expected))
         if cell_dict.get("index") != index:
             failures.append(f"{path}: flags cell {index} expected index {index}, got {cell_dict.get('index')!r}")
         if cell_dict.get("row") != index // max(1, expected_columns):
@@ -3556,7 +3564,7 @@ def require_row_color(path: str, sections: dict[str, dict[str, object]], section
         failures.append(f"{path}: missing {section_title}/{row_label} metric row")
         return
     color = text_value(row, "rowColorHex") or text_value(row, "accentHex")
-    if color.lower() != expected_color.lower():
+    if not color_matches_expected(color, expected_color):
         failures.append(f"{path}: expected {section_title}/{row_label} color {expected_color!r}, got {color!r}")
 
 
@@ -3568,6 +3576,21 @@ def require_segments(path: str, sections: dict[str, dict[str, object]], section_
     actual = [(text_value(segment, "label"), text_value(segment, "value")) for segment in evidence_list(row, "segments")]
     if actual != expected:
         failures.append(f"{path}: expected {section_title}/{row_label} segments {expected!r}, got {actual!r}")
+
+
+def metric_evidence_text(sections: dict[str, dict[str, object]]) -> str:
+    parts: list[str] = []
+    for section in sections.values():
+        parts.append(text_value(section, "title"))
+        for row in evidence_list(section, "rows"):
+            row_dict = typed_dict(row)
+            parts.append(text_value(row_dict, "label"))
+            parts.append(text_value(row_dict, "value"))
+            for segment in evidence_list(row_dict, "segments"):
+                segment_dict = typed_dict(segment)
+                parts.append(text_value(segment_dict, "label"))
+                parts.append(text_value(segment_dict, "value"))
+    return " ".join(part for part in parts if part)
 
 
 def find_metric_row(sections: dict[str, dict[str, object]], section_title: str, row_label: str) -> dict[str, object] | None:
@@ -3589,13 +3612,33 @@ def row_cells(row: dict[str, object]) -> list[str]:
 
 
 def combined_row_text(row: dict[str, object]) -> str:
-    text = text_value(row, "text")
-    return text or " ".join(row_cells(row))
+    parts = [text_value(row, "text"), text_value(row, "detail"), *row_cells(row)]
+    return " ".join(part for part in parts if part)
 
 
 def require_any_text(path: str, label: str, values: list[str], token: str, failures: list[str]) -> None:
     if not any(token.lower() in value.lower() for value in values):
         failures.append(f"{path}: missing {label}")
+
+
+def color_matches_expected(actual: str, expected: str) -> bool:
+    actual_hex = normalized_hex_color(actual)
+    expected_hex = normalized_hex_color(expected)
+    if actual_hex is not None and expected_hex is not None:
+        return actual_hex == expected_hex
+    return expected.lower() in actual.lower()
+
+
+def normalized_hex_color(value: str) -> str | None:
+    token = value.strip()
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}", token):
+        return None
+    if len(token) == 9:
+        alpha = token[1:3]
+        if alpha.lower() != "ff":
+            return token.lower()
+        token = f"#{token[3:]}"
+    return token.lower()
 
 
 def validate_rows_monotonic(path: str, rows: list[object], failures: list[str]) -> None:
@@ -3627,7 +3670,7 @@ def assert_cell_foreground(path: str, rows: list[object], row_token: str, column
         for cell in evidence_list(row, "renderedCells"):
             if isinstance(cell, dict) and text_value(cell, "column").upper() == column_label:
                 color = str(cell.get("foreground") or "")
-                if not any(token.lower() in color.lower() for token in expected_tokens):
+                if not any(color_matches_expected(color, token) for token in expected_tokens):
                     failures.append(f"{path}: {row_token} {column_label} foreground expected {expected_tokens!r}, got {color!r}")
                 return
         failures.append(f"{path}: {row_token} row missing rendered {column_label} cell")
@@ -3762,19 +3805,36 @@ def expected_flag_fill(kind: str) -> str:
     }.get(kind, "")
 
 
-def expected_flag_rects(index: int, count: int) -> tuple[dict[str, float], dict[str, float]]:
+def expected_flag_rects_for_values(values: dict[str, object], index: int, count: int) -> tuple[dict[str, float], dict[str, float]]:
+    content_bounds = typed_dict(values.get("contentBounds"))
+    origin_x = rect_number(content_bounds, "x") or 0.0
+    origin_y = rect_number(content_bounds, "y") or 0.0
+    width = rect_number(content_bounds, "width") or 360.0
+    height = rect_number(content_bounds, "height") or 170.0
+    return expected_flag_rects(index, count, origin_x=origin_x, origin_y=origin_y, width=width, height=height)
+
+
+def expected_flag_rects(
+    index: int,
+    count: int,
+    *,
+    origin_x: float = 0.0,
+    origin_y: float = 0.0,
+    width: float = 360.0,
+    height: float = 170.0,
+) -> tuple[dict[str, float], dict[str, float]]:
     columns, rows = expected_flag_grid(count)
     padding = 8.0
     gap = 8.0
-    grid_width = 360.0 - padding * 2
-    grid_height = 170.0 - padding * 2
+    grid_width = width - padding * 2
+    grid_height = height - padding * 2
     cell_width = (grid_width - (columns - 1) * gap) / max(1, columns)
     cell_height = (grid_height - (rows - 1) * gap) / max(1, rows)
     row = index // max(1, columns)
     column = index % max(1, columns)
     cell = {
-        "x": padding + column * (cell_width + gap),
-        "y": padding + row * (cell_height + gap),
+        "x": origin_x + padding + column * (cell_width + gap),
+        "y": origin_y + padding + row * (cell_height + gap),
         "width": cell_width,
         "height": cell_height,
     }
@@ -4087,6 +4147,14 @@ def validate_ci_workflow_screenshot_contracts(repo_root: Path, failures: list[st
             failures.append(f".github/workflows/windows-dotnet.yml: legacy screenshot profile {token!r} must not gate CI release parity")
 
 
+def validate_low_entropy_variant_exemptions(failures: list[str]) -> None:
+    exempted = set(OVERLAY_VARIANT_MIN_UNIQUE_BYTES) | set(OVERLAY_VARIANT_MIN_BYTE_RANGE)
+    for key in sorted(exempted - OVERLAY_VARIANTS_ALLOW_LOW_PIXEL_ENTROPY):
+        failures.append(
+            f"overlay variant {key[0]}/{key[1]} has a low-entropy PNG exemption but is not an intentionally hidden variant"
+        )
+
+
 def validate_validator_mutations(failures: list[str], include_source_contracts: bool = True) -> None:
     if include_source_contracts:
         repo_root = Path(__file__).resolve().parents[1]
@@ -4117,6 +4185,42 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "flags", "gridRows"), 2),
         validate=validate_overlay_variant_contract,
         expected_tokens=("flags all-kinds expected gridRows",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="standings class header detail disappears",
+        path="browser-overlays/standings-race.png",
+        base=mutation_standings_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 0, "detail"), ""),
+        validate=validate_standings_contract,
+        expected_tokens=("missing standings text '2 CARS'",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="standings opaque ARGB color remains equivalent but translucent ARGB fails",
+        path="browser-overlays/standings-race.png",
+        base=mutation_standings_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 2, "renderedCells", 5, "foreground"), "#80B65CFF"),
+        validate=validate_standings_contract,
+        expected_tokens=("#8 FAST foreground expected",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="session weather metric units switch to imperial",
+        path="browser-overlays/session-weather-race.png",
+        base=mutation_session_weather_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "metricSections", 1, "rows", 2, "segments", 1, "value"), "10 mph"),
+        validate=validate_session_weather_contract,
+        expected_tokens=("expected Weather/Wind segments",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="pit-service tire grid includes row label as tire cell",
+        path="browser-overlays/pit-service-race.png",
+        base=mutation_pit_service_screenshot(),
+        mutate=mutate_pit_service_grid_cells_include_label,
+        validate=validate_pit_service_contract,
+        expected_tokens=("pit-service Compound cells expected",),
         failures=failures,
     )
     expect_mutation_failure(
@@ -4346,6 +4450,199 @@ def mutation_flags_all_kinds_screenshot() -> dict[str, object]:
             },
         },
     }
+
+
+def mutation_standings_screenshot() -> dict[str, object]:
+    columns = [
+        {"label": "CLS", "configuredWidth": 35, "alignment": "right"},
+        {"label": "CAR", "configuredWidth": 50, "alignment": "right"},
+        {"label": "Driver", "configuredWidth": 250, "alignment": "left"},
+        {"label": "GAP", "configuredWidth": 60, "alignment": "right"},
+        {"label": "INT", "configuredWidth": 60, "alignment": "right"},
+        {"label": "FAST", "configuredWidth": 70, "alignment": "right"},
+        {"label": "LAST", "configuredWidth": 70, "alignment": "right"},
+        {"label": "PIT", "configuredWidth": 30, "alignment": "right"},
+    ]
+    rows = [
+        mutation_table_row(0, "class-header", "LMP2", [], detail="2 cars | ~10 laps", height=35),
+        mutation_table_row(1, "data", "#7 LMP2 Reference", ["1", "#7", "LMP2 Reference", "+0.000", "+0.000", "1:42.100", "1:43.200", ""]),
+        mutation_table_row(2, "data", "#8 Kousuke Konishi", ["2", "#8", "Kousuke Konishi", "+1.204", "+1.204", "1:41.900", "1:42.300", ""], fast="#FFB65CFF"),
+        mutation_table_row(3, "class-header", "GT3", [], detail="3 cars | ~12.4 laps", height=35),
+        mutation_table_row(4, "data", "#000 Kauan Vigliazzi Teixeira Lemos", ["1", "#000", "Kauan Vigliazzi Teixeira Lemos", "+0.000", "+0.000", "1:54.100", "1:54.300", ""], fast="#FFB65CFF", last="#FFB65CFF"),
+        mutation_table_row(5, "reference", "#3094 Tech Mates Racing", ["2", "#3094", "Tech Mates Racing", "+2.304", "+2.304", "1:54.000", "1:54.100", ""], is_reference=True, fast="#FF62FF9F", last="#FF62FF9F"),
+        mutation_table_row(6, "data", "#60 Tommie Wittens", ["3", "#60", "Tommie Wittens", "+4.221", "+1.917", "1:55.000", "1:56.000", "IN"]),
+    ]
+    return {
+        "previewMode": "race",
+        "modelEvidence": {
+            "columns": columns,
+            "rows": rows,
+        },
+    }
+
+
+def mutation_table_row(
+    index: int,
+    kind: str,
+    text: str,
+    cells: list[str],
+    *,
+    detail: str = "",
+    height: int = 28,
+    is_reference: bool = False,
+    fast: str = "rgb(255, 247, 255)",
+    last: str = "rgb(255, 247, 255)",
+) -> dict[str, object]:
+    rendered = []
+    labels = ["CLS", "CAR", "Driver", "GAP", "INT", "FAST", "LAST", "PIT"]
+    for cell_index, value in enumerate(cells):
+        foreground = fast if labels[cell_index] == "FAST" else last if labels[cell_index] == "LAST" else "rgb(255, 247, 255)"
+        rendered.append(
+            {
+                "column": labels[cell_index],
+                "text": value,
+                "value": value,
+                "foreground": foreground,
+                "bounds": {"x": cell_index * 40, "y": index * 32, "width": 36, "height": 24},
+            }
+        )
+    return {
+        "index": index,
+        "kind": kind,
+        "text": text,
+        "detail": detail,
+        "cells": cells,
+        "isReference": is_reference,
+        "bounds": {"x": 0, "y": index * 36, "width": 659, "height": height},
+        "renderedCells": rendered,
+    }
+
+
+def mutation_session_weather_screenshot() -> dict[str, object]:
+    return {
+        "bodyKind": "metrics",
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "metricCount": 10,
+        "modelEvidence": {
+            "metricSections": [
+                {
+                    "title": "Session",
+                    "rows": [
+                        mutation_metric_row("Session", [("Type", "Race"), ("Name", "race preview"), ("Mode", "Team")]),
+                        mutation_metric_row("Clock", [("Elapsed", "17:22:51"), ("Left", "6:37:09"), ("Total", "24:00:00")]),
+                        mutation_metric_row("Event", [("Event", "Race"), ("Car", "Aston Martin Vantage GT3 EVO")]),
+                        mutation_metric_row("Track", [("Name", "Gesamtstrecke 24h"), ("Length", "25.4 km")]),
+                        mutation_metric_row("Laps", [("Remaining", "49.6 est"), ("Total", "170 est")]),
+                    ],
+                },
+                {
+                    "title": "Weather",
+                    "rows": [
+                        mutation_metric_row("Surface", [("Wetness", "Unknown"), ("Declared", "Dry"), ("Rubber", "Moderate Usage")]),
+                        mutation_metric_row("Sky", [("Skies", "Mostly Cloudy"), ("Weather", "Dynamic"), ("Rain", "0%")]),
+                        mutation_metric_row("Wind", [("Dir", "NE"), ("Speed", "10 km/h"), ("Facing", "Head")]),
+                        mutation_metric_row("Temps", [("Air", "22 C"), ("Track", "31 C")]),
+                        mutation_metric_row("Atmosphere", [("Hum", "48%"), ("Fog", "0%"), ("Pressure", "1013 hPa")]),
+                    ],
+                },
+            ],
+        },
+    }
+
+
+def mutation_metric_row(label: str, segments: list[tuple[str, str]]) -> dict[str, object]:
+    return {
+        "label": label,
+        "value": " | ".join(value for _segment_label, value in segments),
+        "tone": "normal",
+        "bounds": {"x": 0, "y": 0, "width": 430, "height": 35},
+        "segments": [
+            {
+                "label": segment_label,
+                "value": value,
+                "bounds": {"x": 0, "y": 0, "width": 100, "height": 27},
+            }
+            for segment_label, value in segments
+        ],
+    }
+
+
+def mutation_pit_service_screenshot() -> dict[str, object]:
+    return {
+        "bodyKind": "metrics",
+        "status": "service active",
+        "source": "source: player/team pit service telemetry",
+        "metricCount": 11,
+        "modelEvidence": {
+            "metricSections": [
+                {"title": "Session", "rows": [mutation_metric_row("Time / Laps", [("Time", "03:58"), ("Laps", "148/179 laps")])]},
+                {
+                    "title": "Pit Signal",
+                    "rows": [
+                        mutation_pit_metric_row("Release", "RED - service active", "error", "#FFFF6274"),
+                        mutation_pit_metric_row("Pit status", "in progress", "error", "#FFFF6274"),
+                    ],
+                },
+                {
+                    "title": "Service Request",
+                    "rows": [
+                        mutation_metric_row("Fuel request", [("Requested", "Yes"), ("Selected", "31.6 L")]),
+                        mutation_metric_row("Tearoff", [("Requested", "Yes")]),
+                        mutation_metric_row("Repair", [("Required", "12s"), ("Optional", "18s")]),
+                        mutation_metric_row("Fast repair", [("Selected", "Yes"), ("Available", "1")]),
+                    ],
+                },
+            ],
+            "gridSections": [
+                {
+                    "title": "Tire Analysis",
+                    "headers": ["Info", "FL", "FR", "RL", "RR"],
+                    "rows": [
+                        mutation_grid_row("Compound", ["S", "S", "S", "S"]),
+                        mutation_grid_row("Change request", ["Change", "Change", "Keep", "Change"]),
+                        mutation_grid_row("Set limit", ["4 sets", "4 sets", "4 sets", "4 sets"]),
+                        mutation_grid_row("Sets available", ["2", "2", "0", "2"]),
+                        mutation_grid_row("Sets used", ["2", "2", "3", "2"]),
+                        mutation_grid_row("Pressure", ["25.1 psi", "25.2 psi", "25.3 psi", "25.4 psi"]),
+                        mutation_grid_row("Temperature", ["82 C", "83 C", "84 C", "85 C"]),
+                        mutation_grid_row("Wear", ["92/91/90%", "93/92/91%", "96/95/94%", "97/96/95%"]),
+                        mutation_grid_row("Distance", ["18.4 km", "18.4 km", "18.4 km", "18.4 km"]),
+                    ],
+                },
+            ],
+        },
+    }
+
+
+def mutation_pit_metric_row(label: str, value: str, tone: str, color: str) -> dict[str, object]:
+    row = mutation_metric_row(label, [])
+    row["value"] = value
+    row["tone"] = tone
+    row["rowColorHex"] = color
+    row["accentHex"] = color
+    return row
+
+
+def mutation_grid_row(label: str, values: list[str]) -> dict[str, object]:
+    return {
+        "label": label,
+        "bounds": {"x": 0, "y": 0, "width": 500, "height": 29},
+        "cells": [
+            {
+                "value": value,
+                "bounds": {"x": 110 + index * 96, "y": 4, "width": 90, "height": 21},
+            }
+            for index, value in enumerate(values)
+        ],
+    }
+
+
+def mutate_pit_service_grid_cells_include_label(screenshot: dict[str, object]) -> None:
+    rows = evidence_list(typed_dict(typed_dict(screenshot["modelEvidence"])["gridSections"][0]), "rows")
+    first_row = typed_dict(rows[0])
+    cells = evidence_list(first_row, "cells")
+    first_row["cells"] = [{"value": first_row["label"], "bounds": {"x": 4, "y": 4, "width": 90, "height": 21}}, *cells]
 
 
 def mutation_input_screenshot() -> dict[str, object]:
@@ -4661,6 +4958,7 @@ def validate_png(
     failures: list[str],
     minimum_size: Optional[tuple[int, int]] = None,
     min_byte_range: int = 24,
+    require_decoded_pixels: bool = True,
 ) -> None:
     path = root / relative_path
     try:
@@ -4690,10 +4988,16 @@ def validate_png(
             f"{relative_path}: decoded byte range {metadata['byte_range']}; "
             "image may be blank or unreadable"
         )
+    if require_decoded_pixels and metadata.get("sampleSource") != "decoded-pixels":
+        failures.append(
+            f"{relative_path}: PNG blank check sampled {metadata.get('sampleSource')}; "
+            "active screenshot profiles must sample decoded pixels"
+        )
 
+    sample_label = "decoded pixels" if metadata.get("sampleSource") == "decoded-pixels" else "filtered bytes"
     print(
         f"ok {relative_path}: {size[0]}x{size[1]}, "
-        f"{metadata['unique_bytes']}+ decoded bytes, byte range {metadata['byte_range']}"
+        f"{metadata['unique_bytes']}+ {sample_label}, byte range {metadata['byte_range']}"
     )
 
 
@@ -4712,11 +5016,8 @@ def inspect_png(path: Path, min_unique_bytes: int) -> dict[str, object]:
     if len(raw) != expected_raw_len:
         raise ValueError(f"unexpected decoded byte length {len(raw)} != {expected_raw_len}")
 
-    sample_source = (
-        decode_png_pixels(raw, width, height, channels)
-        if len(raw) <= MAX_UNFILTERED_PNG_SAMPLE_BYTES
-        else raw
-    )
+    use_decoded_pixels = len(raw) <= MAX_UNFILTERED_PNG_SAMPLE_BYTES
+    sample_source = decode_png_pixels(raw, width, height, channels) if use_decoded_pixels else raw
     sample_stride = max(1, len(sample_source) // 250_000)
     sample = sample_source[::sample_stride]
     unique_bytes = len(set(sample))
@@ -4725,6 +5026,7 @@ def inspect_png(path: Path, min_unique_bytes: int) -> dict[str, object]:
         "size": (width, height),
         "unique_bytes": unique_bytes,
         "byte_range": max(sample) - min(sample) if sample else 0,
+        "sampleSource": "decoded-pixels" if use_decoded_pixels else "filtered-png-bytes",
     }
 
 

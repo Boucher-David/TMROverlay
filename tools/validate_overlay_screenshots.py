@@ -508,7 +508,9 @@ def main() -> int:
     parser.add_argument(
         "--profile",
         choices=(
+            "app-static",
             "tracked",
+            "legacy-mock-slices",
             "windows-ci",
             "windows-installer-ci",
             "browser-review-ci",
@@ -521,7 +523,7 @@ def main() -> int:
             "legacy-contact-sheets",
             "release-tutorial",
         ),
-        default="tracked",
+        default="app-static",
         help="Screenshot artifact profile to validate.",
     )
     parser.add_argument(
@@ -534,6 +536,9 @@ def main() -> int:
 
     root = Path(args.root)
     failures: list[str] = []
+    if args.profile == "app-static":
+        validate_active_screenshot_contracts(failures)
+        return finish(failures)
     if args.profile == "windows-ci":
         validate_windows_ci(root, args.min_unique_bytes, failures)
         return finish(failures)
@@ -565,8 +570,16 @@ def main() -> int:
         validate_release_tutorial(root, args.min_unique_bytes, failures)
         return finish(failures)
 
+    # "tracked" is retained as a compatibility alias for the old default.
     validate_tracked_mock_slices(root, args.min_unique_bytes, failures)
     return finish(failures)
+
+
+def validate_active_screenshot_contracts(failures: list[str]) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    validate_windows_expectations(failures)
+    validate_validator_mutations(failures, include_source_contracts=False)
+    validate_ci_workflow_screenshot_contracts(repo_root, failures)
 
 
 def validate_legacy_contact_sheets(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
@@ -4040,9 +4053,44 @@ def read_text_source(path: Path, repo_root: Path, failures: list[str]) -> str | 
         return None
 
 
-def validate_validator_mutations(failures: list[str]) -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    validate_overlay_variant_source_contracts(repo_root, failures)
+def validate_ci_workflow_screenshot_contracts(repo_root: Path, failures: list[str]) -> None:
+    workflow_path = repo_root / ".github" / "workflows" / "windows-dotnet.yml"
+    workflow = read_text_source(workflow_path, repo_root, failures)
+    if workflow is None:
+        return
+
+    required_tokens = (
+        "--profile app-static",
+        "--profile browser-review-ci",
+        "--profile localhost-ci",
+        "--profile windows-ci",
+        "--profile windows-installer-ci",
+        "--profile screenshot-manifest-parity",
+        "tools/compare_screenshot_manifests.py",
+        "browser-review-screenshots",
+        "localhost-screenshots",
+        "windows-overlay-screenshots",
+        "windows-installer-screenshots",
+        "screenshot-manifest-parity-report",
+    )
+    for token in required_tokens:
+        if token not in workflow:
+            failures.append(f".github/workflows/windows-dotnet.yml: missing active screenshot CI token {token!r}")
+
+    forbidden_tokens = (
+        "--profile legacy-mock-slices",
+        "--profile legacy-contact-sheets",
+        "--profile tracked",
+    )
+    for token in forbidden_tokens:
+        if token in workflow:
+            failures.append(f".github/workflows/windows-dotnet.yml: legacy screenshot profile {token!r} must not gate CI release parity")
+
+
+def validate_validator_mutations(failures: list[str], include_source_contracts: bool = True) -> None:
+    if include_source_contracts:
+        repo_root = Path(__file__).resolve().parents[1]
+        validate_overlay_variant_source_contracts(repo_root, failures)
 
     expect_mutation_failure(
         name="relative placeholder row collapse",

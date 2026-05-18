@@ -3998,7 +3998,7 @@ internal static class Program
                     ? row.ChatSegments.Select(segment => new
                     {
                         kind = segment.Kind,
-                        text = segment.Text,
+                        text = (string?)segment.Text,
                         imageUrl = segment.ImageUrl
                     }).ToArray()
                     : new[]

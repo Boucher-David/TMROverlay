@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Callable, Optional
 
 
-MAX_UNFILTERED_PNG_SAMPLE_BYTES = 12_000_000
+MAX_UNFILTERED_PNG_SAMPLE_BYTES = 2_000_000
 
-EXPECTED_PNGS = {
+LEGACY_CONTACT_SHEET_PNGS = {
     "design-v2/design-v2-states.png": (5350, 4020),
     "design-v2/design-v2-components-outrun.png": (5350, 5240),
     "fuel-calculator/fuel-calculator-states.png": (3600, 2800),
@@ -518,6 +518,7 @@ def main() -> int:
             "windows-expectations",
             "screenshot-expectations",
             "validator-mutations",
+            "legacy-contact-sheets",
             "release-tutorial",
         ),
         default="tracked",
@@ -557,25 +558,35 @@ def main() -> int:
     if args.profile == "validator-mutations":
         validate_validator_mutations(failures)
         return finish(failures)
+    if args.profile == "legacy-contact-sheets":
+        validate_legacy_contact_sheets(root, args.min_unique_bytes, failures)
+        return finish(failures)
     if args.profile == "release-tutorial":
         validate_release_tutorial(root, args.min_unique_bytes, failures)
         return finish(failures)
 
-    for relative_path, expected_size in EXPECTED_PNGS.items():
+    validate_tracked_mock_slices(root, args.min_unique_bytes, failures)
+    return finish(failures)
+
+
+def validate_legacy_contact_sheets(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
+    for relative_path, expected_size in LEGACY_CONTACT_SHEET_PNGS.items():
         validate_png(
             root=root,
             relative_path=relative_path,
             expected_size=expected_size,
-            min_unique_bytes=args.min_unique_bytes,
+            min_unique_bytes=min_unique_bytes,
             failures=failures,
         )
 
+
+def validate_tracked_mock_slices(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
     for relative_path in EXPECTED_STATE_PNGS:
         validate_png(
             root=root,
             relative_path=relative_path,
             expected_size=None,
-            min_unique_bytes=args.min_unique_bytes,
+            min_unique_bytes=min_unique_bytes,
             failures=failures,
             minimum_size=(300, 240),
         )
@@ -585,11 +596,9 @@ def main() -> int:
             root=root,
             relative_path=relative_path,
             expected_size=expected_size,
-            min_unique_bytes=args.min_unique_bytes,
+            min_unique_bytes=min_unique_bytes,
             failures=failures,
         )
-
-    return finish(failures)
 
 
 def finish(failures: list[str]) -> int:

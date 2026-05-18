@@ -467,6 +467,10 @@ internal sealed record TelemetryEdgeCaseFrame(
     int? FastRepairUsed,
     int? DriversSoFar,
     int? DriverChangeLapStatus,
+    int? PlayerCarTeamIncidentCount,
+    int? PlayerCarMyIncidentCount,
+    int? PlayerCarDriverIncidentCount,
+    int? PlayerIncidents,
     int TrackWetness,
     bool WeatherDeclaredWet,
     double? PrecipitationPercent,
@@ -520,6 +524,10 @@ internal sealed record TelemetryEdgeCaseFrame(
             FastRepairUsed: sample.FastRepairUsed,
             DriversSoFar: sample.DriversSoFar,
             DriverChangeLapStatus: sample.DriverChangeLapStatus,
+            PlayerCarTeamIncidentCount: sample.PlayerCarTeamIncidentCount,
+            PlayerCarMyIncidentCount: sample.PlayerCarMyIncidentCount,
+            PlayerCarDriverIncidentCount: sample.PlayerCarDriverIncidentCount,
+            PlayerIncidents: sample.PlayerIncidents,
             TrackWetness: sample.TrackWetness,
             WeatherDeclaredWet: sample.WeatherDeclaredWet,
             PrecipitationPercent: FiniteOrNull(sample.PrecipitationPercent),
@@ -570,7 +578,8 @@ internal sealed record TelemetryEdgeCaseCarFrame(
     int? ClassPosition,
     int? CarClass,
     int? TrackSurface,
-    bool? OnPitRoad)
+    bool? OnPitRoad,
+    int? SessionFlags)
 {
     public static TelemetryEdgeCaseCarFrame From(HistoricalCarProximity car)
     {
@@ -584,7 +593,8 @@ internal sealed record TelemetryEdgeCaseCarFrame(
             ClassPosition: car.ClassPosition,
             CarClass: car.CarClass,
             TrackSurface: car.TrackSurface,
-            OnPitRoad: car.OnPitRoad);
+            OnPitRoad: car.OnPitRoad,
+            SessionFlags: car.SessionFlags);
     }
 
     private static double? FiniteOrNull(double? value)

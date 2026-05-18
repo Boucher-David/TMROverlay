@@ -212,6 +212,8 @@ internal sealed class HistoricalSessionDriver
 
     public string? TeamName { get; init; }
 
+    public int? IRating { get; init; }
+
     public string? CarNumber { get; init; }
 
     public string? CarPath { get; init; }
@@ -704,6 +706,10 @@ internal sealed record HistoricalTelemetrySample(
     int? FastRepairAvailable = null,
     int? DriversSoFar = null,
     int? DriverChangeLapStatus = null,
+    int? PlayerCarTeamIncidentCount = null,
+    int? PlayerCarMyIncidentCount = null,
+    int? PlayerCarDriverIncidentCount = null,
+    int? PlayerIncidents = null,
     double? LapCurrentLapTimeSeconds = null,
     double? LapDeltaToBestLapSeconds = null,
     double? LapDeltaToBestLapRate = null,
@@ -751,7 +757,8 @@ internal sealed record HistoricalCarProximity(
     int? CarClass,
     int? TrackSurface,
     bool? OnPitRoad,
-    int? TireCompound = null);
+    int? TireCompound = null,
+    int? SessionFlags = null);
 
 internal sealed record HistoricalTireConditionSnapshot(
     HistoricalTireCornerCondition? LeftFront,

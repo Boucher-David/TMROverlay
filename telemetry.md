@@ -117,6 +117,24 @@ Observed race-start and endurance captures also show that scoring/results data a
 
 `CarIdxEstTime` may be populated before green and in early green frames where `CarIdxF2Time` is still zero. Treat it as track-position estimation unless a consumer has a separate confidence rule. Relative can use positive `CarIdxEstTime` plus valid `CarIdxLapDistPct` during race `SessionState == 3` to keep showing estimated ahead/behind rows, including after a local tow to pit lane. Standings remains more conservative for now: pre-green race rows keep starting-grid order and do not show estimated class gap or focus interval cells. The compact comparison lives in `fixtures/telemetry-analysis/session-state-signal-availability.md`.
 
+### iRating and incident-pressure evidence
+
+Live session YAML exposes `DriverInfo.Drivers[].IRating`, and active race `ResultsPositions` exposes the current class finishing order. For solo official races, the live model can project class-only iRating deltas from those two sources with the standard expected-score curve (`1600 / ln(2)` scale) and one-based class finishing positions. These projections are estimates until official event results are available; they are not official post-race ratings. The current estimate is:
+
+```text
+scale = 1600 / ln(2)
+strengthOfField = round(scale * ln(fieldSize / sum(exp(-rating / scale))))
+winProbability(a, b) =
+  ((1 - exp(-a / scale)) * exp(-b / scale)) /
+  (((1 - exp(-b / scale)) * exp(-a / scale)) + ((1 - exp(-a / scale)) * exp(-b / scale)))
+expectedScore = sum(winProbability(driverRating, competitorRating)) - 0.5
+projectedDelta = round((fieldSize - classPosition - expectedScore - ((fieldSize / 2 - classPosition) / 100)) * (200 / fieldSize))
+```
+
+Team races need stricter handling. Uploaded iRacing event-result JSON evidence showed that endurance/team events calculate an entry-level iRating exchange and then distribute that team delta across drivers by participation/lap share, with additional eligibility effects such as fair-share completion and zero-lap teammates. Live session YAML does not expose enough evidence to prove the final weighted team rating or per-driver distribution. The live model can still publish a team-entry estimate for the car's current class position, but it must carry limitations showing that weighted team rating, per-driver lap share, fair-share eligibility, and zero-lap teammate effects were not applied.
+
+Incident counts are similarly scoped. The live SDK exposes local/player counters such as `PlayerCarTeamIncidentCount`, `PlayerCarMyIncidentCount`, `PlayerCarDriverIncidentCount`, and `PlayerIncidents`, but captured session YAML/results should not be treated as reliable live all-car incident counts. For other cars, the app can only produce low-confidence incident-pressure evidence from `CarIdxSessionFlags`, `CarIdxTrackSurface`, and observed off-track transitions. That pressure signal can explain why a car appears close to trouble or already flagged, but it must not be presented as a true incident count.
+
 ### Useful analysis questions
 
 - Was the sim connected and streaming valid data?

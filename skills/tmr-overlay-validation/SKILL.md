@@ -33,6 +33,20 @@ Before relaxing an assertion:
 - Normalize only proven representation differences, such as equivalent color encodings or platform rounding, and keep those normalizations narrow and documented by the surrounding check.
 - When a recent commit relaxed screenshot or manifest assertions, re-audit it against this standard before building on it.
 
+## New UI Forensic Validation
+
+Whenever code adds or materially changes an overlay, settings tab/region, renderer path, preview mode, browser/localhost route, native form, or other user-facing UI, treat screenshot validation as part of the feature implementation.
+
+The same pass should add or update:
+
+- deterministic fixture states for the normal path and important degraded/non-happy-path states;
+- manifest semantics for visible text, row/column data, availability/waiting/error state, session gating, source/evidence labels, and values that must stay hidden;
+- geometry, bounds, primitive, or pixel evidence for layout-sensitive behavior such as row collapse, circular maps, graph overlap, table sizing, color roles, and text fitting;
+- browser review, localhost, and Windows/native screenshot generation plus validation profiles, or a documented reason a surface does not exist on one of those runtimes;
+- parity comparison logic that checks semantic equality across browser, localhost, and Windows/native instead of relying on manually inspected PNGs.
+
+Do not leave new UI validation as a follow-up unless the user explicitly asks to split it out. If the current artifacts cannot prove the intended behavior, add evidence capture first and keep assertions strict.
+
 ## Branch-Complete Release Hygiene
 
 Run this section when a branch is being declared complete, prepared for merge, or promoted to a product milestone.

@@ -450,6 +450,7 @@ internal static class SessionInfoSummaryParser
             UserId = ReadInt(values, "UserID"),
             TeamId = ReadInt(values, "TeamID"),
             TeamName = ReadString(values, "TeamName"),
+            IRating = ReadInt(values, "IRating"),
             CarNumber = ReadString(values, "CarNumber"),
             CarPath = ReadString(values, "CarPath"),
             CarScreenName = ReadString(values, "CarScreenName"),

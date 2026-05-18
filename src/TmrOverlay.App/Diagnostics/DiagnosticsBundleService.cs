@@ -1473,6 +1473,8 @@ internal sealed class DiagnosticsBundleService
                 DriverDirectoryModel = DriverDirectoryModelSummary(snapshot.Models.DriverDirectory),
                 RaceProgressModel = RaceProgressModelSummary(snapshot.Models.RaceProgress),
                 RaceProjectionModel = RaceProjectionModelSummary(snapshot.Models.RaceProjection),
+                IRatingProjectionModel = IRatingProjectionModelSummary(snapshot.Models.IRatingProjection),
+                IncidentPressureModel = IncidentPressureModelSummary(snapshot.Models.IncidentPressure),
                 RaceEventsModel = RaceEventsModelSummary(snapshot.Models.RaceEvents),
                 TireCompoundModel = TireCompoundModelSummary(snapshot.Models.TireCompounds),
                 TireConditionModel = TireConditionModelSummary(snapshot.Models.TireCondition),
@@ -1582,6 +1584,8 @@ internal sealed class DiagnosticsBundleService
             CarFieldCoverage = BuildCarFieldCoverage(sample?.AllCars ?? []),
             RaceProgressModel = RaceProgressModelSummary(lastActiveSnapshot.Models.RaceProgress),
             RaceProjectionModel = RaceProjectionModelSummary(lastActiveSnapshot.Models.RaceProjection),
+            IRatingProjectionModel = IRatingProjectionModelSummary(lastActiveSnapshot.Models.IRatingProjection),
+            IncidentPressureModel = IncidentPressureModelSummary(lastActiveSnapshot.Models.IncidentPressure),
             RaceEventsModel = RaceEventsModelSummary(lastActiveSnapshot.Models.RaceEvents),
             FuelPitModel = FuelPitModelSummary(lastActiveSnapshot.Models.FuelPit),
             PitServiceModel = PitServiceModelSummary(lastActiveSnapshot.Models.PitService),
@@ -1727,6 +1731,111 @@ internal sealed class DiagnosticsBundleService
                 .ToArray(),
             MissingSignalCount = projection.MissingSignals.Count,
             projection.MissingSignals
+        };
+    }
+
+    private static object IRatingProjectionModelSummary(LiveIRatingProjectionModel projection)
+    {
+        return new
+        {
+            projection.HasData,
+            projection.Quality,
+            Evidence = EvidenceSummary(projection.Evidence),
+            projection.ProjectionScope,
+            projection.ReferenceCarIdx,
+            projection.ReferenceProjectedChange,
+            projection.ReferenceProjectedIRating,
+            ClassProjectionCount = projection.ClassProjections.Count,
+            RowCount = projection.Rows.Count,
+            ClassProjections = projection.ClassProjections
+                .Select(classProjection => new
+                {
+                    classProjection.CarClass,
+                    classProjection.ClassName,
+                    classProjection.FieldSize,
+                    classProjection.StrengthOfField,
+                    RowCount = classProjection.Rows.Count
+                })
+                .ToArray(),
+            ReferenceRow = projection.ReferenceCarIdx is { } referenceCarIdx
+                ? projection.Rows
+                    .Where(row => row.CarIdx == referenceCarIdx)
+                    .Select(IRatingProjectionRowSummary)
+                    .FirstOrDefault()
+                : null,
+            MissingSignalCount = projection.MissingSignals.Count,
+            projection.MissingSignals,
+            LimitationCount = projection.Limitations.Count,
+            projection.Limitations,
+            EstimationNote = "Live projection is derived from DriverInfo.IRating and current class results. Team races publish a team-entry estimate only; weighted team rating, per-driver lap-share distribution, fair-share eligibility, and zero-lap teammate effects are not applied from live session YAML."
+        };
+    }
+
+    private static object IRatingProjectionRowSummary(LiveIRatingProjectionRow row)
+    {
+        return new
+        {
+            row.CarIdx,
+            row.CarClass,
+            row.ClassPosition,
+            row.CurrentIRating,
+            row.ProjectedChange,
+            row.ProjectedIRating,
+            row.IsPlayer,
+            row.IsFocus
+        };
+    }
+
+    private static object IncidentPressureModelSummary(LiveIncidentPressureModel pressure)
+    {
+        return new
+        {
+            pressure.HasData,
+            pressure.Quality,
+            Evidence = EvidenceSummary(pressure.Evidence),
+            pressure.PlayerCarIdx,
+            pressure.FocusCarIdx,
+            pressure.PlayerCarTeamIncidentCount,
+            pressure.PlayerCarMyIncidentCount,
+            pressure.PlayerCarDriverIncidentCount,
+            pressure.PlayerIncidents,
+            pressure.CurrentFlaggedCarCount,
+            pressure.CurrentOffTrackCarCount,
+            CarCount = pressure.Cars.Count,
+            Cars = pressure.Cars
+                .Take(MaxLiveTelemetryCarExamples)
+                .Select(IncidentPressureCarSummary)
+                .ToArray(),
+            MissingSignalCount = pressure.MissingSignals.Count,
+            pressure.MissingSignals,
+            EstimationNote = "Only local/player incident counters are true counts. Other-car pressure is a low-confidence estimate from per-car flags, current surface state, and observed off-track transitions."
+        };
+    }
+
+    private static object IncidentPressureCarSummary(LiveIncidentPressureCar car)
+    {
+        return new
+        {
+            car.CarIdx,
+            car.DriverName,
+            car.TeamName,
+            car.CarNumber,
+            car.CarClass,
+            car.IsPlayer,
+            car.IsFocus,
+            car.SessionFlags,
+            SessionFlagsHex = FormatRawFlagsHex(car.SessionFlags),
+            car.TrackSurface,
+            car.OnPitRoad,
+            car.HasBlackFlag,
+            car.HasDisqualifyFlag,
+            car.HasRepairFlag,
+            car.HasFurledFlag,
+            car.IsCurrentlyOffTrack,
+            car.ObservedOffTrackTransitions,
+            car.PressureScore,
+            car.PressureLevel,
+            Evidence = EvidenceSummary(car.Evidence)
         };
     }
 
@@ -2230,6 +2339,8 @@ internal sealed class DiagnosticsBundleService
             F2TimePositiveCount = cars.Count(car => car.F2TimeSeconds is > 0d),
             CarClassValidCount = cars.Count(car => car.CarClass is > 0),
             TrackSurfaceValidCount = cars.Count(car => car.TrackSurface is >= 0),
+            SessionFlagsKnownCount = cars.Count(car => car.SessionFlags is not null),
+            SessionFlagsActiveCount = cars.Count(car => car.SessionFlags is not null and not 0),
             OnPitRoadKnownCount = cars.Count(car => car.OnPitRoad is not null),
             FullOfficialTimingCount = cars.Count(car =>
                 HasOfficialPosition(car)
@@ -2258,6 +2369,8 @@ internal sealed class DiagnosticsBundleService
                 car.EstimatedTimeSeconds,
                 car.F2TimeSeconds,
                 car.TrackSurface,
+                car.SessionFlags,
+                SessionFlagsHex = FormatRawFlagsHex(car.SessionFlags),
                 car.OnPitRoad,
                 HasOfficialPosition = HasOfficialPosition(car),
                 HasProgress = HasProgress(car)

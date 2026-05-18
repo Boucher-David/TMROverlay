@@ -1126,13 +1126,13 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         if (_activePitWindow is null)
         {
             _activePitWindow = new PitWindowState(
-                StartCapturedAtUtc: capturedAtUtc,
-                StartSessionTimeSeconds: sessionTime,
-                EntryFuelLiters: fuelLevel,
-                EntrySessionFlagsHex: FormatRawFlagsHex(sessionFlags),
-                EntryPitServiceStatus: pitServiceState.Status,
-                EntryPitServiceFlags: pitServiceState.Flags,
-                EntryPitServiceFuelLiters: pitServiceState.FuelLiters);
+                capturedAtUtc,
+                sessionTime,
+                fuelLevel,
+                FormatRawFlagsHex(sessionFlags),
+                pitServiceState.Status,
+                pitServiceState.Flags,
+                pitServiceState.FuelLiters);
         }
 
         _activePitWindow.Update(

@@ -1,0 +1,1380 @@
+{
+  "schemaVersion": 2,
+  "generationVersion": 1,
+  "generatedAtUtc": "2026-05-01T22:25:32+00:00",
+  "identity": {
+    "key": "track-252-nurburgring-combined-gesamtstrecke-24h-25176m-2026-03-30-02",
+    "trackId": 252,
+    "trackName": "nurburgring combined",
+    "trackDisplayName": "Gesamtstrecke 24h",
+    "trackConfigName": "Gesamtstrecke 24h",
+    "trackLengthKm": 25.1764,
+    "trackVersion": "2026.03.30.02"
+  },
+  "racingLine": {
+    "points": [
+      {
+        "lapDistPct": 0,
+        "x": -190,
+        "y": 304,
+        "distanceMeters": 0
+      },
+      {
+        "lapDistPct": 0.004545,
+        "x": -196,
+        "y": 310,
+        "distanceMeters": 114.438
+      },
+      {
+        "lapDistPct": 0.009091,
+        "x": -203,
+        "y": 319,
+        "distanceMeters": 228.876
+      },
+      {
+        "lapDistPct": 0.013636,
+        "x": -214,
+        "y": 328,
+        "distanceMeters": 343.315
+      },
+      {
+        "lapDistPct": 0.018182,
+        "x": -223,
+        "y": 334,
+        "distanceMeters": 457.753
+      },
+      {
+        "lapDistPct": 0.022727,
+        "x": -227,
+        "y": 330,
+        "distanceMeters": 572.191
+      },
+      {
+        "lapDistPct": 0.027273,
+        "x": -231,
+        "y": 328,
+        "distanceMeters": 686.629
+      },
+      {
+        "lapDistPct": 0.031818,
+        "x": -237,
+        "y": 333,
+        "distanceMeters": 801.067
+      },
+      {
+        "lapDistPct": 0.036364,
+        "x": -239,
+        "y": 344,
+        "distanceMeters": 915.505
+      },
+      {
+        "lapDistPct": 0.040909,
+        "x": -242,
+        "y": 358,
+        "distanceMeters": 1029.944
+      },
+      {
+        "lapDistPct": 0.045455,
+        "x": -247,
+        "y": 374,
+        "distanceMeters": 1144.382
+      },
+      {
+        "lapDistPct": 0.05,
+        "x": -248,
+        "y": 391,
+        "distanceMeters": 1258.82
+      },
+      {
+        "lapDistPct": 0.054545,
+        "x": -238,
+        "y": 398,
+        "distanceMeters": 1373.258
+      },
+      {
+        "lapDistPct": 0.059091,
+        "x": -231,
+        "y": 404,
+        "distanceMeters": 1487.696
+      },
+      {
+        "lapDistPct": 0.063636,
+        "x": -235,
+        "y": 411,
+        "distanceMeters": 1602.135
+      },
+      {
+        "lapDistPct": 0.068182,
+        "x": -245,
+        "y": 416,
+        "distanceMeters": 1716.573
+      },
+      {
+        "lapDistPct": 0.072727,
+        "x": -258,
+        "y": 424,
+        "distanceMeters": 1831.011
+      },
+      {
+        "lapDistPct": 0.077273,
+        "x": -271,
+        "y": 436,
+        "distanceMeters": 1945.449
+      },
+      {
+        "lapDistPct": 0.081818,
+        "x": -281,
+        "y": 451,
+        "distanceMeters": 2059.887
+      },
+      {
+        "lapDistPct": 0.086364,
+        "x": -292,
+        "y": 460,
+        "distanceMeters": 2174.325
+      },
+      {
+        "lapDistPct": 0.090909,
+        "x": -296,
+        "y": 455,
+        "distanceMeters": 2288.764
+      },
+      {
+        "lapDistPct": 0.095455,
+        "x": -292,
+        "y": 447,
+        "distanceMeters": 2403.202
+      },
+      {
+        "lapDistPct": 0.1,
+        "x": -283,
+        "y": 438,
+        "distanceMeters": 2517.64
+      },
+      {
+        "lapDistPct": 0.104545,
+        "x": -271,
+        "y": 428,
+        "distanceMeters": 2632.078
+      },
+      {
+        "lapDistPct": 0.109091,
+        "x": -264,
+        "y": 414,
+        "distanceMeters": 2746.516
+      },
+      {
+        "lapDistPct": 0.113636,
+        "x": -265,
+        "y": 398,
+        "distanceMeters": 2860.955
+      },
+      {
+        "lapDistPct": 0.118182,
+        "x": -260,
+        "y": 377,
+        "distanceMeters": 2975.393
+      },
+      {
+        "lapDistPct": 0.122727,
+        "x": -254,
+        "y": 359,
+        "distanceMeters": 3089.831
+      },
+      {
+        "lapDistPct": 0.127273,
+        "x": -249,
+        "y": 345,
+        "distanceMeters": 3204.269
+      },
+      {
+        "lapDistPct": 0.131818,
+        "x": -253,
+        "y": 335,
+        "distanceMeters": 3318.707
+      },
+      {
+        "lapDistPct": 0.136364,
+        "x": -264,
+        "y": 331,
+        "distanceMeters": 3433.145
+      },
+      {
+        "lapDistPct": 0.140909,
+        "x": -272,
+        "y": 324,
+        "distanceMeters": 3547.584
+      },
+      {
+        "lapDistPct": 0.145455,
+        "x": -271,
+        "y": 313,
+        "distanceMeters": 3662.022
+      },
+      {
+        "lapDistPct": 0.15,
+        "x": -260,
+        "y": 298,
+        "distanceMeters": 3776.46
+      },
+      {
+        "lapDistPct": 0.154545,
+        "x": -249,
+        "y": 285,
+        "distanceMeters": 3890.898
+      },
+      {
+        "lapDistPct": 0.159091,
+        "x": -235,
+        "y": 272,
+        "distanceMeters": 4005.336
+      },
+      {
+        "lapDistPct": 0.163636,
+        "x": -217,
+        "y": 265,
+        "distanceMeters": 4119.775
+      },
+      {
+        "lapDistPct": 0.168182,
+        "x": -196,
+        "y": 261,
+        "distanceMeters": 4234.213
+      },
+      {
+        "lapDistPct": 0.172727,
+        "x": -178,
+        "y": 257,
+        "distanceMeters": 4348.651
+      },
+      {
+        "lapDistPct": 0.177273,
+        "x": -167,
+        "y": 249,
+        "distanceMeters": 4463.089
+      },
+      {
+        "lapDistPct": 0.181818,
+        "x": -158,
+        "y": 242,
+        "distanceMeters": 4577.527
+      },
+      {
+        "lapDistPct": 0.186364,
+        "x": -144,
+        "y": 239,
+        "distanceMeters": 4691.965
+      },
+      {
+        "lapDistPct": 0.190909,
+        "x": -136,
+        "y": 233,
+        "distanceMeters": 4806.404
+      },
+      {
+        "lapDistPct": 0.195455,
+        "x": -138,
+        "y": 225,
+        "distanceMeters": 4920.842
+      },
+      {
+        "lapDistPct": 0.2,
+        "x": -145,
+        "y": 216,
+        "distanceMeters": 5035.28
+      },
+      {
+        "lapDistPct": 0.204545,
+        "x": -152,
+        "y": 213,
+        "distanceMeters": 5149.718
+      },
+      {
+        "lapDistPct": 0.209091,
+        "x": -158,
+        "y": 220,
+        "distanceMeters": 5264.156
+      },
+      {
+        "lapDistPct": 0.213636,
+        "x": -165,
+        "y": 232,
+        "distanceMeters": 5378.595
+      },
+      {
+        "lapDistPct": 0.218182,
+        "x": -182,
+        "y": 243,
+        "distanceMeters": 5493.033
+      },
+      {
+        "lapDistPct": 0.222727,
+        "x": -200,
+        "y": 241,
+        "distanceMeters": 5607.471
+      },
+      {
+        "lapDistPct": 0.227273,
+        "x": -217,
+        "y": 233,
+        "distanceMeters": 5721.909
+      },
+      {
+        "lapDistPct": 0.231818,
+        "x": -236,
+        "y": 231,
+        "distanceMeters": 5836.347
+      },
+      {
+        "lapDistPct": 0.236364,
+        "x": -248,
+        "y": 234,
+        "distanceMeters": 5950.785
+      },
+      {
+        "lapDistPct": 0.240909,
+        "x": -257,
+        "y": 227,
+        "distanceMeters": 6065.224
+      },
+      {
+        "lapDistPct": 0.245455,
+        "x": -265,
+        "y": 216,
+        "distanceMeters": 6179.662
+      },
+      {
+        "lapDistPct": 0.25,
+        "x": -274,
+        "y": 204,
+        "distanceMeters": 6294.1
+      },
+      {
+        "lapDistPct": 0.254545,
+        "x": -285,
+        "y": 200,
+        "distanceMeters": 6408.538
+      },
+      {
+        "lapDistPct": 0.259091,
+        "x": -297,
+        "y": 197,
+        "distanceMeters": 6522.976
+      },
+      {
+        "lapDistPct": 0.263636,
+        "x": -303,
+        "y": 189,
+        "distanceMeters": 6637.415
+      },
+      {
+        "lapDistPct": 0.268182,
+        "x": -310,
+        "y": 178,
+        "distanceMeters": 6751.853
+      },
+      {
+        "lapDistPct": 0.272727,
+        "x": -323,
+        "y": 168,
+        "distanceMeters": 6866.291
+      },
+      {
+        "lapDistPct": 0.277273,
+        "x": -338,
+        "y": 158,
+        "distanceMeters": 6980.729
+      },
+      {
+        "lapDistPct": 0.281818,
+        "x": -353,
+        "y": 145,
+        "distanceMeters": 7095.167
+      },
+      {
+        "lapDistPct": 0.286364,
+        "x": -369,
+        "y": 126,
+        "distanceMeters": 7209.605
+      },
+      {
+        "lapDistPct": 0.290909,
+        "x": -380,
+        "y": 109,
+        "distanceMeters": 7324.044
+      },
+      {
+        "lapDistPct": 0.295455,
+        "x": -381,
+        "y": 89,
+        "distanceMeters": 7438.482
+      },
+      {
+        "lapDistPct": 0.3,
+        "x": -374,
+        "y": 70,
+        "distanceMeters": 7552.92
+      },
+      {
+        "lapDistPct": 0.304545,
+        "x": -370,
+        "y": 49,
+        "distanceMeters": 7667.358
+      },
+      {
+        "lapDistPct": 0.309091,
+        "x": -371,
+        "y": 27,
+        "distanceMeters": 7781.796
+      },
+      {
+        "lapDistPct": 0.313636,
+        "x": -376,
+        "y": 5,
+        "distanceMeters": 7896.235
+      },
+      {
+        "lapDistPct": 0.318182,
+        "x": -387,
+        "y": -22,
+        "distanceMeters": 8010.673
+      },
+      {
+        "lapDistPct": 0.322727,
+        "x": -396,
+        "y": -44,
+        "distanceMeters": 8125.111
+      },
+      {
+        "lapDistPct": 0.327273,
+        "x": -408,
+        "y": -64,
+        "distanceMeters": 8239.549
+      },
+      {
+        "lapDistPct": 0.331818,
+        "x": -427,
+        "y": -75,
+        "distanceMeters": 8353.987
+      },
+      {
+        "lapDistPct": 0.336364,
+        "x": -439,
+        "y": -82,
+        "distanceMeters": 8468.425
+      },
+      {
+        "lapDistPct": 0.340909,
+        "x": -440,
+        "y": -92,
+        "distanceMeters": 8582.864
+      },
+      {
+        "lapDistPct": 0.345455,
+        "x": -430,
+        "y": -100,
+        "distanceMeters": 8697.302
+      },
+      {
+        "lapDistPct": 0.35,
+        "x": -411,
+        "y": -107,
+        "distanceMeters": 8811.74
+      },
+      {
+        "lapDistPct": 0.354545,
+        "x": -396,
+        "y": -117,
+        "distanceMeters": 8926.178
+      },
+      {
+        "lapDistPct": 0.359091,
+        "x": -380,
+        "y": -130,
+        "distanceMeters": 9040.616
+      },
+      {
+        "lapDistPct": 0.363636,
+        "x": -364,
+        "y": -145,
+        "distanceMeters": 9155.055
+      },
+      {
+        "lapDistPct": 0.368182,
+        "x": -348,
+        "y": -161,
+        "distanceMeters": 9269.493
+      },
+      {
+        "lapDistPct": 0.372727,
+        "x": -337,
+        "y": -181,
+        "distanceMeters": 9383.931
+      },
+      {
+        "lapDistPct": 0.377273,
+        "x": -334,
+        "y": -200,
+        "distanceMeters": 9498.369
+      },
+      {
+        "lapDistPct": 0.381818,
+        "x": -328,
+        "y": -215,
+        "distanceMeters": 9612.807
+      },
+      {
+        "lapDistPct": 0.386364,
+        "x": -322,
+        "y": -223,
+        "distanceMeters": 9727.245
+      },
+      {
+        "lapDistPct": 0.390909,
+        "x": -325,
+        "y": -231,
+        "distanceMeters": 9841.684
+      },
+      {
+        "lapDistPct": 0.395455,
+        "x": -323,
+        "y": -239,
+        "distanceMeters": 9956.122
+      },
+      {
+        "lapDistPct": 0.4,
+        "x": -313,
+        "y": -248,
+        "distanceMeters": 10070.56
+      },
+      {
+        "lapDistPct": 0.404545,
+        "x": -301,
+        "y": -257,
+        "distanceMeters": 10184.998
+      },
+      {
+        "lapDistPct": 0.409091,
+        "x": -288,
+        "y": -270,
+        "distanceMeters": 10299.436
+      },
+      {
+        "lapDistPct": 0.413636,
+        "x": -275,
+        "y": -283,
+        "distanceMeters": 10413.875
+      },
+      {
+        "lapDistPct": 0.418182,
+        "x": -260,
+        "y": -304,
+        "distanceMeters": 10528.313
+      },
+      {
+        "lapDistPct": 0.422727,
+        "x": -261,
+        "y": -323,
+        "distanceMeters": 10642.751
+      },
+      {
+        "lapDistPct": 0.427273,
+        "x": -266,
+        "y": -335,
+        "distanceMeters": 10757.189
+      },
+      {
+        "lapDistPct": 0.431818,
+        "x": -277,
+        "y": -338,
+        "distanceMeters": 10871.627
+      },
+      {
+        "lapDistPct": 0.436364,
+        "x": -290,
+        "y": -343,
+        "distanceMeters": 10986.065
+      },
+      {
+        "lapDistPct": 0.440909,
+        "x": -299,
+        "y": -352,
+        "distanceMeters": 11100.504
+      },
+      {
+        "lapDistPct": 0.445455,
+        "x": -297,
+        "y": -361,
+        "distanceMeters": 11214.942
+      },
+      {
+        "lapDistPct": 0.45,
+        "x": -283,
+        "y": -369,
+        "distanceMeters": 11329.38
+      },
+      {
+        "lapDistPct": 0.454545,
+        "x": -271,
+        "y": -379,
+        "distanceMeters": 11443.818
+      },
+      {
+        "lapDistPct": 0.459091,
+        "x": -264,
+        "y": -397,
+        "distanceMeters": 11558.256
+      },
+      {
+        "lapDistPct": 0.463636,
+        "x": -253,
+        "y": -409,
+        "distanceMeters": 11672.695
+      },
+      {
+        "lapDistPct": 0.468182,
+        "x": -237,
+        "y": -410,
+        "distanceMeters": 11787.133
+      },
+      {
+        "lapDistPct": 0.472727,
+        "x": -222,
+        "y": -401,
+        "distanceMeters": 11901.571
+      },
+      {
+        "lapDistPct": 0.477273,
+        "x": -211,
+        "y": -391,
+        "distanceMeters": 12016.009
+      },
+      {
+        "lapDistPct": 0.481818,
+        "x": -203,
+        "y": -383,
+        "distanceMeters": 12130.447
+      },
+      {
+        "lapDistPct": 0.486364,
+        "x": -197,
+        "y": -390,
+        "distanceMeters": 12244.885
+      },
+      {
+        "lapDistPct": 0.490909,
+        "x": -185,
+        "y": -393,
+        "distanceMeters": 12359.324
+      },
+      {
+        "lapDistPct": 0.495455,
+        "x": -170,
+        "y": -394,
+        "distanceMeters": 12473.762
+      },
+      {
+        "lapDistPct": 0.5,
+        "x": -152,
+        "y": -392,
+        "distanceMeters": 12588.2
+      },
+      {
+        "lapDistPct": 0.504545,
+        "x": -138,
+        "y": -390,
+        "distanceMeters": 12702.638
+      },
+      {
+        "lapDistPct": 0.509091,
+        "x": -130,
+        "y": -398,
+        "distanceMeters": 12817.076
+      },
+      {
+        "lapDistPct": 0.513636,
+        "x": -128,
+        "y": -412,
+        "distanceMeters": 12931.515
+      },
+      {
+        "lapDistPct": 0.518182,
+        "x": -120,
+        "y": -423,
+        "distanceMeters": 13045.953
+      },
+      {
+        "lapDistPct": 0.522727,
+        "x": -108,
+        "y": -428,
+        "distanceMeters": 13160.391
+      },
+      {
+        "lapDistPct": 0.527273,
+        "x": -92,
+        "y": -432,
+        "distanceMeters": 13274.829
+      },
+      {
+        "lapDistPct": 0.531818,
+        "x": -75,
+        "y": -436,
+        "distanceMeters": 13389.267
+      },
+      {
+        "lapDistPct": 0.536364,
+        "x": -57,
+        "y": -441,
+        "distanceMeters": 13503.705
+      },
+      {
+        "lapDistPct": 0.540909,
+        "x": -40,
+        "y": -452,
+        "distanceMeters": 13618.144
+      },
+      {
+        "lapDistPct": 0.545455,
+        "x": -27,
+        "y": -460,
+        "distanceMeters": 13732.582
+      },
+      {
+        "lapDistPct": 0.55,
+        "x": -16,
+        "y": -453,
+        "distanceMeters": 13847.02
+      },
+      {
+        "lapDistPct": 0.554545,
+        "x": -15,
+        "y": -440,
+        "distanceMeters": 13961.458
+      },
+      {
+        "lapDistPct": 0.559091,
+        "x": -16,
+        "y": -424,
+        "distanceMeters": 14075.896
+      },
+      {
+        "lapDistPct": 0.563636,
+        "x": -15,
+        "y": -407,
+        "distanceMeters": 14190.335
+      },
+      {
+        "lapDistPct": 0.568182,
+        "x": -10,
+        "y": -389,
+        "distanceMeters": 14304.773
+      },
+      {
+        "lapDistPct": 0.572727,
+        "x": 2,
+        "y": -374,
+        "distanceMeters": 14419.211
+      },
+      {
+        "lapDistPct": 0.577273,
+        "x": 20,
+        "y": -364,
+        "distanceMeters": 14533.649
+      },
+      {
+        "lapDistPct": 0.581818,
+        "x": 44,
+        "y": -356,
+        "distanceMeters": 14648.087
+      },
+      {
+        "lapDistPct": 0.586364,
+        "x": 66,
+        "y": -356,
+        "distanceMeters": 14762.525
+      },
+      {
+        "lapDistPct": 0.590909,
+        "x": 87,
+        "y": -354,
+        "distanceMeters": 14876.964
+      },
+      {
+        "lapDistPct": 0.595455,
+        "x": 109,
+        "y": -351,
+        "distanceMeters": 14991.402
+      },
+      {
+        "lapDistPct": 0.6,
+        "x": 129,
+        "y": -344,
+        "distanceMeters": 15105.84
+      },
+      {
+        "lapDistPct": 0.604545,
+        "x": 147,
+        "y": -332,
+        "distanceMeters": 15220.278
+      },
+      {
+        "lapDistPct": 0.609091,
+        "x": 166,
+        "y": -322,
+        "distanceMeters": 15334.716
+      },
+      {
+        "lapDistPct": 0.613636,
+        "x": 187,
+        "y": -323,
+        "distanceMeters": 15449.155
+      },
+      {
+        "lapDistPct": 0.618182,
+        "x": 208,
+        "y": -336,
+        "distanceMeters": 15563.593
+      },
+      {
+        "lapDistPct": 0.622727,
+        "x": 224,
+        "y": -349,
+        "distanceMeters": 15678.031
+      },
+      {
+        "lapDistPct": 0.627273,
+        "x": 244,
+        "y": -354,
+        "distanceMeters": 15792.469
+      },
+      {
+        "lapDistPct": 0.631818,
+        "x": 262,
+        "y": -358,
+        "distanceMeters": 15906.907
+      },
+      {
+        "lapDistPct": 0.636364,
+        "x": 271,
+        "y": -357,
+        "distanceMeters": 16021.345
+      },
+      {
+        "lapDistPct": 0.640909,
+        "x": 273,
+        "y": -348,
+        "distanceMeters": 16135.784
+      },
+      {
+        "lapDistPct": 0.645455,
+        "x": 264,
+        "y": -339,
+        "distanceMeters": 16250.222
+      },
+      {
+        "lapDistPct": 0.65,
+        "x": 250,
+        "y": -328,
+        "distanceMeters": 16364.66
+      },
+      {
+        "lapDistPct": 0.654545,
+        "x": 238,
+        "y": -320,
+        "distanceMeters": 16479.098
+      },
+      {
+        "lapDistPct": 0.659091,
+        "x": 236,
+        "y": -312,
+        "distanceMeters": 16593.536
+      },
+      {
+        "lapDistPct": 0.663636,
+        "x": 243,
+        "y": -313,
+        "distanceMeters": 16707.975
+      },
+      {
+        "lapDistPct": 0.668182,
+        "x": 250,
+        "y": -323,
+        "distanceMeters": 16822.413
+      },
+      {
+        "lapDistPct": 0.672727,
+        "x": 263,
+        "y": -330,
+        "distanceMeters": 16936.851
+      },
+      {
+        "lapDistPct": 0.677273,
+        "x": 279,
+        "y": -335,
+        "distanceMeters": 17051.289
+      },
+      {
+        "lapDistPct": 0.681818,
+        "x": 300,
+        "y": -340,
+        "distanceMeters": 17165.727
+      },
+      {
+        "lapDistPct": 0.686364,
+        "x": 315,
+        "y": -352,
+        "distanceMeters": 17280.165
+      },
+      {
+        "lapDistPct": 0.690909,
+        "x": 321,
+        "y": -367,
+        "distanceMeters": 17394.604
+      },
+      {
+        "lapDistPct": 0.695455,
+        "x": 322,
+        "y": -381,
+        "distanceMeters": 17509.042
+      },
+      {
+        "lapDistPct": 0.7,
+        "x": 330,
+        "y": -392,
+        "distanceMeters": 17623.48
+      },
+      {
+        "lapDistPct": 0.704545,
+        "x": 341,
+        "y": -394,
+        "distanceMeters": 17737.918
+      },
+      {
+        "lapDistPct": 0.709091,
+        "x": 354,
+        "y": -389,
+        "distanceMeters": 17852.356
+      },
+      {
+        "lapDistPct": 0.713636,
+        "x": 374,
+        "y": -383,
+        "distanceMeters": 17966.795
+      },
+      {
+        "lapDistPct": 0.718182,
+        "x": 385,
+        "y": -370,
+        "distanceMeters": 18081.233
+      },
+      {
+        "lapDistPct": 0.722727,
+        "x": 400,
+        "y": -365,
+        "distanceMeters": 18195.671
+      },
+      {
+        "lapDistPct": 0.727273,
+        "x": 413,
+        "y": -356,
+        "distanceMeters": 18310.109
+      },
+      {
+        "lapDistPct": 0.731818,
+        "x": 421,
+        "y": -343,
+        "distanceMeters": 18424.547
+      },
+      {
+        "lapDistPct": 0.736364,
+        "x": 419,
+        "y": -330,
+        "distanceMeters": 18538.985
+      },
+      {
+        "lapDistPct": 0.740909,
+        "x": 413,
+        "y": -317,
+        "distanceMeters": 18653.424
+      },
+      {
+        "lapDistPct": 0.745455,
+        "x": 417,
+        "y": -305,
+        "distanceMeters": 18767.862
+      },
+      {
+        "lapDistPct": 0.75,
+        "x": 432,
+        "y": -298,
+        "distanceMeters": 18882.3
+      },
+      {
+        "lapDistPct": 0.754545,
+        "x": 440,
+        "y": -289,
+        "distanceMeters": 18996.738
+      },
+      {
+        "lapDistPct": 0.759091,
+        "x": 441,
+        "y": -274,
+        "distanceMeters": 19111.176
+      },
+      {
+        "lapDistPct": 0.763636,
+        "x": 436,
+        "y": -264,
+        "distanceMeters": 19225.615
+      },
+      {
+        "lapDistPct": 0.768182,
+        "x": 424,
+        "y": -262,
+        "distanceMeters": 19340.053
+      },
+      {
+        "lapDistPct": 0.772727,
+        "x": 410,
+        "y": -264,
+        "distanceMeters": 19454.491
+      },
+      {
+        "lapDistPct": 0.777273,
+        "x": 399,
+        "y": -261,
+        "distanceMeters": 19568.929
+      },
+      {
+        "lapDistPct": 0.781818,
+        "x": 392,
+        "y": -247,
+        "distanceMeters": 19683.367
+      },
+      {
+        "lapDistPct": 0.786364,
+        "x": 384,
+        "y": -235,
+        "distanceMeters": 19797.805
+      },
+      {
+        "lapDistPct": 0.790909,
+        "x": 379,
+        "y": -219,
+        "distanceMeters": 19912.244
+      },
+      {
+        "lapDistPct": 0.795455,
+        "x": 380,
+        "y": -200,
+        "distanceMeters": 20026.682
+      },
+      {
+        "lapDistPct": 0.8,
+        "x": 378,
+        "y": -182,
+        "distanceMeters": 20141.12
+      },
+      {
+        "lapDistPct": 0.804545,
+        "x": 367,
+        "y": -171,
+        "distanceMeters": 20255.558
+      },
+      {
+        "lapDistPct": 0.809091,
+        "x": 351,
+        "y": -166,
+        "distanceMeters": 20369.996
+      },
+      {
+        "lapDistPct": 0.813636,
+        "x": 336,
+        "y": -149,
+        "distanceMeters": 20484.435
+      },
+      {
+        "lapDistPct": 0.818182,
+        "x": 327,
+        "y": -131,
+        "distanceMeters": 20598.873
+      },
+      {
+        "lapDistPct": 0.822727,
+        "x": 312,
+        "y": -116,
+        "distanceMeters": 20713.311
+      },
+      {
+        "lapDistPct": 0.827273,
+        "x": 293,
+        "y": -105,
+        "distanceMeters": 20827.749
+      },
+      {
+        "lapDistPct": 0.831818,
+        "x": 272,
+        "y": -99,
+        "distanceMeters": 20942.187
+      },
+      {
+        "lapDistPct": 0.836364,
+        "x": 252,
+        "y": -92,
+        "distanceMeters": 21056.625
+      },
+      {
+        "lapDistPct": 0.840909,
+        "x": 236,
+        "y": -92,
+        "distanceMeters": 21171.064
+      },
+      {
+        "lapDistPct": 0.845455,
+        "x": 225,
+        "y": -101,
+        "distanceMeters": 21285.502
+      },
+      {
+        "lapDistPct": 0.85,
+        "x": 212,
+        "y": -104,
+        "distanceMeters": 21399.94
+      },
+      {
+        "lapDistPct": 0.854545,
+        "x": 200,
+        "y": -97,
+        "distanceMeters": 21514.378
+      },
+      {
+        "lapDistPct": 0.859091,
+        "x": 191,
+        "y": -88,
+        "distanceMeters": 21628.816
+      },
+      {
+        "lapDistPct": 0.863636,
+        "x": 193,
+        "y": -78,
+        "distanceMeters": 21743.255
+      },
+      {
+        "lapDistPct": 0.868182,
+        "x": 202,
+        "y": -70,
+        "distanceMeters": 21857.693
+      },
+      {
+        "lapDistPct": 0.872727,
+        "x": 215,
+        "y": -65,
+        "distanceMeters": 21972.131
+      },
+      {
+        "lapDistPct": 0.877273,
+        "x": 229,
+        "y": -61,
+        "distanceMeters": 22086.569
+      },
+      {
+        "lapDistPct": 0.881818,
+        "x": 241,
+        "y": -45,
+        "distanceMeters": 22201.007
+      },
+      {
+        "lapDistPct": 0.886364,
+        "x": 242,
+        "y": -29,
+        "distanceMeters": 22315.445
+      },
+      {
+        "lapDistPct": 0.890909,
+        "x": 232,
+        "y": -15,
+        "distanceMeters": 22429.884
+      },
+      {
+        "lapDistPct": 0.895455,
+        "x": 215,
+        "y": -6,
+        "distanceMeters": 22544.322
+      },
+      {
+        "lapDistPct": 0.9,
+        "x": 198,
+        "y": 4,
+        "distanceMeters": 22658.76
+      },
+      {
+        "lapDistPct": 0.904545,
+        "x": 180,
+        "y": 15,
+        "distanceMeters": 22773.198
+      },
+      {
+        "lapDistPct": 0.909091,
+        "x": 161,
+        "y": 26,
+        "distanceMeters": 22887.636
+      },
+      {
+        "lapDistPct": 0.913636,
+        "x": 137,
+        "y": 41,
+        "distanceMeters": 23002.075
+      },
+      {
+        "lapDistPct": 0.918182,
+        "x": 117,
+        "y": 53,
+        "distanceMeters": 23116.513
+      },
+      {
+        "lapDistPct": 0.922727,
+        "x": 97,
+        "y": 65,
+        "distanceMeters": 23230.951
+      },
+      {
+        "lapDistPct": 0.927273,
+        "x": 77,
+        "y": 78,
+        "distanceMeters": 23345.389
+      },
+      {
+        "lapDistPct": 0.931818,
+        "x": 57,
+        "y": 90,
+        "distanceMeters": 23459.827
+      },
+      {
+        "lapDistPct": 0.936364,
+        "x": 37,
+        "y": 103,
+        "distanceMeters": 23574.265
+      },
+      {
+        "lapDistPct": 0.940909,
+        "x": 17,
+        "y": 115,
+        "distanceMeters": 23688.704
+      },
+      {
+        "lapDistPct": 0.945455,
+        "x": -3,
+        "y": 128,
+        "distanceMeters": 23803.142
+      },
+      {
+        "lapDistPct": 0.95,
+        "x": -28,
+        "y": 144,
+        "distanceMeters": 23917.58
+      },
+      {
+        "lapDistPct": 0.954545,
+        "x": -46,
+        "y": 159,
+        "distanceMeters": 24032.018
+      },
+      {
+        "lapDistPct": 0.959091,
+        "x": -61,
+        "y": 178,
+        "distanceMeters": 24146.456
+      },
+      {
+        "lapDistPct": 0.963636,
+        "x": -74,
+        "y": 198,
+        "distanceMeters": 24260.895
+      },
+      {
+        "lapDistPct": 0.968182,
+        "x": -88,
+        "y": 216,
+        "distanceMeters": 24375.333
+      },
+      {
+        "lapDistPct": 0.972727,
+        "x": -97,
+        "y": 228,
+        "distanceMeters": 24489.771
+      },
+      {
+        "lapDistPct": 0.977273,
+        "x": -105,
+        "y": 232,
+        "distanceMeters": 24604.209
+      },
+      {
+        "lapDistPct": 0.981818,
+        "x": -119,
+        "y": 237,
+        "distanceMeters": 24718.647
+      },
+      {
+        "lapDistPct": 0.986364,
+        "x": -130,
+        "y": 247,
+        "distanceMeters": 24833.085
+      },
+      {
+        "lapDistPct": 0.990909,
+        "x": -142,
+        "y": 259,
+        "distanceMeters": 24947.524
+      },
+      {
+        "lapDistPct": 0.995455,
+        "x": -155,
+        "y": 272,
+        "distanceMeters": 25061.962
+      }
+    ],
+    "closed": true
+  },
+  "pitLane": null,
+  "quality": {
+    "confidence": 4,
+    "completeLapCount": 14,
+    "selectedPointCount": 413732,
+    "binCount": 220,
+    "missingBinCount": 0,
+    "missingBinPercent": 0,
+    "closureMeters": 4.572381,
+    "lengthDeltaPercent": -0.333437,
+    "repeatabilityMedianMeters": 1.237879,
+    "repeatabilityP95Meters": 1.570394,
+    "pitLaneSampleCount": 0,
+    "pitLanePassCount": 0,
+    "pitLaneRepeatabilityP95Meters": null,
+    "reasons": []
+  },
+  "provenance": {
+    "sourceKind": "ibt-derived-screenshot-scenario",
+    "sourcePath": "mercedesamgevogt3_nurburgring combined 2026-05-01 22-25-32.ibt",
+    "sourceBytes": 463670194,
+    "sourceRecordCount": 421338,
+    "captureId": "nurburgring-24h-track-map-probe"
+  },
+  "sectors": [
+    {
+      "sectorNum": 0,
+      "startPct": 0,
+      "endPct": 0.333333
+    },
+    {
+      "sectorNum": 1,
+      "startPct": 0.333333,
+      "endPct": 0.666667
+    },
+    {
+      "sectorNum": 2,
+      "startPct": 0.666667,
+      "endPct": 1
+    }
+  ]
+}

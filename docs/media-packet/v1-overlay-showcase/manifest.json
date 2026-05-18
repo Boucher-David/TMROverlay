@@ -1,0 +1,1721 @@
+{
+  "contract": "tmr-overlay-media-packet/v1",
+  "source": "artifacts/browser-review-screenshots/manifest.json",
+  "sourceSurface": "browser-review",
+  "unitSystem": "Metric",
+  "itemCount": 28,
+  "items": [
+    {
+      "title": "Settings - General",
+      "description": "Shared units, update status, and deterministic preview controls.",
+      "path": "app/01-settings-general.png",
+      "source": "settings/general.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 184405,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": null,
+        "tab": "general",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "9d40d03646a85017746c414f02c0c883f09d28b2a6a8b7f11939f809b9f722c8"
+      }
+    },
+    {
+      "title": "Settings - Standings",
+      "description": "Standings overlay visibility, sizing, browser source, and preview controls.",
+      "path": "app/02-settings-standings.png",
+      "source": "settings/standings.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 175976,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "standings",
+        "tab": "standings",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=standings",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "8989c151ac80035f9e168c29243cc938c82131a13a61615d05a096848b93cd1d"
+      }
+    },
+    {
+      "title": "Settings - Relative",
+      "description": "Relative overlay visibility, row count, sizing, browser source, and preview controls.",
+      "path": "app/03-settings-relative.png",
+      "source": "settings/relative.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 174921,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "relative",
+        "tab": "relative",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=relative",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "e0f27a0f2eac782824de5ec7f76e651ab163616553231f49109862eef3ca7696"
+      }
+    },
+    {
+      "title": "Settings - Gap To Leader",
+      "description": "Gap trend overlay visibility, sizing, browser source, and preview controls.",
+      "path": "app/04-settings-gap-to-leader.png",
+      "source": "settings/gap-to-leader.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 175862,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "gap-to-leader",
+        "tab": "gap-to-leader",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=gap-to-leader",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "ca912f9ecf8bb619581e26bc321caef6016768e88262fa4d5e191763b1fde4f8"
+      }
+    },
+    {
+      "title": "Settings - Track Map",
+      "description": "Track map visibility, opacity, map-building, sector boundaries, and browser source controls.",
+      "path": "app/05-settings-track-map.png",
+      "source": "settings/track-map.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 172410,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "track-map",
+        "tab": "track-map",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=track-map",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "472d5016e6fa93e7d690a0ebf3c0576a91b1ba60fb2a84a9aa05253836860e7d"
+      }
+    },
+    {
+      "title": "Settings - Stream Chat",
+      "description": "Stream chat provider, visibility, sizing, and preview controls.",
+      "path": "app/06-settings-stream-chat.png",
+      "source": "settings/stream-chat.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 174684,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "stream-chat",
+        "tab": "stream-chat",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=stream-chat",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "427aa0343b00e0aea95330d51340221127afc4abdde8e5fca6b5e8f2c7a54034"
+      }
+    },
+    {
+      "title": "Settings - Garage Cover",
+      "description": "Garage cover image import, preview, clear, visibility, and sizing controls.",
+      "path": "app/07-settings-garage-cover.png",
+      "source": "settings/garage-cover.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 176026,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "garage-cover",
+        "tab": "garage-cover",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=garage-cover",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "58c95dcc704d3cfbed52f35be63b402dd49c9a74ef312438165a7e818aa3e792"
+      }
+    },
+    {
+      "title": "Settings - Fuel Calculator",
+      "description": "Fuel calculator visibility, sizing, browser source, and preview controls.",
+      "path": "app/08-settings-fuel-calculator.png",
+      "source": "settings/fuel-calculator.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 176601,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "fuel-calculator",
+        "tab": "fuel-calculator",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=fuel-calculator",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "07622f78669f22683b9d4f9a64641f04b757ffd23002e1529ffbc3d42deba734"
+      }
+    },
+    {
+      "title": "Settings - Inputs",
+      "description": "Input state visibility, trace/readout content, sizing, browser source, and preview controls.",
+      "path": "app/09-settings-inputs.png",
+      "source": "settings/inputs.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 174490,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "input-state",
+        "tab": "input-state",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=input-state",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "48500e74ad5f35530f048f3bbce3fc2abd42e3e044f1c6bb41df1082c102c5ef"
+      }
+    },
+    {
+      "title": "Settings - Car Radar",
+      "description": "Car radar visibility, multiclass warning, sizing, browser source, and preview controls.",
+      "path": "app/10-settings-car-radar.png",
+      "source": "settings/car-radar.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 171443,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "car-radar",
+        "tab": "car-radar",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=car-radar",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "2396d09a04f16c9201c2e0433bde5dd52771355413fbb2ae54c89ae3cb14d6cc"
+      }
+    },
+    {
+      "title": "Settings - Flags",
+      "description": "Flags overlay visibility, sizing, browser source, and preview controls.",
+      "path": "app/11-settings-flags.png",
+      "source": "settings/flags.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 170469,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "flags",
+        "tab": "flags",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=flags",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "6c1d6335900cb163dd738fb4af9d876ca91b95651775c6cf0f2a1d9d250d17ee"
+      }
+    },
+    {
+      "title": "Settings - Session / Weather",
+      "description": "Session and weather overlay visibility, content, sizing, browser source, and preview controls.",
+      "path": "app/12-settings-session-weather.png",
+      "source": "settings/session-weather.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 178279,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "session-weather",
+        "tab": "session-weather",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=session-weather",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "81ef8d1ba22f0a65a7fe3dd1665dd33248a0823589fe7103cd2efff7f4064142"
+      }
+    },
+    {
+      "title": "Settings - Pit Service",
+      "description": "Pit service overlay visibility, tire grid content, sizing, browser source, and preview controls.",
+      "path": "app/13-settings-pit-service.png",
+      "source": "settings/pit-service.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 175802,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": "pit-service",
+        "tab": "pit-service",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=pit-service",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "feb14357f63f2c1f72a354d1284abb0892bea5bb5b0d051b2c41264d6fa8eea6"
+      }
+    },
+    {
+      "title": "Settings - Diagnostics",
+      "description": "Diagnostic telemetry, local map building, support bundle, and support folder controls.",
+      "path": "app/14-settings-diagnostics.png",
+      "source": "settings/support.png",
+      "width": 1240,
+      "height": 680,
+      "bytes": 198376,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": null,
+        "tab": "support",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=support",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 49120,
+            "sha256": "33f42052d33cec092dcbc471f2407708013e7c3beda2bc952b144b672f6bf9d9"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "9150b2914e8f37b4beaa8341f784604c29ae5bb26d93cfe989b91bc682e8adc0",
+        "scenarioHash": "a756b929091e63afd4305eacac45aad4ae9e7bda4f2cbdc88b9921b417062c4d"
+      }
+    },
+    {
+      "title": "Standings",
+      "description": "Multi-class race standings with class headers, focus row, gaps, laps, and pit state.",
+      "path": "overlays/01-standings-race.png",
+      "source": "browser-overlays/standings-race.png",
+      "width": 659,
+      "height": 334,
+      "bytes": 33726,
+      "status": "scoring | race preview",
+      "bodyKind": "table",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/standings.js",
+        "overlayId": "standings",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": "cropped-overlay-element",
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/standings?preview=race",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/standings.js",
+            "exists": true,
+            "bytes": 229,
+            "sha256": "23b4ce2dd17829175b9822dd5c549b3b2b2216655e63d3fb0d690bc375654f33"
+          }
+        ],
+        "modelSummary": {
+          "status": "scoring | race preview",
+          "source": "source: preview fixture extremes",
+          "bodyKind": "table",
+          "shouldRender": null,
+          "rowCount": 6,
+          "metricCount": 0,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "8353aa2f30b14c07b2d67d88bcda47c14b16687f2a43d95426c972dfc25b4432",
+        "sourceHash": "885c34a1d64b548014c9c30fda723b6a5549acff81e1a1a033f82d7ae5fd586c",
+        "scenarioHash": "42173e441ab85bb730155cfd6d3eb0daacfadee50997f8dba3dcdfad447c6be2"
+      }
+    },
+    {
+      "title": "Relative",
+      "description": "Nearby cars around the focus driver with lap relationship coloring and compact empty-row spacing.",
+      "path": "overlays/02-relative-race.png",
+      "source": "browser-overlays/relative-race.png",
+      "width": 360,
+      "height": 373,
+      "bytes": 17884,
+      "status": "5 - 2/4 cars | race preview",
+      "bodyKind": "table",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/relative.js",
+        "overlayId": "relative",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": "cropped-overlay-element",
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/relative?preview=race",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/relative.js",
+            "exists": true,
+            "bytes": 225,
+            "sha256": "c59807349491485bce3b8b622a54bfc407b9e0ef8c434461f4bca872dfa8f8ab"
+          }
+        ],
+        "modelSummary": {
+          "status": "5 - 2/4 cars | race preview",
+          "source": "source: review fixture",
+          "bodyKind": "table",
+          "shouldRender": null,
+          "rowCount": 11,
+          "metricCount": 0,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "6ae9fd46edec98939f6732492e577f5dc60dcd33486bc8e329f1c308df1af1c2",
+        "sourceHash": "c3e2147a01b74585288f87d5492836a9395dd0323ab598c6951dcb85f4cca9a3",
+        "scenarioHash": "042c115d9d2de138f867ec4666d8aa580de559aba3aed59e93312d54fd05f8ee"
+      }
+    },
+    {
+      "title": "Fuel Calculator",
+      "description": "Race stint plan, current fuel, stop count, and measured/history-backed burn evidence.",
+      "path": "overlays/03-fuel-calculator-race.png",
+      "source": "browser-overlays/fuel-calculator-race.png",
+      "width": 503,
+      "height": 315,
+      "bytes": 36289,
+      "status": "3 stints / 2 stops",
+      "bodyKind": "metrics",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/fuel-calculator.js",
+        "overlayId": "fuel-calculator",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": "cropped-overlay-element",
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/fuel-calculator?preview=race",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/fuel-calculator.js",
+            "exists": true,
+            "bytes": 220,
+            "sha256": "7b34ab9adb52fb7563b6afa9f38931bf02246b8b1469a77cce4e734afc8a77c7"
+          }
+        ],
+        "modelSummary": {
+          "status": "3 stints / 2 stops",
+          "source": "burn 3.1 L/lap (measured green lap) | 34.2 laps/tank | history user | gap O0.18 C0.04",
+          "bodyKind": "metrics",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 7,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "77959c66457c3047aeb399fc466d544f803043fb4b3cdf03a259fa0f80951023",
+        "sourceHash": "7a145744c97f7f0423849a0de05030220a78fe8afc0ed1b9cd34eea532e28a67",
+        "scenarioHash": "8089adcd878ef3c372e230a18eec4e86414a113dd557d050988694339f48e38d"
+      }
+    },
+    {
+      "title": "Gap To Leader",
+      "description": "Live gap trend with connected history lines, intervals, and race-context summary rows.",
+      "path": "overlays/04-gap-to-leader-race.png",
+      "source": "browser-overlays/gap-to-leader-race.png",
+      "width": 654,
+      "height": 357,
+      "bytes": 20320,
+      "status": "live | race gap",
+      "bodyKind": "graph",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/gap-to-leader.js",
+        "overlayId": "gap-to-leader",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": "cropped-overlay-element",
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/gap-to-leader?preview=race",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/gap-to-leader.js",
+            "exists": true,
+            "bytes": 215,
+            "sha256": "cd363cb46dcc2423d914215dc3f27dae5f0ea729c7b0dfb59d2a4ec2dd056083"
+          }
+        ],
+        "modelSummary": {
+          "status": "live | race gap",
+          "source": "source: live gap telemetry | cars 3/3",
+          "bodyKind": "graph",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 0,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "6b8275cd33f89c4a70e9e2a46a81133d027b93da1a569d7bfb79edaf574747af",
+        "sourceHash": "4089b28ad88c0f11335aa997c5f7a67fe473e4a205b5e2e4f64c6967024f550d",
+        "scenarioHash": "52623efe9e7374b400f681e33cc7be4c0be9f7fd1eeaaf4610dec3abf6415a89"
+      }
+    },
+    {
+      "title": "Track Map",
+      "description": "IBT-derived Nurburgring 24h track shape with car markers and focus-car highlighting.",
+      "path": "overlays/05-track-map-race.png",
+      "source": "browser-overlays/track-map-race.png",
+      "width": 360,
+      "height": 360,
+      "bytes": 30117,
+      "status": "live",
+      "bodyKind": "track-map",
+      "curation": "real-derived Nurburgring 24h track-map scenario",
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/track-map.js",
+        "overlayId": "track-map",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": "configured-browser-source-canvas",
+        "cropBounds": null,
+        "configuredOverlaySize": {
+          "width": 360,
+          "height": 360
+        },
+        "comparisonMode": "browser-localhost-configured-canvas-vs-native-overlay-window",
+        "comparisonLimit": null,
+        "compositingMode": "solid-review-backdrop",
+        "captureBackdrop": {
+          "kind": "solid-color",
+          "color": "#14191d",
+          "colorRgb": "rgb(20, 25, 29)",
+          "scope": "configured-canvas-screenshot-only"
+        },
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/track-map?preview=race",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/track-map.js",
+            "exists": true,
+            "bytes": 6021,
+            "sha256": "05a9b836913d9f6ca96bfbfcba60b38dd8d408e7de279c6e8e4999acb29faadb"
+          }
+        ],
+        "modelSummary": {
+          "status": "live",
+          "source": "source: live position telemetry",
+          "bodyKind": "track-map",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 0,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 4
+        },
+        "modelHash": "3ba86d9120d3e19456efa5415ca34bd575614247c86d10dac975a77807e885e3",
+        "sourceHash": "de6f5d16e730472e01b96acfc7285dd309c12ac74b3b783ac2ab08dac5b6ba67",
+        "scenarioHash": "f95520eaad676439fc9d5f0b8d035bf2dc7708852b894339d159ec3d76e30b36"
+      }
+    },
+    {
+      "title": "Track Map Fallback",
+      "description": "Circular fallback map used when generated geometry is unavailable.",
+      "path": "overlays/06-track-map-circle-fallback.png",
+      "source": "browser-overlays/track-map-fallback.png",
+      "width": 360,
+      "height": 360,
+      "bytes": 23658,
+      "status": "live",
+      "bodyKind": "track-map",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/track-map.js",
+        "overlayId": "track-map",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": "circle-fallback",
+        "captureMode": "configured-browser-source-canvas",
+        "cropBounds": null,
+        "configuredOverlaySize": {
+          "width": 360,
+          "height": 360
+        },
+        "comparisonMode": "browser-localhost-configured-canvas-vs-native-overlay-window",
+        "comparisonLimit": null,
+        "compositingMode": "solid-review-backdrop",
+        "captureBackdrop": {
+          "kind": "solid-color",
+          "color": "#14191d",
+          "colorRgb": "rgb(20, 25, 29)",
+          "scope": "configured-canvas-screenshot-only"
+        },
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/track-map?preview=race&trackMap=fallback",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/track-map.js",
+            "exists": true,
+            "bytes": 6021,
+            "sha256": "05a9b836913d9f6ca96bfbfcba60b38dd8d408e7de279c6e8e4999acb29faadb"
+          }
+        ],
+        "modelSummary": {
+          "status": "live",
+          "source": "source: live position telemetry",
+          "bodyKind": "track-map",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 0,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 4
+        },
+        "modelHash": "05396f8d529a6d5428122e0492caa72b87802bf602ff563d0c69db4fb7ae9072",
+        "sourceHash": "de6f5d16e730472e01b96acfc7285dd309c12ac74b3b783ac2ab08dac5b6ba67",
+        "scenarioHash": "c3a8513f2a5737de28dcceeafdc7919af19c1a88c25264ab276943faf085ca01"
+      }
+    },
+    {
+      "title": "Session / Weather",
+      "description": "Session, clock, lap, track, weather, wind, temperature, and atmosphere metrics.",
+      "path": "overlays/07-session-weather-race.png",
+      "source": "browser-overlays/session-weather-race.png",
+      "width": 464,
+      "height": 496,
+      "bytes": 47979,
+      "status": "Race",
+      "bodyKind": "metrics",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/session-weather.js",
+        "overlayId": "session-weather",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": "cropped-overlay-element",
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/session-weather?preview=race",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/session-weather.js",
+            "exists": true,
+            "bytes": 250,
+            "sha256": "e236103839a5b90575fcfb511718fec38ada689251c62568fe26cda829c3cdca"
+          }
+        ],
+        "modelSummary": {
+          "status": "Race",
+          "source": null,
+          "bodyKind": "metrics",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 12,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "0c07dd899695932b919992dc23709f1437971ad4bc15c4bf8cc51c420e0ef660",
+        "sourceHash": "befaae675eb46237e684426077ecb854edd6686b7f722b9a9d6d0d173e366136",
+        "scenarioHash": "c5782d129c8fd0b58c601e9055bfd91b073532e04a2492d79d999c188381ea98"
+      }
+    },
+    {
+      "title": "Pit Service - Active",
+      "description": "Pit signal, service status, fuel/repair requests, and per-tire service grid.",
+      "path": "overlays/08-pit-service-active.png",
+      "source": "browser-overlays/pit-service-race.png",
+      "width": 530,
+      "height": 743,
+      "bytes": 63560,
+      "status": "service active",
+      "bodyKind": "metrics",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/pit-service.js",
+        "overlayId": "pit-service",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": "cropped-overlay-element",
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/pit-service?preview=race",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/pit-service.js",
+            "exists": true,
+            "bytes": 234,
+            "sha256": "90c278cf45faf6cc7ad98312aed06cf038345ad657ffa54c871dc7d79132bcb1"
+          }
+        ],
+        "modelSummary": {
+          "status": "service active",
+          "source": "source: player/team pit service telemetry",
+          "bodyKind": "metrics",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 11,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "c8bcf2abff3bd3ebc5c16519596934af9b9c667c26867e08e100c14b134572cf",
+        "sourceHash": "ae760c8ffce97ca2339db60d9ddbcea034a8b0cff2bc12952eabdadbd1e0c232",
+        "scenarioHash": "c154e6b1d8e84a14b59229cfec188448dd1ad1c349697dd10b0bc410aefb9972"
+      }
+    },
+    {
+      "title": "Pit Service - Idle",
+      "description": "Pit-ready idle state with safe placeholders for unavailable tire and service values.",
+      "path": "overlays/09-pit-service-idle.png",
+      "source": "browser-overlays/pit-service-idle.png",
+      "width": 530,
+      "height": 743,
+      "bytes": 51103,
+      "status": "pit ready",
+      "bodyKind": "metrics",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/pit-service.js",
+        "overlayId": "pit-service",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": "idle",
+        "captureMode": "cropped-overlay-element",
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/pit-service?preview=race&fixture=pit-service-idle",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/pit-service.js",
+            "exists": true,
+            "bytes": 234,
+            "sha256": "90c278cf45faf6cc7ad98312aed06cf038345ad657ffa54c871dc7d79132bcb1"
+          }
+        ],
+        "modelSummary": {
+          "status": "pit ready",
+          "source": "source: player/team pit service telemetry",
+          "bodyKind": "metrics",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 11,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "f93154a2e0281ed4d85b8cffdaf2d89ebab11114a7a4a5db95373d2eeb8d0303",
+        "sourceHash": "ae760c8ffce97ca2339db60d9ddbcea034a8b0cff2bc12952eabdadbd1e0c232",
+        "scenarioHash": "6b3dca4b6309c98048e8deea41a794507a14cb90eb8bb48d0f396a6dcd9f8c36"
+      }
+    },
+    {
+      "title": "Input / Car State",
+      "description": "Throttle, brake, steering, gear, speed, ABS, and trace graph evidence.",
+      "path": "overlays/10-input-state-race.png",
+      "source": "browser-overlays/input-state-race.png",
+      "width": 520,
+      "height": 260,
+      "bytes": 23333,
+      "status": "6 | 7900 rpm | ABS",
+      "bodyKind": "inputs",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/input-state.js",
+        "overlayId": "input-state",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": "cropped-overlay-element",
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/input-state?preview=race",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/input-state.js",
+            "exists": true,
+            "bytes": 13147,
+            "sha256": "ce0a126a8685e5ae7f4adf8d1111304dfa029561b6c5a35ecb3c0818a548cdea"
+          }
+        ],
+        "modelSummary": {
+          "status": "6 | 7900 rpm | ABS",
+          "source": null,
+          "bodyKind": "inputs",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 0,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "231bd83d13aaf86e2f6a0f1152a35803056ccbaff385b3902ade84f2e29ef593",
+        "sourceHash": "0d2793f6eaa4f0bf92b97233f9dc0edd0b405ccbde6b07a04880cc8691073612",
+        "scenarioHash": "29cfa9894d7ac64568e4b9e8129799ef5bb427556d71fbd8f9e751f84f66a3b3"
+      }
+    },
+    {
+      "title": "Car Radar",
+      "description": "Both-sides proximity warning with radar rings and side-pressure arcs.",
+      "path": "overlays/11-car-radar-both-sides.png",
+      "source": "browser-overlays/car-radar-both-sides.png",
+      "width": 300,
+      "height": 300,
+      "bytes": 15035,
+      "status": "cars both sides",
+      "bodyKind": "car-radar",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/car-radar.js",
+        "overlayId": "car-radar",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": "both-sides",
+        "captureMode": "configured-browser-source-canvas",
+        "cropBounds": null,
+        "configuredOverlaySize": {
+          "width": 300,
+          "height": 300
+        },
+        "comparisonMode": "browser-localhost-configured-canvas-vs-native-overlay-window",
+        "comparisonLimit": null,
+        "compositingMode": "solid-review-backdrop",
+        "captureBackdrop": {
+          "kind": "solid-color",
+          "color": "#14191d",
+          "colorRgb": "rgb(20, 25, 29)",
+          "scope": "configured-canvas-screenshot-only"
+        },
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/car-radar?preview=race&fixture=car-radar-both-sides",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/car-radar.js",
+            "exists": true,
+            "bytes": 7946,
+            "sha256": "813435adc6835f578cac903ecd0d00dc99cc4777003c7c5a8460629c03200cc8"
+          }
+        ],
+        "modelSummary": {
+          "status": "cars both sides",
+          "source": "source: spatial telemetry",
+          "bodyKind": "car-radar",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 0,
+          "flagCount": 0,
+          "carRadarCarCount": 3,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "f9274aaf53b143c83db7fa7800d00cd7f857352c475adb4bb115293f467f2880",
+        "sourceHash": "bfa54394696e10914bb70e4116c9b260492eaf173e315cb15cb162288c4a2338",
+        "scenarioHash": "a38c6626a37f5dd7b0d9f06124035bb7c9b2f800d5242579b27ae24be0723b96"
+      }
+    },
+    {
+      "title": "Flags",
+      "description": "Full flag palette: green, blue, yellow, caution, red, black, repair, white, and checkered.",
+      "path": "overlays/12-flags-all-kinds.png",
+      "source": "browser-overlays/flags-all-kinds.png",
+      "width": 360,
+      "height": 170,
+      "bytes": 7834,
+      "status": "green + blue + yellow + caution + red + black + repair + white + checkered",
+      "bodyKind": "flags",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/flags.js",
+        "overlayId": "flags",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": "all-kinds",
+        "captureMode": "configured-browser-source-canvas",
+        "cropBounds": null,
+        "configuredOverlaySize": {
+          "width": 360,
+          "height": 170
+        },
+        "comparisonMode": "browser-localhost-configured-canvas-vs-native-overlay-window",
+        "comparisonLimit": null,
+        "compositingMode": "solid-review-backdrop",
+        "captureBackdrop": {
+          "kind": "solid-color",
+          "color": "#14191d",
+          "colorRgb": "rgb(20, 25, 29)",
+          "scope": "configured-canvas-screenshot-only"
+        },
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/flags?preview=race&fixture=flags-all-kinds",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/flags.js",
+            "exists": true,
+            "bytes": 7654,
+            "sha256": "ff1598a23a742f565818173f6667869cf81e4db7a4fa62c7c36dca038e247e9e"
+          }
+        ],
+        "modelSummary": {
+          "status": "green + blue + yellow + caution + red + black + repair + white + checkered",
+          "source": "source: session flags telemetry",
+          "bodyKind": "flags",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 0,
+          "flagCount": 9,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "78c47dd3cf7a9286ce6aef08941a18bf9a6228570feabe70eaccc9528680538d",
+        "sourceHash": "4aacaef4e55034209b4f420a002cd7a5e61d058df6d9e00c4d2f4fec007d61da",
+        "scenarioHash": "e87a85ed355cc43df107982794a59e4918644ae0556b83468eead4277f7fce1d"
+      }
+    },
+    {
+      "title": "Stream Chat",
+      "description": "Twitch-style chat with badges, emotes, names, timestamps, and message text.",
+      "path": "overlays/13-stream-chat-twitch-rich.png",
+      "source": "browser-overlays/stream-chat-twitch-rich.png",
+      "width": 380,
+      "height": 520,
+      "bytes": 21446,
+      "status": "replay chat | twitch",
+      "bodyKind": "stream-chat",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/stream-chat.js",
+        "overlayId": "stream-chat",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": "twitch-rich",
+        "captureMode": "cropped-overlay-element",
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/stream-chat?preview=race&fixture=stream-chat-twitch-rich",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/stream-chat.js",
+            "exists": true,
+            "bytes": 8270,
+            "sha256": "7bd30a3f6cd5e63a984fb972e33851c834dbc85f5552336ae18d8d78847d2b13"
+          }
+        ],
+        "modelSummary": {
+          "status": "replay chat | twitch",
+          "source": null,
+          "bodyKind": "stream-chat",
+          "shouldRender": true,
+          "rowCount": 3,
+          "metricCount": 0,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "32a206c066034d253d2d91693f8b82af127b4b8a0be66c495446f14d25bd42a7",
+        "sourceHash": "0f263c0f78ae389f683e31d89a880b43d59ea841414d4c3758f5cc8bd3338482",
+        "scenarioHash": "a5d32d5563a48ca79b6e86e640e28f9e724026111a9e71e2537bf37aa8cb6517"
+      }
+    },
+    {
+      "title": "Garage Cover",
+      "description": "Garage-visible full-canvas cover image used for broadcast or stream masking.",
+      "path": "overlays/14-garage-cover-visible.png",
+      "source": "browser-overlays/garage-cover-garage-visible.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 1272110,
+      "status": "garage visible",
+      "bodyKind": "garage-cover",
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-overlay",
+        "renderer": "browser-overlay-assets",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+        "moduleAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/garage-cover.js",
+        "overlayId": "garage-cover",
+        "tab": null,
+        "region": null,
+        "previewMode": "race",
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": "garage-visible",
+        "captureMode": "cropped-overlay-element",
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "comparisonMode": null,
+        "comparisonLimit": null,
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-preview-fixture",
+        "urlPath": "/review/overlays/garage-cover?preview=race&fixture=garage-visible",
+        "selector": ".overlay",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+            "exists": true,
+            "bytes": 109617,
+            "sha256": "a44fdeaac2d2ae5b961b330716afe48f8ec365f9bac345522122164846a8c031"
+          },
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/garage-cover.js",
+            "exists": true,
+            "bytes": 2157,
+            "sha256": "8e56b33f0874de510cac816bd2eaf41c808a81145b1ec08b73b259310b2bd9d4"
+          }
+        ],
+        "modelSummary": {
+          "status": "garage visible",
+          "source": "source: garage telemetry/settings",
+          "bodyKind": "garage-cover",
+          "shouldRender": true,
+          "rowCount": 0,
+          "metricCount": 0,
+          "flagCount": 0,
+          "carRadarCarCount": 0,
+          "trackMapMarkerCount": 0
+        },
+        "modelHash": "0f749bf15a027fe86e6c0a46c9efc7e04eac7468ae8ac4e6648737b47c87f73e",
+        "sourceHash": "47441f33340b4586753eaa669caf710f7628afa33386cd5ec81aef4e13bfcf6a",
+        "scenarioHash": "8e3e60de91dd6a0f3e0049b61d92339561ca4b71c8213a3a62398cd9d0c7a0c0"
+      }
+    }
+  ]
+}

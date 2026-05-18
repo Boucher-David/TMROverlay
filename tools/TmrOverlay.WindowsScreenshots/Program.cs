@@ -52,6 +52,9 @@ internal static class Program
     private const int ContactCellHeight = 420;
     private const int ContactPadding = 28;
     private const int ContactHeaderHeight = 52;
+    private static Size SettingsScreenshotClientSize => new(
+        SettingsOverlayDefinition.Definition.DefaultWidth,
+        SettingsOverlayDefinition.Definition.DefaultHeight);
 
     [STAThread]
     private static int Main(string[] args)
@@ -1163,69 +1166,13 @@ internal static class Program
 
     private static DesignV2OverlayModel ReviewTrackMapModel(bool includeMarkers = true, bool includeGeneratedMap = true)
     {
-        TrackMapDocument? document = includeGeneratedMap
-            ? new TrackMapDocument(
-            TrackMapDocument.CurrentSchemaVersion,
-            TrackMapDocument.CurrentGenerationVersion,
-            DateTimeOffset.Parse("2026-05-17T12:00:00Z"),
-            new TrackMapIdentity(
-                "review-gesamtstrecke-24h",
-                TrackId: 999001,
-                TrackName: "Gesamtstrecke 24h",
-                TrackDisplayName: "Gesamtstrecke 24h",
-                TrackConfigName: "24h",
-                TrackLengthKm: 25.38d,
-                TrackVersion: null),
-            new TrackMapGeometry(
-            [
-                new TrackMapPoint(0d, 0d, 48d),
-                new TrackMapPoint(0.16d, 65d, 92d),
-                new TrackMapPoint(0.32d, 132d, 82d),
-                new TrackMapPoint(0.48d, 170d, 12d),
-                new TrackMapPoint(0.64d, 112d, -48d),
-                new TrackMapPoint(0.82d, 28d, -36d),
-                new TrackMapPoint(1d, 0d, 48d)
-            ],
-            Closed: true),
-            new TrackMapGeometry(
-            [
-                new TrackMapPoint(0.02d, 6d, 42d),
-                new TrackMapPoint(0.08d, 42d, 24d),
-                new TrackMapPoint(0.14d, 88d, 30d)
-            ],
-            Closed: false),
-            new TrackMapQuality(
-                TrackMapConfidence.High,
-                CompleteLapCount: 6,
-                SelectedPointCount: 7,
-                BinCount: 7,
-                MissingBinCount: 0,
-                MissingBinPercent: 0d,
-                ClosureMeters: 0d,
-                LengthDeltaPercent: 0d,
-                RepeatabilityMedianMeters: 0d,
-                RepeatabilityP95Meters: 0d,
-                PitLaneSampleCount: 3,
-                PitLanePassCount: 1,
-                PitLaneRepeatabilityP95Meters: 0d,
-                Reasons: []),
-            new TrackMapProvenance(
-                SourceKind: "review-fixture",
-                SourcePath: null,
-                SourceBytes: null,
-                SourceRecordCount: null,
-                CaptureId: "review"),
-            Sectors:
-            [
-                new TrackMapSector(0, 0d, 0.32d),
-                new TrackMapSector(1, 0.32d, 0.68d),
-                new TrackMapSector(2, 0.68d, 1d)
-            ])
-            : null;
+        TrackMapDocument? document = includeGeneratedMap ? ReviewTrackMapDocument() : null;
         var viewModel = new TrackMapOverlayViewModel(
             Title: "Track Map",
             Status: "live",
-            Source: "source: live position telemetry",
+            Source: includeGeneratedMap
+                ? "source: IBT-derived Nurburgring 24h track map | live position telemetry"
+                : "source: live position telemetry",
             IsAvailable: true,
             Markers: includeMarkers
                 ?
@@ -1249,12 +1196,27 @@ internal static class Program
         return new DesignV2OverlayModel(
             "Track Map",
             "live",
-            "source: live position telemetry",
+            includeGeneratedMap
+                ? "source: IBT-derived Nurburgring 24h track map | live position telemetry"
+                : "source: live position telemetry",
             DesignV2Evidence.Live,
             new DesignV2TrackMapBody(TrackMapRenderModel.FromViewModel(viewModel)),
             HeaderText: "live | 06:37:08",
             ShowFooter: false,
             ShowHeader: false);
+    }
+
+    private static TrackMapDocument ReviewTrackMapDocument()
+    {
+        var path = Path.Combine(
+            RepoRoot(),
+            "fixtures",
+            "screenshot-scenarios",
+            "track-map-nurburgring-24h.json");
+        return JsonSerializer.Deserialize<TrackMapDocument>(
+            File.ReadAllText(path),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException($"Could not load review track map document: {path}");
     }
 
     private static DesignV2OverlayModel ReviewSessionWeatherModel(OverlaySessionKind previewMode)
@@ -1898,9 +1860,13 @@ internal static class Program
             .Select(index =>
             {
                 var t = index / 10d;
+                var throttle = Math.Clamp(0.58d + Math.Sin(t) * 0.32d, 0d, 1d);
+                var brake = index is >= 52 and <= 138
+                    ? Math.Clamp(throttle + Math.Sin(index / 4d) * 0.018d, 0d, 1d)
+                    : Math.Clamp(0.56d + Math.Sin(t * 0.96d + 0.6d) * 0.32d, 0d, 1d);
                 return new InputStateTracePoint(
-                    Throttle: Math.Clamp(0.58d + Math.Sin(t) * 0.32d, 0d, 1d),
-                    Brake: Math.Clamp(0.56d + Math.Sin(t * 0.96d + 0.6d) * 0.32d, 0d, 1d),
+                    Throttle: throttle,
+                    Brake: brake,
                     Clutch: Math.Clamp(0.08d + Math.Sin(t * 0.35d) * 0.06d, 0d, 1d),
                     BrakeAbsActive: index is > 112 and < 132);
             })
@@ -2075,6 +2041,19 @@ internal static class Program
         Action<Form>? beforeCapture = null)
     {
         using var form = createForm();
+        if (IsWindowsSettingsSurface(metadata))
+        {
+            beforeCapture?.Invoke(form);
+            return RenderSettingsForm(
+                outputRoot,
+                fileStem,
+                label,
+                form,
+                postProcess,
+                relativeDirectory,
+                metadata!);
+        }
+
         PrepareForm(form, refreshPasses);
         beforeCapture?.Invoke(form);
 
@@ -2114,6 +2093,18 @@ internal static class Program
         ScreenshotMetadata? metadata = null)
     {
         using var form = createForm();
+        if (IsWindowsSettingsSurface(metadata))
+        {
+            return RenderSettingsFormCrop(
+                outputRoot,
+                relativeDirectory,
+                fileStem,
+                label,
+                form,
+                cropBounds,
+                metadata!);
+        }
+
         PrepareForm(form, refreshPasses);
         using var full = new Bitmap(form.ClientSize.Width, form.ClientSize.Height, PixelFormat.Format32bppArgb);
         form.DrawToBitmap(full, new Rectangle(Point.Empty, form.ClientSize));
@@ -2135,6 +2126,109 @@ internal static class Program
         var path = Path.Combine(directory, $"{fileStem}.png");
         bitmap.Save(path, ImageFormat.Png);
         return new RenderedScreenshot(label, path, bitmap.Width, bitmap.Height, CompleteMetadata(metadata, form, relativeDirectory, boundedCrop));
+    }
+
+    private static RenderedScreenshot RenderSettingsForm(
+        string outputRoot,
+        string fileStem,
+        string label,
+        Form form,
+        Action<Bitmap>? postProcess,
+        string relativeDirectory,
+        ScreenshotMetadata metadata)
+    {
+        var targetSize = SettingsScreenshotClientSize;
+        using var renderRoot = CreateSettingsRenderRoot(form, targetSize);
+        PrepareSettingsRenderRoot(renderRoot);
+
+        using var bitmap = new Bitmap(targetSize.Width, targetSize.Height, PixelFormat.Format32bppArgb);
+        renderRoot.DrawToBitmap(bitmap, new Rectangle(Point.Empty, targetSize));
+        postProcess?.Invoke(bitmap);
+        var completedMetadata = CompleteSettingsMetadata(
+            metadata,
+            renderRoot,
+            new Rectangle(Point.Empty, targetSize));
+
+        var directory = Path.Combine(outputRoot, relativeDirectory);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, $"{fileStem}.png");
+        bitmap.Save(path, ImageFormat.Png);
+        return new RenderedScreenshot(label, path, bitmap.Width, bitmap.Height, completedMetadata);
+    }
+
+    private static RenderedScreenshot RenderSettingsFormCrop(
+        string outputRoot,
+        string relativeDirectory,
+        string fileStem,
+        string label,
+        Form form,
+        Rectangle cropBounds,
+        ScreenshotMetadata metadata)
+    {
+        var targetSize = SettingsScreenshotClientSize;
+        using var renderRoot = CreateSettingsRenderRoot(form, targetSize);
+        PrepareSettingsRenderRoot(renderRoot);
+        using var full = new Bitmap(targetSize.Width, targetSize.Height, PixelFormat.Format32bppArgb);
+        renderRoot.DrawToBitmap(full, new Rectangle(Point.Empty, targetSize));
+
+        var fullBounds = new Rectangle(Point.Empty, targetSize);
+        var boundedCrop = Rectangle.Intersect(fullBounds, cropBounds);
+        if (boundedCrop.Width <= 0 || boundedCrop.Height <= 0)
+        {
+            throw new InvalidOperationException($"{label} crop is outside the rendered settings surface bounds.");
+        }
+
+        using var bitmap = new Bitmap(boundedCrop.Width, boundedCrop.Height, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.DrawImage(full, new Rectangle(Point.Empty, boundedCrop.Size), boundedCrop, GraphicsUnit.Pixel);
+        }
+
+        var directory = Path.Combine(outputRoot, relativeDirectory);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, $"{fileStem}.png");
+        bitmap.Save(path, ImageFormat.Png);
+        return new RenderedScreenshot(
+            label,
+            path,
+            bitmap.Width,
+            bitmap.Height,
+            CompleteSettingsMetadata(metadata, renderRoot, boundedCrop));
+    }
+
+    private static Panel CreateSettingsRenderRoot(Form form, Size targetSize)
+    {
+        var surface = Descendants(form).OfType<DesignV2SettingsSurface>().FirstOrDefault()
+            ?? throw new InvalidOperationException("Settings screenshot capture could not find the Design V2 settings surface.");
+        form.Controls.Remove(surface);
+        surface.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        surface.Location = Point.Empty;
+        surface.Size = targetSize;
+        surface.Visible = true;
+        surface.RefreshRuntimeState();
+
+        var root = new Panel
+        {
+            BackColor = OverlayTheme.Colors.SettingsBackground,
+            Location = Point.Empty,
+            Size = targetSize
+        };
+        root.Controls.Add(surface);
+        return root;
+    }
+
+    private static void PrepareSettingsRenderRoot(Control root)
+    {
+        root.CreateControl();
+        CreateControlHandles(root);
+        root.PerformLayout();
+        foreach (var surface in Descendants(root).OfType<DesignV2SettingsSurface>())
+        {
+            surface.RefreshRuntimeState();
+            surface.PerformLayout();
+        }
+
+        Application.DoEvents();
     }
 
     private static void PrepareForm(Form form, int refreshPasses)
@@ -2412,6 +2506,26 @@ internal static class Program
             ContentBounds = ScreenshotContentBounds(completed, form, captureBounds),
             LayoutEvidence = ScreenshotLayoutEvidence(completed, form, captureBounds),
             UiEvidence = ScreenshotUiEvidence(completed, form, captureBounds),
+            ScenarioEvidence = ScreenshotScenarioEvidence(completed)
+        };
+    }
+
+    private static ScreenshotMetadata CompleteSettingsMetadata(
+        ScreenshotMetadata metadata,
+        Control renderRoot,
+        Rectangle? captureBounds)
+    {
+        var completed = metadata with
+        {
+            Renderer = metadata.Renderer ?? "SettingsOverlayForm/DesignV2SettingsSurface"
+        };
+        var capture = CaptureBoundsFor(renderRoot, captureBounds);
+        return completed with
+        {
+            TextSample = ScreenshotTextSample(completed, renderRoot),
+            ContentBounds = RectEvidence(new Rectangle(0, 0, capture.Width, capture.Height), includeAspectRatio: true),
+            LayoutEvidence = SettingsLayoutEvidence(completed, renderRoot, captureBounds),
+            UiEvidence = SettingsUiEvidence(completed, renderRoot, captureBounds),
             ScenarioEvidence = ScreenshotScenarioEvidence(completed)
         };
     }
@@ -2796,7 +2910,7 @@ internal static class Program
             : 0;
     }
 
-    private static string? ScreenshotTextSample(ScreenshotMetadata metadata, Form form)
+    private static string? ScreenshotTextSample(ScreenshotMetadata metadata, Control root)
     {
         if (string.Equals(metadata.Surface, "windows-native-overlay", StringComparison.Ordinal))
         {
@@ -2810,7 +2924,7 @@ internal static class Program
         AddText(parts, metadata.Region);
         AddText(parts, metadata.PreviewMode);
         AddText(parts, metadata.Fixture);
-        foreach (var control in Descendants(form).Take(80))
+        foreach (var control in Descendants(root).Take(80))
         {
             AddText(parts, control.Text);
             AddText(parts, ReadMemberValue(control, "Selected")?.ToString());
@@ -2852,16 +2966,17 @@ internal static class Program
             : null;
     }
 
-    private static bool IsWindowsSettingsSurface(ScreenshotMetadata metadata)
+    private static bool IsWindowsSettingsSurface(ScreenshotMetadata? metadata)
     {
-        return string.Equals(metadata.Surface, "windows-settings", StringComparison.Ordinal)
-            || string.Equals(metadata.Surface, "windows-settings-component", StringComparison.Ordinal);
+        return metadata is not null
+            && (string.Equals(metadata.Surface, "windows-settings", StringComparison.Ordinal)
+                || string.Equals(metadata.Surface, "windows-settings-component", StringComparison.Ordinal));
     }
 
-    private static object SettingsLayoutEvidence(ScreenshotMetadata metadata, Form form, Rectangle? captureBounds)
+    private static object SettingsLayoutEvidence(ScreenshotMetadata metadata, Control root, Rectangle? captureBounds)
     {
-        var capture = CaptureBoundsFor(form, captureBounds);
-        var elements = SettingsCapturedElements(metadata, form, capture);
+        var capture = CaptureBoundsFor(root, captureBounds);
+        var elements = SettingsCapturedElements(metadata, root, capture);
         return new
         {
             contract = "windows-settings-layout/v1",
@@ -2875,10 +2990,10 @@ internal static class Program
         };
     }
 
-    private static object SettingsUiEvidence(ScreenshotMetadata metadata, Form form, Rectangle? captureBounds)
+    private static object SettingsUiEvidence(ScreenshotMetadata metadata, Control root, Rectangle? captureBounds)
     {
-        var capture = CaptureBoundsFor(form, captureBounds);
-        var elements = SettingsCapturedElements(metadata, form, capture);
+        var capture = CaptureBoundsFor(root, captureBounds);
+        var elements = SettingsCapturedElements(metadata, root, capture);
         return new
         {
             contract = "settings-ui-evidence/v1",
@@ -2903,11 +3018,11 @@ internal static class Program
         };
     }
 
-    private static List<Dictionary<string, object?>> SettingsCapturedElements(ScreenshotMetadata metadata, Form form, Rectangle capture)
+    private static List<Dictionary<string, object?>> SettingsCapturedElements(ScreenshotMetadata metadata, Control root, Rectangle capture)
     {
         var elements = new List<Dictionary<string, object?>>();
-        var surface = Descendants(form).OfType<DesignV2SettingsSurface>().FirstOrDefault();
-        var offset = surface is null ? Point.Empty : ControlOffsetFrom(form, surface);
+        var surface = Descendants(root).OfType<DesignV2SettingsSurface>().FirstOrDefault();
+        var offset = surface is null ? Point.Empty : ControlOffsetFrom(root, surface);
 
         AddCapturedElement(elements, "settings-shell", 0, "Settings shell", Offset(new Rectangle(44, 36, 1152, 608), offset), capture, null, ColorToCss(OverlayTheme.Colors.SettingsBackground));
         AddCapturedElement(elements, "settings-titlebar", 0, "Tech Mates Racing Overlay", Offset(new Rectangle(44, 36, 1152, 58), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextPrimary), ColorToCss(OverlayTheme.DesignV2.TitleBar));
@@ -3135,9 +3250,9 @@ internal static class Program
         };
     }
 
-    private static Rectangle CaptureBoundsFor(Form form, Rectangle? captureBounds)
+    private static Rectangle CaptureBoundsFor(Control root, Rectangle? captureBounds)
     {
-        return captureBounds ?? new Rectangle(Point.Empty, form.ClientSize);
+        return captureBounds ?? new Rectangle(Point.Empty, root.ClientSize);
     }
 
     private static void AddCapturedElement(

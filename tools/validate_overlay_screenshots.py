@@ -126,24 +126,20 @@ WINDOWS_GENERATOR_SIZE_SOURCES = {
 }
 
 WINDOWS_MINIMUM_PNGS = {
-    # GitHub-hosted Windows runners can clamp wide top-level WinForms clients
-    # to the available desktop width even when the app's production client
-    # target is wider than the previous 1080x600 shell. Keep the height exact enough for layout review while
-    # accepting the runner-observed width.
-    "states/settings-general.png": (1000, 680),
-    "states/settings-standings.png": (1000, 680),
-    "states/settings-relative.png": (1000, 680),
-    "states/settings-gap-to-leader.png": (1000, 680),
-    "states/settings-track-map.png": (1000, 680),
-    "states/settings-stream-chat.png": (1000, 680),
-    "states/settings-garage-cover.png": (1000, 680),
-    "states/settings-fuel-calculator.png": (1000, 680),
-    "states/settings-inputs.png": (1000, 680),
-    "states/settings-car-radar.png": (1000, 680),
-    "states/settings-flags.png": (1000, 680),
-    "states/settings-session-weather.png": (1000, 680),
-    "states/settings-pit-service.png": (1000, 680),
-    "states/settings-support.png": (1000, 680),
+    "states/settings-general.png": (1240, 680),
+    "states/settings-standings.png": (1240, 680),
+    "states/settings-relative.png": (1240, 680),
+    "states/settings-gap-to-leader.png": (1240, 680),
+    "states/settings-track-map.png": (1240, 680),
+    "states/settings-stream-chat.png": (1240, 680),
+    "states/settings-garage-cover.png": (1240, 680),
+    "states/settings-fuel-calculator.png": (1240, 680),
+    "states/settings-inputs.png": (1240, 680),
+    "states/settings-car-radar.png": (1240, 680),
+    "states/settings-flags.png": (1240, 680),
+    "states/settings-session-weather.png": (1240, 680),
+    "states/settings-pit-service.png": (1240, 680),
+    "states/settings-support.png": (1240, 680),
     "components/settings/sidebar-tabs.png": (190, 506),
     "components/settings/region-tabs.png": (420, 52),
     "components/settings/unit-choice.png": (392, 132),
@@ -671,7 +667,7 @@ def validate_windows_ci(root: Path, min_unique_bytes: int, failures: list[str]) 
             expected_size=None,
             min_unique_bytes=WINDOWS_MIN_UNIQUE_BYTES.get(relative_path, min_unique_bytes),
             failures=failures,
-            minimum_size=(1000, 680),
+            minimum_size=(1240, 680),
         )
 
     for overlay_id, expected_size in WINDOWS_NATIVE_OVERLAY_SIZES.items():
@@ -3570,10 +3566,26 @@ def validate_gap_to_leader_contract(path: str, values: dict[str, object], failur
     series = evidence_list(geometry, "series")
     if len(series) < 2:
         failures.append(f"{path}: gap graph expected at least two rendered series")
-    if not any(item.get("isClassLeader") is True for item in series):
+    class_leader_series = [item for item in series if isinstance(item, dict) and item.get("isClassLeader") is True]
+    reference_series = [item for item in series if isinstance(item, dict) and item.get("isReference") is True]
+    if not class_leader_series:
         failures.append(f"{path}: gap graph missing class leader series")
-    if sum(1 for item in series if item.get("isReference") is True) != 1:
+    if len(reference_series) != 1:
         failures.append(f"{path}: gap graph expected exactly one reference series")
+    for label, candidates in (("class leader", class_leader_series[:1]), ("reference", reference_series)):
+        for item in candidates:
+            point_count = get_manifest_value(item, "pointCount")
+            if not isinstance(point_count, int) or point_count < 6:
+                failures.append(f"{path}: gap graph {label} series expected at least 6 source points, got {point_count!r}")
+            rendered_points = graph_series_rendered_points(item)
+            if len(rendered_points) < 6:
+                failures.append(f"{path}: gap graph {label} series expected at least 6 rendered points, got {len(rendered_points)}")
+            x_span = graph_series_x_span(rendered_points)
+            if x_span is not None and x_span < 120:
+                failures.append(f"{path}: gap graph {label} series expected rendered x-span >= 120px, got {x_span:g}")
+            starts_segment_count = sum(1 for point in evidence_list(item, "points") if isinstance(point, dict) and point.get("startsSegment") is True)
+            if len(rendered_points) >= 6 and starts_segment_count >= len(rendered_points):
+                failures.append(f"{path}: gap graph {label} series marks every point as a new segment; line continuity is unproven")
     labels = [text_value(row, "text") for row in evidence_list(geometry, "metricRows")]
     for label in ("5L", "10L", "Pit", "PLap", "Stint", "Tire", "Last", "Status"):
         if label not in labels:
@@ -3601,6 +3613,13 @@ def validate_track_map_contract(path: str, values: dict[str, object], failures: 
             failures.append(f"{path}: generated track-map unexpectedly contains circle fallback primitives {primitive_kinds!r}")
         if primitive_kinds.count("path") < 4:
             failures.append(f"{path}: generated track-map expected multiple path primitives, got {primitive_kinds!r}")
+        path_point_counts = [
+            len(evidence_list(item, "points"))
+            for item in evidence_list(track_map, "primitives")
+            if isinstance(item, dict) and text_value(item, "kind") == "path"
+        ]
+        if not path_point_counts or max(path_point_counts) < 80:
+            failures.append(f"{path}: generated track-map expected a detailed racing-line path, got point counts {path_point_counts!r}")
     else:
         if primitive_kinds.count("ellipse") < 3 or "arc" not in primitive_kinds:
             failures.append(f"{path}: circle track-map expected ellipse/arc fallback primitives, got {primitive_kinds!r}")
@@ -3941,6 +3960,25 @@ def require_trace_overlap(path: str, first: dict[str, object], second: dict[str,
         failures.append(f"{path}: input-state {label} expected at least 120 comparable trace points, got {horizontal_pairs}")
     if close_points < 24:
         failures.append(f"{path}: input-state {label} expected at least 24 visually overlapping trace points, got {close_points}")
+
+
+def graph_series_rendered_points(series: dict[str, object]) -> list[dict[str, object]]:
+    rendered: list[dict[str, object]] = []
+    for item in evidence_list(series, "points"):
+        if not isinstance(item, dict):
+            continue
+        point = item.get("point")
+        if isinstance(point, dict):
+            rendered.append(point)
+    return rendered
+
+
+def graph_series_x_span(points: list[dict[str, object]]) -> float | None:
+    xs = [rect_number(point, "x") for point in points]
+    finite_xs = [x for x in xs if x is not None]
+    if not finite_xs:
+        return None
+    return max(finite_xs) - min(finite_xs)
 
 
 def validate_grid_row_geometry(path: str, label: str, row: dict[str, object], failures: list[str]) -> None:

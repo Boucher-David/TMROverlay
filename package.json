@@ -16,6 +16,7 @@
     "screenshots:browser-review": "node tools/browser-review/render-screenshots.mjs --surface browser-review",
     "screenshots:localhost": "node tools/browser-review/render-screenshots.mjs --surface localhost",
     "screenshots:all": "node tools/browser-review/render-screenshots.mjs --surface all",
+    "media:packet": "node tools/browser-review/build-media-packet.mjs",
     "validate:browser:race-start": "node tools/browser-review/validate-race-start-replay.mjs"
   },
   "devDependencies": {

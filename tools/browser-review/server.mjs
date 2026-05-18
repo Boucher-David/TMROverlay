@@ -18,6 +18,9 @@ import {
 const port = Number.parseInt(process.env.TMR_BROWSER_REVIEW_PORT || '5177', 10);
 const initialReviewUnitSystem = normalizeUnitSystem(process.env.TMR_REVIEW_UNIT_SYSTEM || process.env.TMR_UNIT_SYSTEM || 'Metric');
 const reviewAppState = createReviewAppState();
+const reviewNurburgringTrackMap = JSON.parse(readFileSync(
+  resolve(repoRoot, 'fixtures/screenshot-scenarios/track-map-nurburgring-24h.json'),
+  'utf8'));
 const clients = new Set();
 const productionOverlayModelIds = new Set(browserOverlayPages()
   .filter((page) => page.modelRoute)
@@ -924,9 +927,14 @@ function reviewTimingRow(carIdx, overallPosition, classPosition, lapDistPct, car
 function reviewInputTrace() {
   return Array.from({ length: 180 }, (_, index) => {
     const t = index / 10;
+    const overlapWindow = index >= 52 && index <= 138;
+    const throttle = Math.max(0, Math.min(1, 0.58 + Math.sin(t) * 0.32));
+    const brake = overlapWindow
+      ? Math.max(0, Math.min(1, throttle + Math.sin(index / 4) * 0.018))
+      : Math.max(0, Math.min(1, 0.56 + Math.sin(t * 0.96 + 0.6) * 0.32));
     return {
-      throttle: Math.max(0, Math.min(1, 0.58 + Math.sin(t) * 0.32)),
-      brake: Math.max(0, Math.min(1, 0.56 + Math.sin(t * 0.96 + 0.6) * 0.32)),
+      throttle,
+      brake,
       clutch: Math.max(0, Math.min(1, 0.08 + Math.sin(t * 0.35) * 0.06)),
       brakeAbsActive: index > 112 && index < 132
     };
@@ -1392,7 +1400,7 @@ function reviewGapPoints(overlayState) {
     return [];
   }
 
-  return [0, 0, 243.63125];
+  return [249.8, 247.2, 245.4, 243.6, 241.9, 239.7];
 }
 
 function reviewEmptyGapGraph() {
@@ -1423,31 +1431,41 @@ function reviewEmptyGapGraph() {
 }
 
 function reviewGapGraph() {
-  const timestampUtc = new Date('2026-05-17T12:00:00.000Z').toISOString();
-  const axisSeconds = 62571.436719;
-  const referenceGap = 243.63124999999854;
-  const point = (carIdx, gapSeconds, isReference, isClassLeader, classPosition) => ({
-    timestampUtc,
-    axisSeconds,
+  const startSeconds = 62571.436719;
+  const endSeconds = startSeconds + 420;
+  const timestampStart = Date.parse('2026-05-17T12:00:00.000Z');
+  const trend = [
+    { offset: 0, p1: 0, altP1: 5.4, focus: 249.8 },
+    { offset: 60, p1: 0.4, altP1: 4.8, focus: 247.2 },
+    { offset: 120, p1: 0.1, altP1: 4.3, focus: 245.4 },
+    { offset: 180, p1: 0.6, altP1: 3.7, focus: 243.6 },
+    { offset: 240, p1: 0.3, altP1: 3.2, focus: 241.9 },
+    { offset: 300, p1: 0.2, altP1: 2.6, focus: 240.5 },
+    { offset: 360, p1: 0.5, altP1: 2.1, focus: 239.7 },
+    { offset: 420, p1: 0.0, altP1: 1.8, focus: 238.9 }
+  ];
+  const point = (sample, carIdx, gapSeconds, isReference, isClassLeader, classPosition, index) => ({
+    timestampUtc: new Date(timestampStart + sample.offset * 1000).toISOString(),
+    axisSeconds: startSeconds + sample.offset,
     gapSeconds,
     carIdx,
     isReference,
     isClassLeader,
     classPosition,
-    startsSegment: true
+    startsSegment: index === 0
   });
   const series = [
-    reviewGapSeries(8, false, true, 1, [point(8, 0, false, true, 1)]),
-    reviewGapSeries(17, false, true, 1, [point(17, 0, false, true, 1)]),
-    reviewGapSeries(42, true, false, 24, [point(42, referenceGap, true, false, 24)])
+    reviewGapSeries(8, false, true, 1, trend.map((sample, index) => point(sample, 8, sample.p1, false, true, 1, index))),
+    reviewGapSeries(17, false, true, 1, trend.map((sample, index) => point(sample, 17, sample.altP1, false, true, 1, index))),
+    reviewGapSeries(42, true, false, 24, trend.map((sample, index) => point(sample, 42, sample.focus, true, false, 24, index)))
   ];
   return {
     series,
     weather: [],
     leaderChanges: [],
     driverChanges: [],
-    startSeconds: axisSeconds,
-    endSeconds: 63360.136719,
+    startSeconds,
+    endSeconds,
     maxGapSeconds: 500,
     lapReferenceSeconds: 525.8,
     selectedSeriesCount: series.length,
@@ -2099,28 +2117,7 @@ function clampInteger(value, defaultValue, minimum, maximum) {
 }
 
 function reviewTrackMap() {
-  return {
-    racingLine: {
-      closed: true,
-      points: [
-        { x: 0, y: 48, lapDistPct: 0 },
-        { x: 65, y: 92, lapDistPct: 0.16 },
-        { x: 132, y: 82, lapDistPct: 0.32 },
-        { x: 170, y: 12, lapDistPct: 0.48 },
-        { x: 112, y: -48, lapDistPct: 0.64 },
-        { x: 28, y: -36, lapDistPct: 0.82 },
-        { x: 0, y: 48, lapDistPct: 1 }
-      ]
-    },
-    pitLane: {
-      closed: false,
-      points: [
-        { x: 6, y: 42, lapDistPct: 0.02 },
-        { x: 42, y: 24, lapDistPct: 0.08 },
-        { x: 88, y: 30, lapDistPct: 0.14 }
-      ]
-    }
-  };
+  return reviewNurburgringTrackMap;
 }
 
 function withLiveReload(html) {

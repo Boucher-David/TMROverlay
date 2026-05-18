@@ -2897,7 +2897,8 @@ internal static class Program
             tabs = elements.Where(element => ElementRole(element) == "settings-sidebar-tab").ToArray(),
             regions = elements.Where(element => ElementRole(element) == "settings-region-segment").ToArray(),
             panels = elements.Where(element => ElementRole(element) == "settings-panel").ToArray(),
-            controls = elements.Where(element => ElementRole(element) is "settings-control" or "settings-button" or "settings-choice" or "settings-toggle" or "settings-check" or "settings-stepper" or "settings-slider" or "settings-textbox").ToArray(),
+            controls = elements.Where(element => ElementRole(element) is "settings-control" or "settings-button" or "settings-choice" or "settings-toggle" or "settings-check" or "settings-stepper" or "settings-slider" or "settings-textbox" or "settings-field-label" or "settings-field-value").ToArray(),
+            textFields = elements.Where(element => ElementRole(element) is "settings-field-label" or "settings-field-value").ToArray(),
             preview = (object?)null
         };
     }
@@ -2972,6 +2973,8 @@ internal static class Program
             AddCapturedElement(elements, "settings-panel", panelIndex++, panel.Label, Offset(panel.Bounds, offset), capture, ColorToCss(OverlayTheme.DesignV2.TextPrimary), ColorToCss(OverlayTheme.DesignV2.SurfaceRaised));
         }
 
+        AddSettingsDrawnTextElements(elements, metadata, capture, offset);
+
         if (surface is not null)
         {
             var controlIndex = 0;
@@ -2991,6 +2994,110 @@ internal static class Program
         }
 
         return elements;
+    }
+
+    private static void AddSettingsDrawnTextElements(
+        List<Dictionary<string, object?>> elements,
+        ScreenshotMetadata metadata,
+        Rectangle capture,
+        Point offset)
+    {
+        var index = 0;
+        if (string.Equals(metadata.Tab, "general", StringComparison.OrdinalIgnoreCase))
+        {
+            AddSettingsDrawnTextElement(
+                elements,
+                ref index,
+                "settings-field-label",
+                "Status",
+                new Rectangle(748, 281, 70, 18),
+                capture,
+                offset,
+                OverlayTheme.DesignV2.TextSecondary,
+                13f,
+                FontStyle.Regular,
+                "general.updates.status.label",
+                "label");
+            AddSettingsDrawnTextElement(
+                elements,
+                ref index,
+                "settings-field-value",
+                "Disabled.",
+                new Rectangle(826, 281, 290, 18),
+                capture,
+                offset,
+                OverlayTheme.DesignV2.TextMuted,
+                10f,
+                FontStyle.Bold,
+                "general.updates.status.value",
+                "value");
+            return;
+        }
+
+        if (string.Equals(metadata.Tab, "support", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(metadata.Tab, "error-logging", StringComparison.OrdinalIgnoreCase))
+        {
+            AddSettingsDrawnTextElement(
+                elements,
+                ref index,
+                "settings-field-label",
+                "Latest bundle",
+                new Rectangle(328, 514, 110, 18),
+                capture,
+                offset,
+                OverlayTheme.DesignV2.TextSecondary,
+                13f,
+                FontStyle.Regular,
+                "support.bundle.latest.label",
+                "label");
+            AddSettingsDrawnTextElement(
+                elements,
+                ref index,
+                "settings-field-value",
+                "No bundle yet",
+                new Rectangle(454, 513, 220, 18),
+                capture,
+                offset,
+                OverlayTheme.DesignV2.TextPrimary,
+                12f,
+                FontStyle.Bold,
+                "support.bundle.latest.value",
+                "value",
+                monospaced: true);
+        }
+    }
+
+    private static void AddSettingsDrawnTextElement(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        string role,
+        string text,
+        Rectangle bounds,
+        Rectangle capture,
+        Point offset,
+        Color foreground,
+        float fontSize,
+        FontStyle fontStyle,
+        string evidenceKey,
+        string evidenceRole,
+        bool monospaced = false)
+    {
+        AddCapturedElement(
+            elements,
+            role,
+            index++,
+            text,
+            Offset(bounds, offset),
+            capture,
+            ColorToCss(foreground),
+            null,
+            new Dictionary<string, object?>
+            {
+                ["controlKind"] = "drawn-text",
+                ["evidenceKey"] = evidenceKey,
+                ["evidenceRole"] = evidenceRole
+            },
+            TextMetricsEvidence(text, bounds, fontSize, fontStyle, monospaced));
     }
 
     private static object GenericFormLayoutEvidence(ScreenshotMetadata metadata, Form form, Rectangle? captureBounds)
@@ -3042,7 +3149,8 @@ internal static class Program
         Rectangle capture,
         string? foreground,
         string? background,
-        Dictionary<string, object?>? attributes = null)
+        Dictionary<string, object?>? attributes = null,
+        object? textMetrics = null)
     {
         var visible = Rectangle.Intersect(sourceBounds, capture);
         if (visible.Width <= 0 || visible.Height <= 0)
@@ -3059,6 +3167,7 @@ internal static class Program
             ["text"] = string.IsNullOrWhiteSpace(text) ? null : text,
             ["sourceBounds"] = RectEvidence(sourceBounds),
             ["bounds"] = RectEvidence(new Rectangle(visible.X - capture.X, visible.Y - capture.Y, visible.Width, visible.Height)),
+            ["textMetrics"] = textMetrics,
             ["styles"] = new Dictionary<string, object?>
             {
                 ["color"] = foreground,
@@ -3071,6 +3180,46 @@ internal static class Program
             },
             ["attributes"] = attributes
         });
+    }
+
+    private static object? TextMetricsEvidence(
+        string? text,
+        Rectangle bounds,
+        float size,
+        FontStyle style,
+        bool monospaced = false)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        using var font = monospaced
+            ? new Font(FontFamily.GenericMonospace, size, style, GraphicsUnit.Pixel)
+            : new Font(
+                string.IsNullOrWhiteSpace(ScreenshotFontFamily) ? "Segoe UI" : ScreenshotFontFamily,
+                size,
+                style,
+                GraphicsUnit.Pixel);
+        var measured = TextRenderer.MeasureText(
+            text,
+            font,
+            new Size(10_000, 10_000),
+            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+        const double tolerance = 2d;
+        return new
+        {
+            textLength = text.Length,
+            availableWidth = bounds.Width,
+            availableHeight = bounds.Height,
+            measuredWidth = measured.Width,
+            measuredHeight = measured.Height,
+            fitsWidth = measured.Width <= bounds.Width + tolerance,
+            fitsHeight = measured.Height <= bounds.Height + tolerance,
+            overflowX = (string?)null,
+            overflowY = (string?)null,
+            whiteSpace = "nowrap"
+        };
     }
 
     private static string? ElementRole(Dictionary<string, object?> element)
@@ -3166,8 +3315,8 @@ internal static class Program
             [
                 ("Capture Controls", new Rectangle(306, 214, 392, 206)),
                 ("Automatic History", new Rectangle(726, 214, 414, 206)),
-                ("Support Folders", new Rectangle(306, 446, 392, 142)),
-                ("Support Bundle", new Rectangle(726, 446, 414, 142))
+                ("Support Bundle", new Rectangle(306, 446, 392, 142)),
+                ("Support Folders", new Rectangle(726, 446, 414, 142))
             ];
         }
 

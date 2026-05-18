@@ -518,6 +518,30 @@ async function readDomDiagnostics(element) {
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, limit) || null;
+    const textMetricsFor = (element) => {
+      const text = textFor(element, 500);
+      if (!text) return null;
+
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      const availableWidth = element.clientWidth || rect.width;
+      const availableHeight = element.clientHeight || rect.height;
+      const measuredWidth = element.scrollWidth || rect.width;
+      const measuredHeight = element.scrollHeight || rect.height;
+      const tolerance = 1.5;
+      return {
+        textLength: text.length,
+        availableWidth: round(availableWidth),
+        availableHeight: round(availableHeight),
+        measuredWidth: round(measuredWidth),
+        measuredHeight: round(measuredHeight),
+        fitsWidth: measuredWidth <= availableWidth + tolerance,
+        fitsHeight: measuredHeight <= availableHeight + tolerance,
+        overflowX: style.overflowX || null,
+        overflowY: style.overflowY || null,
+        whiteSpace: style.whiteSpace || null
+      };
+    };
     const styleFor = (element) => {
       const style = window.getComputedStyle(element);
       return {
@@ -557,6 +581,8 @@ async function readDomDiagnostics(element) {
         ariaChecked: element.getAttribute('aria-checked') || null,
         type: element.getAttribute('type') || null,
         href: element.getAttribute('href') || null,
+        evidenceKey: element.getAttribute('data-evidence-key') || null,
+        evidenceRole: element.getAttribute('data-evidence-role') || null,
         value: value || null,
         checked: 'checked' in element ? Boolean(element.checked) : null,
         selected: 'selected' in element ? Boolean(element.selected) : null,
@@ -574,7 +600,10 @@ async function readDomDiagnostics(element) {
       ['settings-content-body', '.content-body'],
       ['settings-region-segment', '.region-segment'],
       ['settings-panel', '.panel, .garage-preview-stage, .cover-preview'],
+      ['settings-panel-title', '.panel h2'],
       ['settings-field-row', '.field-row, .status-row'],
+      ['settings-field-label', '.field-label'],
+      ['settings-field-value', '.field-value, .value-code, .support-status'],
       ['settings-button', 'button'],
       ['settings-segmented', '.segmented'],
       ['settings-choice', '.choice'],
@@ -704,6 +733,7 @@ async function readDomDiagnostics(element) {
           text: textFor(element),
           bounds,
           styles: styleFor(element),
+          textMetrics: textMetricsFor(element),
           attributes: attributeEvidence(element)
         });
       });
@@ -800,6 +830,13 @@ function uiEvidence(route, dom) {
         'settings-matrix-cell'
       ].includes(element.role))
       .map(settingElementEvidence),
+    textFields: elements
+      .filter((element) => [
+        'settings-panel-title',
+        'settings-field-label',
+        'settings-field-value'
+      ].includes(element.role))
+      .map(settingElementEvidence),
     preview: settingsPreviewEvidence(elements)
   };
 }
@@ -867,7 +904,9 @@ function settingElementEvidence(element) {
     className: element.className || null,
     text: element.text || null,
     bounds: element.bounds || null,
+    sourceBounds: element.sourceBounds || null,
     styles: element.styles || null,
+    textMetrics: element.textMetrics || null,
     attributes: element.attributes || null
   };
 }

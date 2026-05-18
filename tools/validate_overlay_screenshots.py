@@ -1641,6 +1641,7 @@ def require_settings_ui_evidence(path: str, value: object, failures: list[str]) 
     require_rect(path, value.get("contentBounds"), "settings UI content bounds", failures)
 
     is_component_crop = path.startswith("components/settings/")
+    settings_elements_for_fit: list[dict[str, object]] = []
     tabs = value.get("tabs")
     if not is_component_crop and (not isinstance(tabs, list) or not tabs):
         failures.append(f"{path}: settings UI evidence missing sidebar tabs")
@@ -1651,6 +1652,7 @@ def require_settings_ui_evidence(path: str, value: object, failures: list[str]) 
             if tab.get("text") in (None, ""):
                 failures.append(f"{path}: settings UI tab {index} missing text")
             require_rect(path, tab.get("bounds"), f"settings UI tab {index} bounds", failures)
+            settings_elements_for_fit.append(tab)
 
     tab = value.get("tab")
     requested_region = value.get("requestedRegion")
@@ -1671,6 +1673,7 @@ def require_settings_ui_evidence(path: str, value: object, failures: list[str]) 
             if not isinstance(panel, dict):
                 continue
             require_rect(path, panel.get("bounds"), f"settings UI panel {index} bounds", failures)
+            require_settings_element_not_clipped(path, panel, f"settings UI panel {index}", is_component_crop, failures)
 
     controls = value.get("controls")
     if controls is not None and not isinstance(controls, list):
@@ -1680,6 +1683,23 @@ def require_settings_ui_evidence(path: str, value: object, failures: list[str]) 
             if not isinstance(control, dict):
                 continue
             require_rect(path, control.get("bounds"), f"settings UI control {index} bounds", failures)
+            settings_elements_for_fit.append(control)
+
+    text_fields = value.get("textFields")
+    if text_fields is not None and not isinstance(text_fields, list):
+        failures.append(f"{path}: settings UI textFields is not a list")
+    elif isinstance(text_fields, list):
+        for index, text_field in enumerate(text_fields[:64]):
+            if not isinstance(text_field, dict):
+                continue
+            require_rect(path, text_field.get("bounds"), f"settings UI text field {index} bounds", failures)
+            settings_elements_for_fit.append(text_field)
+
+    for index, element in enumerate(settings_elements_for_fit[:128]):
+        require_settings_element_not_clipped(path, element, f"settings UI element {index}", is_component_crop, failures)
+        require_settings_text_fit(path, element, f"settings UI element {index}", failures)
+
+    require_settings_critical_text_fields(path, value, is_component_crop, failures)
 
     if is_component_crop:
         evidence_counts = [
@@ -1687,9 +1707,137 @@ def require_settings_ui_evidence(path: str, value: object, failures: list[str]) 
             len(value.get("regions")) if isinstance(value.get("regions"), list) else 0,
             len(value.get("panels")) if isinstance(value.get("panels"), list) else 0,
             len(value.get("controls")) if isinstance(value.get("controls"), list) else 0,
+            len(value.get("textFields")) if isinstance(value.get("textFields"), list) else 0,
         ]
         if max(evidence_counts, default=0) <= 0:
             failures.append(f"{path}: settings component UI evidence did not capture any structural items")
+
+
+def require_settings_element_not_clipped(
+    path: str,
+    element: dict[str, object],
+    label: str,
+    is_component_crop: bool,
+    failures: list[str],
+) -> None:
+    if is_component_crop:
+        return
+
+    source = typed_dict(get_manifest_value(element, "sourceBounds"))
+    bounds = typed_dict(get_manifest_value(element, "bounds"))
+    if not source or not bounds:
+        return
+
+    source_width = rect_number(source, "width")
+    source_height = rect_number(source, "height")
+    bounds_width = rect_number(bounds, "width")
+    bounds_height = rect_number(bounds, "height")
+    if None in (source_width, source_height, bounds_width, bounds_height):
+        return
+
+    if bounds_width + 0.5 < source_width or bounds_height + 0.5 < source_height:
+        failures.append(
+            f"{path}: {label} clipped from source bounds "
+            f"{source_width:g}x{source_height:g} to visible {bounds_width:g}x{bounds_height:g}"
+        )
+
+
+def require_settings_text_fit(
+    path: str,
+    element: dict[str, object],
+    label: str,
+    failures: list[str],
+) -> None:
+    text = element.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return
+
+    role = str(element.get("role") or "")
+    if role not in {
+        "settings-sidebar-tab",
+        "settings-region-segment",
+        "settings-field-row",
+        "settings-field-label",
+        "settings-field-value",
+        "settings-button",
+        "settings-choice",
+        "settings-toggle",
+        "settings-check",
+        "settings-stepper",
+        "settings-slider",
+        "settings-textbox",
+    }:
+        return
+
+    metrics = typed_dict(get_manifest_value(element, "textMetrics"))
+    attributes = typed_dict(get_manifest_value(element, "attributes"))
+    evidence_key = attributes.get("evidenceKey")
+    field_label = str(evidence_key) if isinstance(evidence_key, str) and evidence_key else label
+    if not metrics:
+        if role in {"settings-field-label", "settings-field-value"}:
+            failures.append(f"{path}: {field_label} missing text fit metrics")
+        return
+
+    for key in ("availableWidth", "availableHeight", "measuredWidth", "measuredHeight"):
+        if not isinstance(get_manifest_value(metrics, key), (int, float)):
+            failures.append(f"{path}: {field_label} text fit metrics missing numeric {key}")
+
+    fits_width = get_manifest_value(metrics, "fitsWidth")
+    fits_height = get_manifest_value(metrics, "fitsHeight")
+    measured_width = get_manifest_value(metrics, "measuredWidth")
+    measured_height = get_manifest_value(metrics, "measuredHeight")
+    available_width = get_manifest_value(metrics, "availableWidth")
+    available_height = get_manifest_value(metrics, "availableHeight")
+    if fits_width is False:
+        failures.append(
+            f"{path}: {field_label} text does not fit width "
+            f"{measured_width!r} > {available_width!r}"
+        )
+    if fits_height is False:
+        failures.append(
+            f"{path}: {field_label} text does not fit height "
+            f"{measured_height!r} > {available_height!r}"
+        )
+
+
+def require_settings_critical_text_fields(
+    path: str,
+    value: dict[str, object],
+    is_component_crop: bool,
+    failures: list[str],
+) -> None:
+    if is_component_crop:
+        return
+
+    tab = str(value.get("tab") or "").strip().lower()
+    overlay_id = str(value.get("overlayId") or "").strip()
+    required: tuple[str, ...]
+    if tab == "general" and not overlay_id:
+        required = ("general.updates.status.label", "general.updates.status.value")
+    elif tab in {"support", "error-logging"}:
+        required = ("support.bundle.latest.label", "support.bundle.latest.value")
+    else:
+        return
+
+    text_fields = value.get("textFields")
+    fields = [field for field in text_fields if isinstance(field, dict)] if isinstance(text_fields, list) else []
+    for evidence_key in required:
+        element = settings_field_by_evidence_key(fields, evidence_key)
+        if element is None:
+            failures.append(f"{path}: settings UI missing critical text field evidence {evidence_key!r}")
+            continue
+        require_settings_text_fit(path, element, evidence_key, failures)
+
+
+def settings_field_by_evidence_key(
+    fields: list[dict[str, object]],
+    evidence_key: str,
+) -> dict[str, object] | None:
+    for field in fields:
+        attributes = typed_dict(get_manifest_value(field, "attributes"))
+        if attributes.get("evidenceKey") == evidence_key:
+            return field
+    return None
 
 
 def require_installer_ui_evidence(path: str, value: object, failures: list[str]) -> None:
@@ -4317,6 +4465,24 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="settings update status text clips",
+        path="settings/general.png",
+        base=mutation_settings_ui_evidence("general"),
+        mutate=lambda evidence: set_nested_value(evidence, ("textFields", 1, "textMetrics", "fitsWidth"), False),
+        validate=lambda path, evidence, local_failures: require_settings_ui_evidence(path, evidence, local_failures),
+        expected_tokens=("general.updates.status.value text does not fit width",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="settings support bundle field evidence disappears",
+        path="settings/support.png",
+        base=mutation_settings_ui_evidence("support"),
+        mutate=lambda evidence: set_nested_value(evidence, ("textFields", 1, "attributes", "evidenceKey"), "support.bundle.latest.missing"),
+        validate=lambda path, evidence, local_failures: require_settings_ui_evidence(path, evidence, local_failures),
+        expected_tokens=("settings UI missing critical text field evidence 'support.bundle.latest.value'",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="variant scenario evidence mismatches fixture",
         path="browser-overlays/fuel-calculator-waiting.png",
         base=mutation_variant_scenario_screenshot(),
@@ -4417,6 +4583,73 @@ def set_nested_value(values: dict[str, object], path: tuple[object, ...], new_va
         current[final_key] = new_value
         return
     raise KeyError(path)
+
+
+def mutation_settings_ui_evidence(tab: str) -> dict[str, object]:
+    if tab == "support":
+        text_fields = [
+            mutation_settings_text_field("settings-field-label", "Latest bundle", "support.bundle.latest.label", 328, 514, 110, 18),
+            mutation_settings_text_field("settings-field-value", "No bundle yet", "support.bundle.latest.value", 454, 513, 220, 18),
+        ]
+        panels = [
+            {"role": "settings-panel", "text": "Support Bundle", "bounds": {"x": 306, "y": 446, "width": 392, "height": 142}},
+        ]
+    else:
+        text_fields = [
+            mutation_settings_text_field("settings-field-label", "Status", "general.updates.status.label", 748, 281, 70, 18),
+            mutation_settings_text_field("settings-field-value", "No update available.", "general.updates.status.value", 826, 281, 290, 18),
+        ]
+        panels = [
+            {"role": "settings-panel", "text": "Updates", "bounds": {"x": 726, "y": 214, "width": 414, "height": 132}},
+        ]
+
+    return {
+        "contract": "settings-ui-evidence/v1",
+        "surface": "browser-review-settings",
+        "tab": tab,
+        "overlayId": None,
+        "requestedRegion": "general",
+        "activeRegion": "general",
+        "root": {"x": 0, "y": 0, "width": 1240, "height": 680},
+        "contentBounds": {"x": 44, "y": 36, "width": 1152, "height": 608},
+        "tabs": [
+            {"role": "settings-sidebar-tab", "text": "General", "bounds": {"x": 78, "y": 136, "width": 164, "height": 27}},
+        ],
+        "panels": panels,
+        "controls": text_fields,
+        "textFields": text_fields,
+    }
+
+
+def mutation_settings_text_field(
+    role: str,
+    text: str,
+    evidence_key: str,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+) -> dict[str, object]:
+    return {
+        "role": role,
+        "text": text,
+        "bounds": {"x": x, "y": y, "width": width, "height": height},
+        "sourceBounds": {"x": x, "y": y, "width": width, "height": height},
+        "attributes": {
+            "evidenceKey": evidence_key,
+            "evidenceRole": "value" if evidence_key.endswith(".value") else "label",
+        },
+        "textMetrics": {
+            "textLength": len(text),
+            "availableWidth": width,
+            "availableHeight": height,
+            "measuredWidth": max(1, width - 4),
+            "measuredHeight": max(1, height - 4),
+            "fitsWidth": True,
+            "fitsHeight": True,
+            "whiteSpace": "nowrap",
+        },
+    }
 
 
 def mutation_relative_screenshot() -> dict[str, object]:

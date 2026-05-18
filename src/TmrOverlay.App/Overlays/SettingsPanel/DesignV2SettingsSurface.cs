@@ -493,12 +493,12 @@ internal sealed class DesignV2SettingsSurface : Control
                 Invalidate();
             }));
 
-        AddActionButton(new Rectangle(748, 552, 132, 32), "Create Bundle", _callbacks.CreateDiagnosticsBundle);
-        AddActionButton(new Rectangle(894, 552, 104, 32), "Copy Path", _callbacks.CopyLatestDiagnosticsBundlePath);
-        AddActionButton(new Rectangle(328, 514, 104, 30), "Open Logs", () => _callbacks.OpenSupportDirectory(_storageOptions.LogsRoot, "logs"));
-        AddActionButton(new Rectangle(446, 514, 118, 30), "Diagnostics", () => _callbacks.OpenSupportDirectory(_storageOptions.DiagnosticsRoot, "diagnostics"));
-        AddActionButton(new Rectangle(328, 552, 100, 30), "Captures", () => _callbacks.OpenSupportDirectory(_storageOptions.CaptureRoot, "captures"));
-        AddActionButton(new Rectangle(446, 552, 92, 30), "History", () => _callbacks.OpenSupportDirectory(_storageOptions.UserHistoryRoot, "history"));
+        AddActionButton(new Rectangle(328, 552, 132, 32), "Create Bundle", _callbacks.CreateDiagnosticsBundle);
+        AddActionButton(new Rectangle(474, 552, 104, 32), "Copy Path", _callbacks.CopyLatestDiagnosticsBundlePath);
+        AddActionButton(new Rectangle(748, 514, 104, 30), "Open Logs", () => _callbacks.OpenSupportDirectory(_storageOptions.LogsRoot, "logs"));
+        AddActionButton(new Rectangle(866, 514, 118, 30), "Diagnostics", () => _callbacks.OpenSupportDirectory(_storageOptions.DiagnosticsRoot, "diagnostics"));
+        AddActionButton(new Rectangle(748, 552, 100, 30), "Captures", () => _callbacks.OpenSupportDirectory(_storageOptions.CaptureRoot, "captures"));
+        AddActionButton(new Rectangle(866, 552, 92, 30), "History", () => _callbacks.OpenSupportDirectory(_storageOptions.UserHistoryRoot, "history"));
     }
 
     private void BuildOverlayGeneralControls(OverlayDefinition definition, OverlaySettings settings)
@@ -1058,15 +1058,15 @@ internal sealed class DesignV2SettingsSurface : Control
         DrawStatusRow(graphics, "Radar", "Calibration analysis", 348, Green);
         DrawStatusRow(graphics, "Post-race", "Summary analysis", 382, Green);
 
-        DrawPanel(graphics, new Rectangle(726, 446, 414, 142), "Support Bundle");
-        DrawText(graphics, "Latest bundle", new Rectangle(748, 514, 110, 18), 13f, FontStyle.Regular, TextMuted);
-        DrawText(graphics, SupportStatusText.LatestBundleDisplayText(latestPath), new Rectangle(876, 513, 220, 18), 12f, FontStyle.Bold, TextPrimary, monospaced: true);
+        DrawPanel(graphics, new Rectangle(306, 446, 392, 142), "Support Bundle");
+        DrawText(graphics, "Latest bundle", new Rectangle(328, 514, 110, 18), 13f, FontStyle.Regular, TextMuted);
+        DrawText(graphics, LatestBundleValueText(latestPath), new Rectangle(454, 513, 220, 18), 12f, FontStyle.Bold, TextPrimary, monospaced: true);
         if (!string.IsNullOrWhiteSpace(_supportStatusText))
         {
-            DrawText(graphics, _supportStatusText, new Rectangle(748, 562, 330, 18), 11f, FontStyle.Bold, _supportStatusIsError ? OverlayTheme.Colors.WarningText : Green);
+            DrawText(graphics, _supportStatusText, new Rectangle(328, 562, 330, 18), 11f, FontStyle.Bold, _supportStatusIsError ? OverlayTheme.Colors.WarningText : Green);
         }
 
-        DrawPanel(graphics, new Rectangle(306, 446, 392, 142), "Support Folders");
+        DrawPanel(graphics, new Rectangle(726, 446, 414, 142), "Support Folders");
     }
 
     private void DrawOverlayPage(Graphics graphics, OverlayDefinition definition, OverlaySettings settings)
@@ -2158,6 +2158,13 @@ internal sealed class DesignV2SettingsSurface : Control
             ReleaseUpdateStatus.Failed => string.IsNullOrWhiteSpace(snapshot.LastError) ? "Check failed." : snapshot.LastError,
             _ => "Unknown."
         };
+    }
+
+    private static string LatestBundleValueText(string? bundlePath)
+    {
+        return string.IsNullOrWhiteSpace(bundlePath)
+            ? "No bundle yet"
+            : Path.GetFileName(bundlePath);
     }
 
     private static Color ColorForReleaseUpdateStatus(ReleaseUpdateStatus status)

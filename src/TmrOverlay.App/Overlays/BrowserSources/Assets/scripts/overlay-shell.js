@@ -2,6 +2,7 @@
     const overlayEl = document.querySelector('.overlay');
     const statusEl = document.getElementById('status');
     const timeRemainingEl = document.getElementById('time-remaining');
+    const headerItemsEl = document.querySelector('.header-items');
     const contentEl = document.getElementById('content');
     const sourceEl = document.getElementById('source');
     let modelRootOpacity = 1;
@@ -419,13 +420,29 @@
     function renderHeaderItems(model, fallbackStatus) {
       const hasHeaderItems = Array.isArray(model?.headerItems);
       const items = hasHeaderItems ? model.headerItems : [];
-      const statusItem = items.find((item) => String(item?.key || '').toLowerCase() === 'status');
-      const timeItem = items.find((item) => String(item?.key || '').toLowerCase() === 'timeremaining');
-      const statusValue = statusItem ? String(statusItem.value || '').trim() : hasHeaderItems ? '' : fallbackStatus || '';
-      statusEl.textContent = statusValue;
-      statusEl.hidden = !statusValue;
-      if (timeRemainingEl) {
-        const value = timeItem?.value || '';
+      const visibleItems = items
+        .filter((item) => String(item?.key || '').toLowerCase() !== 'status')
+        .map((item) => ({
+          key: String(item?.key || '').trim(),
+          value: String(item?.value || '').trim()
+        }))
+        .filter((item) => item.value);
+      if (statusEl) {
+        statusEl.textContent = '';
+        statusEl.hidden = true;
+      }
+
+      if (headerItemsEl) {
+        headerItemsEl.innerHTML = visibleItems.map((item) => {
+          const key = item.key.toLowerCase();
+          const id = key === 'timeremaining' ? ' id="time-remaining"' : '';
+          const className = key === 'timeremaining'
+            ? 'header-item time-remaining'
+            : `header-item header-item-${cssClassToken(key || 'item')}`;
+          return `<div${id} class="${className}" data-key="${escapeHtml(item.key)}">${escapeHtml(item.value)}</div>`;
+        }).join('');
+      } else if (timeRemainingEl) {
+        const value = visibleItems.find((item) => item.key.toLowerCase() === 'timeremaining')?.value || '';
         timeRemainingEl.textContent = value;
         timeRemainingEl.hidden = !value;
       }
@@ -433,15 +450,34 @@
 
     function renderFooterSource(model) {
       if (!sourceEl) return;
-      const value = String(model?.source || '').trim();
-      sourceEl.textContent = value;
-      sourceEl.hidden = !value;
+      sourceEl.textContent = '';
+      sourceEl.hidden = true;
     }
 
     function clearFooterSource() {
       if (!sourceEl) return;
       sourceEl.hidden = true;
       sourceEl.textContent = '';
+    }
+
+    function clearHeaderItems() {
+      if (statusEl) {
+        statusEl.textContent = '';
+        statusEl.hidden = true;
+      }
+      if (headerItemsEl) {
+        headerItemsEl.textContent = '';
+      } else if (timeRemainingEl) {
+        timeRemainingEl.hidden = true;
+        timeRemainingEl.textContent = '';
+      }
+    }
+
+    function cssClassToken(value) {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'item';
     }
 
     function drawOverlayGraph(canvas, model) {
@@ -1354,12 +1390,8 @@
       const module = browserOverlay.module;
       if (!module?.render) {
         contentEl.innerHTML = '<div class="empty">Unknown overlay route.</div>';
-        statusEl.textContent = 'not configured';
+        clearHeaderItems();
         clearFooterSource();
-        if (timeRemainingEl) {
-          timeRemainingEl.hidden = true;
-          timeRemainingEl.textContent = '';
-        }
         return;
       }
 
@@ -1380,12 +1412,8 @@
           return;
         }
 
-        statusEl.textContent = 'localhost offline';
+        clearHeaderItems();
         clearFooterSource();
-        if (timeRemainingEl) {
-          timeRemainingEl.hidden = true;
-          timeRemainingEl.textContent = '';
-        }
         contentEl.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
       }
     }

@@ -477,8 +477,8 @@ function settingsOverlayDefinition(id, reviewState = null) {
     carsAhead: overlayState.carsAhead ?? 5,
     carsBehind: overlayState.carsBehind ?? 5,
     chrome: overlayState.chrome || {},
-    headerRows: sharedChrome ? ['Status', 'Time remaining'] : [],
-    footerRows: sharedChrome && id !== 'session-weather' ? ['Source'] : [],
+    headerRows: sharedChrome ? ['Time remaining'] : [],
+    footerRows: [],
     contentTitle: settingsContentTitle(id),
     gridColumns: ['session-weather', 'pit-service', 'stream-chat'].includes(id) ? 2 : 1,
     contentRows: settingsContentRows(id, overlayState)
@@ -508,9 +508,9 @@ function settingsOverlaySubtitle(id) {
 
 function settingsBrowserSize(id, overlayState = {}) {
   const base = {
-    standings: [659, 334],
-    relative: [360, 373],
-    'gap-to-leader': [654, 357],
+    standings: [659, 313],
+    relative: [360, 352],
+    'gap-to-leader': [654, 336],
     'track-map': [360, 360],
     'stream-chat': [380, 520],
     'garage-cover': [1280, 720],
@@ -519,7 +519,7 @@ function settingsBrowserSize(id, overlayState = {}) {
     'car-radar': [300, 300],
     flags: [360, 170],
     'session-weather': [464, 496],
-    'pit-service': [530, 743]
+    'pit-service': [530, 722]
   }[id] || [400, 300];
   if (id === 'input-state') {
     base[0] = inputStateBaseWidth(overlayState, base[0]);
@@ -911,7 +911,7 @@ function flagsDisplayModel(page, live, settings) {
     status: visibleFlags.length ? visibleFlags.map((flag) => flag.label).join(' + ').toLowerCase() : 'none',
     source: 'source: session flags telemetry',
     bodyKind: 'flags',
-    headerItems: [{ key: 'status', value: visibleFlags.length ? visibleFlags[0].label : 'none' }],
+    headerItems: [],
     flags: {
       flags: visibleFlags,
       isWaiting: false
@@ -1413,10 +1413,6 @@ function validLapTime(value) {
 
 function fuelHeaderItems(status, live, settings) {
   const items = [];
-  if (settings?.showHeaderStatus !== false) {
-    items.push({ key: 'status', value: status });
-  }
-
   if (settings?.showHeaderTimeRemaining !== false) {
     const timeRemaining = formatFuelHeaderTimeRemaining(live?.models?.session);
     if (timeRemaining) {
@@ -1438,7 +1434,7 @@ function formatFuelHeaderTimeRemaining(session) {
 }
 
 function fuelSourceFromSettings(settings, source) {
-  return settings?.showFooterSource === false ? '' : source;
+  return source;
 }
 
 function inputStateDisplayModel(page, live, settings) {
@@ -1571,7 +1567,7 @@ function carRadarDisplayModel(page, live, settings = {}) {
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
-    headerItems: [{ key: 'status', value: status }],
+    headerItems: [],
     source: inCar && spatial.hasData !== false ? 'source: spatial telemetry' : 'source: waiting',
     bodyKind: 'car-radar',
     carRadar: {
@@ -2130,7 +2126,7 @@ function trackMapDisplayModel(page, live, settings) {
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status: 'live',
-    headerItems: [{ key: 'status', value: 'live' }],
+    headerItems: [],
     source: 'source: live position telemetry',
     bodyKind: 'track-map',
     trackMap: {
@@ -2153,7 +2149,7 @@ function garageCoverDisplayModel(page, live, settings) {
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
-    headerItems: [{ key: 'status', value: status }],
+    headerItems: [],
     source: 'source: garage telemetry/settings',
     bodyKind: 'garage-cover',
     garageCover: {
@@ -2199,7 +2195,7 @@ function streamChatDisplayModel(page, live, settings) {
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
-    headerItems: [{ key: 'status', value: status }],
+    headerItems: [],
     source: '',
     bodyKind: 'stream-chat',
     streamChat: {
@@ -2210,9 +2206,7 @@ function streamChatDisplayModel(page, live, settings) {
 }
 
 function browserStatus(headerItems, fallback) {
-  return headerItems.find((item) => String(item.key || '').toLowerCase() === 'status')?.value
-    || headerItems[0]?.value
-    || fallback;
+  return fallback;
 }
 
 function normalizeStreamChatRows(rows) {

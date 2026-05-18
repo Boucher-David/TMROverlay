@@ -224,14 +224,12 @@ describe('browser overlay catalogue behaviour', () => {
         replayStatus: 'replay chat | spoofed',
         replaySource: 'source: spoofed stream replay',
         replayRows: [{ name: 'viewer42', text: 'Fuel window is open.', kind: 'message' }],
-        showHeaderStatus: false,
         showHeaderTimeRemaining: true,
-        showFooterSource: true
       }
     });
 
     expect(response?.model?.status).toBe('replay chat | spoofed');
-    expect(response?.model?.headerItems).toEqual([{ key: 'status', value: 'replay chat | spoofed' }]);
+    expect(response?.model?.headerItems).toEqual([]);
     expect(response?.model?.source).toBe('');
   });
 
@@ -407,7 +405,7 @@ function browserScenarios() {
         expect(contentText(document)).toContain('Stint Targets');
         expect(contentText(document)).not.toContain('Laps Left');
         expect(document.querySelector('#content .metric.modeled, #content .value-segment.modeled')).toBeNull();
-        expect(document.getElementById('status').textContent).toBe('3 stints / 2 stops');
+        expect(document.getElementById('status')).toBeNull();
       }
     },
     {
@@ -488,7 +486,7 @@ function browserScenarios() {
         expect(metricText(document)).toContain('Atmosphere Hum 48% Fog 0% Pressure 1013 hPa');
         expect(metricText(document).join(' ')).not.toContain('State state 4');
         expect(metricText(document).join(' ')).not.toContain('Sun Alt');
-        expect(document.getElementById('status').textContent).toBe('Race');
+        expect(document.getElementById('status')).toBeNull();
       }
     },
     {
@@ -561,7 +559,6 @@ function browserScenarios() {
             ]
           }
         ], [
-          { key: 'status', value: '' },
           { key: 'timeRemaining', value: '00:03:58' }
         ]),
         waitForSelector: '.metric.segmented'
@@ -579,7 +576,7 @@ function browserScenarios() {
         expect(contentText(document)).not.toContain('player on pit road');
         expect(document.querySelector('.tire-grid').textContent).toContain('Set limit');
         expect(document.querySelector('.tire-grid').textContent).toContain('92/91/90%');
-        expect(document.getElementById('status').textContent).toBe('');
+        expect(document.getElementById('status')).toBeNull();
         expect(document.getElementById('time-remaining').textContent).toBe('00:03:58');
       }
     },
@@ -666,8 +663,9 @@ function browserScenarios() {
       assert: ({ document }) => {
         expect(document.querySelector('.model-graph')).not.toBeNull();
         expect(metricText(document)).not.toContain('Class leader +4.2');
-        expect(document.getElementById('status').textContent).toBe('live | race gap');
-        expect(document.getElementById('source').textContent).toBe('source: live gap telemetry | cars 4');
+        expect(document.getElementById('status')).toBeNull();
+        expect(document.getElementById('source').textContent).toBe('');
+        expect(document.getElementById('source').hidden).toBe(true);
       }
     },
     {
@@ -701,7 +699,7 @@ function browserScenarios() {
       assert: ({ document }) => {
         expect(document.querySelector('.input-graph')).not.toBeNull();
         expect(document.body.textContent).toContain('ABS');
-        expect(document.getElementById('status').textContent).toBe('');
+        expect(document.getElementById('status')).toBeNull();
       }
     },
     {
@@ -790,7 +788,7 @@ function browserScenarios() {
       assert: ({ document }) => {
         expect(document.querySelector('.radar-v2')).toBeNull();
         expect(document.getElementById('content').textContent.trim()).toBe('');
-        expect(document.getElementById('status').textContent).toBe('waiting for radar');
+        expect(document.getElementById('status')).toBeNull();
       }
     },
     {
@@ -815,7 +813,7 @@ function browserScenarios() {
       assert: ({ document }) => {
         expect(document.querySelector('.radar-v2')).toBeNull();
         expect(document.getElementById('content').textContent.trim()).toBe('');
-        expect(document.getElementById('status').textContent).toMatch(/waiting( for player in car)?/);
+        expect(document.getElementById('status')).toBeNull();
       }
     },
     {
@@ -869,7 +867,7 @@ function browserScenarios() {
         expect(document.querySelectorAll('.track circle[fill="rgba(255,218,89,0.961)"]').length).toBe(1);
         expect(document.querySelectorAll('.track circle[fill="rgba(0,232,255,1.000)"]').length).toBe(1);
         expect(document.querySelector('.track text')?.textContent).toBe('5');
-        expect(document.getElementById('status').textContent).toBe('live');
+        expect(document.getElementById('status')).toBeNull();
       }
     },
     {
@@ -906,7 +904,7 @@ function browserScenarios() {
         expect(document.querySelector('.flag-yellow title')?.textContent).toContain('Yellow | waving');
         expect(document.querySelector('.flag-meatball circle')?.getAttribute('fill')).toBe('rgb(245,124,38)');
         expect(document.getElementById('content').textContent).toContain('Repair');
-        expect(document.getElementById('status').textContent).toBe('');
+        expect(document.getElementById('status')).toBeNull();
       }
     },
     {
@@ -921,7 +919,7 @@ function browserScenarios() {
       assert: ({ document }) => {
         expect(document.querySelector('.garage-cover')).not.toBeNull();
         expect(document.querySelector('.garage-cover img')?.getAttribute('src')).toContain('/api/garage-cover/default-image');
-        expect(document.getElementById('status').textContent).toBe('garage visible');
+        expect(document.getElementById('status')).toBeNull();
       }
     },
     {
@@ -942,7 +940,7 @@ function browserScenarios() {
         expect(document.querySelector('.chat-line')).not.toBeNull();
         expect(document.querySelector('.chat-name').textContent).toBe('TMR');
         expect(document.querySelector('.title').textContent).toBe('Stream Chat');
-        expect(document.getElementById('status').textContent).toBe('waiting for chat source');
+        expect(document.getElementById('status')).toBeNull();
       }
     }
   ];
@@ -961,7 +959,7 @@ function tableModel(overlayId, title, status, columns, rows) {
   };
 }
 
-function metricsModel(overlayId, title, status, metrics, source = 'source: catalogue behaviour', gridSections = [], metricSections = [], headerItems = [{ key: 'status', value: status }]) {
+function metricsModel(overlayId, title, status, metrics, source = 'source: catalogue behaviour', gridSections = [], metricSections = [], headerItems = []) {
   return {
     overlayId,
     title,

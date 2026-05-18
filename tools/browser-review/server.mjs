@@ -954,26 +954,28 @@ function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off', searc
 }
 
 function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
+  const fixture = fixtureVariant(searchParams);
+  const withChrome = (model) => applyReviewChrome(model, overlayId, previewMode, fixture === 'chrome-off');
+
   if (assetBackedReviewOverlayModelIds.has(overlayId)) {
-    return applyReviewChrome(reviewAssetBackedDisplayModel(overlayId, previewMode, searchParams), overlayId, previewMode);
+    return withChrome(reviewAssetBackedDisplayModel(overlayId, previewMode, searchParams));
   }
 
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const session = sessionKeyFromPreview(previewMode);
-  const fixture = fixtureVariant(searchParams);
   const previewLabel = previewMode === 'off' ? 'review fixture' : `${previewMode} preview`;
   // BrowserOverlayModelFactory is a C# application service and cannot be executed
   // directly from this Node review server. The fallback builders below emit the
   // BrowserOverlayDisplayModel JSON contract used by production browser sources.
   switch (overlayId) {
     case 'standings':
-      return applyReviewChrome(filterTableModelContent(filterStandingsReviewRows(standingsDisplayModel(previewLabel), overlayState), 'standings', overlayState, session), overlayId, previewMode);
+      return withChrome(filterTableModelContent(filterStandingsReviewRows(standingsDisplayModel(previewLabel), overlayState), 'standings', overlayState, session));
     case 'relative':
-      return applyReviewChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), overlayState), 'relative', overlayState, session), overlayId, previewMode);
+      return withChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), overlayState), 'relative', overlayState, session));
     case 'fuel-calculator':
       {
         if (fixture === 'fuel-waiting') {
-          return applyReviewChrome(metricsModel(
+          return withChrome(metricsModel(
             'fuel-calculator',
             'Fuel Calculator',
             'waiting for local fuel context',
@@ -982,10 +984,9 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
             [],
             [],
             [
-              { key: 'status', value: 'waiting for local fuel context' },
               { key: 'timeRemaining', value: '--' }
             ],
-            false), overlayId, previewMode);
+            false));
         }
         const raceRows = [
           metricRow('Plan', '31 laps | 3 stints | 2 stops', 'info', [
@@ -1042,7 +1043,7 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
         }
         const visibleStintRows = usageLabel != null ? stintRows.slice(0, 1) : stintRows;
         metricSections.push({ title: 'Stint Targets', rows: visibleStintRows });
-        return applyReviewChrome(metricsModel(
+        return withChrome(metricsModel(
           'fuel-calculator',
           'Fuel Calculator',
           '3 stints / 2 stops',
@@ -1051,9 +1052,8 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           [],
           metricSections,
           [
-            { key: 'status', value: '3 stints / 2 stops' },
             { key: 'timeRemaining', value: '06:37:08' }
-          ]), overlayId, previewMode);
+          ]));
       }
     case 'session-weather':
       {
@@ -1112,10 +1112,9 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
             { title: 'Session', rows: sessionRows },
             { title: 'Weather', rows: weatherRows }
           ];
-          return applyReviewChrome(metricsModel('session-weather', 'Session / Weather', 'weather unavailable', metricSections.flatMap((section) => section.rows), '', [], metricSections, [
-            { key: 'status', value: 'weather unavailable' },
+          return withChrome(metricsModel('session-weather', 'Session / Weather', 'weather unavailable', metricSections.flatMap((section) => section.rows), '', [], metricSections, [
             { key: 'timeRemaining', value: '--' }
-          ]), overlayId, previewMode);
+          ]));
         }
         const sessionType = session === 'qualifying' ? 'Qualify' : sessionDisplayName(session);
         const sessionName = sessionDisplayName(session);
@@ -1178,10 +1177,9 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           { title: 'Session', rows: sessionRows },
           { title: 'Weather', rows: weatherRows }
         ], overlayState, session);
-        return applyReviewChrome(metricsModel('session-weather', 'Session / Weather', sessionType, metricSections.flatMap((section) => section.rows), '', [], metricSections, [
-          { key: 'status', value: sessionType },
+        return withChrome(metricsModel('session-weather', 'Session / Weather', sessionType, metricSections.flatMap((section) => section.rows), '', [], metricSections, [
           { key: 'timeRemaining', value: clock.left }
-        ]), overlayId, previewMode);
+        ]));
       }
     case 'pit-service':
       {
@@ -1235,16 +1233,15 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
             gridRow('Wear', ['--', '--', '--', '--']),
             gridRow('Distance', ['--', '--', '--', '--'])
           ];
-          return applyReviewChrome(metricsModel('pit-service', 'Pit Service', 'pit ready', pitSections.flatMap((section) => section.rows), 'source: player/team pit service telemetry', [
+          return withChrome(metricsModel('pit-service', 'Pit Service', 'pit ready', pitSections.flatMap((section) => section.rows), 'source: player/team pit service telemetry', [
             {
               title: 'Tire Analysis',
               headers: ['Info', 'FL', 'FR', 'RL', 'RR'],
               rows: tireRows
             }
           ], pitSections, [
-            { key: 'status', value: 'pit ready' },
             { key: 'timeRemaining', value: '00:03:58' }
-          ]), overlayId, previewMode);
+          ]));
         }
         const pitSections = filterMetricSectionsByContent('pit-service', [
           {
@@ -1305,20 +1302,19 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           gridRow('Wear', ['92/91/90%', '93/92/91%', '96/95/94%', '97/96/95%']),
           gridRow('Distance', [formatDistance(18400), formatDistance(18400), formatDistance(18400), formatDistance(18400)])
         ], overlayState, session);
-        return applyReviewChrome(metricsModel('pit-service', 'Pit Service', 'service active', pitSections.flatMap((section) => section.rows), 'source: player/team pit service telemetry', [
+        return withChrome(metricsModel('pit-service', 'Pit Service', 'service active', pitSections.flatMap((section) => section.rows), 'source: player/team pit service telemetry', [
           {
             title: 'Tire Analysis',
             headers: ['Info', 'FL', 'FR', 'RL', 'RR'],
             rows: tireRows
           }
         ].filter((section) => section.rows.length > 0), pitSections, [
-          { key: 'status', value: 'service active' },
           { key: 'timeRemaining', value: '00:03:58' }
-        ]), overlayId, previewMode);
+        ]));
       }
     case 'gap-to-leader':
       if (fixture === 'gap-no-cars') {
-        return applyReviewChrome({
+        return withChrome({
           overlayId,
           title: 'Gap To Leader',
           status: 'hidden | race gap',
@@ -1331,10 +1327,10 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           graph: reviewEmptyGapGraph(),
           headerItems: [],
           shouldRender: false
-        }, overlayId, previewMode);
+        });
       }
       if (session !== 'race') {
-        return applyReviewChrome({
+        return withChrome({
           overlayId,
           title: 'Gap To Leader',
           status: 'hidden | race only',
@@ -1346,11 +1342,11 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           points: [],
           headerItems: [],
           shouldRender: false
-        }, overlayId, previewMode);
+        });
       }
 
       if (Number(overlayState.carsAhead ?? 5) <= 0 && Number(overlayState.carsBehind ?? 5) <= 0) {
-        return applyReviewChrome({
+        return withChrome({
           overlayId,
           title: 'Gap To Leader',
           status: 'hidden | race gap',
@@ -1362,10 +1358,10 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           points: [],
           headerItems: [],
           shouldRender: false
-        }, overlayId, previewMode);
+        });
       }
 
-      return applyReviewChrome({
+      return withChrome({
         overlayId,
         title: 'Gap To Leader',
         status: 'live | race gap',
@@ -1377,11 +1373,10 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
         points: reviewGapPoints(overlayState),
         graph: reviewGapGraph(),
         headerItems: [
-          { key: 'status', value: 'live | race gap' },
           { key: 'timeRemaining', value: '06:37:08' }
         ],
         shouldRender: true
-      }, overlayId, previewMode);
+      });
     default:
       return tableModel(overlayId, browserOverlayPage(overlayId).title, `live | ${previewLabel}`, []);
   }
@@ -1507,25 +1502,20 @@ function reviewGapSeries(carIdx, isReference, isClassLeader, classPosition, poin
   };
 }
 
-function applyReviewChrome(model, overlayId, previewMode) {
+function applyReviewChrome(model, overlayId, previewMode, forceChromeOff = false) {
   if (!supportsSharedChrome(overlayId)) {
     return model;
   }
 
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const session = sessionKeyFromPreview(previewMode);
-  const showStatus = chromeEnabled(overlayState, 'header', 'Status', session, true);
-  const showTime = chromeEnabled(overlayState, 'header', 'Time remaining', session, true);
-  const showSource = overlayId === 'session-weather'
-    ? false
-    : chromeEnabled(overlayState, 'footer', 'Source', session, true);
+  const showTime = !forceChromeOff && chromeEnabled(overlayState, 'header', 'Time remaining', session, true);
   return {
     ...model,
-    source: showSource ? model.source : '',
     headerItems: (model.headerItems || []).filter((item) => {
       const key = String(item?.key || '').toLowerCase();
-      if (key === 'status') return showStatus;
       if (key === 'timeremaining') return showTime;
+      if (key === 'status') return false;
       return true;
     })
   };
@@ -1605,7 +1595,6 @@ function relativeDisplayModel(previewLabel = 'review fixture', session = 'practi
     metrics: [],
     points: [],
     headerItems: [
-      { key: 'status', value: `5 - 2/4 cars | ${previewLabel}` },
       { key: 'timeRemaining', value: '06:37:08' }
     ]
   };
@@ -1801,7 +1790,7 @@ function metricsModel(
   source = 'source: review fixture',
   gridSections = [],
   metricSections = [],
-  headerItems = [{ key: 'status', value: status }],
+  headerItems = [],
   shouldRender = true) {
   return {
     overlayId,
@@ -1992,7 +1981,6 @@ function standingsDisplayModel(previewLabel = 'review fixture') {
     ],
     metrics: [],
     headerItems: [
-      { key: 'status', value: `scoring | ${previewLabel}` },
       { key: 'timeRemaining', value: '06:37:08' }
     ]
   };

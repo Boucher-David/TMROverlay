@@ -844,6 +844,12 @@ internal static class Program
         return
         [
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "waiting", "Waiting"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
+            new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
+            new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
+            new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
+            new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
+            new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "missing", "Missing Data"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "idle", "Idle"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "waiting", "Waiting"),
@@ -870,7 +876,8 @@ internal static class Program
         SessionWeatherOverlayDefinition.Definition.Id,
         PitServiceOverlayDefinition.Definition.Id,
         InputStateOverlayDefinition.Definition.Id,
-        StreamChatOverlayDefinition.Definition.Id
+        StreamChatOverlayDefinition.Definition.Id,
+        GapToLeaderOverlayDefinition.Definition.Id
     };
 
     private static readonly HashSet<string> FullCanvasComparisonOverlayIds = new(StringComparer.OrdinalIgnoreCase)
@@ -937,11 +944,22 @@ internal static class Program
             return ReviewStreamChatModel();
         }
 
+        if (string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewGapModel();
+        }
+
         return null;
     }
 
     private static DesignV2OverlayModel ReviewNativeVariantModel(string overlayId, string slug)
     {
+        if (string.Equals(slug, "chrome-off", StringComparison.OrdinalIgnoreCase)
+            && ReviewAlignedNativeModel(overlayId, OverlaySessionKind.Race) is { } chromeModel)
+        {
+            return WithoutSharedChrome(chromeModel);
+        }
+
         if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             && string.Equals(slug, "waiting", StringComparison.OrdinalIgnoreCase))
         {
@@ -1014,6 +1032,15 @@ internal static class Program
         throw new InvalidOperationException($"Unknown native overlay fixture variant {overlayId}/{slug}.");
     }
 
+    private static DesignV2OverlayModel WithoutSharedChrome(DesignV2OverlayModel model)
+    {
+        return model with
+        {
+            HeaderText = string.Empty,
+            ShowFooter = false
+        };
+    }
+
     private static void SetDesignV2Model(DesignV2LiveOverlayForm form, DesignV2OverlayModel model)
     {
         var field = typeof(DesignV2LiveOverlayForm).GetField("_model", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -1059,7 +1086,8 @@ internal static class Program
                     new DesignV2Column("PIT", 30, ContentAlignment.MiddleRight)
                 ],
                 rows),
-            HeaderText: $"{status} | 06:37:08");
+            HeaderText: "06:37:08",
+            ShowFooter: false);
     }
 
     private static DesignV2OverlayModel ReviewRelativeModel(OverlaySessionKind previewMode)
@@ -1082,7 +1110,8 @@ internal static class Program
                     new DesignV2Column("Delta", 70, ContentAlignment.MiddleRight)
                 ],
                 rows),
-            HeaderText: $"{status} | 06:37:08");
+            HeaderText: "06:37:08",
+            ShowFooter: false);
     }
 
     private static DesignV2OverlayModel ReviewFuelModel(OverlaySessionKind previewMode)
@@ -1161,7 +1190,8 @@ internal static class Program
             "burn 3.1 L/lap (measured green lap) | 34.2 laps/tank | history user | gap O0.18 C0.04",
             DesignV2Evidence.Modeled,
             new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, []),
-            HeaderText: "3 stints / 2 stops | 06:37:08");
+            HeaderText: "06:37:08",
+            ShowFooter: false);
     }
 
     private static DesignV2OverlayModel ReviewTrackMapModel(bool includeMarkers = true, bool includeGeneratedMap = true)
@@ -1201,7 +1231,7 @@ internal static class Program
                 : "source: live position telemetry",
             DesignV2Evidence.Live,
             new DesignV2TrackMapBody(TrackMapRenderModel.FromViewModel(viewModel)),
-            HeaderText: "live | 06:37:08",
+            HeaderText: "06:37:08",
             ShowFooter: false,
             ShowHeader: false);
     }
@@ -1300,7 +1330,7 @@ internal static class Program
             string.Empty,
             DesignV2Evidence.Neutral,
             new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, []),
-            HeaderText: $"{sessionType} | {clock.Left}",
+            HeaderText: clock.Left,
             ShowFooter: false);
     }
 
@@ -1394,7 +1424,8 @@ internal static class Program
             "source: player/team pit service telemetry",
             DesignV2Evidence.Error,
             new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, grid),
-            HeaderText: "service active | 00:03:58");
+            HeaderText: "00:03:58",
+            ShowFooter: false);
     }
 
     private static DesignV2OverlayModel ReviewFuelWaitingModel()
@@ -1405,7 +1436,8 @@ internal static class Program
             "source: waiting",
             DesignV2Evidence.Unavailable,
             new DesignV2MetricRowsBody([]),
-            HeaderText: "waiting for local fuel context | --",
+            HeaderText: "--",
+            ShowFooter: false,
             ShouldRender: false);
     }
 
@@ -1484,7 +1516,7 @@ internal static class Program
             string.Empty,
             DesignV2Evidence.Unavailable,
             new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, []),
-            HeaderText: "weather unavailable | --",
+            HeaderText: "--",
             ShowFooter: false);
     }
 
@@ -1554,7 +1586,8 @@ internal static class Program
             "source: player/team pit service telemetry",
             DesignV2Evidence.Live,
             new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, grid),
-            HeaderText: "pit ready | 00:03:58");
+            HeaderText: "00:03:58",
+            ShowFooter: false);
     }
 
     private static DesignV2OverlayModel ReviewInputWaitingModel()
@@ -1629,6 +1662,110 @@ internal static class Program
             ShowFooter: false);
     }
 
+    private static DesignV2OverlayModel ReviewGapModel()
+    {
+        const double startSeconds = 62571.436719d;
+        var timestampStart = new DateTimeOffset(2026, 5, 17, 12, 0, 0, TimeSpan.Zero);
+        var trend = new[]
+        {
+            (Offset: 0d, P1: 0d, AltP1: 5.4d, Focus: 249.8d),
+            (Offset: 60d, P1: 0.4d, AltP1: 4.8d, Focus: 247.2d),
+            (Offset: 120d, P1: 0.1d, AltP1: 4.3d, Focus: 245.4d),
+            (Offset: 180d, P1: 0.6d, AltP1: 3.7d, Focus: 243.6d),
+            (Offset: 240d, P1: 0.3d, AltP1: 3.2d, Focus: 241.9d),
+            (Offset: 300d, P1: 0.2d, AltP1: 2.6d, Focus: 240.5d),
+            (Offset: 360d, P1: 0.5d, AltP1: 2.1d, Focus: 239.7d),
+            (Offset: 420d, P1: 0d, AltP1: 1.8d, Focus: 238.9d)
+        };
+        var endSeconds = startSeconds + trend[^1].Offset;
+        DesignV2GapTrendPoint Point(
+            (double Offset, double P1, double AltP1, double Focus) sample,
+            int carIdx,
+            double gapSeconds,
+            bool isReference,
+            bool isClassLeader,
+            int classPosition,
+            int index)
+        {
+            return new DesignV2GapTrendPoint(
+                timestampStart.AddSeconds(sample.Offset),
+                startSeconds + sample.Offset,
+                gapSeconds,
+                carIdx,
+                isReference,
+                isClassLeader,
+                classPosition,
+                StartsSegment: index == 0);
+        }
+
+        var series = new[]
+        {
+            new DesignV2GapSeries(
+                8,
+                IsReference: false,
+                IsClassLeader: true,
+                ClassPosition: 1,
+                Alpha: 0.35d,
+                IsStickyExit: false,
+                IsStale: false,
+                trend.Select((sample, index) => Point(sample, 8, sample.P1, false, true, 1, index)).ToArray()),
+            new DesignV2GapSeries(
+                17,
+                IsReference: false,
+                IsClassLeader: true,
+                ClassPosition: 1,
+                Alpha: 0.35d,
+                IsStickyExit: false,
+                IsStale: false,
+                trend.Select((sample, index) => Point(sample, 17, sample.AltP1, false, true, 1, index)).ToArray()),
+            new DesignV2GapSeries(
+                42,
+                IsReference: true,
+                IsClassLeader: false,
+                ClassPosition: 24,
+                Alpha: 0.35d,
+                IsStickyExit: false,
+                IsStale: false,
+                trend.Select((sample, index) => Point(sample, 42, sample.Focus, true, false, 24, index)).ToArray())
+        };
+        var graph = new DesignV2GraphBody(
+            Points: trend.Select(sample => sample.Focus).ToArray(),
+            Series: series,
+            Weather: [],
+            LeaderChanges: [],
+            DriverChanges: [],
+            StartSeconds: startSeconds,
+            EndSeconds: endSeconds,
+            MaxGapSeconds: 500d,
+            LapReferenceSeconds: 525.8d,
+            SelectedSeriesCount: series.Length,
+            TrendMetrics:
+            [
+                new DesignV2GapTrendMetric("5L", null, null, "warming", "0.0L"),
+                new DesignV2GapTrendMetric("10L", null, null, "warming", "0.0L"),
+                new DesignV2GapTrendMetric("Pit", null, null, "pit", null),
+                new DesignV2GapTrendMetric("PLap", null, null, "pitLap", null),
+                new DesignV2GapTrendMetric("Stint", null, null, "stint", null),
+                new DesignV2GapTrendMetric("Tire", null, null, "tire", null),
+                new DesignV2GapTrendMetric("Last", null, null, "last", null, ComparisonText: "8:13.000"),
+                new DesignV2GapTrendMetric("Status", null, null, "status", null, ComparisonText: "Track")
+            ],
+            ActiveThreat: null,
+            ThreatCarIdx: null,
+            MetricDeadbandSeconds: 0.25d,
+            ComparisonLabel: "P1",
+            Scale: DesignV2GapScale.Leader(500d));
+
+        return new DesignV2OverlayModel(
+            "Gap To Leader",
+            "live | race gap",
+            "source: live gap telemetry | cars 3/3",
+            DesignV2Evidence.Live,
+            graph,
+            HeaderText: "06:37:08",
+            ShowFooter: false);
+    }
+
     private static DesignV2OverlayModel ReviewCarRadarVariantModel(string slug)
     {
         if (!string.Equals(slug, "left", StringComparison.OrdinalIgnoreCase)
@@ -1676,7 +1813,7 @@ internal static class Program
                 PreviewVisible: false,
                 RenderModel: renderModel,
                 SurfaceAlpha: renderModel.ShouldRender ? 1d : 0d),
-            HeaderText: status,
+            HeaderText: string.Empty,
             ShowFooter: false);
     }
 
@@ -1689,6 +1826,7 @@ internal static class Program
             DesignV2Evidence.Unavailable,
             new DesignV2GraphBody([]),
             HeaderText: string.Empty,
+            ShowFooter: false,
             ShouldRender: false);
     }
 
@@ -1753,7 +1891,7 @@ internal static class Program
                     ["vip"],
                     [StreamChatDisplaySegment.TextSegment("Box this lap for fuel and tires")])
             ]),
-            HeaderText: "replay chat | twitch",
+            HeaderText: string.Empty,
             ShowFooter: false);
     }
 
@@ -1771,7 +1909,7 @@ internal static class Program
                     "Streamlabs is browser-source only in this build.",
                     DesignV2Evidence.Error)
             ]),
-            HeaderText: "streamlabs unavailable",
+            HeaderText: string.Empty,
             ShowFooter: false);
     }
 
@@ -1887,7 +2025,7 @@ internal static class Program
                     "Choose Streamlabs or Twitch in the Stream Chat settings tab.",
                     DesignV2Evidence.Unavailable)
             ]),
-            HeaderText: "waiting for chat source",
+            HeaderText: string.Empty,
             ShowFooter: false);
     }
 
@@ -3667,9 +3805,9 @@ internal static class Program
         }
 
         var elements = new List<object>();
-        AddLayoutElement(elements, "header", 0, null, layout.Header, null, null);
+        AddLayoutElement(elements, "header", 0, layout.HeaderText, layout.Header, null, null);
         AddLayoutElement(elements, "content", 0, NativeBodyText(layout.BodyLayout), layout.BodyLayout?.Bounds ?? layout.Body, null, null);
-        AddLayoutElement(elements, "footer", 0, null, layout.Footer, null, null);
+        AddLayoutElement(elements, "footer", 0, layout.FooterText, layout.Footer, null, null);
 
         if (layout.BodyLayout is { } body)
         {

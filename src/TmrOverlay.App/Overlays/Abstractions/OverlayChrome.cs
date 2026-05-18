@@ -183,7 +183,7 @@ internal static class OverlayChrome
 
     public static bool ShouldShowHeaderStatus(OverlayChromeState state, int clientWidth, int titleWidth)
     {
-        return HeaderSlots(state, clientWidth, titleWidth).Contains(HeaderStatusSlotKey);
+        return false;
     }
 
     public static bool ShouldShowHeaderTimeRemaining(OverlayChromeState state, int clientWidth, int titleWidth)
@@ -196,11 +196,6 @@ internal static class OverlayChrome
         return FitSlots(
             [
                 new OverlayChromeSlotRequest(
-                    HeaderStatusSlotKey,
-                    state.ShowStatus,
-                    HeaderStatusMinimumSlotWidth,
-                    Priority: 0),
-                new OverlayChromeSlotRequest(
                     HeaderTimeRemainingSlotKey,
                     state.ShowTimeRemaining,
                     HeaderTimeRemainingMinimumSlotWidth,
@@ -211,15 +206,7 @@ internal static class OverlayChrome
 
     public static bool ShouldShowFooterSource(OverlayChromeState state, int clientWidth)
     {
-        return FitSlots(
-            [
-                new OverlayChromeSlotRequest(
-                    FooterSourceSlotKey,
-                    state.ShowFooter && !string.IsNullOrWhiteSpace(state.Source),
-                    FooterSourceMinimumSlotWidth,
-                    Priority: 0)
-            ],
-            AvailableContentWidth(clientWidth)).Contains(FooterSourceSlotKey);
+        return false;
     }
 
     public static IReadOnlySet<string> FitSlots(IEnumerable<OverlayChromeSlotRequest> requests, int availableWidth)
@@ -299,16 +286,6 @@ internal static class OverlayChrome
         using var statusBrush = new SolidBrush(StatusTextColor(state.Tone));
         graphics.DrawString(state.Title, titleFont, titleBrush, OverlayTheme.Layout.OuterPadding, OverlayTheme.Layout.OverlayTitleTop);
         var headerSlots = HeaderSlots(state, clientWidth, titleWidth);
-        if (headerSlots.Contains(HeaderStatusSlotKey))
-        {
-            DrawRightAligned(
-                graphics,
-                state.Status,
-                statusFont,
-                statusBrush,
-                HeaderStatusRectangle(clientWidth, titleWidth, showTimeRemaining: headerSlots.Contains(HeaderTimeRemainingSlotKey)));
-        }
-
         if (headerSlots.Contains(HeaderTimeRemainingSlotKey))
         {
             DrawRightAligned(
@@ -353,7 +330,7 @@ internal static class OverlayChrome
         Label? timeRemainingLabel = null)
     {
         var changed = false;
-        var showStatus = state.ShowStatus;
+        var showStatus = false;
         var showTimeRemaining = state.ShowTimeRemaining && timeRemainingLabel is not null;
         if (titleWidth is { } width)
         {

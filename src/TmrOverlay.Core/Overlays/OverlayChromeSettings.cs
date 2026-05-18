@@ -7,29 +7,15 @@ internal static class OverlayChromeSettings
 {
     private static readonly string[] ChromeOptionKeys =
     [
-        OverlayOptionKeys.ChromeHeaderStatusTest,
-        OverlayOptionKeys.ChromeHeaderStatusPractice,
-        OverlayOptionKeys.ChromeHeaderStatusQualifying,
-        OverlayOptionKeys.ChromeHeaderStatusRace,
         OverlayOptionKeys.ChromeHeaderTimeRemainingTest,
         OverlayOptionKeys.ChromeHeaderTimeRemainingPractice,
         OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying,
-        OverlayOptionKeys.ChromeHeaderTimeRemainingRace,
-        OverlayOptionKeys.ChromeFooterSourceTest,
-        OverlayOptionKeys.ChromeFooterSourcePractice,
-        OverlayOptionKeys.ChromeFooterSourceQualifying,
-        OverlayOptionKeys.ChromeFooterSourceRace
+        OverlayOptionKeys.ChromeHeaderTimeRemainingRace
     ];
 
     public static bool ShowHeaderStatus(OverlaySettings settings, LiveTelemetrySnapshot snapshot)
     {
-        return IsEnabledForSession(
-            settings,
-            OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot),
-            OverlayOptionKeys.ChromeHeaderStatusTest,
-            OverlayOptionKeys.ChromeHeaderStatusPractice,
-            OverlayOptionKeys.ChromeHeaderStatusQualifying,
-            OverlayOptionKeys.ChromeHeaderStatusRace);
+        return false;
     }
 
     public static bool ShowHeaderTimeRemaining(OverlaySettings settings, LiveTelemetrySnapshot snapshot)
@@ -45,23 +31,12 @@ internal static class OverlayChromeSettings
 
     public static bool ShowFooterSource(OverlaySettings settings, LiveTelemetrySnapshot snapshot)
     {
-        if (!SupportsFooterSource(settings))
-        {
-            return false;
-        }
-
-        return IsEnabledForSession(
-            settings,
-            OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot),
-            OverlayOptionKeys.ChromeFooterSourceTest,
-            OverlayOptionKeys.ChromeFooterSourcePractice,
-            OverlayOptionKeys.ChromeFooterSourceQualifying,
-            OverlayOptionKeys.ChromeFooterSourceRace);
+        return false;
     }
 
     public static bool SupportsFooterSource(OverlaySettings settings)
     {
-        return settings.Id.Trim().ToLowerInvariant() is not "session-weather";
+        return false;
     }
 
     public static string SettingsSignature(OverlaySettings settings)

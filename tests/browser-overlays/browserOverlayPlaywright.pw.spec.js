@@ -22,7 +22,8 @@ test.describe('browser overlay Playwright integration', () => {
 
     const rows = page.locator('tbody tr');
     await expect(rows).toHaveCount(6);
-    await expect(page.locator('#status')).toHaveText('scoring | 5/5 live');
+    await expect(page.locator('#status')).toHaveCount(0);
+    await expect(page.locator('.header-items')).toHaveText('06:37:08');
     await expect(rows.nth(4)).toHaveClass(/focus/);
 
     const overlayBox = await page.locator('.overlay').boundingBox();
@@ -1023,7 +1024,8 @@ function standingsDisplayModel() {
       carRow(['2', '#71', 'Focus Racer', '+3.4', '0.0', '1:54.228', '1:54.901', ''], { isReference: true }),
       carRow(['3', '#91', 'Chaser', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
     ],
-    metrics: []
+    metrics: [],
+    headerItems: [{ key: 'timeRemaining', value: '06:37:08' }]
   };
 }
 

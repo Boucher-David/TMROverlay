@@ -111,9 +111,9 @@ public sealed class AppSettingsStoreTests
             Assert.True(persistedStandings.ShowInPractice);
             Assert.False(persistedStandings.ShowInQualifying);
             Assert.True(persistedStandings.ShowInRace);
-            Assert.False(persistedStandings.GetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, true));
+            Assert.False(persistedStandings.Options.ContainsKey(OverlayOptionKeys.ChromeHeaderStatusRace));
             Assert.False(persistedStandings.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, true));
-            Assert.False(persistedStandings.GetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, true));
+            Assert.False(persistedStandings.Options.ContainsKey(OverlayOptionKeys.ChromeFooterSourceRace));
             Assert.False(persistedStandings.GetBooleanOption(standingsGapEnabledKey, true));
             Assert.Equal(1, persistedStandings.GetIntegerOption(standingsDriverOrderKey, 3, 1, 8));
             Assert.Equal(360, persistedStandings.GetIntegerOption(OverlayOptionKeys.StandingsColumnDriverWidth, 250, 180, 520));
@@ -126,8 +126,8 @@ public sealed class AppSettingsStoreTests
             Assert.Equal(0.8, persistedRelative.Opacity);
             Assert.False(persistedRelative.ShowInPractice);
             Assert.Equal(3, persistedRelative.GetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, 5, 0, 8));
-            Assert.False(persistedRelative.GetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusQualifying, true));
-            Assert.False(persistedRelative.GetBooleanOption(OverlayOptionKeys.ChromeFooterSourceQualifying, true));
+            Assert.False(persistedRelative.Options.ContainsKey(OverlayOptionKeys.ChromeHeaderStatusQualifying));
+            Assert.False(persistedRelative.Options.ContainsKey(OverlayOptionKeys.ChromeFooterSourceQualifying));
             Assert.True(persistedRelative.GetBooleanOption(
                 $"{persistedRelative.Id}.content.{OverlayContentColumnSettings.RelativePitColumnId}.enabled",
                 false));
@@ -191,8 +191,8 @@ public sealed class AppSettingsStoreTests
             Assert.Equal(12, overlay.GetIntegerOption(OverlayOptionKeys.GapCarsBehind, 5, 0, 12));
             Assert.True(overlay.Options.ContainsKey(OverlayOptionKeys.GapCarsAhead));
             Assert.True(overlay.Options.ContainsKey(OverlayOptionKeys.GapCarsBehind));
-            Assert.True(overlay.GetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusPractice, defaultValue: false));
-            Assert.True(overlay.GetBooleanOption(OverlayOptionKeys.ChromeFooterSourcePractice, defaultValue: false));
+            Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.ChromeHeaderStatusPractice));
+            Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.ChromeFooterSourcePractice));
             Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.RelativeCarsEachSide));
             Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.RelativeCarsAhead));
             Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.RelativeCarsBehind));
@@ -367,7 +367,7 @@ public sealed class AppSettingsStoreTests
             Assert.False(fuel.GetBooleanOption(OverlayOptionKeys.FuelAdvice, defaultValue: true));
             Assert.False(fuel.Options.ContainsKey(OverlayOptionKeys.RelativeCarsEachSide));
             Assert.False(fuel.Options.ContainsKey(OverlayOptionKeys.TrackMapBuildFromTelemetry));
-            Assert.False(sessionWeather.GetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, defaultValue: true));
+            Assert.False(sessionWeather.Options.ContainsKey(OverlayOptionKeys.ChromeHeaderStatusRace));
             Assert.False(sessionWeather.Options.ContainsKey(OverlayOptionKeys.ChromeFooterSourceRace));
         }
         finally
@@ -507,8 +507,8 @@ public sealed class AppSettingsStoreTests
             Assert.False(standings.ShowInQualifying);
             Assert.True(standings.ShowInRace);
             Assert.Equal("screen-2", standings.ScreenId);
-            Assert.False(standings.GetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, defaultValue: true));
-            Assert.False(standings.GetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, defaultValue: true));
+            Assert.False(standings.Options.ContainsKey(OverlayOptionKeys.ChromeHeaderStatusRace));
+            Assert.False(standings.Options.ContainsKey(OverlayOptionKeys.ChromeFooterSourceRace));
             Assert.True(standings.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingRace, defaultValue: false));
             Assert.False(standings.GetBooleanOption(
                 $"{standings.Id}.content.{OverlayContentColumnSettings.StandingsGapColumnId}.enabled",
@@ -546,8 +546,8 @@ public sealed class AppSettingsStoreTests
             Assert.False(restartedStandings.ShowInPractice);
             Assert.False(restartedStandings.ShowInQualifying);
             Assert.True(restartedStandings.ShowInRace);
-            Assert.False(restartedStandings.GetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, defaultValue: true));
-            Assert.False(restartedStandings.GetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, defaultValue: true));
+            Assert.False(restartedStandings.Options.ContainsKey(OverlayOptionKeys.ChromeHeaderStatusRace));
+            Assert.False(restartedStandings.Options.ContainsKey(OverlayOptionKeys.ChromeFooterSourceRace));
             Assert.False(restartedStandings.GetBooleanOption(
                 $"{restartedStandings.Id}.content.{OverlayContentColumnSettings.StandingsGapColumnId}.enabled",
                 defaultValue: true));

@@ -559,12 +559,10 @@ public sealed class OverlayInputTransparencyTests
     }
 
     [Fact]
-    public void DesignV2Chrome_UsesPerOverlayPerSessionHeaderFooterSettings()
+    public void DesignV2Chrome_RendersOnlyTimeRemainingFromSharedChrome()
     {
         var settings = new OverlaySettings { Id = "standings" };
-        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, false);
         settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingRace, true);
-        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, false);
         var snapshot = RaceSnapshot(timeRemainingSeconds: 600d);
 
         var header = DesignV2LiveOverlayForm.BuildHeaderText(settings, snapshot, "live standings");
@@ -578,17 +576,14 @@ public sealed class OverlayInputTransparencyTests
     }
 
     [Fact]
-    public void DesignV2Chrome_UsesSharedFooterSourceSettingForFuel()
+    public void DesignV2Chrome_NeverShowsRemovedFooterSource()
     {
         var settings = new OverlaySettings { Id = "fuel-calculator" };
-        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, true);
 
-        Assert.True(DesignV2LiveOverlayForm.ShowFooterForSettings(
+        Assert.False(DesignV2LiveOverlayForm.ShowFooterForSettings(
             DesignV2LiveOverlayKind.FuelCalculator,
             settings,
             RaceSnapshot(timeRemainingSeconds: 600d)));
-
-        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, false);
 
         Assert.False(DesignV2LiveOverlayForm.ShowFooterForSettings(
             DesignV2LiveOverlayKind.FuelCalculator,
@@ -597,17 +592,33 @@ public sealed class OverlayInputTransparencyTests
     }
 
     [Fact]
+    public void DesignV2Chrome_AllSharedChromeOffLeavesNoHeaderTextOrFooter()
+    {
+        var settings = new OverlaySettings { Id = "standings" };
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingTest, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingRace, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, true);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, true);
+        var snapshot = RaceSnapshot(timeRemainingSeconds: 600d);
+
+        Assert.Equal(string.Empty, DesignV2LiveOverlayForm.BuildHeaderText(settings, snapshot, "live standings"));
+        Assert.False(DesignV2LiveOverlayForm.ShowFooterForSettings(
+            DesignV2LiveOverlayKind.Standings,
+            settings,
+            snapshot));
+    }
+
+    [Fact]
     public void DesignV2Chrome_SessionWeatherDoesNotExposeSourceFooter()
     {
         var settings = new OverlaySettings { Id = "session-weather" };
-        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, true);
 
         Assert.False(DesignV2LiveOverlayForm.ShowFooterForSettings(
             DesignV2LiveOverlayKind.SessionWeather,
             settings,
             RaceSnapshot(timeRemainingSeconds: 600d)));
-
-        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, false);
 
         Assert.False(DesignV2LiveOverlayForm.ShowFooterForSettings(
             DesignV2LiveOverlayKind.SessionWeather,

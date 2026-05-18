@@ -2219,12 +2219,6 @@ internal sealed class DesignV2SettingsSurface : Control
     private static readonly SettingsOverlayTabSections.OverlayChromeSettingsRow[] HeaderChromeRows =
     [
         new(
-            "Status",
-            OverlayOptionKeys.ChromeHeaderStatusTest,
-            OverlayOptionKeys.ChromeHeaderStatusPractice,
-            OverlayOptionKeys.ChromeHeaderStatusQualifying,
-            OverlayOptionKeys.ChromeHeaderStatusRace),
-        new(
             "Time remaining",
             OverlayOptionKeys.ChromeHeaderTimeRemainingTest,
             OverlayOptionKeys.ChromeHeaderTimeRemainingPractice,
@@ -2232,15 +2226,7 @@ internal sealed class DesignV2SettingsSurface : Control
             OverlayOptionKeys.ChromeHeaderTimeRemainingRace)
     ];
 
-    private static readonly SettingsOverlayTabSections.OverlayChromeSettingsRow[] FooterChromeRows =
-    [
-        new(
-            "Source",
-            OverlayOptionKeys.ChromeFooterSourceTest,
-            OverlayOptionKeys.ChromeFooterSourcePractice,
-            OverlayOptionKeys.ChromeFooterSourceQualifying,
-            OverlayOptionKeys.ChromeFooterSourceRace)
-    ];
+    private static readonly SettingsOverlayTabSections.OverlayChromeSettingsRow[] FooterChromeRows = [];
 
     private static IReadOnlyList<SettingsOverlayTabSections.OverlayChromeSettingsRow> FooterChromeRowsFor(string overlayId)
     {

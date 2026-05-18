@@ -98,15 +98,15 @@ EXPECTED_COMPONENT_PNGS = {
 
 WINDOWS_EXPECTED_PNGS = {
     "states/fuel-calculator-live.png": (503, 315),
-    "states/relative-live.png": (360, 373),
-    "states/standings-live.png": (659, 334),
+    "states/relative-live.png": (360, 352),
+    "states/standings-live.png": (659, 313),
     "states/track-map-placeholder.png": (360, 360),
     "states/flags-blue.png": (360, 170),
     "states/session-weather-live.png": (464, 496),
-    "states/pit-service-active.png": (530, 743),
+    "states/pit-service-active.png": (530, 722),
     "states/input-state-trace.png": (520, 260),
     "states/car-radar-side-pressure.png": (300, 300),
-    "states/gap-to-leader-trend.png": (654, 357),
+    "states/gap-to-leader-trend.png": (654, 336),
 }
 
 WINDOWS_EXPECTED_SIZE_SOURCES = {
@@ -195,21 +195,21 @@ WINDOWS_SETTING_REGION_PNGS = [
 ]
 
 WINDOWS_NATIVE_OVERLAY_SIZES = {
-    "standings": (659, 334),
+    "standings": (659, 313),
     "fuel-calculator": (503, 315),
-    "relative": (360, 373),
+    "relative": (360, 352),
     "track-map": (360, 360),
     "stream-chat": (380, 520),
     "flags": (360, 170),
     "session-weather": (464, 496),
-    "pit-service": (530, 743),
+    "pit-service": (530, 722),
     "input-state": (520, 260),
     "car-radar": (300, 300),
-    "gap-to-leader": (654, 357),
+    "gap-to-leader": (654, 336),
 }
 
 WINDOWS_NATIVE_SPECIAL_PNGS = {
-    "native-overlays/standings-preview-sizing-race.png": (659, 334),
+    "native-overlays/standings-preview-sizing-race.png": (659, 313),
 }
 
 WINDOWS_NATIVE_OVERLAY_SIZE_SOURCES = {
@@ -259,6 +259,12 @@ BROWSER_FULL_CANVAS_COMPARISON_OVERLAYS: set[str] = set()
 
 OVERLAY_VARIANT_SPECS = (
     ("fuel-calculator", "waiting", "fixture=fuel-waiting", True, None),
+    ("standings", "chrome-off", "fixture=chrome-off", True, None),
+    ("relative", "chrome-off", "fixture=chrome-off", True, None),
+    ("fuel-calculator", "chrome-off", "fixture=chrome-off", True, None),
+    ("gap-to-leader", "chrome-off", "fixture=chrome-off", True, None),
+    ("session-weather", "chrome-off", "fixture=chrome-off", True, None),
+    ("pit-service", "chrome-off", "fixture=chrome-off", True, None),
     ("session-weather", "missing", "fixture=session-weather-missing", True, None),
     ("pit-service", "idle", "fixture=pit-service-idle", True, None),
     ("input-state", "waiting", "fixture=input-waiting", True, None),
@@ -358,6 +364,7 @@ WINDOWS_NATIVE_REVIEW_ALIGNED_OVERLAYS = {
     "pit-service",
     "input-state",
     "stream-chat",
+    "gap-to-leader",
 }
 
 WINDOWS_NATIVE_FULL_CANVAS_COMPARISON_OVERLAYS = {
@@ -1435,6 +1442,7 @@ def validate_windows_manifest(root: Path, expected_paths: set[str], failures: li
             require_windows_native_comparison_evidence(path, screenshot, failures)
             require_layout_evidence(path, metadata.get("layout"), failures)
             require_model_evidence(path, screenshot.get("modelEvidence"), failures)
+            validate_overlay_chrome_contract(path, screenshot, failures)
             if metadata.get("surface") != "windows-native-overlay":
                 failures.append(f"{path}: expected windows-native-overlay surface, got {metadata.get('surface')!r}")
             validate_overlay_semantics(
@@ -1483,6 +1491,7 @@ def validate_browser_review_manifest(
             require_model_evidence(path, screenshot.get("modelEvidence"), failures)
             require_browser_full_canvas_exception_evidence(path, screenshot, failures)
             validate_localhost_alias_manifest(path, screenshot, failures)
+            validate_overlay_chrome_contract(path, screenshot, failures)
             validate_overlay_semantics(
                 path,
                 values=screenshot,
@@ -1524,6 +1533,81 @@ def require_layout_evidence(path: str, value: object, failures: list[str]) -> No
 
     if isinstance(body_layout, dict):
         require_native_body_layout_evidence(path, body_layout, failures)
+
+    elements_list = layout_elements(value)
+    if elements_list:
+        require_header_item_fit(path, elements_list, failures)
+
+
+def validate_overlay_chrome_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    if not path.startswith(("browser-overlays/", "localhost-overlays/", "native-overlays/")):
+        return
+
+    layout = values.get("layout")
+    elements = layout_elements(layout)
+    if not elements:
+        return
+
+    status = str(values.get("status") or "").strip()
+    source = str(values.get("source") or "").strip()
+    header_roles = {"header", "status", "header-items", "header-item", "time-remaining"}
+    footer_roles = {"footer", "source"}
+    header_text = " ".join(
+        element_text(element)
+        for element in elements
+        if element_role(element) in header_roles
+    ).strip()
+    footer_text = " ".join(
+        element_text(element)
+        for element in elements
+        if element_role(element) in footer_roles
+    ).strip()
+
+    for element in elements:
+        role = element_role(element)
+        text = element_text(element)
+        if role == "status" and text:
+            failures.append(f"{path}: removed header status chrome rendered text {text!r}")
+        if role == "source" and text:
+            failures.append(f"{path}: removed footer source chrome rendered text {text!r}")
+
+    if status and status in header_text:
+        failures.append(f"{path}: semantic status {status!r} is still present in rendered header chrome")
+    if source and source in footer_text:
+        failures.append(f"{path}: semantic source {source!r} is still present in rendered footer chrome")
+
+
+def layout_elements(layout: object) -> list[dict[str, object]]:
+    if not isinstance(layout, dict):
+        return []
+    elements = layout.get("elements") or layout.get("Elements")
+    return [element for element in elements if isinstance(element, dict)] if isinstance(elements, list) else []
+
+
+def element_role(element: dict[str, object]) -> str:
+    return str(element.get("role") or element.get("Role") or "").strip().lower()
+
+
+def element_text(element: dict[str, object]) -> str:
+    return str(element.get("text") or element.get("Text") or "").strip()
+
+
+def require_header_item_fit(path: str, elements: list[dict[str, object]], failures: list[str]) -> None:
+    for index, element in enumerate(elements):
+        role = element_role(element)
+        if role not in {"header-items", "header-item", "time-remaining"}:
+            continue
+        if not element_text(element):
+            continue
+        metrics = typed_dict(get_manifest_value(element, "textMetrics"))
+        if not metrics:
+            if path.startswith(("browser-overlays/", "localhost-overlays/")):
+                failures.append(f"{path}: header chrome element {index} missing text fit metrics")
+            continue
+        if get_manifest_value(metrics, "fitsWidth") is False:
+            failures.append(f"{path}: header chrome element {index} text does not fit width")
+        if get_manifest_value(metrics, "fitsHeight") is False:
+            failures.append(f"{path}: header chrome element {index} text does not fit height")
 
 
 def require_scenario_evidence(path: str, value: object, failures: list[str]) -> None:
@@ -1696,6 +1780,7 @@ def require_settings_ui_evidence(path: str, value: object, failures: list[str]) 
         require_settings_text_fit(path, element, f"settings UI element {index}", failures)
 
     require_settings_critical_text_fields(path, value, is_component_crop, failures)
+    require_removed_chrome_settings_absent(path, value, failures)
 
     if is_component_crop:
         evidence_counts = [
@@ -1823,6 +1908,28 @@ def require_settings_critical_text_fields(
             failures.append(f"{path}: settings UI missing critical text field evidence {evidence_key!r}")
             continue
         require_settings_text_fit(path, element, evidence_key, failures)
+
+
+def require_removed_chrome_settings_absent(path: str, value: dict[str, object], failures: list[str]) -> None:
+    normalized = path.replace("\\", "/").lower()
+    checks: list[tuple[str, str]] = []
+    if normalized.endswith("-header.png") or "/header" in normalized:
+        checks.append(("Status", "removed header status option"))
+    if normalized.endswith("-footer.png") or "/footer" in normalized:
+        checks.append(("Source", "removed footer source option"))
+    if not checks:
+        return
+
+    elements: list[dict[str, object]] = []
+    for key in ("controls", "textFields", "panels"):
+        candidate = value.get(key)
+        if isinstance(candidate, list):
+            elements.extend(element for element in candidate if isinstance(element, dict))
+
+    for token, label in checks:
+        for element in elements:
+            if str(element.get("text") or "").strip() == token:
+                failures.append(f"{path}: settings UI still exposes {label} {token!r}")
 
 
 def settings_field_by_evidence_key(
@@ -2907,7 +3014,9 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
 
     validate_overlay_variant_scenario(path, values, overlay_id, slug, failures)
 
-    if overlay_id == "fuel-calculator" and slug == "waiting":
+    if slug == "chrome-off":
+        validate_chrome_off_variant(path, values, failures)
+    elif overlay_id == "fuel-calculator" and slug == "waiting":
         validate_fuel_waiting_variant(path, values, failures)
     elif overlay_id == "session-weather" and slug == "missing":
         validate_session_weather_missing_variant(path, values, failures)
@@ -2931,6 +3040,30 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
         validate_stream_chat_variant(path, values, slug, failures)
     else:
         failures.append(f"{path}: no validator for overlay fixture variant {overlay_id}/{slug}")
+
+
+def validate_chrome_off_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    elements = layout_elements(values.get("layout"))
+    if not elements:
+        failures.append(f"{path}: chrome-off variant missing layout elements")
+        return
+
+    for index, element in enumerate(elements):
+        role = element_role(element)
+        text = element_text(element)
+        if role in {"header-items", "header-item", "time-remaining"} and text:
+            failures.append(f"{path}: chrome-off variant header item {index} rendered text {text!r}")
+        if role == "source" and text:
+            failures.append(f"{path}: chrome-off variant footer source rendered text {text!r}")
+
+    model_header_items = values.get("headerItems")
+    if isinstance(model_header_items, list):
+        visible_items = [
+            item for item in model_header_items
+            if isinstance(item, dict) and str(item.get("value") or "").strip()
+        ]
+        if visible_items:
+            failures.append(f"{path}: chrome-off variant model still exposes visible headerItems")
 
 
 def validate_overlay_variant_scenario(
@@ -4503,6 +4636,33 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="removed header status chrome reappears",
+        path="browser-overlays/fuel-calculator-race.png",
+        base=mutation_overlay_chrome_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("layout", "elements", 2, "text"), "3 stints / 2 stops"),
+        validate=validate_overlay_chrome_contract,
+        expected_tokens=("removed header status chrome rendered text",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="removed footer source chrome reappears",
+        path="browser-overlays/fuel-calculator-race.png",
+        base=mutation_overlay_chrome_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("layout", "elements", 4, "text"), "source: model evidence"),
+        validate=validate_overlay_chrome_contract,
+        expected_tokens=("removed footer source chrome rendered text",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="chrome-off variant time remaining reappears",
+        path="browser-overlays/fuel-calculator-chrome-off.png",
+        base=mutation_chrome_off_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("layout", "elements", 1, "text"), "06:37:08"),
+        validate=validate_chrome_off_variant,
+        expected_tokens=("chrome-off variant header item",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="settings update status text clips",
         path="settings/general.png",
         base=mutation_settings_ui_evidence("general"),
@@ -4518,6 +4678,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         mutate=lambda evidence: set_nested_value(evidence, ("textFields", 1, "attributes", "evidenceKey"), "support.bundle.latest.missing"),
         validate=lambda path, evidence, local_failures: require_settings_ui_evidence(path, evidence, local_failures),
         expected_tokens=("settings UI missing critical text field evidence 'support.bundle.latest.value'",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="settings header status option reappears",
+        path="settings/standings-header.png",
+        base=mutation_settings_chrome_evidence("header"),
+        mutate=lambda evidence: evidence["controls"].append(mutation_settings_text_field("settings-field-label", "Status", "standings.chrome.header.status", 388, 260, 70, 18)),
+        validate=lambda path, evidence, local_failures: require_settings_ui_evidence(path, evidence, local_failures),
+        expected_tokens=("settings UI still exposes removed header status option",),
         failures=failures,
     )
     expect_mutation_failure(
@@ -4656,6 +4825,34 @@ def mutation_settings_ui_evidence(tab: str) -> dict[str, object]:
         "panels": panels,
         "controls": text_fields,
         "textFields": text_fields,
+    }
+
+
+def mutation_settings_chrome_evidence(region: str) -> dict[str, object]:
+    controls = [
+        mutation_settings_text_field("settings-field-label", "Time remaining", "standings.chrome.header.time-remaining", 388, 236, 132, 18),
+    ] if region == "header" else []
+    return {
+        "contract": "settings-ui-evidence/v1",
+        "surface": "browser-review-settings",
+        "tab": "standings",
+        "overlayId": "standings",
+        "requestedRegion": region,
+        "activeRegion": region,
+        "root": {"x": 0, "y": 0, "width": 1240, "height": 680},
+        "contentBounds": {"x": 44, "y": 36, "width": 1152, "height": 608},
+        "tabs": [
+            {"role": "settings-sidebar-tab", "text": "Standings", "bounds": {"x": 78, "y": 190, "width": 164, "height": 27}},
+        ],
+        "regions": [
+            {"role": "settings-region-segment", "text": "Header", "bounds": {"x": 418, "y": 136, "width": 110, "height": 28}},
+            {"role": "settings-region-segment", "text": "Footer", "bounds": {"x": 530, "y": 136, "width": 110, "height": 28}},
+        ],
+        "panels": [
+            {"role": "settings-panel", "text": "Header", "bounds": {"x": 306, "y": 214, "width": 834, "height": 232}},
+        ],
+        "controls": controls,
+        "textFields": controls,
     }
 
 
@@ -5087,6 +5284,57 @@ def mutation_input_waiting_screenshot() -> dict[str, object]:
             },
         },
     }
+
+
+def mutation_overlay_chrome_screenshot() -> dict[str, object]:
+    return {
+        "overlayId": "fuel-calculator",
+        "previewMode": "race",
+        "status": "3 stints / 2 stops",
+        "source": "source: model evidence",
+        "bodyKind": "metrics",
+        "layout": {
+            "contract": "browser-layout/v1",
+            "root": {"x": 0, "y": 0, "width": 503, "height": 315},
+            "elements": [
+                {
+                    "role": "header",
+                    "text": "Fuel Calculator 06:37:08",
+                    "bounds": {"x": 1, "y": 1, "width": 501, "height": 38},
+                },
+                {
+                    "role": "header-items",
+                    "text": "06:37:08",
+                    "bounds": {"x": 384, "y": 11, "width": 104, "height": 17},
+                    "textMetrics": {"fitsWidth": True, "fitsHeight": True},
+                },
+                {
+                    "role": "status",
+                    "text": "",
+                    "bounds": {"x": 384, "y": 11, "width": 1, "height": 1},
+                },
+                {
+                    "role": "time-remaining",
+                    "text": "06:37:08",
+                    "bounds": {"x": 443, "y": 15, "width": 45, "height": 12},
+                    "textMetrics": {"fitsWidth": True, "fitsHeight": True},
+                },
+                {
+                    "role": "source",
+                    "text": "",
+                    "bounds": {"x": 1, "y": 292, "width": 1, "height": 1},
+                },
+            ],
+        },
+    }
+
+
+def mutation_chrome_off_screenshot() -> dict[str, object]:
+    screenshot = mutation_overlay_chrome_screenshot()
+    screenshot["fixtureVariant"] = "chrome-off"
+    set_nested_value(screenshot, ("layout", "elements", 1, "text"), "")
+    set_nested_value(screenshot, ("layout", "elements", 3, "text"), "")
+    return screenshot
 
 
 def mutation_variant_scenario_screenshot() -> dict[str, object]:

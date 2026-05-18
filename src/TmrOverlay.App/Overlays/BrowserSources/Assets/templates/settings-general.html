@@ -1038,9 +1038,9 @@
 
       function browserSize(overlay) {
         const base = {
-          standings: [659, 334],
-          relative: [360, 373],
-          'gap-to-leader': [654, 357],
+          standings: [659, 313],
+          relative: [360, 352],
+          'gap-to-leader': [654, 336],
           'track-map': [360, 360],
           'stream-chat': [380, 520],
           'garage-cover': [1280, 720],
@@ -1049,7 +1049,7 @@
           'car-radar': [300, 300],
           flags: [360, 170],
           'session-weather': [464, 496],
-          'pit-service': [530, 743]
+          'pit-service': [530, 722]
         }[overlay?.id] || [400, 300];
         if (overlay?.id === 'input-state') {
           base[0] = inputStateBaseWidth(overlay, base[0]);

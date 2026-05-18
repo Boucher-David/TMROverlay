@@ -40,6 +40,12 @@ const configuredCanvasCaptureBackdrop = {
 const previewModes = ['practice', 'qualifying', 'race'];
 const nonHappyPathOverlayVariants = [
   { overlayId: 'fuel-calculator', slug: 'waiting', query: 'fixture=fuel-waiting' },
+  { overlayId: 'standings', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'relative', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'fuel-calculator', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'gap-to-leader', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'session-weather', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'pit-service', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'session-weather', slug: 'missing', query: 'fixture=session-weather-missing' },
   { overlayId: 'pit-service', slug: 'idle', query: 'fixture=pit-service-idle' },
   { overlayId: 'input-state', slug: 'waiting', query: 'fixture=input-waiting' },
@@ -628,6 +634,8 @@ async function readDomDiagnostics(element) {
       ['header', '.header'],
       ['title', '.title'],
       ['status', '#status'],
+      ['header-items', '.header-items'],
+      ['header-item', '.header-item'],
       ['time-remaining', '#time-remaining'],
       ['content', '#content'],
       ['source', '#source'],

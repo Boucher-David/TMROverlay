@@ -35,8 +35,8 @@ describe('data contract settings mapping', () => {
     expect(standings.opacityPercent).toBe(88);
     expect(standings.classSeparatorsEnabled).toBe(true);
     expect(standings.otherClassRows).toBe(0);
-    expect(standings.chrome.header.Status.race).toBe(false);
-    expect(standings.chrome.footer.Source.race).toBe(false);
+    expect(standings.headerRows).toEqual(['Time remaining']);
+    expect(standings.footerRows).toEqual([]);
     expect(contentRow(standings, 'Class gap').enabled).toBe(false);
     expect(contentRow(standings, 'Driver').enabled).toBe(true);
 
@@ -46,7 +46,7 @@ describe('data contract settings mapping', () => {
 
     const fuel = overlay(config, 'fuel-calculator');
     expect(fuel.contentRows).toEqual([]);
-    expect(fuel.chrome.footer.Source.race).toBe(false);
+    expect(fuel.footerRows).toEqual([]);
 
     const sessionWeather = overlay(config, 'session-weather');
     expect(contentRow(sessionWeather, 'Total time').enabled).toBe(false);
@@ -59,7 +59,7 @@ describe('data contract settings mapping', () => {
     const pitService = overlay(config, 'pit-service');
     expect(contentRow(pitService, 'Pressure').enabled).toBe(true);
     expect(contentRow(pitService, 'Fast repairs available').enabled).toBe(true);
-    expect(pitService.chrome.footer.Source.race).toBe(false);
+    expect(pitService.footerRows).toEqual([]);
 
     const inputState = overlay(config, 'input-state');
     expect(contentRow(inputState, 'Brake trace').enabled).toBe(true);
@@ -139,25 +139,17 @@ function contentState(options) {
 function chromeState(options) {
   const chrome = {
     header: {
-      Status: {},
       'Time remaining': {}
     },
-    footer: {
-      Source: {}
-    }
+    footer: {}
   };
   for (const [key, value] of Object.entries(options)) {
     const enabled = value !== 'false';
-    const match = /^chrome\.(header|footer)\.(status|time-remaining|source)\.(test|practice|qualifying|race)$/.exec(key);
+    const match = /^chrome\.header\.time-remaining\.(test|practice|qualifying|race)$/.exec(key);
     if (!match) continue;
 
-    const [, area, item, session] = match;
-    const label = item === 'status'
-      ? 'Status'
-      : item === 'time-remaining'
-        ? 'Time remaining'
-        : 'Source';
-    chrome[area][label][session === 'test' ? 'practice' : session] = enabled;
+    const [, session] = match;
+    chrome.header['Time remaining'][session === 'test' ? 'practice' : session] = enabled;
   }
 
   return chrome;

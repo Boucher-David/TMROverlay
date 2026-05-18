@@ -8,7 +8,7 @@ internal static class RelativeOverlayDefinition
         Id: "relative",
         DisplayName: "Relative",
         DefaultWidth: 360,
-        DefaultHeight: 373,
+        DefaultHeight: 352,
         Options:
         [
             OverlaySettingsOptionDescriptor.Integer(

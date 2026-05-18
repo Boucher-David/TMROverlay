@@ -445,7 +445,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             {
                 _model = _model with
                 {
-                    HeaderText = "overlay error",
+                    HeaderText = string.Empty,
                     ShowFooter = false,
                     ShowHeader = true
                 };
@@ -495,7 +495,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         {
             return model with
             {
-                HeaderText = model.Status,
+                HeaderText = string.Empty,
                 ShowFooter = false,
                 ShowHeader = true
             };
@@ -520,11 +520,6 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     internal static string BuildHeaderText(OverlaySettings settings, LiveTelemetrySnapshot snapshot, string status)
     {
         var parts = new List<string>(2);
-        if (OverlayChromeSettings.ShowHeaderStatus(settings, snapshot) && !string.IsNullOrWhiteSpace(status))
-        {
-            parts.Add(status);
-        }
-
         if (OverlayChromeSettings.ShowHeaderTimeRemaining(settings, snapshot))
         {
             var timeRemaining = OverlayHeaderTimeFormatter.FormatTimeRemaining(snapshot);
@@ -539,12 +534,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     internal static bool ShowFooterForSettings(DesignV2LiveOverlayKind kind, OverlaySettings settings, LiveTelemetrySnapshot snapshot)
     {
-        if (kind == DesignV2LiveOverlayKind.SessionWeather)
-        {
-            return false;
-        }
-
-        return OverlayChromeSettings.ShowFooterSource(settings, snapshot);
+        return false;
     }
 
     private void ApplyModelVisibility(DesignV2OverlayModel model)
@@ -2795,6 +2785,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             Footer = LayoutRect(footer),
             ShowHeader = model.ShowHeader,
             ShowFooter = model.ShowFooter,
+            HeaderText = model.ShowHeader ? model.HeaderText ?? string.Empty : null,
+            FooterText = model.ShowFooter ? model.Footer : null,
             BodyLayout = BuildBodyLayout(body, model.Body)
         };
     }
@@ -2817,7 +2809,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 Body = LayoutRect(rect),
                 BodyLayout = BuildRadarLayout(rect, radar)
             },
-            DesignV2InputsBody inputs => BuildInputsLayoutDiagnostics(rect, client, constants, inputs),
+            DesignV2InputsBody inputs => BuildInputsLayoutDiagnostics(rect, client, constants, model, inputs),
             DesignV2TrackMapBody trackMap => new DesignV2LayoutDiagnostics(
                 "design-v2-layout/v1",
                 KindName(_kind),
@@ -2844,6 +2836,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         RectangleF rect,
         DesignV2LayoutRect client,
         DesignV2LayoutConstants constants,
+        DesignV2OverlayModel model,
         DesignV2InputsBody inputs)
     {
         var header = new RectangleF(rect.Left, rect.Top, rect.Width, HeaderHeight);
@@ -2859,6 +2852,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             Body = LayoutRect(content),
             ShowHeader = true,
             ShowFooter = false,
+            HeaderText = model.HeaderText ?? string.Empty,
             BodyLayout = BuildInputsLayout(content, inputs)
         };
     }
@@ -4224,7 +4218,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             DrawText(graphics, model.Title, titleFont, TextPrimary, new RectangleF(outer.Left + 14, header.Top + 10, titleWidth, 18));
             DrawText(
                 graphics,
-                model.HeaderText ?? model.Status,
+                model.HeaderText ?? string.Empty,
                 statusFont,
                 EvidenceColor(model.Evidence),
                 new RectangleF(outer.Left + titleWidth + 24, header.Top + 10, Math.Max(1, outer.Width - titleWidth - 38 - closeButtonSpace), 18),
@@ -7371,7 +7365,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         {
             return WaitingModel(TitleFor(kind), "waiting") with
             {
-                HeaderText = "waiting",
+                HeaderText = string.Empty,
                 ShowFooter = false,
                 ShowHeader = true
             };
@@ -7929,6 +7923,10 @@ internal sealed record DesignV2LayoutDiagnostics(
     public bool ShowHeader { get; init; }
 
     public bool ShowFooter { get; init; }
+
+    public string? HeaderText { get; init; }
+
+    public string? FooterText { get; init; }
 
     public DesignV2LayoutBody? BodyLayout { get; init; }
 }

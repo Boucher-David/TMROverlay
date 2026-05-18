@@ -198,9 +198,9 @@ public sealed class OverlayContentColumnSettingsTests
             currentSize: new Size(StandingsOverlayDefinition.Definition.DefaultWidth, 2160),
             sessionPreviewActive: true);
 
-        Assert.Equal(new Size(659, 334), size);
+        Assert.Equal(new Size(659, 313), size);
         Assert.Equal(659, standings.Width);
-        Assert.Equal(334, standings.Height);
+        Assert.Equal(313, standings.Height);
     }
 
     [Fact]
@@ -238,20 +238,20 @@ public sealed class OverlayContentColumnSettingsTests
         Assert.True(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             StandingsOverlayDefinition.Definition,
             new Size(659, 720),
-            new Size(659, 334)));
+            new Size(659, 313)));
         Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             StandingsOverlayDefinition.Definition,
             new Size(659, 720),
-            new Size(659, 334),
+            new Size(659, 313),
             sessionPreviewActive: true));
         Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             StandingsOverlayDefinition.Definition,
             new Size(500, 720),
-            new Size(659, 334)));
+            new Size(659, 313)));
         Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             RelativeOverlayDefinition.Definition,
             new Size(360, 520),
-            new Size(360, 373)));
+            new Size(360, 352)));
     }
 
     [Theory]

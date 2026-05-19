@@ -943,14 +943,244 @@ function reviewInputTrace() {
 
 function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
   const model = reviewDisplayModel(overlayId, previewMode, searchParams);
-  if (!model || opacityExcludedOverlayIds.has(overlayId)) {
-    return model ? { ...model, rootOpacity: 1 } : model;
+  if (!model) {
+    return model;
+  }
+
+  if (opacityExcludedOverlayIds.has(overlayId)) {
+    return withEffectiveSettingsEvidence({ ...model, rootOpacity: 1 }, overlayId, previewMode, searchParams);
   }
 
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const percent = Number(overlayState.opacityPercent ?? 100);
   const opacity = Number.isFinite(percent) ? Math.max(0.2, Math.min(1, percent / 100)) : 1;
-  return { ...model, rootOpacity: opacity };
+  return withEffectiveSettingsEvidence({ ...model, rootOpacity: opacity }, overlayId, previewMode, searchParams);
+}
+
+function withEffectiveSettingsEvidence(model, overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
+  return {
+    ...model,
+    effectiveSettings: reviewEffectiveSettings(model, overlayId, previewMode, searchParams)
+  };
+}
+
+function reviewEffectiveSettings(model, overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
+  const normalizedPreviewMode = normalizePreviewMode(previewMode);
+  const session = sessionKeyFromPreview(previewMode);
+  const overlayState = reviewAppState.overlays[overlayId] || {};
+  return {
+    overlayId,
+    previewMode: normalizedPreviewMode,
+    sources: {
+      browserReview: { applied: true },
+      localhostObs: { applied: true },
+      windowsNative: { applied: true }
+    },
+    rendered: {
+      bodyKind: model?.bodyKind || null,
+      shouldRender: model?.shouldRender !== false,
+      rowCount: (model?.rows || []).length,
+      headerItems: (model?.headerItems || []).map((item) => ({
+        key: item?.key || null,
+        value: item?.value || ''
+      }))
+    },
+    settings: reviewEffectiveSettingList(overlayId, overlayState, session, searchParams)
+  };
+}
+
+function reviewEffectiveSettingList(overlayId, overlayState, session, searchParams = new URLSearchParams()) {
+  const settings = [
+    effectiveSetting('overlayEnabled', overlayState.enabled === true),
+    effectiveSetting(`session.${session}.enabled`, overlaySessionEnabled(overlayId, overlayState, session)),
+    effectiveSetting('general.unitSystem', reviewAppState.unitSystem)
+  ];
+
+  if (overlayId === 'relative') {
+    settings.push(effectiveSetting('carsEachSide', clampInteger(overlayState?.carsEachSide, 5, 0, 8)));
+  }
+
+  if (overlayId === 'standings') {
+    settings.push(
+      effectiveContentSetting(overlayState, session, 'standings.class-separators.enabled', 'Class separators', true),
+      effectiveSetting('otherClassRows', clampInteger(overlayState?.otherClassRows, 2, 0, 6))
+    );
+  }
+
+  if (overlayId === 'gap-to-leader') {
+    const carsAhead = clampInteger(overlayState?.carsAhead, 5, 0, 12);
+    const carsBehind = clampInteger(overlayState?.carsBehind, 5, 0, 12);
+    settings.push(
+      effectiveSetting('carsAhead', carsAhead),
+      effectiveSetting('carsBehind', carsBehind),
+      effectiveSetting('gap.cars-window', { carsAhead, carsBehind })
+    );
+  }
+
+  if (overlayId === 'stream-chat') {
+    settings.push(effectiveSetting('stream-chat.provider', reviewSettings(overlayId, 'race', searchParams).provider));
+  }
+
+  if (overlayId === 'garage-cover') {
+    settings.push(
+      effectiveSetting('garage-cover.previewVisible', reviewSettings(overlayId, 'race', searchParams).previewVisible === true),
+      effectiveContentSetting(overlayState, session, 'Content', 'Content', true)
+    );
+  }
+
+  if (supportsSharedChrome(overlayId)) {
+    settings.push(effectiveSetting(
+      `chrome.header.time-remaining.${session}`,
+      chromeEnabled(overlayState, 'header', 'Time remaining', session, true),
+      session));
+  }
+
+  if (overlayId === 'input-state') {
+    settings.push(effectiveSetting(
+      'input-state.trace.*',
+      contentLabelsEnabled(overlayState, [
+        'input-state.trace.throttle',
+        'input-state.trace.brake',
+        'input-state.trace.clutch',
+        'Throttle trace',
+        'Brake trace',
+        'Clutch trace'
+      ], true, session),
+      session));
+  }
+
+  for (const row of reviewEffectiveContentRows(overlayId)) {
+    settings.push(effectiveContentSetting(overlayState, session, row.key, row.label, row.defaultEnabled));
+  }
+
+  return settings;
+}
+
+function overlaySessionEnabled(overlayId, overlayState, session) {
+  if (Object.hasOwn(overlayState?.sessions || {}, session)) {
+    return overlayState.sessions[session] === true;
+  }
+
+  return overlayId === 'gap-to-leader' ? session === 'race' : true;
+}
+
+function effectiveSetting(key, value, session = null) {
+  return session
+    ? { key, value, session }
+    : { key, value };
+}
+
+function effectiveContentSetting(overlayState, session, key, label, defaultEnabled) {
+  return effectiveSetting(
+    key,
+    contentLabelsEnabled(overlayState, [key, label].filter(Boolean), defaultEnabled, session),
+    session);
+}
+
+function reviewEffectiveContentRows(overlayId) {
+  return {
+    standings: [
+      ['standings.content.standings.class-position.enabled', 'Class position', true],
+      ['standings.content.standings.car-number.enabled', 'Car number', true],
+      ['standings.content.standings.driver.enabled', 'Driver', true],
+      ['standings.content.standings.gap.enabled', 'Class gap', true],
+      ['standings.content.standings.interval.enabled', 'Focus interval', true],
+      ['standings.content.standings.fastest-lap.enabled', 'Fastest lap', true],
+      ['standings.content.standings.last-lap.enabled', 'Last lap', true],
+      ['standings.content.standings.pit.enabled', 'Pit status', true]
+    ],
+    relative: [
+      ['relative.content.relative.position.enabled', 'Relative position', true],
+      ['relative.content.relative.driver.enabled', 'Driver', true],
+      ['relative.content.relative.gap.enabled', 'Relative delta', true],
+      ['relative.content.relative.pit.enabled', 'Pit status', false]
+    ],
+    'track-map': [
+      ['track-map.sector-boundaries.enabled', 'Sector boundaries', true]
+    ],
+    'stream-chat': [
+      ['stream-chat.twitch.author-color', 'Author color', true],
+      ['stream-chat.twitch.badges', 'Badges', true],
+      ['stream-chat.twitch.bits', 'Bits', true],
+      ['stream-chat.twitch.first-message', 'First message', true],
+      ['stream-chat.twitch.replies', 'Replies', true],
+      ['stream-chat.twitch.timestamps', 'Timestamps', true],
+      ['stream-chat.twitch.emotes', 'Emotes', true],
+      ['stream-chat.twitch.alerts', 'Alerts', true],
+      ['stream-chat.twitch.message-ids', 'Message IDs', false]
+    ],
+    'input-state': [
+      ['input-state.trace.throttle', 'Throttle trace', true],
+      ['input-state.trace.brake', 'Brake trace', true],
+      ['input-state.trace.clutch', 'Clutch trace', true],
+      ['input-state.current.throttle', 'Throttle %', true],
+      ['input-state.current.brake', 'Brake %', true],
+      ['input-state.current.clutch', 'Clutch %', true],
+      ['input-state.current.steering', 'Steering wheel', true],
+      ['input-state.current.gear', 'Gear', true],
+      ['input-state.current.speed', 'Speed', true]
+    ],
+    'car-radar': [
+      ['radar.multiclass-warning', 'Faster-class warning', true]
+    ],
+    flags: [
+      ['flags.show-green', 'Green', true],
+      ['flags.show-blue', 'Blue', true],
+      ['flags.show-yellow', 'Yellow', true],
+      ['flags.show-critical', 'Red / black', true],
+      ['flags.show-finish', 'White / checkered', true]
+    ],
+    'session-weather': [
+      ['session-weather.session.type.enabled', 'Session type', true],
+      ['session-weather.session.name.enabled', 'Session name', true],
+      ['session-weather.session.mode.enabled', 'Session mode', true],
+      ['session-weather.clock.elapsed.enabled', 'Elapsed time', true],
+      ['session-weather.clock.remaining.enabled', 'Remaining time', true],
+      ['session-weather.clock.total.enabled', 'Total time', true],
+      ['session-weather.event.type.enabled', 'Event type', true],
+      ['session-weather.event.car.enabled', 'Car', true],
+      ['session-weather.track.name.enabled', 'Track name', true],
+      ['session-weather.track.length.enabled', 'Track length', true],
+      ['session-weather.laps.remaining.enabled', 'Laps remaining', true],
+      ['session-weather.laps.total.enabled', 'Laps total', true],
+      ['session-weather.surface.wetness.enabled', 'Wetness', true],
+      ['session-weather.surface.declared.enabled', 'Declared surface', true],
+      ['session-weather.surface.rubber.enabled', 'Rubber', true],
+      ['session-weather.sky.skies.enabled', 'Skies', true],
+      ['session-weather.sky.weather.enabled', 'Weather', true],
+      ['session-weather.sky.rain.enabled', 'Rain', true],
+      ['session-weather.wind.direction.enabled', 'Wind direction', true],
+      ['session-weather.wind.speed.enabled', 'Wind speed', true],
+      ['session-weather.wind.facing.enabled', 'Facing wind', true],
+      ['session-weather.temps.air.enabled', 'Air temp', true],
+      ['session-weather.temps.track.enabled', 'Track temp', true],
+      ['session-weather.atmosphere.humidity.enabled', 'Humidity', true],
+      ['session-weather.atmosphere.fog.enabled', 'Fog', true],
+      ['session-weather.atmosphere.pressure.enabled', 'Pressure', true]
+    ],
+    'pit-service': [
+      ['pit-service.session.time.enabled', 'Session time', true],
+      ['pit-service.session.laps.enabled', 'Session laps', true],
+      ['pit-service.signal.release.enabled', 'Release', true],
+      ['pit-service.signal.status.enabled', 'Pit status', true],
+      ['pit-service.service.fuel-requested.enabled', 'Fuel requested', true],
+      ['pit-service.service.fuel-selected.enabled', 'Fuel selected', true],
+      ['pit-service.service.tearoff-requested.enabled', 'Tearoff requested', true],
+      ['pit-service.service.repair-required.enabled', 'Required repair', true],
+      ['pit-service.service.repair-optional.enabled', 'Optional repair', true],
+      ['pit-service.service.fast-repair-selected.enabled', 'Fast repair selected', true],
+      ['pit-service.service.fast-repair-available.enabled', 'Fast repairs available', true],
+      ['pit-service.tire-analysis.compound', 'Compound', true],
+      ['pit-service.tire-analysis.change', 'Change request', true],
+      ['pit-service.tire-analysis.set-limit', 'Set limit', true],
+      ['pit-service.tire-analysis.sets-available', 'Sets available', true],
+      ['pit-service.tire-analysis.sets-used', 'Sets used', true],
+      ['pit-service.tire-analysis.pressure', 'Pressure', true],
+      ['pit-service.tire-analysis.temperature', 'Temperature', true],
+      ['pit-service.tire-analysis.wear', 'Wear', true],
+      ['pit-service.tire-analysis.distance', 'Distance', true]
+    ]
+  }[overlayId]?.map(([key, label, defaultEnabled]) => ({ key, label, defaultEnabled })) || [];
 }
 
 function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {

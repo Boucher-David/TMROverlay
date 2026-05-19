@@ -48,6 +48,12 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.Empty(response.Model.Metrics);
         Assert.Equal("waiting for iRacing", response.Model.Status);
         Assert.False(response.Model.ShouldRender);
+        var effectiveSettings = response.Model.EffectiveSettings;
+        Assert.NotNull(effectiveSettings);
+        Assert.Equal("fuel-calculator", effectiveSettings!.OverlayId);
+        Assert.Equal("off", effectiveSettings.PreviewMode);
+        Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "overlayEnabled" && Equals(setting.Value, false));
+        Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "general.unitSystem" && Equals(setting.Value, "Metric"));
     }
 
     [Fact]

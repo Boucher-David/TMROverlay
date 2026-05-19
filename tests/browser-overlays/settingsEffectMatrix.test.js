@@ -21,6 +21,7 @@ describe('settings effect matrix', () => {
       expectEffectiveSettingsEvidence(model, {
         caseId: testCase.id,
         overlayId: testCase.overlayId,
+        preview: testCase.query?.preview || previewMode,
         settingKey: testCase.settingKey,
         expectedValue: testCase.expectedValue,
         session: testCase.session || null
@@ -395,6 +396,7 @@ function contentRow(overlay, label) {
 function expectEffectiveSettingsEvidence(model, {
   caseId,
   overlayId,
+  preview = previewMode,
   settingKey,
   expectedValue,
   session = null
@@ -406,7 +408,7 @@ function expectEffectiveSettingsEvidence(model, {
   }
 
   expect.soft(evidence.overlayId, `${caseId}: effectiveSettings overlay id`).toBe(overlayId);
-  expect.soft(evidence.previewMode, `${caseId}: effectiveSettings preview mode`).toBe(previewMode);
+  expect.soft(evidence.previewMode, `${caseId}: effectiveSettings preview mode`).toBe(preview);
   expect.soft(evidence.sources?.browserReview?.applied, `${caseId}: browser review source evidence`).toBe(true);
   expect.soft(evidence.sources?.localhostObs?.applied, `${caseId}: localhost OBS source evidence`).toBe(true);
   expect.soft(evidence.sources?.windowsNative?.applied, `${caseId}: Windows native source evidence`).toBe(true);

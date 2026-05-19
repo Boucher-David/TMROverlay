@@ -195,6 +195,11 @@ internal sealed class BrowserOverlayModelFactory
             };
         }
 
+        model = model with
+        {
+            EffectiveSettings = EffectiveSettingsEvidence(model, overlayId, settings, modelSnapshot, now)
+        };
+
         response = new BrowserOverlayModelResponse(now, model);
         return true;
     }
@@ -2264,6 +2269,243 @@ internal sealed class BrowserOverlayModelFactory
         };
     }
 
+    private static BrowserOverlayEffectiveSettings EffectiveSettingsEvidence(
+        BrowserOverlayDisplayModel model,
+        string overlayId,
+        ApplicationSettings settings,
+        LiveTelemetrySnapshot snapshot,
+        DateTimeOffset now)
+    {
+        var sessionKind = OverlayAvailabilityEvaluator.NormalizeSessionKind(OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
+        var session = EffectiveSettingsSessionKey(sessionKind);
+        var overlay = TryGetDefinition(overlayId, out var definition)
+            ? OverlayOrDefault(settings, definition)
+            : FindOverlay(settings, overlayId) ?? new OverlaySettings { Id = overlayId };
+        var effectiveSettings = new List<BrowserOverlayEffectiveSetting>
+        {
+            new("overlayEnabled", overlay.Enabled),
+            new($"session.{session}.enabled", OverlayEnabledForSession(overlay, sessionKind)),
+            new("general.unitSystem", UnitSystem(settings))
+        };
+
+        AddContentEffectiveSettings(effectiveSettings, overlay, sessionKind, session);
+        AddOverlaySpecificEffectiveSettings(effectiveSettings, overlayId, overlay, settings, sessionKind, session, now);
+
+        return new BrowserOverlayEffectiveSettings(
+            OverlayId: model.OverlayId,
+            PreviewMode: session,
+            Sources: new BrowserOverlayEffectiveSettingSources(
+                BrowserReview: new BrowserOverlayEffectiveSettingSource(true),
+                LocalhostObs: new BrowserOverlayEffectiveSettingSource(true),
+                WindowsNative: new BrowserOverlayEffectiveSettingSource(true)),
+            Rendered: new BrowserOverlayEffectiveRendered(
+                BodyKind: model.BodyKind,
+                ShouldRender: model.ShouldRender,
+                RowCount: model.Rows.Count,
+                HeaderItems: model.HeaderItems
+                    .Select(item => new BrowserOverlayEffectiveHeaderItem(item.Key, item.Value))
+                    .ToArray()),
+            Settings: effectiveSettings);
+    }
+
+    private static void AddOverlaySpecificEffectiveSettings(
+        List<BrowserOverlayEffectiveSetting> settings,
+        string overlayId,
+        OverlaySettings overlay,
+        ApplicationSettings appSettings,
+        OverlaySessionKind? sessionKind,
+        string session,
+        DateTimeOffset now)
+    {
+        if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.Add(new(
+                "otherClassRows",
+                overlay.GetIntegerOption(
+                    OverlayOptionKeys.StandingsOtherClassRows,
+                    defaultValue: StandingsBrowserSettings.Default.OtherClassRowsPerClass,
+                    minimum: 0,
+                    maximum: 6)));
+        }
+        else if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.Add(new("carsEachSide", RelativeBrowserSettings.CarsEachSide(overlay)));
+        }
+        else if (string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            var carsAhead = overlay.GetIntegerOption(OverlayOptionKeys.GapCarsAhead, defaultValue: 5, minimum: 0, maximum: 12);
+            var carsBehind = overlay.GetIntegerOption(OverlayOptionKeys.GapCarsBehind, defaultValue: 5, minimum: 0, maximum: 12);
+            settings.Add(new("carsAhead", carsAhead));
+            settings.Add(new("carsBehind", carsBehind));
+            settings.Add(new("gap.cars-window", new Dictionary<string, int>
+            {
+                ["carsAhead"] = carsAhead,
+                ["carsBehind"] = carsBehind
+            }));
+        }
+        else if (string.Equals(overlayId, CarRadarOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.Add(new(
+                OverlayOptionKeys.RadarMulticlassWarning,
+                OverlayContentColumnSettings.ContentEnabledForSession(
+                    overlay,
+                    OverlayOptionKeys.RadarMulticlassWarning,
+                    defaultEnabled: true,
+                    sessionKind),
+                session));
+        }
+        else if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.Add(new(OverlayOptionKeys.FlagsShowGreen, overlay.GetBooleanOption(OverlayOptionKeys.FlagsShowGreen, defaultValue: true), session));
+            settings.Add(new(OverlayOptionKeys.FlagsShowBlue, overlay.GetBooleanOption(OverlayOptionKeys.FlagsShowBlue, defaultValue: true), session));
+            settings.Add(new(OverlayOptionKeys.FlagsShowYellow, overlay.GetBooleanOption(OverlayOptionKeys.FlagsShowYellow, defaultValue: true), session));
+            settings.Add(new(OverlayOptionKeys.FlagsShowCritical, overlay.GetBooleanOption(OverlayOptionKeys.FlagsShowCritical, defaultValue: true), session));
+            settings.Add(new(OverlayOptionKeys.FlagsShowFinish, overlay.GetBooleanOption(OverlayOptionKeys.FlagsShowFinish, defaultValue: true), session));
+        }
+        else if (string.Equals(overlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.Add(new(
+                OverlayOptionKeys.TrackMapSectorBoundariesEnabled,
+                OverlayContentColumnSettings.ContentEnabledForSession(
+                    overlay,
+                    OverlayOptionKeys.TrackMapSectorBoundariesEnabled,
+                    defaultEnabled: true,
+                    sessionKind),
+                session));
+            settings.Add(new(
+                OverlayOptionKeys.TrackMapBuildFromTelemetry,
+                OverlayContentColumnSettings.ContentEnabledForSession(
+                    overlay,
+                    OverlayOptionKeys.TrackMapBuildFromTelemetry,
+                    defaultEnabled: true,
+                    sessionKind),
+                session));
+        }
+        else if (string.Equals(overlayId, StreamChatOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.Add(new(
+                OverlayOptionKeys.StreamChatProvider,
+                StreamChatOverlaySettings.FromOverlay(overlay).Provider));
+        }
+        else if (string.Equals(overlayId, GarageCoverOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.Add(new(
+                "garage-cover.previewVisible",
+                GarageCoverViewModel.BrowserSettingsFrom(appSettings, now).PreviewVisible));
+            settings.Add(new("Content", true));
+        }
+
+        if (SupportsSharedChrome(overlayId))
+        {
+            settings.Add(new(
+                $"chrome.header.time-remaining.{session}",
+                ChromeTimeRemainingEnabled(overlay, sessionKind),
+                session));
+        }
+    }
+
+    private static void AddContentEffectiveSettings(
+        List<BrowserOverlayEffectiveSetting> settings,
+        OverlaySettings overlay,
+        OverlaySessionKind? sessionKind,
+        string session)
+    {
+        if (!OverlayContentColumnSettings.TryGetContentDefinition(overlay.Id, out var definition))
+        {
+            return;
+        }
+
+        foreach (var column in definition.Columns)
+        {
+            var key = column.EnabledKey(overlay.Id);
+            settings.Add(new(
+                key,
+                OverlayContentColumnSettings.ContentEnabledForSession(
+                    overlay,
+                    key,
+                    column.DefaultEnabled,
+                    sessionKind),
+                session));
+        }
+
+        foreach (var block in definition.Blocks ?? [])
+        {
+            settings.Add(new(
+                block.EnabledOptionKey,
+                OverlayContentColumnSettings.ContentEnabledForSession(
+                    overlay,
+                    block.EnabledOptionKey,
+                    block.DefaultEnabled,
+                    sessionKind),
+                session));
+        }
+
+        if (string.Equals(overlay.Id, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            var throttle = OverlayContentColumnSettings.ContentEnabledForSession(
+                overlay,
+                OverlayOptionKeys.InputShowThrottleTrace,
+                defaultEnabled: true,
+                sessionKind);
+            var brake = OverlayContentColumnSettings.ContentEnabledForSession(
+                overlay,
+                OverlayOptionKeys.InputShowBrakeTrace,
+                defaultEnabled: true,
+                sessionKind);
+            var clutch = OverlayContentColumnSettings.ContentEnabledForSession(
+                overlay,
+                OverlayOptionKeys.InputShowClutchTrace,
+                defaultEnabled: true,
+                sessionKind);
+            settings.Add(new("input-state.trace.*", throttle || brake || clutch, session));
+        }
+    }
+
+    private static bool OverlayEnabledForSession(OverlaySettings overlay, OverlaySessionKind? sessionKind)
+    {
+        return sessionKind switch
+        {
+            OverlaySessionKind.Qualifying => overlay.ShowInQualifying,
+            OverlaySessionKind.Race => overlay.ShowInRace,
+            _ => overlay.ShowInPractice
+        };
+    }
+
+    private static string EffectiveSettingsSessionKey(OverlaySessionKind? sessionKind)
+    {
+        return sessionKind switch
+        {
+            OverlaySessionKind.Qualifying => "qualifying",
+            OverlaySessionKind.Race => "race",
+            OverlaySessionKind.Practice => "practice",
+            _ => "off"
+        };
+    }
+
+    private static bool SupportsSharedChrome(string overlayId)
+    {
+        return string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ChromeTimeRemainingEnabled(OverlaySettings overlay, OverlaySessionKind? sessionKind)
+    {
+        return sessionKind switch
+        {
+            OverlaySessionKind.Practice => overlay.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, defaultValue: true),
+            OverlaySessionKind.Qualifying => overlay.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying, defaultValue: true),
+            OverlaySessionKind.Race => overlay.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingRace, defaultValue: true),
+            _ => overlay.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingTest, defaultValue: true)
+                || overlay.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, defaultValue: true)
+                || overlay.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying, defaultValue: true)
+                || overlay.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingRace, defaultValue: true)
+        };
+    }
+
     private static bool TryGetDefinition(string overlayId, out OverlayDefinition definition)
     {
         definition = overlayId switch
@@ -2430,7 +2672,8 @@ internal sealed record BrowserOverlayDisplayModel(
     IReadOnlyList<BrowserOverlayGridSection>? GridSections = null,
     IReadOnlyList<BrowserOverlayMetricSection>? MetricSections = null,
     bool ShouldRender = true,
-    double RootOpacity = 1d)
+    double RootOpacity = 1d,
+    BrowserOverlayEffectiveSettings? EffectiveSettings = null)
 {
     public static BrowserOverlayDisplayModel Table(
         string overlayId,
@@ -2481,6 +2724,35 @@ internal sealed record BrowserOverlayDisplayModel(
             ShouldRender: shouldRender);
     }
 }
+
+internal sealed record BrowserOverlayEffectiveSettings(
+    string OverlayId,
+    string PreviewMode,
+    BrowserOverlayEffectiveSettingSources Sources,
+    BrowserOverlayEffectiveRendered Rendered,
+    IReadOnlyList<BrowserOverlayEffectiveSetting> Settings);
+
+internal sealed record BrowserOverlayEffectiveSettingSources(
+    BrowserOverlayEffectiveSettingSource BrowserReview,
+    BrowserOverlayEffectiveSettingSource LocalhostObs,
+    BrowserOverlayEffectiveSettingSource WindowsNative);
+
+internal sealed record BrowserOverlayEffectiveSettingSource(bool Applied);
+
+internal sealed record BrowserOverlayEffectiveRendered(
+    string BodyKind,
+    bool ShouldRender,
+    int RowCount,
+    IReadOnlyList<BrowserOverlayEffectiveHeaderItem> HeaderItems);
+
+internal sealed record BrowserOverlayEffectiveHeaderItem(
+    string Key,
+    string Value);
+
+internal sealed record BrowserOverlayEffectiveSetting(
+    string Key,
+    object Value,
+    string? Session = null);
 
 internal sealed record BrowserCarRadarModel(
     bool IsAvailable,

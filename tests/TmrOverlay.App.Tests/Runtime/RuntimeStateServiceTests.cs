@@ -58,6 +58,11 @@ public sealed class RuntimeStateServiceTests
             Assert.False(state.TryGetProperty("stoppedAtUtc", out var stoppedAtUtc) && stoppedAtUtc.ValueKind != System.Text.Json.JsonValueKind.Null);
             Assert.True(state.TryGetProperty("processId", out var processId));
             Assert.Equal(Environment.ProcessId, processId.GetInt32());
+            Assert.True(state.TryGetProperty("processIdentity", out var processIdentity));
+            Assert.Equal(Environment.ProcessId, processIdentity.GetProperty("processId").GetInt32());
+            Assert.False(string.IsNullOrWhiteSpace(processIdentity.GetProperty("processName").GetString()));
+            Assert.True(processIdentity.TryGetProperty("capturedAtUtc", out var capturedAtUtc));
+            Assert.Equal(System.Text.Json.JsonValueKind.String, capturedAtUtc.ValueKind);
 
             await service.StopAsync(CancellationToken.None);
         }

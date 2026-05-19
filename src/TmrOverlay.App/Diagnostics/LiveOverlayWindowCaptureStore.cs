@@ -178,7 +178,7 @@ internal sealed class LiveOverlayWindowCaptureStore
         }
 
         var reasons = new List<string>();
-        if (settingsWindowInputProtected)
+        if (settingsWindowInputProtected && settingsWindowIntersects)
         {
             reasons.Add("settings-window-input-protected");
         }

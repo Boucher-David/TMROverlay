@@ -2061,8 +2061,8 @@ function graphMetricRows(metricsRect, graph, canvasBounds) {
       bounds: offsetRect(canvasBounds, row),
       cells: [
         graphMetricCell('Metric', stringOrNull(metric?.label), { x: metricsRect.x + 8, y, width: 44, height: row.height }, canvasBounds),
-        graphMetricCell(stringOrNull(graph?.comparisonLabel) || '--', graphMetricValueText(metric), { x: metricsRect.x + 56, y, width: 46, height: row.height }, canvasBounds),
-        graphMetricCell('Threat', graphMetricChaserText(metric), { x: metricsRect.x + 108, y, width: metricsRect.width - 114, height: row.height }, canvasBounds)
+        graphMetricCell(stringOrNull(graph?.comparisonLabel) || '--', graphMetricValueText(metric), { x: metricsRect.x + 56, y, width: 72, height: row.height }, canvasBounds),
+        graphMetricCell('Threat', graphMetricChaserText(metric), { x: metricsRect.x + 136, y, width: metricsRect.width - 142, height: row.height }, canvasBounds)
       ]
     };
   });
@@ -2322,7 +2322,7 @@ function browserGapGraphLayout(width, height) {
 }
 
 function gapMetricsTableWidth(width) {
-  const metricsWidth = 184;
+  const metricsWidth = 220;
   const availableAfterTable = width - 58 - 38 - 10 - metricsWidth;
   return availableAfterTable >= 300 ? metricsWidth : 0;
 }

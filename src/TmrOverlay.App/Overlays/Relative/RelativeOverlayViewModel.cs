@@ -22,9 +22,10 @@ internal sealed record RelativeOverlayViewModel(
             return Waiting(availability.StatusText);
         }
 
-        var showLapRelationship = OverlayAvailabilityEvaluator.NormalizeSessionKind(availability.SessionKind) == OverlaySessionKind.Race;
+        var isRaceSession = OverlayAvailabilityEvaluator.NormalizeSessionKind(availability.SessionKind) == OverlaySessionKind.Race;
+        var showLapRelationship = isRaceSession;
         var reference = ReferenceRow(snapshot, showLapRelationship);
-        var relativeRows = snapshot.Models.Relative.Rows;
+        var relativeRows = RowsForSession(snapshot.Models.Relative.Rows, isRaceSession);
         if (reference is null)
         {
             return Waiting("waiting for focus-relative telemetry");
@@ -51,6 +52,24 @@ internal sealed record RelativeOverlayViewModel(
         var source = BuildSource(snapshot, relativeRows);
 
         return new RelativeOverlayViewModel(status, source, rows);
+    }
+
+    private static IReadOnlyList<LiveRelativeRow> RowsForSession(
+        IReadOnlyList<LiveRelativeRow> rows,
+        bool isRaceSession)
+    {
+        return isRaceSession
+            ? rows
+            : rows
+                .Where(IsUsableNonRaceProximityRow)
+                .ToArray();
+    }
+
+    private static bool IsUsableNonRaceProximityRow(LiveRelativeRow row)
+    {
+        return string.Equals(row.Source, "proximity", StringComparison.OrdinalIgnoreCase)
+            && ((row.RelativeSeconds is { } seconds && IsFinite(seconds))
+                || (row.RelativeMeters is { } meters && IsFinite(meters)));
     }
 
     private static RelativeOverlayViewModel Waiting(string status)
@@ -212,9 +231,7 @@ internal sealed record RelativeOverlayViewModel(
     {
         if (rows.Count == 0)
         {
-            return snapshot.Models.Relative.HasData
-                ? "source: model-v2 relative"
-                : "source: waiting";
+            return "source: waiting";
         }
 
         var hasFallback = rows.Any(row => !string.Equals(row.Source, "proximity", StringComparison.OrdinalIgnoreCase));

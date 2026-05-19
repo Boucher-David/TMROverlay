@@ -627,7 +627,7 @@ internal static class LiveRaceModelBuilder
         LiveSpatialModel spatial,
         LiveProximitySnapshot proximity)
     {
-        var nonCompetitorCarIdxs = NonCompetitorCarIdxs(context);
+        var nonCompetitorCarIdxs = LiveCompetitionFilters.NonCompetitorCarIdxs(context);
         var timingRows = timing.OverallRows
             .GroupBy(row => row.CarIdx)
             .Select(group => group.First())
@@ -640,55 +640,12 @@ internal static class LiveRaceModelBuilder
             : timingRows;
 
         return new LiveCoverageModel(
-            RosterCount: context.Drivers.Count(IsRaceRosterDriver),
+            RosterCount: context.Drivers.Count(LiveCompetitionFilters.IsRaceRosterDriver),
             ResultRowCount: scoring.Rows.Count,
             LiveScoringRowCount: scoredTimingRows.Count(row => row.OverallPosition is not null || row.ClassPosition is not null),
             LiveTimingRowCount: scoredTimingRows.Count(row => row.HasTiming),
             LiveSpatialRowCount: scoredTimingRows.Count(row => row.HasSpatialProgress),
             LiveProximityRowCount: proximity.NearbyCars.Count(car => !nonCompetitorCarIdxs.Contains(car.CarIdx)));
-    }
-
-    private static bool IsRaceRosterDriver(HistoricalSessionDriver driver)
-    {
-        return driver.CarIdx is >= 0
-            && driver.IsSpectator != true
-            && driver.UserId != -1
-            && !IsNonCompetitorDriver(driver);
-    }
-
-    private static HashSet<int> NonCompetitorCarIdxs(HistoricalSessionContext context)
-    {
-        return context.Drivers
-            .Where(IsNonCompetitorDriver)
-            .Select(driver => driver.CarIdx!.Value)
-            .ToHashSet();
-    }
-
-    private static bool IsNonCompetitorDriver(HistoricalSessionDriver driver)
-    {
-        if (driver.CarIdx is not >= 0 || !HasPaceOrSafetyIdentity(driver))
-        {
-            return false;
-        }
-
-        return driver.UserId == -1
-            || (driver.IsSpectator == true && driver.CarClassRelSpeed == 0);
-    }
-
-    private static bool HasPaceOrSafetyIdentity(HistoricalSessionDriver driver)
-    {
-        return ContainsPaceOrSafety(driver.UserName)
-            || ContainsPaceOrSafety(driver.TeamName)
-            || ContainsPaceOrSafety(driver.CarPath)
-            || ContainsPaceOrSafety(driver.CarScreenName)
-            || ContainsPaceOrSafety(driver.CarScreenNameShort);
-    }
-
-    private static bool ContainsPaceOrSafety(string? value)
-    {
-        return !string.IsNullOrWhiteSpace(value)
-            && (value.Contains("pace car", StringComparison.OrdinalIgnoreCase)
-                || value.Contains("safety", StringComparison.OrdinalIgnoreCase));
     }
 
     private static LiveScoringModel BuildScoring(
@@ -698,7 +655,7 @@ internal static class LiveRaceModelBuilder
         LiveTimingModel timing)
     {
         var selection = SelectScoringResults(context, sample, timing);
-        var nonCompetitorCarIdxs = NonCompetitorCarIdxs(context);
+        var nonCompetitorCarIdxs = LiveCompetitionFilters.NonCompetitorCarIdxs(context);
         var selectedResults = selection.Results
             .Where(result => result.CarIdx is { } carIdx && !nonCompetitorCarIdxs.Contains(carIdx))
             .ToArray();
@@ -711,8 +668,8 @@ internal static class LiveRaceModelBuilder
             };
         }
 
-        var zeroBasedOverall = selection.Results.Any(result => result.Position == 0);
-        var zeroBasedClass = selection.Results.Any(result => result.ClassPosition == 0);
+        var zeroBasedOverall = selectedResults.Any(result => result.Position == 0);
+        var zeroBasedClass = selectedResults.Any(result => result.ClassPosition == 0);
         var referenceCarIdx = FocusCarIdx(sample);
         var referenceClass = ReferenceCarClass(sample);
         var driversByCarIdx = driverDirectory.Drivers.ToDictionary(driver => driver.CarIdx);
@@ -824,7 +781,7 @@ internal static class LiveRaceModelBuilder
 
         var expectedRows = startingGridRowCount > 0
             ? startingGridRowCount
-            : context.Drivers.Count(IsRaceRosterDriver);
+            : context.Drivers.Count(LiveCompetitionFilters.IsRaceRosterDriver);
         var targetRows = expectedRows > 0
             ? Math.Min(expectedRows, rows.Length)
             : rows.Length;
@@ -1121,7 +1078,7 @@ internal static class LiveRaceModelBuilder
         IReadOnlySet<int>? griddedCarIdxs)
     {
         var rows = new List<LiveTimingRow>();
-        var nonCompetitorCarIdxs = NonCompetitorCarIdxs(context);
+        var nonCompetitorCarIdxs = LiveCompetitionFilters.NonCompetitorCarIdxs(context);
         var focusCarIdx = FocusCarIdx(sample);
         var playerCarIdx = sample.PlayerCarIdx;
         var classLeaderCarIdx = leaderGap.ClassLeaderCarIdx ?? FocusClassLeaderCarIdx(sample);
@@ -1313,8 +1270,9 @@ internal static class LiveRaceModelBuilder
         LiveReferenceModel reference)
     {
         var referenceClass = reference.ReferenceCarClass;
-        var nonCompetitorCarIdxs = NonCompetitorCarIdxs(context);
+        var nonCompetitorCarIdxs = LiveCompetitionFilters.NonCompetitorCarIdxs(context);
         var timingByCarIdx = timing.OverallRows.ToDictionary(row => row.CarIdx);
+        var allowWeakTimingFallbacks = IsRaceSession(context);
         var rows = new List<LiveRelativeRow>();
 
         foreach (var car in proximity.NearbyCars)
@@ -1325,7 +1283,8 @@ internal static class LiveRaceModelBuilder
             }
 
             timingByCarIdx.TryGetValue(car.CarIdx, out var timingRow);
-            var inferredRelativeSeconds = car.RelativeSeconds ?? InferRelativeSecondsFromLapDistance(car.RelativeLaps, sample);
+            var inferredRelativeSeconds = car.RelativeSeconds
+                ?? (allowWeakTimingFallbacks ? InferRelativeSecondsFromLapDistance(car.RelativeLaps, sample) : null);
             rows.Add(new LiveRelativeRow(
                 CarIdx: car.CarIdx,
                 Quality: car.RelativeSeconds is not null || car.RelativeMeters is not null
@@ -1370,7 +1329,9 @@ internal static class LiveRaceModelBuilder
                 continue;
             }
 
-            var inferredRelativeSeconds = InferRelativeSecondsFromLapDistance(relativeLaps, sample);
+            var inferredRelativeSeconds = allowWeakTimingFallbacks
+                ? InferRelativeSecondsFromLapDistance(relativeLaps, sample)
+                : null;
             rows.Add(new LiveRelativeRow(
                 CarIdx: car.CarIdx,
                 Quality: inferredRelativeSeconds is not null ? LiveModelQuality.Inferred : LiveModelQuality.Partial,
@@ -1393,28 +1354,31 @@ internal static class LiveRaceModelBuilder
                 LapDeltaToReference: LapDeltaToReference(car.LapCompleted, timingRow.ProgressLaps, reference)));
         }
 
-        rows.AddRange(timing.OverallRows
-            .Where(row => !row.IsFocus
-                && row.DeltaSecondsToFocus is not null
-                && row.GapEvidence.IsUsable)
-            .Select(row => new LiveRelativeRow(
-                CarIdx: row.CarIdx,
-                Quality: LiveModelQuality.Inferred,
-                Source: "class-gap",
-                IsAhead: row.DeltaSecondsToFocus < 0d,
-                IsBehind: row.DeltaSecondsToFocus > 0d,
-                IsSameClass: referenceClass is not null && row.CarClass == referenceClass,
-                TimingEvidence: row.GapEvidence,
-                PlacementEvidence: LiveSignalEvidence.Unavailable("class-gap", "no_lap_distance_placement"),
-                DriverName: row.DriverName,
-                OverallPosition: row.OverallPosition,
-                ClassPosition: row.ClassPosition,
-                CarClass: row.CarClass,
-                RelativeSeconds: row.DeltaSecondsToFocus,
-                RelativeLaps: null,
-                RelativeMeters: null,
-                OnPitRoad: row.OnPitRoad,
-                LapDeltaToReference: LapDeltaToReference(row, reference))));
+        if (IsRaceSession(context))
+        {
+            rows.AddRange(timing.OverallRows
+                .Where(row => !row.IsFocus
+                    && row.DeltaSecondsToFocus is not null
+                    && row.GapEvidence.IsUsable)
+                .Select(row => new LiveRelativeRow(
+                    CarIdx: row.CarIdx,
+                    Quality: LiveModelQuality.Inferred,
+                    Source: "class-gap",
+                    IsAhead: row.DeltaSecondsToFocus < 0d,
+                    IsBehind: row.DeltaSecondsToFocus > 0d,
+                    IsSameClass: referenceClass is not null && row.CarClass == referenceClass,
+                    TimingEvidence: row.GapEvidence,
+                    PlacementEvidence: LiveSignalEvidence.Unavailable("class-gap", "no_lap_distance_placement"),
+                    DriverName: row.DriverName,
+                    OverallPosition: row.OverallPosition,
+                    ClassPosition: row.ClassPosition,
+                    CarClass: row.CarClass,
+                    RelativeSeconds: row.DeltaSecondsToFocus,
+                    RelativeLaps: null,
+                    RelativeMeters: null,
+                    OnPitRoad: row.OnPitRoad,
+                    LapDeltaToReference: LapDeltaToReference(row, reference))));
+        }
 
         if (AllowsEstimatedRelativeTiming(context, sample))
         {
@@ -1677,7 +1641,7 @@ internal static class LiveRaceModelBuilder
         var hasLiveWeather = IsFinite(sample.AirTempC)
             || IsFinite(sample.TrackTempCrewC)
             || trackWetness is not null
-            || sample.WeatherDeclaredWet
+            || sample.WeatherDeclaredWet == true
             || sample.Skies is not null
             || livePrecipitationPercent is not null
             || windVelocityMetersPerSecond is not null
@@ -2194,11 +2158,10 @@ internal static class LiveRaceModelBuilder
             return row;
         }
 
-        var gapSeconds = gap.GapSecondsToClassLeader;
-        var gapLaps = WholeLapGapForTiming(gap.GapLapsToClassLeader);
-        var deltaSecondsToReference = gap.DeltaSecondsToReference;
-        if (isRaceSession
-            && gapSeconds is not null
+        var gapSeconds = isRaceSession ? gap.GapSecondsToClassLeader : null;
+        var gapLaps = isRaceSession ? WholeLapGapForTiming(gap.GapLapsToClassLeader) : null;
+        var deltaSecondsToReference = isRaceSession ? gap.DeltaSecondsToReference : null;
+        if (gapSeconds is not null
             && gapSeconds > 0d
             && IsRaceF2Placeholder(row))
         {
@@ -2227,7 +2190,7 @@ internal static class LiveRaceModelBuilder
         IReadOnlyList<LiveTimingRow> rows)
     {
         var isRaceSession = IsRaceSession(context);
-        var allowRaceTiming = !isRaceSession || AllowsLiveRaceGaps(sample);
+        var allowRaceTiming = isRaceSession && AllowsLiveRaceGaps(sample);
         var focusRow = rows.FirstOrDefault(row => row.IsFocus);
         var focusF2 = focusRow is null ? null : UsableF2ForTiming(focusRow, isRaceSession);
         var leadersByClass = rows
@@ -3708,14 +3671,14 @@ internal static class LiveRaceModelBuilder
         };
     }
 
-    private static bool DetermineDeclaredWetSurfaceMismatch(bool declaredWet, int? trackWetness)
+    private static bool DetermineDeclaredWetSurfaceMismatch(bool? declaredWet, int? trackWetness)
     {
-        if (trackWetness is null)
+        if (declaredWet is null || trackWetness is null)
         {
             return false;
         }
 
-        return declaredWet
+        return declaredWet.Value
             ? trackWetness <= 1
             : trackWetness >= 3;
     }

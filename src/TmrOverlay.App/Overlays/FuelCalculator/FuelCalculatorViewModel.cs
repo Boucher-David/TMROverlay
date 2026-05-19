@@ -30,7 +30,7 @@ internal sealed record FuelCalculatorViewModel(
         int maximumRows)
     {
         return new FuelCalculatorViewModel(
-            Status: strategy.Status,
+            Status: DisplayStatus(strategy),
             Overview: BuildOverview(strategy, unitSystem),
             Source: BuildSourceText(strategy, history, unitSystem),
             Rows: BuildDisplayRows(strategy, showAdvice, unitSystem, maximumRows),
@@ -50,6 +50,11 @@ internal sealed record FuelCalculatorViewModel(
 
     private static string BuildOverview(FuelStrategySnapshot strategy, string unitSystem)
     {
+        if (IsNonRaceStrategy(strategy))
+        {
+            return BuildNonRaceOverview(strategy, unitSystem);
+        }
+
         if (strategy.PlannedRaceLaps is { } plannedLaps
             && strategy.PlannedStintCount is { } stintCount
             && strategy.FinalStintTargetLaps is { } finalStintLaps)
@@ -73,6 +78,11 @@ internal sealed record FuelCalculatorViewModel(
         string unitSystem,
         int maximumRows)
     {
+        if (IsNonRaceStrategy(strategy))
+        {
+            return BuildNonRaceDisplayRows(strategy, unitSystem, maximumRows);
+        }
+
         var includeAdvice = false;
         var rows = new List<FuelDisplayRow>(maximumRows);
 
@@ -101,6 +111,11 @@ internal sealed record FuelCalculatorViewModel(
         string unitSystem,
         int maximumRows)
     {
+        if (IsNonRaceStrategy(strategy))
+        {
+            return BuildNonRaceMetricSections(strategy, unitSystem, maximumRows);
+        }
+
         var includeAdvice = false;
         var rowBudget = Math.Max(1, maximumRows);
         var raceRows = new List<SimpleTelemetryRowViewModel>
@@ -151,6 +166,106 @@ internal sealed record FuelCalculatorViewModel(
         }
 
         return sections;
+    }
+
+    private static string DisplayStatus(FuelStrategySnapshot strategy)
+    {
+        if (!IsNonRaceStrategy(strategy))
+        {
+            return strategy.Status;
+        }
+
+        if (strategy.CurrentFuelLiters is null)
+        {
+            return "waiting for fuel";
+        }
+
+        return strategy.FuelPerLapLiters is null
+            ? "fuel level"
+            : "fuel range";
+    }
+
+    private static IReadOnlyList<FuelDisplayRow> BuildNonRaceDisplayRows(
+        FuelStrategySnapshot strategy,
+        string unitSystem,
+        int maximumRows)
+    {
+        var rows = new List<FuelDisplayRow>(Math.Max(0, maximumRows));
+        if (maximumRows <= 0)
+        {
+            return rows;
+        }
+
+        rows.Add(new FuelDisplayRow(
+            "Fuel Range",
+            BuildNonRaceFuelText(strategy, unitSystem),
+            string.Empty));
+
+        foreach (var row in BuildUsageDisplayRows(strategy, unitSystem)
+            .Take(Math.Max(0, maximumRows - rows.Count)))
+        {
+            rows.Add(row);
+        }
+
+        return rows;
+    }
+
+    private static IReadOnlyList<SimpleTelemetryMetricSectionViewModel> BuildNonRaceMetricSections(
+        FuelStrategySnapshot strategy,
+        string unitSystem,
+        int maximumRows)
+    {
+        var rowBudget = Math.Max(1, maximumRows);
+        var fuelRows = new List<SimpleTelemetryRowViewModel>
+        {
+            new("Fuel", BuildNonRaceFuelText(strategy, unitSystem), strategy.CurrentFuelLiters is null ? SimpleTelemetryTone.Waiting : SimpleTelemetryTone.Info)
+            {
+                Segments = NonRaceFuelSegments(strategy, unitSystem)
+            }
+        };
+        var sections = new List<SimpleTelemetryMetricSectionViewModel>
+        {
+            new("Fuel Range", fuelRows)
+        };
+
+        var usageRows = BuildUsageMetricRows(strategy, unitSystem)
+            .Take(Math.Max(0, rowBudget - fuelRows.Count))
+            .ToArray();
+        if (usageRows.Length > 0)
+        {
+            sections.Add(new SimpleTelemetryMetricSectionViewModel("Fuel Usage", usageRows));
+        }
+
+        return sections;
+    }
+
+    private static IReadOnlyList<SimpleTelemetryMetricSegmentViewModel> NonRaceFuelSegments(
+        FuelStrategySnapshot strategy,
+        string unitSystem)
+    {
+        return
+        [
+            Segment("Level", FormatFuelVolume(strategy.CurrentFuelLiters, unitSystem), strategy.CurrentFuelLiters is null ? SimpleTelemetryTone.Waiting : SimpleTelemetryTone.Info),
+            Segment("Usage", FormatFuelPerLap(strategy.FuelPerLapLiters, unitSystem), BurnTone(strategy.FuelPerLapLiters)),
+            Segment("Range", FormatCurrentRange(strategy), CurrentRangeLaps(strategy) is null ? SimpleTelemetryTone.Waiting : SimpleTelemetryTone.Info),
+            Segment("Tank", FuelStrategyCalculator.FormatNumber(strategy.FullTankStintLaps, " laps"), strategy.FullTankStintLaps is null ? SimpleTelemetryTone.Waiting : SimpleTelemetryTone.Info)
+        ];
+    }
+
+    private static string BuildNonRaceOverview(FuelStrategySnapshot strategy, string unitSystem)
+    {
+        return SimpleTelemetryOverlayViewModel.JoinAvailable(
+            FuelVolumeOrNull(strategy.CurrentFuelLiters, unitSystem),
+            PrefixIfAvailable("range", FormatCurrentRange(strategy)),
+            PrefixIfAvailable("usage", FormatFuelPerLap(strategy.FuelPerLapLiters, unitSystem)));
+    }
+
+    private static string BuildNonRaceFuelText(FuelStrategySnapshot strategy, string unitSystem)
+    {
+        return SimpleTelemetryOverlayViewModel.JoinAvailable(
+            FuelVolumeOrNull(strategy.CurrentFuelLiters, unitSystem),
+            PrefixIfAvailable("range", FormatCurrentRange(strategy)),
+            PrefixIfAvailable("tank", FuelStrategyCalculator.FormatNumber(strategy.FullTankStintLaps, " laps")));
     }
 
     private static IReadOnlyList<FuelDisplayRow> BuildUsageDisplayRows(
@@ -465,6 +580,11 @@ internal sealed record FuelCalculatorViewModel(
         SessionHistoryLookupResult history,
         string unitSystem)
     {
+        if (IsNonRaceStrategy(strategy))
+        {
+            return BuildNonRaceSourceText(strategy, history, unitSystem);
+        }
+
         var fuelPerLap = FormatFuelPerLap(strategy.FuelPerLapLiters, unitSystem);
         var fullTank = FuelStrategyCalculator.FormatNumber(strategy.FullTankStintLaps, " laps/tank");
         var historySource = history.UserAggregate is not null
@@ -480,6 +600,56 @@ internal sealed record FuelCalculatorViewModel(
             : string.Empty;
         var tireModel = string.Empty;
         return $"burn {fuelPerLap} ({strategy.FuelPerLapSource}) | {fullTank} | history {historySource}{historicalRange}{tireModel}{gaps}";
+    }
+
+    private static string BuildNonRaceSourceText(
+        FuelStrategySnapshot strategy,
+        SessionHistoryLookupResult history,
+        string unitSystem)
+    {
+        var usage = FormatFuelPerLap(strategy.FuelPerLapLiters, unitSystem);
+        var fullTank = FuelStrategyCalculator.FormatNumber(strategy.FullTankStintLaps, " laps/tank");
+        var historySource = history.UserAggregate is not null
+            ? "user"
+            : history.BaselineAggregate is not null
+                ? "baseline"
+                : "none";
+        var measuredRange = strategy.MeasuredFuelPerLapMinimumLiters is not null
+            || strategy.MeasuredFuelPerLapAverageLiters is not null
+            || strategy.MeasuredFuelPerLapMaximumLiters is not null
+                ? $" | measured min/avg/max {FormatFuelNumber(strategy.MeasuredFuelPerLapMinimumLiters, unitSystem)}/{FormatFuelNumber(strategy.MeasuredFuelPerLapAverageLiters, unitSystem)}/{FormatFuelNumber(strategy.MeasuredFuelPerLapMaximumLiters, unitSystem)} {FuelPerLapSuffix(unitSystem)}"
+                : string.Empty;
+        return $"usage {usage} ({strategy.FuelPerLapSource}) | range {FormatCurrentRange(strategy)} | {fullTank} | history {historySource}{measuredRange}";
+    }
+
+    private static bool IsNonRaceStrategy(FuelStrategySnapshot strategy)
+    {
+        return OverlayAvailabilityEvaluator.NormalizeSessionKind(strategy.SessionKind) is
+            OverlaySessionKind.Practice or OverlaySessionKind.Qualifying;
+    }
+
+    private static double? CurrentRangeLaps(FuelStrategySnapshot strategy)
+    {
+        return strategy.CurrentFuelLiters is { } currentFuel
+            && strategy.FuelPerLapLiters is { } fuelPerLap
+            && fuelPerLap > 0d
+                ? currentFuel / fuelPerLap
+                : null;
+    }
+
+    private static string FormatCurrentRange(FuelStrategySnapshot strategy)
+    {
+        return FuelStrategyCalculator.FormatNumber(CurrentRangeLaps(strategy), " laps");
+    }
+
+    private static string? FuelVolumeOrNull(double? liters, string unitSystem)
+    {
+        return liters is null ? null : FormatFuelVolume(liters, unitSystem);
+    }
+
+    private static string? PrefixIfAvailable(string prefix, string value)
+    {
+        return value == "--" ? null : $"{prefix} {value}";
     }
 
     private static string FormatTireAdvice(TireChangeAdvice? advice, string unitSystem)

@@ -546,7 +546,7 @@ internal sealed class AppPerformanceState
         }
 
         var reasons = new List<string>();
-        if (settingsWindowInputProtected)
+        if (settingsWindowInputProtected && intersectsSettingsWindow)
         {
             reasons.Add("settings-window-input-protected");
         }

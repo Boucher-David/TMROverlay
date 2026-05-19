@@ -90,6 +90,16 @@ internal static class OverlayContentSizing
                 || settings.GetBooleanOption(OverlayOptionKeys.FlagsShowFinish, defaultValue: true);
         }
 
+        if (OverlayContentColumnSettings.TryGetContentDefinition(definition.Id, out var columnContentDefinition)
+            && columnContentDefinition.Columns.Count > 0)
+        {
+            return OverlayContentColumnSettings.EnabledColumnsFor(
+                    settings,
+                    columnContentDefinition.Columns,
+                    sessionKind)
+                .Count > 0;
+        }
+
         return true;
     }
 

@@ -358,7 +358,8 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
     private IReadOnlyDictionary<int, CarClassPace> BuildClassPaces()
     {
         return _context.Drivers
-            .Where(driver => driver.CarClassId is not null)
+            .Where(driver => driver.CarClassId is not null
+                && !LiveCompetitionFilters.IsNonCompetitorDriver(driver))
             .GroupBy(driver => driver.CarClassId!.Value)
             .ToDictionary(
                 group => group.Key,

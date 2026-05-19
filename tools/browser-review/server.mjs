@@ -967,7 +967,8 @@ function hiddenProductDisplayModel(overlayId, previewMode = 'off') {
   const session = sessionKeyFromPreview(previewMode);
   const overlayDisabled = Object.hasOwn(overlayState, 'enabled') && overlayState.enabled === false;
   const sessionDisabled = Object.hasOwn(overlayState?.sessions || {}, session) && overlayState.sessions[session] === false;
-  if (!overlayDisabled && !sessionDisabled) {
+  const noRenderableContent = !reviewHasRenderableContent(overlayId, overlayState, session);
+  if (!overlayDisabled && !sessionDisabled && !noRenderableContent) {
     return null;
   }
 
@@ -975,7 +976,11 @@ function hiddenProductDisplayModel(overlayId, previewMode = 'off') {
   return {
     overlayId,
     title: page.title,
-    status: overlayDisabled ? 'disabled | product hidden' : 'hidden | session disabled',
+    status: overlayDisabled
+      ? 'disabled | product hidden'
+      : sessionDisabled
+        ? 'hidden | session disabled'
+        : 'hidden | no enabled content',
     source: '',
     bodyKind: hiddenBodyKind(overlayId),
     columns: [],
@@ -985,6 +990,27 @@ function hiddenProductDisplayModel(overlayId, previewMode = 'off') {
     headerItems: [],
     shouldRender: false
   };
+}
+
+function reviewHasRenderableContent(overlayId, overlayState, session) {
+  if (overlayId === 'gap-to-leader') {
+    return Number(overlayState?.carsAhead ?? 5) > 0 || Number(overlayState?.carsBehind ?? 5) > 0;
+  }
+
+  const renderableContentOverlays = new Set([
+    'standings',
+    'relative',
+    'session-weather',
+    'pit-service',
+    'input-state',
+    'flags'
+  ]);
+  if (!renderableContentOverlays.has(overlayId)) {
+    return true;
+  }
+
+  return reviewEffectiveContentRows(overlayId)
+    .some((row) => contentLabelsEnabled(overlayState, [row.key, row.label].filter(Boolean), row.defaultEnabled, session));
 }
 
 function hiddenBodyKind(overlayId) {
@@ -1159,7 +1185,7 @@ function reviewEffectiveContentRows(overlayId) {
       ['standings.content.standings.car-number.enabled', 'Car number', true],
       ['standings.content.standings.driver.enabled', 'Driver', true],
       ['standings.content.standings.gap.enabled', 'Class gap', true],
-      ['standings.content.standings.interval.enabled', 'Focus interval', true],
+      ['standings.content.standings.interval.enabled', 'Previous interval', true],
       ['standings.content.standings.fastest-lap.enabled', 'Fastest lap', true],
       ['standings.content.standings.last-lap.enabled', 'Last lap', true],
       ['standings.content.standings.pit.enabled', 'Pit status', true]
@@ -1850,17 +1876,17 @@ function applyReviewChrome(model, overlayId, previewMode, forceChromeOff = false
 function headerToneForModel(overlayId, model) {
   const status = String(model?.status || '').toLowerCase();
   if (model?.shouldRender === false) return 'waiting';
-  if (overlayId === 'standings') return status.includes('waiting') ? 'waiting' : 'normal';
+  if (overlayId === 'standings') return status.includes('waiting') ? 'waiting' : 'info';
   if (overlayId === 'relative') return status.includes('waiting') ? 'waiting' : 'info';
   if (overlayId === 'fuel-calculator') return status.includes('waiting') || status.includes('disconnected') ? 'waiting' : 'success';
-  if (overlayId === 'session-weather') return status.includes('unavailable') || status.includes('unknown') ? 'waiting' : 'normal';
+  if (overlayId === 'session-weather') return status.includes('unavailable') || status.includes('unknown') ? 'waiting' : 'info';
   if (overlayId === 'pit-service') {
     if (status.includes('service active')) return 'error';
     if (status.includes('ready')) return 'success';
-    return 'normal';
+    return 'info';
   }
   if (overlayId === 'gap-to-leader') return status.includes('live') ? 'info' : 'waiting';
-  return status.includes('waiting') || status.includes('hidden') || status.includes('disabled') ? 'waiting' : 'normal';
+  return status.includes('waiting') || status.includes('hidden') || status.includes('disabled') ? 'waiting' : 'info';
 }
 
 function normalizeHeaderTone(tone) {
@@ -1935,7 +1961,7 @@ function relativeDisplayModel(previewLabel = 'review fixture', session = 'practi
       { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 38, alignment: 'right' },
       { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
       { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
-      { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 36, alignment: 'right' }
+      { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 48, alignment: 'right' }
     ],
     rows: [
       relativeRow(['3', '#34 Near Ahead', '-2.350', ''], { carClassColorHex: '#33CEFF', relativeLapDelta: showLapRelationship ? 1 : null }),
@@ -2063,7 +2089,7 @@ function tableContentLabel(overlayId, column) {
       'car-number': 'Car number',
       driver: 'Driver',
       gap: 'Class gap',
-      interval: 'Focus interval',
+      interval: 'Previous interval',
       'fastest-lap': 'Fastest lap',
       'last-lap': 'Last lap',
       pit: 'Pit status'
@@ -2325,7 +2351,7 @@ function standingsDisplayModel(previewLabel = 'review fixture') {
       { label: 'INT', dataKey: 'interval', width: 60, alignment: 'right' },
       { label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
       { label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
-      { label: 'PIT', dataKey: 'pit', width: 36, alignment: 'right' }
+      { label: 'PIT', dataKey: 'pit', width: 48, alignment: 'right' }
     ],
     rows: [
       headerRow('LMP2', '2 cars | ~10 laps', '#33CEFF'),

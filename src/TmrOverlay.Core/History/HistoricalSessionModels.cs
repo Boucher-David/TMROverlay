@@ -602,7 +602,7 @@ internal sealed record HistoricalTelemetrySample(
     double AirTempC,
     double TrackTempCrewC,
     int TrackWetness,
-    bool WeatherDeclaredWet,
+    bool? WeatherDeclaredWet,
     int PlayerTireCompound,
     int? Skies = null,
     double? PrecipitationPercent = null,

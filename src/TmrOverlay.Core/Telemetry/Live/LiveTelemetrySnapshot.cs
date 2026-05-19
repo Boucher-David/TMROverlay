@@ -157,7 +157,9 @@ internal sealed record LiveProximitySnapshot(
             .Where(driver => driver.CarIdx is not null && !string.IsNullOrWhiteSpace(driver.CarClassColorHex))
             .GroupBy(driver => driver.CarIdx!.Value)
             .ToDictionary(group => group.Key, group => group.First().CarClassColorHex);
+        var nonCompetitorCarIdxs = LiveCompetitionFilters.NonCompetitorCarIdxs(context);
         var cars = (sample.NearbyCars ?? [])
+            .Where(car => !nonCompetitorCarIdxs.Contains(car.CarIdx))
             .Where(car => !IsPitRoadCar(car))
             .Select(car => ToLiveCar(
                 car,

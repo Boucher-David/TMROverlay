@@ -250,7 +250,7 @@ internal sealed class BrowserOverlayModelFactory
                     .Select(column => StandingsCellTone(row, column.DataKey))
                     .ToArray()))
             .ToArray();
-        var headerItems = HeaderItems(overlay, snapshot, viewModel.Status, viewModel.Rows.Count == 0 ? "waiting" : "normal");
+        var headerItems = HeaderItems(overlay, snapshot, viewModel.Status, viewModel.Rows.Count == 0 ? "waiting" : "info");
 
         return BrowserOverlayDisplayModel.Table(
             StandingsOverlayDefinition.Definition.Id,
@@ -858,6 +858,7 @@ internal sealed class BrowserOverlayModelFactory
                 car.IsReferenceCar,
                 car.IsClassLeader,
                 car.ClassPosition,
+                GapToLeaderPresentationRules.CompletedLapFromCurrentLap(car.CurrentLap),
                 startsSegment);
             if (points.Count > 0 && Math.Abs(points[^1].AxisSeconds - axisSeconds) < 0.001d)
             {
@@ -1350,6 +1351,9 @@ internal sealed class BrowserOverlayModelFactory
         var comparisonState = LatestBrowserGapTrendPoint(referenceState.CarIdx) is { } referenceCurrent
             ? BrowserGapComparisonCar(referenceState, referenceCurrent)
             : null;
+        var lastComparisonState = LatestBrowserGapTrendPoint(referenceState.CarIdx) is { } lastReferenceCurrent
+            ? BrowserGapCarAhead(referenceState, lastReferenceCurrent)
+            : null;
 
         return new[]
         {
@@ -1361,7 +1365,7 @@ internal sealed class BrowserOverlayModelFactory
                 null,
                 PrimaryText: BrowserGapLapTimeText(referenceState.LastLapTimeSeconds),
                 ThreatText: BrowserGapLapTimeText(threatState?.LastLapTimeSeconds),
-                ComparisonText: BrowserGapLapTimeText(comparisonState?.LastLapTimeSeconds)),
+                ComparisonText: BrowserGapLapTimeText(lastComparisonState?.LastLapTimeSeconds)),
             new BrowserGapTrendMetric(
                 "Status",
                 null,
@@ -1389,7 +1393,12 @@ internal sealed class BrowserOverlayModelFactory
         }
 
         var targetAxisSeconds = latest - lookbackSeconds;
-        var chaser = StrongestBrowserGapBehindGain(referenceState, referenceCurrent, targetAxisSeconds, latest);
+        if (!HasBrowserGapCompletedLapHistory(referenceState.CarIdx, targetLaps))
+        {
+            return new BrowserGapTrendMetric(label, null, null, "unavailable", null);
+        }
+
+        var chaser = StrongestBrowserGapBehindGain(referenceState, referenceCurrent, targetAxisSeconds, latest, targetLaps);
         if (BrowserGapTrendPointNear(referenceState.CarIdx, targetAxisSeconds) is not { } referencePast)
         {
             return new BrowserGapTrendMetric(
@@ -1404,6 +1413,11 @@ internal sealed class BrowserOverlayModelFactory
         if (comparisonState is null || LatestBrowserGapTrendPoint(comparisonState.CarIdx) is not { } comparisonCurrent)
         {
             return new BrowserGapTrendMetric(label, null, chaser, "ready", "leader");
+        }
+
+        if (!HasBrowserGapCompletedLapHistory(comparisonState.CarIdx, targetLaps))
+        {
+            return new BrowserGapTrendMetric(label, null, chaser, "unavailable", null);
         }
 
         if (BrowserGapTrendPointNear(comparisonState.CarIdx, targetAxisSeconds) is not { } comparisonPast)
@@ -1425,7 +1439,8 @@ internal sealed class BrowserOverlayModelFactory
         BrowserGapCarRenderState referenceState,
         BrowserGapTrendPoint referenceCurrent,
         double targetAxisSeconds,
-        double latest)
+        double latest,
+        double? targetLaps)
     {
         if (HasBrowserGapPitActivityBetween(referenceState, targetAxisSeconds, latest)
             || BrowserGapTrendPointNear(referenceState.CarIdx, targetAxisSeconds) is not { } referencePast)
@@ -1439,6 +1454,9 @@ internal sealed class BrowserOverlayModelFactory
             if (state.CarIdx == referenceState.CarIdx
                 || state.IsReference
                 || !IsSameLapBrowserGapState(referenceState, state)
+                || state.ClassPosition is not > 0
+                || latest - state.LastSeenAxisSeconds > GapMissingTelemetryGraceSeconds
+                || !HasBrowserGapCompletedLapHistory(state.CarIdx, targetLaps)
                 || HasBrowserGapPitActivityBetween(state, targetAxisSeconds, latest)
                 || LatestBrowserGapTrendPoint(state.CarIdx) is not { } current
                 || current.GapSeconds <= referenceCurrent.GapSeconds
@@ -1457,7 +1475,10 @@ internal sealed class BrowserOverlayModelFactory
 
             if (best is null || gainSeconds > best.GainSeconds)
             {
-                best = new BrowserBehindGainMetric(state.CarIdx, BrowserGapCarShortLabel(state), gainSeconds);
+                best = new BrowserBehindGainMetric(
+                    state.CarIdx,
+                    GapToLeaderPresentationRules.PositionLabel(state.ClassPosition)!,
+                    gainSeconds);
             }
         }
 
@@ -1471,6 +1492,7 @@ internal sealed class BrowserOverlayModelFactory
         return _gapCarRenderStates.Values
             .Where(state => state.CarIdx != referenceState.CarIdx
                 && !state.IsReference
+                && state.ClassPosition is > 0
                 && IsSameLapBrowserGapState(referenceState, state))
             .Select(state => new
             {
@@ -1499,6 +1521,7 @@ internal sealed class BrowserOverlayModelFactory
         return _gapCarRenderStates.Values
             .Where(state => state.CarIdx != referenceState.CarIdx
                 && !state.IsReference
+                && state.ClassPosition is > 0
                 && IsSameLapBrowserGapState(referenceState, state))
             .Select(state => new
             {
@@ -1660,11 +1683,22 @@ internal sealed class BrowserOverlayModelFactory
             : null;
     }
 
-    private BrowserGapTrendPoint? FirstBrowserGapTrendPoint(int carIdx)
+    private bool HasBrowserGapCompletedLapHistory(int carIdx, double? targetLaps)
     {
-        return _gapSeries.TryGetValue(carIdx, out var points) && points.Count > 0
-            ? points[0]
-            : null;
+        if (!_gapSeries.TryGetValue(carIdx, out var points) || points.Count == 0)
+        {
+            return false;
+        }
+
+        var earliest = points
+            .Where(point => point.CompletedLap is not null)
+            .Select(point => point.CompletedLap)
+            .FirstOrDefault();
+        var latest = points
+            .Where(point => point.CompletedLap is not null)
+            .Select(point => point.CompletedLap)
+            .LastOrDefault();
+        return GapToLeaderPresentationRules.HasCompletedLapHistory(earliest, latest, targetLaps);
     }
 
     private BrowserGapTrendPoint? BrowserGapTrendPointNear(int carIdx, double axisSeconds)
@@ -1747,7 +1781,10 @@ internal sealed class BrowserOverlayModelFactory
         double startSeconds,
         double endSeconds)
     {
-        var leaderScaleMax = SelectBrowserMaxGapSeconds(selectedSeries, startSeconds, endSeconds);
+        var scaleSeries = selectedSeries
+            .Where(ShouldUseForBrowserGapScale)
+            .ToArray();
+        var leaderScaleMax = SelectBrowserMaxGapSeconds(scaleSeries, startSeconds, endSeconds);
         var referenceSelection = selectedSeries.FirstOrDefault(selection => selection.State.IsReference);
         if (referenceSelection is null
             || !_gapSeries.TryGetValue(referenceSelection.State.CarIdx, out var rawReferencePoints))
@@ -1774,7 +1811,7 @@ internal sealed class BrowserOverlayModelFactory
         var maxAheadSeconds = 0d;
         var maxBehindSeconds = 0d;
         var hasLocalComparison = false;
-        foreach (var selection in selectedSeries.Where(selection => !selection.State.IsClassLeader))
+        foreach (var selection in scaleSeries.Where(selection => !selection.State.IsClassLeader))
         {
             if (!_gapSeries.TryGetValue(selection.State.CarIdx, out var points))
             {
@@ -1818,6 +1855,18 @@ internal sealed class BrowserOverlayModelFactory
             latestReferenceGap);
     }
 
+    private bool ShouldUseForBrowserGapScale(BrowserGapSeriesSelection selection)
+    {
+        return GapToLeaderPresentationRules.ShouldUseForFocusScale(
+            selection.State.IsReference,
+            selection.State.IsClassLeader,
+            selection.IsStale,
+            selection.IsStickyExit,
+            selection.State.IsCurrentlyDesired,
+            selection.State.DeltaSecondsToReference,
+            GapFilteredRangeSeconds());
+    }
+
     private double SelectBrowserMaxGapSeconds(
         IReadOnlyList<BrowserGapSeriesSelection> selectedSeries,
         double startSeconds,
@@ -1835,11 +1884,10 @@ internal sealed class BrowserOverlayModelFactory
 
     private double GapFocusScaleMinimumReferenceGap()
     {
-        return Math.Max(
+        return GapToLeaderPresentationRules.FocusScaleTriggerSeconds(
+            _lastGapLapReferenceSeconds,
             GapFocusScaleMinimumReferenceGapSeconds,
-            _lastGapLapReferenceSeconds is { } lapSeconds && IsValidLapReference(lapSeconds)
-                ? lapSeconds * GapFocusScaleMinimumReferenceGapLaps
-                : 0d);
+            GapFocusScaleMinimumReferenceGapLaps);
     }
 
     private double GapFocusScaleMinimumRange()
@@ -2201,13 +2249,6 @@ internal sealed class BrowserOverlayModelFactory
         return null;
     }
 
-    private static string BrowserGapCarShortLabel(BrowserGapCarRenderState state)
-    {
-        return state.ClassPosition is > 0
-            ? $"P{state.ClassPosition.Value}"
-            : $"#{state.CarIdx}";
-    }
-
     private bool IsSameLapBrowserGapState(
         BrowserGapCarRenderState referenceState,
         BrowserGapCarRenderState candidateState)
@@ -2316,17 +2357,22 @@ internal sealed class BrowserOverlayModelFactory
         DateTimeOffset now,
         out BrowserOverlayModelResponse response)
     {
-        var overlay = FindOverlay(settings, definition.Id);
+        var overlay = FindOverlay(settings, definition.Id) ?? new OverlaySettings
+        {
+            Id = definition.Id,
+            Width = definition.DefaultWidth,
+            Height = definition.DefaultHeight,
+            Opacity = string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+                ? TrackMapBrowserSettings.Default.InternalOpacity
+                : 1d
+        };
         var sessionKind = OverlayAvailabilityEvaluator.NormalizeSessionKind(OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
-        if (!IsProductHidden(overlay, sessionKind))
+        if (ProductHiddenStatus(definition, overlay, sessionKind, snapshot, now) is not { } status)
         {
             response = null!;
             return false;
         }
 
-        var status = overlay?.Enabled == false
-            ? "disabled | product hidden"
-            : "hidden | session disabled";
         var model = new BrowserOverlayDisplayModel(
             definition.Id,
             definition.DisplayName,
@@ -2348,10 +2394,42 @@ internal sealed class BrowserOverlayModelFactory
         return true;
     }
 
-    private static bool IsProductHidden(OverlaySettings? overlay, OverlaySessionKind? sessionKind)
+    private static string? ProductHiddenStatus(
+        OverlayDefinition definition,
+        OverlaySettings overlay,
+        OverlaySessionKind? sessionKind,
+        LiveTelemetrySnapshot snapshot,
+        DateTimeOffset now)
     {
-        return overlay is not null
-            && (!overlay.Enabled || !OverlayEnabledForSession(overlay, sessionKind));
+        if (!overlay.Enabled)
+        {
+            return "disabled | product hidden";
+        }
+
+        if (!OverlayEnabledForSession(overlay, sessionKind))
+        {
+            return "hidden | session disabled";
+        }
+
+        if (!OverlayContentSizing.HasRenderableContent(definition, overlay, sessionKind)
+            || !GapWindowEnabled(overlay))
+        {
+            return "hidden | no enabled content";
+        }
+
+        var context = LiveLocalStrategyContext.ForRequirement(snapshot, now, definition.ContextRequirement);
+        if (!context.IsAvailable)
+        {
+            return $"hidden | {context.StatusText}";
+        }
+
+        if (definition.FadeWhenLiveTelemetryUnavailable
+            && !OverlayAvailabilityEvaluator.FromSnapshot(snapshot, now).IsAvailable)
+        {
+            return "hidden | telemetry unavailable";
+        }
+
+        return null;
     }
 
     private static string HiddenBodyKind(string overlayId)
@@ -2409,8 +2487,8 @@ internal sealed class BrowserOverlayModelFactory
     {
         return columns
             .Select(column => string.Equals(column.DataKey, OverlayContentColumnSettings.DataPit, StringComparison.Ordinal)
-                    && column.Width < 36
-                ? column with { Width = 36 }
+                    && column.Width < 44
+                ? column with { Width = 44 }
                 : column)
             .ToArray();
     }
@@ -2798,7 +2876,7 @@ internal sealed class BrowserOverlayModelFactory
             SimpleTelemetryTone.Info => "info",
             SimpleTelemetryTone.Modeled => "info",
             SimpleTelemetryTone.Waiting => "waiting",
-            _ => "normal"
+            _ => "info"
         };
     }
 
@@ -3146,6 +3224,7 @@ internal sealed record BrowserGapTrendPoint(
     bool IsReference,
     bool IsClassLeader,
     int? ClassPosition,
+    int? CompletedLap,
     bool StartsSegment);
 
 internal sealed record BrowserGapWeatherPoint(

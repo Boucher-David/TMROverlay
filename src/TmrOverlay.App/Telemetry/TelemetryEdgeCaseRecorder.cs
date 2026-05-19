@@ -472,7 +472,7 @@ internal sealed record TelemetryEdgeCaseFrame(
     int? PlayerCarDriverIncidentCount,
     int? PlayerIncidents,
     int TrackWetness,
-    bool WeatherDeclaredWet,
+    bool? WeatherDeclaredWet,
     double? PrecipitationPercent,
     double? WindVelocityMetersPerSecond,
     double? WindDirectionRadians,

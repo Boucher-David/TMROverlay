@@ -290,7 +290,7 @@ public sealed class RelativeOverlayViewModelTests
     public void From_FormatsTimingFallbackRowsByDirection()
     {
         var now = DateTimeOffset.UtcNow;
-        var snapshot = Snapshot(
+        var snapshot = WithSession(Snapshot(
             now,
             RelativeRow(
                 carIdx: 11,
@@ -307,7 +307,8 @@ public sealed class RelativeOverlayViewModelTests
                 classPosition: 7,
                 source: "class-gap",
                 quality: LiveModelQuality.Inferred,
-                placementEvidence: LiveSignalEvidence.Unavailable("class-gap", "no_lap_distance_placement")));
+                placementEvidence: LiveSignalEvidence.Unavailable("class-gap", "no_lap_distance_placement"))),
+            "Race");
 
         var viewModel = RelativeOverlayViewModel.From(
             snapshot,
@@ -322,19 +323,48 @@ public sealed class RelativeOverlayViewModelTests
     }
 
     [Fact]
-    public void From_LabelsFullyDegradedRowsAsPartial()
+    public void From_SuppressesTimingFallbackRowsOutsideRace()
     {
         var now = DateTimeOffset.UtcNow;
-        var snapshot = Snapshot(
+        var snapshot = WithSession(Snapshot(
             now,
             RelativeRow(
                 carIdx: 11,
                 isAhead: true,
-                seconds: null,
+                seconds: -2.5d,
                 classPosition: 5,
-                quality: LiveModelQuality.Partial,
-                timingEvidence: LiveSignalEvidence.Partial("proximity-relative-seconds", "relative_seconds_missing"),
-                placementEvidence: LiveSignalEvidence.Unavailable("CarIdxLapDistPct", "missing_lap_distance")));
+                source: "class-gap",
+                quality: LiveModelQuality.Inferred,
+                placementEvidence: LiveSignalEvidence.Unavailable("class-gap", "no_lap_distance_placement"))),
+            "Practice");
+
+        var viewModel = RelativeOverlayViewModel.From(
+            snapshot,
+            now,
+            carsAhead: 5,
+            carsBehind: 5);
+
+        var reference = Assert.Single(viewModel.Rows);
+        Assert.True(reference.IsReference);
+        Assert.Equal("source: waiting", viewModel.Source);
+        Assert.Equal("6 - 0 cars", viewModel.Status);
+    }
+
+    [Fact]
+    public void From_LabelsFullyDegradedRowsAsPartial()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = WithSession(Snapshot(
+                now,
+                RelativeRow(
+                    carIdx: 11,
+                    isAhead: true,
+                    seconds: null,
+                    classPosition: 5,
+                    quality: LiveModelQuality.Partial,
+                    timingEvidence: LiveSignalEvidence.Partial("proximity-relative-seconds", "relative_seconds_missing"),
+                    placementEvidence: LiveSignalEvidence.Unavailable("CarIdxLapDistPct", "missing_lap_distance"))),
+            "Race");
 
         var viewModel = RelativeOverlayViewModel.From(
             snapshot,
@@ -345,6 +375,33 @@ public sealed class RelativeOverlayViewModelTests
         Assert.Equal("source: partial timing", viewModel.Source);
         Assert.True(viewModel.Rows[0].IsPartial);
         Assert.Equal("--", viewModel.Rows[0].Gap);
+    }
+
+    [Fact]
+    public void From_SuppressesWeakProximityTimingOutsideRace()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = WithSession(Snapshot(
+                now,
+                RelativeRow(
+                    carIdx: 11,
+                    isAhead: true,
+                    seconds: null,
+                    classPosition: 5,
+                    quality: LiveModelQuality.Partial,
+                    timingEvidence: LiveSignalEvidence.Partial("proximity-relative-seconds", "relative_seconds_missing"),
+                    placementEvidence: LiveSignalEvidence.Unavailable("CarIdxLapDistPct", "missing_lap_distance"))),
+            "Practice");
+
+        var viewModel = RelativeOverlayViewModel.From(
+            snapshot,
+            now,
+            carsAhead: 5,
+            carsBehind: 5);
+
+        var reference = Assert.Single(viewModel.Rows);
+        Assert.True(reference.IsReference);
+        Assert.Equal("source: waiting", viewModel.Source);
     }
 
     [Fact]

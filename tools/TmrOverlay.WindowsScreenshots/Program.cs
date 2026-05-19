@@ -1094,7 +1094,7 @@ internal static class Program
                     new DesignV2Column("INT", 60, ContentAlignment.MiddleRight),
                     new DesignV2Column("FAST", 70, ContentAlignment.MiddleRight),
                     new DesignV2Column("LAST", 70, ContentAlignment.MiddleRight),
-                    new DesignV2Column("PIT", 36, ContentAlignment.MiddleRight)
+                    new DesignV2Column("PIT", 48, ContentAlignment.MiddleRight)
                 ],
                 rows),
             HeaderText: "06:37:08",
@@ -1117,7 +1117,7 @@ internal static class Program
         };
         if (includePitColumn)
         {
-            columns.Add(new DesignV2Column("Pit", 36, ContentAlignment.MiddleRight));
+            columns.Add(new DesignV2Column("Pit", 48, ContentAlignment.MiddleRight));
         }
 
         return new DesignV2OverlayModel(
@@ -1686,18 +1686,18 @@ internal static class Program
         var timestampStart = new DateTimeOffset(2026, 5, 17, 12, 0, 0, TimeSpan.Zero);
         var trend = new[]
         {
-            (Offset: 0d, P1: 0d, AltP1: 5.4d, Focus: 249.8d),
-            (Offset: 60d, P1: 0.4d, AltP1: 4.8d, Focus: 247.2d),
-            (Offset: 120d, P1: 0.1d, AltP1: 4.3d, Focus: 245.4d),
-            (Offset: 180d, P1: 0.6d, AltP1: 3.7d, Focus: 243.6d),
-            (Offset: 240d, P1: 0.3d, AltP1: 3.2d, Focus: 241.9d),
-            (Offset: 300d, P1: 0.2d, AltP1: 2.6d, Focus: 240.5d),
-            (Offset: 360d, P1: 0.5d, AltP1: 2.1d, Focus: 239.7d),
-            (Offset: 420d, P1: 0d, AltP1: 1.8d, Focus: 238.9d)
+            (Offset: 0d, P1: 0d, Ahead: 234.0d, Focus: 240.8d, Threat: 251.0d),
+            (Offset: 60d, P1: 0.4d, Ahead: 234.2d, Focus: 240.1d, Threat: 249.4d),
+            (Offset: 120d, P1: 0.1d, Ahead: 234.4d, Focus: 239.5d, Threat: 247.8d),
+            (Offset: 180d, P1: 0.6d, Ahead: 234.6d, Focus: 238.8d, Threat: 246.2d),
+            (Offset: 240d, P1: 0.3d, Ahead: 234.8d, Focus: 238.2d, Threat: 244.6d),
+            (Offset: 300d, P1: 0.2d, Ahead: 235.0d, Focus: 237.6d, Threat: 243.2d),
+            (Offset: 360d, P1: 0.5d, Ahead: 235.2d, Focus: 237.1d, Threat: 241.8d),
+            (Offset: 420d, P1: 0d, Ahead: 235.4d, Focus: 236.5d, Threat: 240.4d)
         };
         var endSeconds = startSeconds + trend[^1].Offset;
         DesignV2GapTrendPoint Point(
-            (double Offset, double P1, double AltP1, double Focus) sample,
+            (double Offset, double P1, double Ahead, double Focus, double Threat) sample,
             int carIdx,
             double gapSeconds,
             bool isReference,
@@ -1713,9 +1713,12 @@ internal static class Program
                 isReference,
                 isClassLeader,
                 classPosition,
+                CompletedLap: 120 + index * 2,
                 StartsSegment: index == 0);
         }
 
+        var referencePoints = trend.Select((sample, index) => Point(sample, 42, sample.Focus, true, false, 24, index)).ToArray();
+        var activeThreat = new DesignV2BehindGainMetric(43, "P25", 5.3d);
         var series = new[]
         {
             new DesignV2GapSeries(
@@ -1723,28 +1726,37 @@ internal static class Program
                 IsReference: false,
                 IsClassLeader: true,
                 ClassPosition: 1,
-                Alpha: 0.35d,
+                Alpha: 1d,
                 IsStickyExit: false,
                 IsStale: false,
                 trend.Select((sample, index) => Point(sample, 8, sample.P1, false, true, 1, index)).ToArray()),
             new DesignV2GapSeries(
-                17,
+                41,
                 IsReference: false,
-                IsClassLeader: true,
-                ClassPosition: 1,
-                Alpha: 0.35d,
+                IsClassLeader: false,
+                ClassPosition: 23,
+                Alpha: 1d,
                 IsStickyExit: false,
                 IsStale: false,
-                trend.Select((sample, index) => Point(sample, 17, sample.AltP1, false, true, 1, index)).ToArray()),
+                trend.Select((sample, index) => Point(sample, 41, sample.Ahead, false, false, 23, index)).ToArray()),
             new DesignV2GapSeries(
                 42,
                 IsReference: true,
                 IsClassLeader: false,
                 ClassPosition: 24,
-                Alpha: 0.35d,
+                Alpha: 1d,
                 IsStickyExit: false,
                 IsStale: false,
-                trend.Select((sample, index) => Point(sample, 42, sample.Focus, true, false, 24, index)).ToArray())
+                referencePoints),
+            new DesignV2GapSeries(
+                43,
+                IsReference: false,
+                IsClassLeader: false,
+                ClassPosition: 25,
+                Alpha: 1d,
+                IsStickyExit: false,
+                IsStale: false,
+                trend.Select((sample, index) => Point(sample, 43, sample.Threat, false, false, 25, index)).ToArray())
         };
         var graph = new DesignV2GraphBody(
             Points: trend.Select(sample => sample.Focus).ToArray(),
@@ -1754,25 +1766,25 @@ internal static class Program
             DriverChanges: [],
             StartSeconds: startSeconds,
             EndSeconds: endSeconds,
-            MaxGapSeconds: 500d,
+            MaxGapSeconds: 250d,
             LapReferenceSeconds: 525.8d,
             SelectedSeriesCount: series.Length,
             TrendMetrics:
             [
-                new DesignV2GapTrendMetric("5L", null, null, "warming", "0.0L"),
-                new DesignV2GapTrendMetric("10L", null, null, "warming", "0.0L"),
+                new DesignV2GapTrendMetric("5L", -1.8d, activeThreat, "ready", null),
+                new DesignV2GapTrendMetric("10L", -3.4d, activeThreat, "ready", null),
                 new DesignV2GapTrendMetric("Pit", null, null, "pit", null),
                 new DesignV2GapTrendMetric("PLap", null, null, "pitLap", null),
-                new DesignV2GapTrendMetric("Stint", null, null, "stint", null),
+                new DesignV2GapTrendMetric("Stint", null, null, "stint", null, ThreatText: "17L", ComparisonText: "18L"),
                 new DesignV2GapTrendMetric("Tire", null, null, "tire", null),
-                new DesignV2GapTrendMetric("Last", null, null, "last", null, ComparisonText: "8:13.000"),
-                new DesignV2GapTrendMetric("Status", null, null, "status", null, ComparisonText: "Track")
+                new DesignV2GapTrendMetric("Last", null, null, "last", null, ThreatText: "8:12.120", ComparisonText: "8:13.000"),
+                new DesignV2GapTrendMetric("Status", null, null, "status", null, ThreatText: "Track", ComparisonText: "Track")
             ],
-            ActiveThreat: null,
-            ThreatCarIdx: null,
+            ActiveThreat: new DesignV2GapTrendMetric("5L", null, activeThreat, "ready", null),
+            ThreatCarIdx: 43,
             MetricDeadbandSeconds: 0.25d,
-            ComparisonLabel: "P1",
-            Scale: DesignV2GapScale.Leader(500d));
+            ComparisonLabel: "P23",
+            Scale: DesignV2GapScale.FocusRelative(250d, 8d, 8d, referencePoints, 236.5d));
 
         return new DesignV2OverlayModel(
             "Gap To Leader",
@@ -4963,12 +4975,12 @@ internal static class Program
     {
         if (string.Equals(slug, "chrome-off", StringComparison.OrdinalIgnoreCase))
         {
-            var settings = OverlaySettingsFor(definition);
-            SetSharedChromeOptions(settings, enabled: false);
-            var size = OverlayContentSizing.BaseSizeFor(definition, settings, OverlaySessionKind.Race);
-            settings.Width = size.Width;
-            settings.Height = size.Height;
-            return settings;
+            var chromeOffSettings = OverlaySettingsFor(definition);
+            SetSharedChromeOptions(chromeOffSettings, enabled: false);
+            var size = OverlayContentSizing.BaseSizeFor(definition, chromeOffSettings, OverlaySessionKind.Race);
+            chromeOffSettings.Width = size.Width;
+            chromeOffSettings.Height = size.Height;
+            return chromeOffSettings;
         }
 
         if (!string.Equals(definition.Id, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)

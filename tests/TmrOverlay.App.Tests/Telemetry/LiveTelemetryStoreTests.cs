@@ -322,6 +322,27 @@ DriverInfo:
     }
 
     [Fact]
+    public void RaceProjectionMapper_KeepsPublishedLapsRemainingOverRollingTimedProjection()
+    {
+        var progress = LiveRaceProgressModel.Empty with
+        {
+            RaceLapsRemaining = 4d,
+            RaceLapsRemainingSource = "session laps remain"
+        };
+        var projection = LiveRaceProjectionModel.Empty with
+        {
+            HasData = true,
+            EstimatedTeamLapsRemaining = 9d,
+            EstimatedTeamLapsRemainingSource = "timed race by rolling overall leader pace"
+        };
+
+        var mapped = LiveRaceProjectionMapper.ApplyToRaceProgress(progress, projection);
+
+        Assert.Equal(4d, mapped.RaceLapsRemaining);
+        Assert.Equal("session laps remain", mapped.RaceLapsRemainingSource);
+    }
+
+    [Fact]
     public void RecordFrame_PrefersPublishedLapsRemainingForClassZeroProjection()
     {
         var store = new LiveTelemetryStore();
@@ -619,6 +640,11 @@ DriverInfo:
             teamCarClass: 4098,
             teamLapDistPct: 0.5d,
             teamEstimatedTimeSeconds: 45d,
+            nearbyCars:
+            [
+                Car(11, position: 2, classPosition: 2, lapDistPct: 0.49d, f2TimeSeconds: 46d),
+                Car(63, position: 3, classPosition: 3, lapDistPct: 0.10d, f2TimeSeconds: 120d)
+            ],
             allCars:
             [
                 Car(10, position: 1, classPosition: 1, lapDistPct: 0.50d, f2TimeSeconds: 45d),
@@ -630,6 +656,8 @@ DriverInfo:
         var models = store.Snapshot().Models;
 
         Assert.Equal(3, models.Coverage.RosterCount);
+        Assert.Equal(1, models.Coverage.LiveProximityRowCount);
+        Assert.DoesNotContain(store.Snapshot().Proximity.NearbyCars, car => car.CarIdx == 63);
         Assert.DoesNotContain(models.Scoring.Rows, row => row.CarIdx == 63);
         Assert.DoesNotContain(models.Timing.OverallRows, row => row.CarIdx == 63);
         Assert.DoesNotContain(models.Relative.Rows, row => row.CarIdx == 63);
@@ -988,6 +1016,24 @@ SessionInfo:
  - SessionNum: 0
    SessionType: Race
    SessionName: RACE
+   SessionTime: 3600 sec
+   SessionLaps: unlimited
+DriverInfo:
+ DriverCarIdx: 10
+""");
+    }
+
+    private static void ApplyPracticeSession(LiveTelemetryStore store)
+    {
+        store.ApplySessionInfo("""
+WeekendInfo:
+ EventType: Practice
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Practice
+   SessionName: PRACTICE
    SessionTime: 3600 sec
    SessionLaps: unlimited
 DriverInfo:
@@ -2770,6 +2816,7 @@ QualifyResultsInfo:
     public void RecordFrame_InferRelativeOverlaySecondsWithoutChangingRadarTiming()
     {
         var store = new LiveTelemetryStore();
+        ApplyRaceSession(store);
 
         store.RecordFrame(CreateSample(
             playerCarIdx: 10,
@@ -2803,6 +2850,37 @@ QualifyResultsInfo:
 
         var parity = LiveModelParityAnalyzer.Analyze(snapshot);
         Assert.False(parity.HasMismatch);
+    }
+
+    [Fact]
+    public void RecordFrame_DoesNotInferRelativeOverlaySecondsOutsideRace()
+    {
+        var store = new LiveTelemetryStore();
+        ApplyPracticeSession(store);
+
+        store.RecordFrame(CreateSample(
+            playerCarIdx: 10,
+            teamLapDistPct: 0.50d,
+            teamCarClass: 4098,
+            nearbyCars:
+            [
+                new HistoricalCarProximity(
+                    CarIdx: 12,
+                    LapCompleted: 2,
+                    LapDistPct: 0.53d,
+                    F2TimeSeconds: null,
+                    EstimatedTimeSeconds: null,
+                    Position: 8,
+                    ClassPosition: 4,
+                    CarClass: 4098,
+                    TrackSurface: 3,
+                    OnPitRoad: false)
+            ]));
+
+        var relativeRow = Assert.Single(store.Snapshot().Models.Relative.Rows);
+        Assert.Null(relativeRow.RelativeSeconds);
+        Assert.Equal("proximity-relative-seconds", relativeRow.TimingEvidence.Source);
+        Assert.Equal("relative_seconds_missing", relativeRow.TimingEvidence.MissingReason);
     }
 
     [Fact]

@@ -444,6 +444,111 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
     }
 
     [Fact]
+    public void CompleteCollection_SummarizesLapProfileReadiness()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-diagnostics");
+            Directory.CreateDirectory(captureDirectory);
+            var recorder = CreateRecorder(storage);
+            var context = CreateContext();
+            var capturedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", capturedAtUtc);
+            var snapshot = CreateSnapshot(
+                context,
+                CreateSample(
+                    capturedAtUtc,
+                    sessionTime: 0d,
+                    focusCarIdx: 10,
+                    carLeftRight: 1,
+                    focusF2TimeSeconds: 500d,
+                    classPosition: 3,
+                    observedPosition: 25,
+                    observedClassPosition: 10,
+                    observedLapDistPct: 0.5d),
+                sequence: 1);
+            var timingRows = new[]
+            {
+                TimingRow(10, carClass: 12, className: "GT3", classPosition: 1, bestLap: 92.4d, lastLap: 92.4d),
+                TimingRow(11, carClass: 12, className: "GT3", classPosition: 2, bestLap: 93.1d, lastLap: 93.1d),
+                TimingRow(12, carClass: 12, className: "GT3", classPosition: 3, bestLap: 94.2d, lastLap: null)
+            };
+            var scoringRows = new[]
+            {
+                ScoringRow(10, carClass: 12, className: "GT3", classPosition: 1, bestLap: 92.4d, lastLap: 92.4d),
+                ScoringRow(11, carClass: 12, className: "GT3", classPosition: 2, bestLap: 93.1d, lastLap: 93.1d),
+                ScoringRow(12, carClass: 12, className: "GT3", classPosition: 3, bestLap: 94.2d, lastLap: null)
+            };
+            snapshot = snapshot with
+            {
+                Models = snapshot.Models with
+                {
+                    Timing = LiveTimingModel.Empty with
+                    {
+                        HasData = true,
+                        Quality = LiveModelQuality.Reliable,
+                        PlayerCarIdx = 10,
+                        FocusCarIdx = 10,
+                        OverallRows = timingRows,
+                        ClassRows = timingRows
+                    },
+                    Scoring = LiveScoringModel.Empty with
+                    {
+                        HasData = true,
+                        Quality = LiveModelQuality.Reliable,
+                        Source = LiveScoringSource.SessionResults,
+                        ReferenceCarIdx = 10,
+                        ReferenceCarClass = 12,
+                        Rows = scoringRows,
+                        ClassGroups =
+                        [
+                            new LiveScoringClassGroup(
+                                CarClass: 12,
+                                ClassName: "GT3",
+                                CarClassColorHex: "#ff0000",
+                                IsReferenceClass: true,
+                                RowCount: scoringRows.Length,
+                                Rows: scoringRows)
+                        ]
+                    }
+                }
+            };
+
+            recorder.RecordFrame(snapshot);
+
+            var path = recorder.CompleteCollection(capturedAtUtc.AddSeconds(1), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var lapProfile = document.RootElement.GetProperty("lapProfile");
+            Assert.Equal(1, lapProfile.GetProperty("observedFrames").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithTimingRows").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithScoringRows").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithAnyRows").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithAnyBestLap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithAnyLastLap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithBestAndLastLap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithRecentPersonalBest").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithClassFastestBestLap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithClassFastestLastLap").GetInt32());
+            Assert.Equal(3, lapProfile.GetProperty("maxRows").GetInt32());
+            Assert.Equal(2, lapProfile.GetProperty("maxRowsWithBestAndLastLap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("maxRowsWithRecentPersonalBest").GetInt32());
+            Assert.Equal(2, lapProfile.GetProperty("sourceRowCounts").GetProperty("merged:best-and-last-lap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("sourceRowCounts").GetProperty("merged:recent-personal-best").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("sourceRowCounts").GetProperty("merged:class-fastest-last-lap").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void CompleteCollection_SummarizesUnavailableFocusContext()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
@@ -1496,6 +1601,85 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
             TrackSurface: 3,
             OnPitRoad: false,
             SessionFlags: sessionFlags);
+    }
+
+    private static LiveTimingRow TimingRow(
+        int carIdx,
+        int? carClass,
+        string? className,
+        int? classPosition,
+        double? bestLap,
+        double? lastLap)
+    {
+        var evidence = LiveSignalEvidence.Reliable("unit-test");
+        return new LiveTimingRow(
+            CarIdx: carIdx,
+            Quality: LiveModelQuality.Reliable,
+            Source: "unit-test",
+            IsPlayer: carIdx == 10,
+            IsFocus: carIdx == 10,
+            IsOverallLeader: classPosition == 1,
+            IsClassLeader: classPosition == 1,
+            HasTiming: true,
+            HasSpatialProgress: true,
+            CanUseForRadarPlacement: true,
+            TimingEvidence: evidence,
+            SpatialEvidence: evidence,
+            RadarPlacementEvidence: evidence,
+            GapEvidence: evidence,
+            DriverName: $"Driver {carIdx}",
+            TeamName: null,
+            CarNumber: carIdx.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            CarClassName: className,
+            CarClassColorHex: "#ff0000",
+            OverallPosition: classPosition,
+            ClassPosition: classPosition,
+            CarClass: carClass,
+            LapCompleted: 12,
+            LapDistPct: 0.5d,
+            ProgressLaps: 12.5d,
+            F2TimeSeconds: 100d + carIdx,
+            EstimatedTimeSeconds: 100d + carIdx,
+            LastLapTimeSeconds: lastLap,
+            BestLapTimeSeconds: bestLap,
+            GapSecondsToClassLeader: classPosition is { } position && position > 1 ? (double)position : 0d,
+            GapLapsToClassLeader: null,
+            IntervalSecondsToPreviousClassRow: null,
+            IntervalLapsToPreviousClassRow: null,
+            DeltaSecondsToFocus: null,
+            TrackSurface: 3,
+            OnPitRoad: false);
+    }
+
+    private static LiveScoringRow ScoringRow(
+        int carIdx,
+        int? carClass,
+        string? className,
+        int? classPosition,
+        double? bestLap,
+        double? lastLap)
+    {
+        return new LiveScoringRow(
+            CarIdx: carIdx,
+            OverallPositionRaw: classPosition,
+            ClassPositionRaw: classPosition,
+            OverallPosition: classPosition,
+            ClassPosition: classPosition,
+            CarClass: carClass,
+            DriverName: $"Driver {carIdx}",
+            TeamName: null,
+            CarNumber: carIdx.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            CarClassName: className,
+            CarClassColorHex: "#ff0000",
+            IsPlayer: carIdx == 10,
+            IsFocus: carIdx == 10,
+            IsReferenceClass: true,
+            Lap: 13,
+            LapsComplete: 12,
+            LastLapTimeSeconds: lastLap,
+            BestLapTimeSeconds: bestLap,
+            ReasonOut: null,
+            HasTakenGrid: true);
     }
 
     private static HistoricalSessionContext CreateContext()

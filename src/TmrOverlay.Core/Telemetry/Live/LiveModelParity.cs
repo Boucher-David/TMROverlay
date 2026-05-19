@@ -55,7 +55,7 @@ internal static class LiveModelParityAnalyzer
                 && (IsFinite(sample.AirTempC)
                     || IsFinite(sample.TrackTempCrewC)
                     || sample.TrackWetness >= 0
-                    || sample.WeatherDeclaredWet
+                    || sample.WeatherDeclaredWet == true
                     || sample.Skies is not null
                     || ValidPercent(sample.PrecipitationPercent) is not null
                     || ValidNonNegative(sample.WindVelocityMetersPerSecond) is not null

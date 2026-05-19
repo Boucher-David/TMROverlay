@@ -552,7 +552,7 @@ public sealed class OverlayInputTransparencyTests
             ThreatCarIdx: null,
             MetricDeadbandSeconds: 0.25d);
         var plot = new RectangleF(0, 10, 100, 200);
-        var leaderPoint = new DesignV2GapTrendPoint(DateTimeOffset.UtcNow, 5d, 0d, 1, false, true, 1, false);
+        var leaderPoint = new DesignV2GapTrendPoint(DateTimeOffset.UtcNow, 5d, 0d, 1, false, true, 1, 12, false);
         var trailingPoint = leaderPoint with { GapSeconds = 20d, IsClassLeader = false, ClassPosition = 10 };
 
         Assert.Equal(plot.Top, DesignV2LiveOverlayForm.GapGraphPoint(leaderPoint, graph, plot, 20d).Y);

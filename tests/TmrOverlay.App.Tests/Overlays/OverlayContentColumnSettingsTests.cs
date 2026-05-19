@@ -137,7 +137,7 @@ public sealed class OverlayContentColumnSettingsTests
         Assert.Contains(standingsColumns, column =>
             column.Id == OverlayContentColumnSettings.StandingsIntervalColumnId
             && column.Label == "INT"
-            && column.SettingsLabel == "Focus interval");
+            && column.SettingsLabel == "Previous interval");
         Assert.Contains(standingsColumns, column =>
             column.Id == OverlayContentColumnSettings.StandingsFastestLapColumnId
             && column.Label == "FAST"
@@ -336,6 +336,28 @@ public sealed class OverlayContentColumnSettingsTests
     [Fact]
     public void HasRenderableContentHonorsEmptySimpleTelemetryInputAndFlagCategories()
     {
+        var standings = new ApplicationSettings().GetOrAddOverlay(
+            StandingsOverlayDefinition.Definition.Id,
+            StandingsOverlayDefinition.Definition.DefaultWidth,
+            StandingsOverlayDefinition.Definition.DefaultHeight);
+        foreach (var column in OverlayContentColumnSettings.Standings.Columns)
+        {
+            standings.SetBooleanOption(column.EnabledKey(standings.Id), false);
+        }
+
+        Assert.False(OverlayContentSizing.HasRenderableContent(StandingsOverlayDefinition.Definition, standings));
+
+        var relative = new ApplicationSettings().GetOrAddOverlay(
+            RelativeOverlayDefinition.Definition.Id,
+            RelativeOverlayDefinition.Definition.DefaultWidth,
+            RelativeOverlayDefinition.Definition.DefaultHeight);
+        foreach (var column in OverlayContentColumnSettings.Relative.Columns)
+        {
+            relative.SetBooleanOption(column.EnabledKey(relative.Id), false);
+        }
+
+        Assert.False(OverlayContentSizing.HasRenderableContent(RelativeOverlayDefinition.Definition, relative));
+
         var pitService = new ApplicationSettings().GetOrAddOverlay(
             PitServiceOverlayDefinition.Definition.Id,
             PitServiceOverlayDefinition.Definition.DefaultWidth,

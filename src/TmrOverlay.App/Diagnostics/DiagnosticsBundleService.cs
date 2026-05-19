@@ -978,6 +978,7 @@ internal sealed class DiagnosticsBundleService
         var liveOverlayDiagnosticsPath = Path.Combine(captureDirectory, _liveOverlayDiagnosticsOptions.OutputFileName);
         var liveOverlayDiagnostics = TryReadJsonObject(liveOverlayDiagnosticsPath);
         var lapDeltaQuality = LapDeltaQualityFromDiagnostics(liveOverlayDiagnostics?["lapDelta"] as JsonObject);
+        var lapProfileReadiness = LapProfileReadinessFromDiagnostics(liveOverlayDiagnostics?["lapProfile"] as JsonObject);
         var postRaceFuelEvidence = PostRaceFuelEvidence(synthesis, liveOverlayDiagnostics);
 
         return new
@@ -1027,6 +1028,7 @@ internal sealed class DiagnosticsBundleService
             },
             PostRaceFuelEvidence = postRaceFuelEvidence,
             LapDeltaQuality = lapDeltaQuality,
+            LapProfileReadiness = lapProfileReadiness,
             LiveOverlayDiagnostics = new
             {
                 Path = liveOverlayDiagnosticsPath,
@@ -1044,6 +1046,12 @@ internal sealed class DiagnosticsBundleService
                 FlagsYellowFamilyStateCounts = liveOverlayDiagnostics?["flags"]?["yellowFamilyStateCounts"],
                 FlagsCarIdxYellowFamilyBitCounts = liveOverlayDiagnostics?["flags"]?["carIdxYellowFamilyBitCounts"],
                 FlagsCarIdxYellowFamilyStateCounts = liveOverlayDiagnostics?["flags"]?["carIdxYellowFamilyStateCounts"],
+                FlagsRawToDisplayLabelCounts = liveOverlayDiagnostics?["flags"]?["rawToDisplayLabelCounts"],
+                FlagsDisplayLabelStateCounts = liveOverlayDiagnostics?["flags"]?["displayLabelStateCounts"],
+                FlagsDisplayKindCounts = liveOverlayDiagnostics?["flags"]?["displayKindCounts"],
+                FlagsDisplayCategoryCounts = liveOverlayDiagnostics?["flags"]?["displayCategoryCounts"],
+                FlagsDisplayLabelCounts = liveOverlayDiagnostics?["flags"]?["displayLabelCounts"],
+                FlagsToneCounts = liveOverlayDiagnostics?["flags"]?["toneCounts"],
                 RadarSideTransitionFrames = (int?)liveOverlayDiagnostics?["radar"]?["sideTransitionFrames"],
                 RadarOppositeSideFlipFrames = (int?)liveOverlayDiagnostics?["radar"]?["oppositeSideFlipFrames"],
                 RadarSideTransitionWithoutPlacementFrames = (int?)liveOverlayDiagnostics?["radar"]?["sideTransitionWithoutPlacementFrames"],
@@ -1065,6 +1073,18 @@ internal sealed class DiagnosticsBundleService
                 LapDeltaClassification = lapDeltaQuality.Classification,
                 LapDeltaValueFrameCounts = lapDeltaQuality.ValueFrameCounts,
                 LapDeltaUsableFrameCounts = lapDeltaQuality.UsableFrameCounts,
+                LapProfileObservedFrames = lapProfileReadiness.ObservedFrames,
+                LapProfileFramesWithTimingRows = lapProfileReadiness.FramesWithTimingRows,
+                LapProfileFramesWithScoringRows = lapProfileReadiness.FramesWithScoringRows,
+                LapProfileFramesWithBestAndLastLap = lapProfileReadiness.FramesWithBestAndLastLap,
+                LapProfileFramesWithRecentPersonalBest = lapProfileReadiness.FramesWithRecentPersonalBest,
+                LapProfileFramesWithClassFastestBestLap = lapProfileReadiness.FramesWithClassFastestBestLap,
+                LapProfileFramesWithClassFastestLastLap = lapProfileReadiness.FramesWithClassFastestLastLap,
+                LapProfileMaxRows = lapProfileReadiness.MaxRows,
+                LapProfileMaxRowsWithBestAndLastLap = lapProfileReadiness.MaxRowsWithBestAndLastLap,
+                LapProfileClassification = lapProfileReadiness.Classification,
+                LapProfileSourceFrameCounts = lapProfileReadiness.SourceFrameCounts,
+                LapProfileSourceRowCounts = lapProfileReadiness.SourceRowCounts,
                 NonRaceRaceLapSignalFrames = (int?)liveOverlayDiagnostics?["raceProjection"]?["nonRaceRaceLapSignalFrames"],
                 NonRaceRaceProjectionFrames = (int?)liveOverlayDiagnostics?["raceProjection"]?["nonRaceRaceProjectionFrames"]
             }
@@ -1528,6 +1548,437 @@ internal sealed class DiagnosticsBundleService
             sample.LapDeltaToSessionLastLapOk);
     }
 
+    private static LapProfileReadinessDiagnostics LapProfileReadinessFromDiagnostics(JsonObject? lapProfile)
+    {
+        if (lapProfile is null)
+        {
+            return BuildLapProfileReadiness(
+                evidenceAvailable: false,
+                observedFrames: null,
+                framesWithTimingRows: null,
+                framesWithScoringRows: null,
+                framesWithAnyRows: null,
+                framesWithAnyBestLap: null,
+                framesWithAnyLastLap: null,
+                framesWithBestAndLastLap: null,
+                framesWithRecentPersonalBest: null,
+                framesWithClassFastestBestLap: null,
+                framesWithClassFastestLastLap: null,
+                maxRows: null,
+                maxRowsWithBestAndLastLap: null,
+                maxRowsWithRecentPersonalBest: null,
+                maxRowsWithClassFastestBestLap: null,
+                maxRowsWithClassFastestLastLap: null,
+                sourceFrameCounts: EmptyStringIntDictionary(),
+                sourceRowCounts: EmptyStringIntDictionary());
+        }
+
+        return BuildLapProfileReadiness(
+            evidenceAvailable: true,
+            observedFrames: (int?)lapProfile["observedFrames"],
+            framesWithTimingRows: (int?)lapProfile["framesWithTimingRows"],
+            framesWithScoringRows: (int?)lapProfile["framesWithScoringRows"],
+            framesWithAnyRows: (int?)lapProfile["framesWithAnyRows"],
+            framesWithAnyBestLap: (int?)lapProfile["framesWithAnyBestLap"],
+            framesWithAnyLastLap: (int?)lapProfile["framesWithAnyLastLap"],
+            framesWithBestAndLastLap: (int?)lapProfile["framesWithBestAndLastLap"],
+            framesWithRecentPersonalBest: (int?)lapProfile["framesWithRecentPersonalBest"],
+            framesWithClassFastestBestLap: (int?)lapProfile["framesWithClassFastestBestLap"],
+            framesWithClassFastestLastLap: (int?)lapProfile["framesWithClassFastestLastLap"],
+            maxRows: (int?)lapProfile["maxRows"],
+            maxRowsWithBestAndLastLap: (int?)lapProfile["maxRowsWithBestAndLastLap"],
+            maxRowsWithRecentPersonalBest: (int?)lapProfile["maxRowsWithRecentPersonalBest"],
+            maxRowsWithClassFastestBestLap: (int?)lapProfile["maxRowsWithClassFastestBestLap"],
+            maxRowsWithClassFastestLastLap: (int?)lapProfile["maxRowsWithClassFastestLastLap"],
+            sourceFrameCounts: JsonObjectToIntDictionary(lapProfile["sourceFrameCounts"]),
+            sourceRowCounts: JsonObjectToIntDictionary(lapProfile["sourceRowCounts"]));
+    }
+
+    private static LapProfileReadinessDiagnostics LapProfileReadinessFromSnapshot(LiveTelemetrySnapshot snapshot)
+    {
+        var timingRows = LapProfileTimingRows(snapshot.Models.Timing).ToArray();
+        var scoringRows = LapProfileScoringRows(snapshot.Models.Scoring).ToArray();
+        var mergedRows = MergeLapProfileRows(timingRows, scoringRows).ToArray();
+        var readiness = LapProfileReadiness(mergedRows);
+        var sourceFrameCounts = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var sourceRowCounts = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        RecordLapProfileSourceCounts(sourceFrameCounts, sourceRowCounts, "timing", timingRows);
+        RecordLapProfileSourceCounts(sourceFrameCounts, sourceRowCounts, "scoring", scoringRows);
+        RecordLapProfileSourceCounts(sourceFrameCounts, sourceRowCounts, "merged", mergedRows);
+
+        return BuildLapProfileReadiness(
+            evidenceAvailable: true,
+            observedFrames: 1,
+            framesWithTimingRows: timingRows.Length > 0 ? 1 : 0,
+            framesWithScoringRows: scoringRows.Length > 0 ? 1 : 0,
+            framesWithAnyRows: mergedRows.Length > 0 ? 1 : 0,
+            framesWithAnyBestLap: readiness.RowsWithBestLap > 0 ? 1 : 0,
+            framesWithAnyLastLap: readiness.RowsWithLastLap > 0 ? 1 : 0,
+            framesWithBestAndLastLap: readiness.RowsWithBestAndLastLap > 0 ? 1 : 0,
+            framesWithRecentPersonalBest: readiness.RowsWithRecentPersonalBest > 0 ? 1 : 0,
+            framesWithClassFastestBestLap: readiness.RowsWithClassFastestBestLap > 0 ? 1 : 0,
+            framesWithClassFastestLastLap: readiness.RowsWithClassFastestLastLap > 0 ? 1 : 0,
+            maxRows: mergedRows.Length,
+            maxRowsWithBestAndLastLap: readiness.RowsWithBestAndLastLap,
+            maxRowsWithRecentPersonalBest: readiness.RowsWithRecentPersonalBest,
+            maxRowsWithClassFastestBestLap: readiness.RowsWithClassFastestBestLap,
+            maxRowsWithClassFastestLastLap: readiness.RowsWithClassFastestLastLap,
+            sourceFrameCounts,
+            sourceRowCounts);
+    }
+
+    private static LapProfileReadinessDiagnostics BuildLapProfileReadiness(
+        bool evidenceAvailable,
+        int? observedFrames,
+        int? framesWithTimingRows,
+        int? framesWithScoringRows,
+        int? framesWithAnyRows,
+        int? framesWithAnyBestLap,
+        int? framesWithAnyLastLap,
+        int? framesWithBestAndLastLap,
+        int? framesWithRecentPersonalBest,
+        int? framesWithClassFastestBestLap,
+        int? framesWithClassFastestLastLap,
+        int? maxRows,
+        int? maxRowsWithBestAndLastLap,
+        int? maxRowsWithRecentPersonalBest,
+        int? maxRowsWithClassFastestBestLap,
+        int? maxRowsWithClassFastestLastLap,
+        IReadOnlyDictionary<string, int> sourceFrameCounts,
+        IReadOnlyDictionary<string, int> sourceRowCounts)
+    {
+        var classification = ClassifyLapProfileReadiness(
+            evidenceAvailable,
+            observedFrames,
+            framesWithAnyRows,
+            framesWithAnyBestLap,
+            framesWithAnyLastLap,
+            framesWithBestAndLastLap,
+            framesWithRecentPersonalBest,
+            framesWithClassFastestBestLap,
+            framesWithClassFastestLastLap);
+        var bestVsLastReady = framesWithBestAndLastLap.GetValueOrDefault() > 0;
+        var recentPersonalBestEvidenceAvailable = framesWithRecentPersonalBest.GetValueOrDefault() > 0;
+        var classFastestEvidenceAvailable = framesWithClassFastestBestLap.GetValueOrDefault() > 0
+            || framesWithClassFastestLastLap.GetValueOrDefault() > 0;
+
+        return new LapProfileReadinessDiagnostics(
+            EvidenceAvailable: evidenceAvailable,
+            ObservedFrames: observedFrames,
+            FramesWithTimingRows: framesWithTimingRows,
+            FramesWithScoringRows: framesWithScoringRows,
+            FramesWithAnyRows: framesWithAnyRows,
+            FramesWithAnyBestLap: framesWithAnyBestLap,
+            FramesWithAnyLastLap: framesWithAnyLastLap,
+            FramesWithBestAndLastLap: framesWithBestAndLastLap,
+            FramesWithRecentPersonalBest: framesWithRecentPersonalBest,
+            FramesWithClassFastestBestLap: framesWithClassFastestBestLap,
+            FramesWithClassFastestLastLap: framesWithClassFastestLastLap,
+            MaxRows: maxRows,
+            MaxRowsWithBestAndLastLap: maxRowsWithBestAndLastLap,
+            MaxRowsWithRecentPersonalBest: maxRowsWithRecentPersonalBest,
+            MaxRowsWithClassFastestBestLap: maxRowsWithClassFastestBestLap,
+            MaxRowsWithClassFastestLastLap: maxRowsWithClassFastestLastLap,
+            SourceFrameCounts: sourceFrameCounts,
+            SourceRowCounts: sourceRowCounts,
+            Classification: classification,
+            BestVsLastReady: bestVsLastReady,
+            RecentPersonalBestEvidenceAvailable: recentPersonalBestEvidenceAvailable,
+            ClassFastestEvidenceAvailable: classFastestEvidenceAvailable,
+            Interpretation: bestVsLastReady
+                ? "Lap profile rows include usable best and last lap values; standings best-vs-last highlighting can be evaluated from bundle evidence."
+                : "Lap profile rows do not yet prove usable best-vs-last lap pairs.");
+    }
+
+    private static string ClassifyLapProfileReadiness(
+        bool evidenceAvailable,
+        int? observedFrames,
+        int? framesWithAnyRows,
+        int? framesWithAnyBestLap,
+        int? framesWithAnyLastLap,
+        int? framesWithBestAndLastLap,
+        int? framesWithRecentPersonalBest,
+        int? framesWithClassFastestBestLap,
+        int? framesWithClassFastestLastLap)
+    {
+        if (!evidenceAvailable)
+        {
+            return "not_recorded";
+        }
+
+        if (observedFrames.GetValueOrDefault() <= 0)
+        {
+            return "no_observed_frames";
+        }
+
+        if (framesWithAnyRows.GetValueOrDefault() <= 0)
+        {
+            return "no_rows";
+        }
+
+        if (framesWithAnyBestLap.GetValueOrDefault() <= 0 || framesWithAnyLastLap.GetValueOrDefault() <= 0)
+        {
+            return "missing_best_or_last_lap";
+        }
+
+        if (framesWithBestAndLastLap.GetValueOrDefault() <= 0)
+        {
+            return "best_and_last_not_on_same_row";
+        }
+
+        if (framesWithRecentPersonalBest.GetValueOrDefault() > 0
+            && framesWithClassFastestBestLap.GetValueOrDefault() > 0
+            && framesWithClassFastestLastLap.GetValueOrDefault() > 0)
+        {
+            return "best_vs_last_and_highlight_ready";
+        }
+
+        if (framesWithRecentPersonalBest.GetValueOrDefault() > 0)
+        {
+            return "best_vs_last_recent_personal_best_ready";
+        }
+
+        return "best_vs_last_ready";
+    }
+
+    private static void RecordLapProfileSourceCounts(
+        SortedDictionary<string, int> sourceFrameCounts,
+        SortedDictionary<string, int> sourceRowCounts,
+        string source,
+        IReadOnlyList<LapProfileRowDiagnostic> rows)
+    {
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        Increment(sourceFrameCounts, $"{source}:rows");
+        Increment(sourceRowCounts, $"{source}:rows", rows.Count);
+        var readiness = LapProfileReadiness(rows);
+        RecordLapProfileSourceReadiness(sourceFrameCounts, sourceRowCounts, source, "best-lap", readiness.RowsWithBestLap);
+        RecordLapProfileSourceReadiness(sourceFrameCounts, sourceRowCounts, source, "last-lap", readiness.RowsWithLastLap);
+        RecordLapProfileSourceReadiness(sourceFrameCounts, sourceRowCounts, source, "best-and-last-lap", readiness.RowsWithBestAndLastLap);
+        RecordLapProfileSourceReadiness(sourceFrameCounts, sourceRowCounts, source, "recent-personal-best", readiness.RowsWithRecentPersonalBest);
+        RecordLapProfileSourceReadiness(sourceFrameCounts, sourceRowCounts, source, "class-fastest-best-lap", readiness.RowsWithClassFastestBestLap);
+        RecordLapProfileSourceReadiness(sourceFrameCounts, sourceRowCounts, source, "class-fastest-last-lap", readiness.RowsWithClassFastestLastLap);
+    }
+
+    private static void RecordLapProfileSourceReadiness(
+        SortedDictionary<string, int> sourceFrameCounts,
+        SortedDictionary<string, int> sourceRowCounts,
+        string source,
+        string key,
+        int rowCount)
+    {
+        if (rowCount <= 0)
+        {
+            return;
+        }
+
+        Increment(sourceFrameCounts, $"{source}:{key}");
+        Increment(sourceRowCounts, $"{source}:{key}", rowCount);
+    }
+
+    private static IEnumerable<LapProfileRowDiagnostic> LapProfileTimingRows(LiveTimingModel timing)
+    {
+        return timing.OverallRows
+            .Concat(timing.ClassRows)
+            .GroupBy(row => row.CarIdx)
+            .Select(group => ToLapProfileRow(SelectLapProfileTimingRow(group)))
+            .OrderBy(row => row.CarIdx);
+    }
+
+    private static IEnumerable<LapProfileRowDiagnostic> LapProfileScoringRows(LiveScoringModel scoring)
+    {
+        IEnumerable<LiveScoringRow> rows = scoring.Rows.Count > 0
+            ? scoring.Rows
+            : scoring.ClassGroups.SelectMany(group => group.Rows);
+
+        return rows
+            .GroupBy(row => row.CarIdx)
+            .Select(group => ToLapProfileRow(SelectLapProfileScoringRow(group)))
+            .OrderBy(row => row.CarIdx);
+    }
+
+    private static IEnumerable<LapProfileRowDiagnostic> MergeLapProfileRows(
+        IReadOnlyList<LapProfileRowDiagnostic> timingRows,
+        IReadOnlyList<LapProfileRowDiagnostic> scoringRows)
+    {
+        var timingByCarIdx = timingRows
+            .GroupBy(row => row.CarIdx)
+            .ToDictionary(group => group.Key, group => group.First());
+        var scoringByCarIdx = scoringRows
+            .GroupBy(row => row.CarIdx)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var carIdx in timingByCarIdx.Keys.Concat(scoringByCarIdx.Keys).Distinct().OrderBy(value => value))
+        {
+            timingByCarIdx.TryGetValue(carIdx, out var timing);
+            scoringByCarIdx.TryGetValue(carIdx, out var scoring);
+            yield return new LapProfileRowDiagnostic(
+                CarIdx: carIdx,
+                CarClass: scoring?.CarClass ?? timing?.CarClass,
+                CarClassName: FirstNonEmpty(scoring?.CarClassName, timing?.CarClassName),
+                CarClassColorHex: FirstNonEmpty(scoring?.CarClassColorHex, timing?.CarClassColorHex),
+                BestLapTimeSeconds: ValidLapTimeSeconds(scoring?.BestLapTimeSeconds)
+                    ?? ValidLapTimeSeconds(timing?.BestLapTimeSeconds),
+                LastLapTimeSeconds: ValidLapTimeSeconds(scoring?.LastLapTimeSeconds)
+                    ?? ValidLapTimeSeconds(timing?.LastLapTimeSeconds));
+        }
+    }
+
+    private static LiveTimingRow SelectLapProfileTimingRow(IEnumerable<LiveTimingRow> rows)
+    {
+        return rows
+            .OrderByDescending(row => ValidLapTimeSeconds(row.BestLapTimeSeconds) is not null
+                && ValidLapTimeSeconds(row.LastLapTimeSeconds) is not null)
+            .ThenByDescending(row => ValidLapTimeSeconds(row.BestLapTimeSeconds) is not null)
+            .ThenByDescending(row => ValidLapTimeSeconds(row.LastLapTimeSeconds) is not null)
+            .ThenByDescending(row => row.HasTiming)
+            .ThenByDescending(row => row.Quality)
+            .First();
+    }
+
+    private static LiveScoringRow SelectLapProfileScoringRow(IEnumerable<LiveScoringRow> rows)
+    {
+        return rows
+            .OrderByDescending(row => ValidLapTimeSeconds(row.BestLapTimeSeconds) is not null
+                && ValidLapTimeSeconds(row.LastLapTimeSeconds) is not null)
+            .ThenByDescending(row => ValidLapTimeSeconds(row.BestLapTimeSeconds) is not null)
+            .ThenByDescending(row => ValidLapTimeSeconds(row.LastLapTimeSeconds) is not null)
+            .ThenBy(row => row.ClassPosition ?? int.MaxValue)
+            .ThenBy(row => row.OverallPosition ?? int.MaxValue)
+            .First();
+    }
+
+    private static LapProfileRowDiagnostic ToLapProfileRow(LiveTimingRow row)
+    {
+        return new LapProfileRowDiagnostic(
+            CarIdx: row.CarIdx,
+            CarClass: row.CarClass,
+            CarClassName: row.CarClassName,
+            CarClassColorHex: row.CarClassColorHex,
+            BestLapTimeSeconds: ValidLapTimeSeconds(row.BestLapTimeSeconds),
+            LastLapTimeSeconds: ValidLapTimeSeconds(row.LastLapTimeSeconds));
+    }
+
+    private static LapProfileRowDiagnostic ToLapProfileRow(LiveScoringRow row)
+    {
+        return new LapProfileRowDiagnostic(
+            CarIdx: row.CarIdx,
+            CarClass: row.CarClass,
+            CarClassName: row.CarClassName,
+            CarClassColorHex: row.CarClassColorHex,
+            BestLapTimeSeconds: ValidLapTimeSeconds(row.BestLapTimeSeconds),
+            LastLapTimeSeconds: ValidLapTimeSeconds(row.LastLapTimeSeconds));
+    }
+
+    private static LapProfileFrameReadinessDiagnostic LapProfileReadiness(IReadOnlyList<LapProfileRowDiagnostic> rows)
+    {
+        var classFastestLapByClass = rows
+            .Where(row => ValidLapTimeSeconds(row.BestLapTimeSeconds) is not null)
+            .GroupBy(row => ClassKey(row.CarClass, row.CarClassName, row.CarClassColorHex), StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Select(row => ValidLapTimeSeconds(row.BestLapTimeSeconds))
+                    .Where(value => value is not null)
+                    .Select(value => value!.Value)
+                    .Min(),
+                StringComparer.Ordinal);
+        var bestLapRows = 0;
+        var lastLapRows = 0;
+        var bestAndLastRows = 0;
+        var recentPersonalBestRows = 0;
+        var classFastestBestLapRows = 0;
+        var classFastestLastLapRows = 0;
+
+        foreach (var row in rows)
+        {
+            var bestLap = ValidLapTimeSeconds(row.BestLapTimeSeconds);
+            var lastLap = ValidLapTimeSeconds(row.LastLapTimeSeconds);
+            var classFastestLap = classFastestLapByClass.TryGetValue(
+                    ClassKey(row.CarClass, row.CarClassName, row.CarClassColorHex),
+                    out var fastestLap)
+                ? fastestLap
+                : (double?)null;
+            var isClassFastestBestLap = IsMatchingLapTime(bestLap, classFastestLap);
+            var isClassFastestLastLap = IsMatchingLapTime(lastLap, classFastestLap);
+
+            if (bestLap is not null)
+            {
+                bestLapRows++;
+            }
+
+            if (lastLap is not null)
+            {
+                lastLapRows++;
+            }
+
+            if (bestLap is not null && lastLap is not null)
+            {
+                bestAndLastRows++;
+            }
+
+            if (isClassFastestBestLap)
+            {
+                classFastestBestLapRows++;
+            }
+
+            if (isClassFastestLastLap)
+            {
+                classFastestLastLapRows++;
+            }
+
+            if (!isClassFastestBestLap && IsMatchingLapTime(lastLap, bestLap))
+            {
+                recentPersonalBestRows++;
+            }
+        }
+
+        return new LapProfileFrameReadinessDiagnostic(
+            bestLapRows,
+            lastLapRows,
+            bestAndLastRows,
+            recentPersonalBestRows,
+            classFastestBestLapRows,
+            classFastestLastLapRows);
+    }
+
+    private static double? ValidLapTimeSeconds(double? seconds)
+    {
+        return LiveRaceProgressProjector.ValidLapTime(seconds);
+    }
+
+    private static bool IsMatchingLapTime(double? lapTimeSeconds, double? referenceLapTimeSeconds)
+    {
+        return lapTimeSeconds is { } lapTime
+            && referenceLapTimeSeconds is { } referenceLapTime
+            && Math.Abs(lapTime - referenceLapTime) <= 0.0005d;
+    }
+
+    private static string ClassKey(int? carClass, string? className, string? classColorHex)
+    {
+        if (carClass is { } value)
+        {
+            return FormattableString.Invariant($"id:{value}");
+        }
+
+        return FirstNonEmpty(className, classColorHex)?.Trim().ToUpperInvariant() ?? "unknown";
+    }
+
+    private static void Increment(SortedDictionary<string, int> values, string? key, int amount = 1)
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        var normalizedKey = string.IsNullOrWhiteSpace(key) ? "unknown" : key.Trim();
+        values.TryGetValue(normalizedKey, out var count);
+        values[normalizedKey] = count + amount;
+    }
+
     private static IReadOnlyList<SessionInfoSetupSignal> ExtractSetupSignals(string yaml)
     {
         var signals = new List<SessionInfoSetupSignal>();
@@ -1663,9 +2114,129 @@ internal sealed class DiagnosticsBundleService
             : _ibtAnalysisOptions.OutputDirectoryName;
     }
 
-    private TrackMapStoreDiagnosticsSnapshot TrackMapDiagnostics()
+    private object TrackMapDiagnostics()
     {
-        return _trackMapStore.DiagnosticsSnapshot(CurrentTrackIdentity(), TrackMapUserMapLookupEnabled());
+        var snapshot = _trackMapStore.DiagnosticsSnapshot(CurrentTrackIdentity(), TrackMapUserMapLookupEnabled());
+        return new
+        {
+            snapshot.GeneratedAtUtc,
+            snapshot.UserRoot,
+            snapshot.BundledRoot,
+            snapshot.UserMapCount,
+            snapshot.BundledMapCount,
+            snapshot.InvalidUserMapCount,
+            snapshot.InvalidBundledMapCount,
+            snapshot.CurrentTrack,
+            snapshot.RecentMaps,
+            RuntimeLookup = new TrackMapRuntimeLookupDiagnostics(
+                NativeReloadIntervalSeconds: 10d,
+                BrowserModelFactoryReloadIntervalSeconds: 10d,
+                LocalhostTrackMapRoute: "/api/track-map",
+                BrowserOverlayRoute: TrackMapBrowserSource.Page.CanonicalRoute,
+                BrowserSourceRefreshIntervalMilliseconds: TrackMapRenderModel.RefreshIntervalMilliseconds,
+                ReloadPolicy: "Native and browser model factories re-read the selected track-map document on track/source changes and at least every 10 seconds; localhost /api/track-map resolves the best map on each request."),
+            BuildEvents = BuildTrackMapGenerationEventDiagnostics()
+        };
+    }
+
+    private TrackMapGenerationEventDiagnosticsSnapshot BuildTrackMapGenerationEventDiagnostics()
+    {
+        if (!Directory.Exists(_storageOptions.EventsRoot))
+        {
+            return new TrackMapGenerationEventDiagnosticsSnapshot(
+                EventsRoot: _storageOptions.EventsRoot,
+                Exists: false,
+                RecentEventFilesScanned: 0,
+                MalformedEventLineCount: 0,
+                GeneratedCount: 0,
+                SkippedCount: 0,
+                RejectedCount: 0,
+                FailedCount: 0,
+                LatestGeneratedAtUtc: null,
+                LatestGeneratedCaptureId: null,
+                LatestGeneratedMapPath: null,
+                EventNameCounts: EmptyStringIntDictionary(),
+                ReasonCounts: EmptyStringIntDictionary(),
+                RecentEvents: []);
+        }
+
+        var files = Directory
+            .EnumerateFiles(_storageOptions.EventsRoot, "*.jsonl")
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .Take(MaxRecentEventFilesForDiagnostics)
+            .ToArray();
+        var events = new List<TrackMapGenerationEventDiagnostics>();
+        var eventNameCounts = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var reasonCounts = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var malformed = 0;
+
+        foreach (var file in files)
+        {
+            try
+            {
+                foreach (var line in File.ReadLines(file.FullName))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    if (!TryReadAppEvent(line, out var timestampUtc, out var name, out var properties))
+                    {
+                        malformed++;
+                        continue;
+                    }
+
+                    if (!IsTrackMapGenerationEvent(name))
+                    {
+                        continue;
+                    }
+
+                    Increment(eventNameCounts, name);
+                    var reason = FirstNonEmpty((string?)properties?["reason"], (string?)properties?["reasons"], (string?)properties?["error"]);
+                    Increment(reasonCounts, reason);
+                    events.Add(TrackMapGenerationEventDiagnostics.From(file.Name, timestampUtc, name!, properties));
+                }
+            }
+            catch
+            {
+                malformed++;
+            }
+        }
+
+        var latestGenerated = events
+            .Where(item => string.Equals(item.Name, "track_map_generated", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => item.TimestampUtc ?? DateTimeOffset.MinValue)
+            .FirstOrDefault();
+
+        return new TrackMapGenerationEventDiagnosticsSnapshot(
+            EventsRoot: _storageOptions.EventsRoot,
+            Exists: true,
+            RecentEventFilesScanned: files.Length,
+            MalformedEventLineCount: malformed,
+            GeneratedCount: events.Count(item => string.Equals(item.Name, "track_map_generated", StringComparison.OrdinalIgnoreCase)),
+            SkippedCount: events.Count(item => string.Equals(item.Name, "track_map_generation_skipped", StringComparison.OrdinalIgnoreCase)),
+            RejectedCount: events.Count(item => string.Equals(item.Name, "track_map_generation_rejected", StringComparison.OrdinalIgnoreCase)),
+            FailedCount: events.Count(item => string.Equals(item.Name, "track_map_generation_failed", StringComparison.OrdinalIgnoreCase)),
+            LatestGeneratedAtUtc: latestGenerated?.TimestampUtc,
+            LatestGeneratedCaptureId: latestGenerated?.CaptureId,
+            LatestGeneratedMapPath: latestGenerated?.MapPath,
+            EventNameCounts: eventNameCounts,
+            ReasonCounts: reasonCounts,
+            RecentEvents: events
+                .OrderByDescending(item => item.TimestampUtc ?? DateTimeOffset.MinValue)
+                .ThenBy(item => item.FileName, StringComparer.OrdinalIgnoreCase)
+                .Take(20)
+                .ToArray());
+    }
+
+    private static bool IsTrackMapGenerationEvent(string? name)
+    {
+        return string.Equals(name, "track_map_generated", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, "track_map_generation_skipped", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, "track_map_generation_rejected", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, "track_map_generation_failed", StringComparison.OrdinalIgnoreCase);
     }
 
     private HistoricalTrackIdentity? CurrentTrackIdentity()
@@ -1879,6 +2450,7 @@ internal sealed class DiagnosticsBundleService
                 resolvedPlayerCarIdx,
                 resolvedFocusCarIdx);
             var lapDeltaQuality = LapDeltaQualityFromSample(sample);
+            var lapProfileReadiness = LapProfileReadinessFromSnapshot(snapshot);
 
             var carFieldCoverage = BuildCarFieldCoverage(allCars);
             var overlays = ManagedOverlayDefinitions()
@@ -1926,6 +2498,7 @@ internal sealed class DiagnosticsBundleService
                 LastActive = LastActiveLiveTelemetrySummary(lastActiveSnapshot, snapshot, settingsSnapshot, now),
                 FocusVsLocalContext = focusVsLocalContext,
                 LapDeltaQuality = lapDeltaQuality,
+                LapProfileReadiness = lapProfileReadiness,
                 Snapshot = new
                 {
                     snapshot.IsConnected,
@@ -2101,6 +2674,7 @@ internal sealed class DiagnosticsBundleService
                     ?? lastActiveSnapshot.Models.DriverDirectory.FocusCarIdx
                     ?? sample?.FocusCarIdx),
             LapDeltaQuality = LapDeltaQualityFromSample(sample),
+            LapProfileReadiness = LapProfileReadinessFromSnapshot(lastActiveSnapshot),
             RaceProjectionModel = RaceProjectionModelSummary(lastActiveSnapshot.Models.RaceProjection),
             IRatingProjectionModel = IRatingProjectionModelSummary(lastActiveSnapshot.Models.IRatingProjection),
             IncidentPressureModel = IncidentPressureModelSummary(lastActiveSnapshot.Models.IncidentPressure),
@@ -2888,7 +3462,11 @@ internal sealed class DiagnosticsBundleService
         return new
         {
             RowCount = cars.Count,
-            SdkCarIdxSlotRowCount = cars.Count,
+            SdkCarIdxSlotRowCount = cars
+                .Where(HasSdkCarIdxSlot)
+                .Select(car => car.CarIdx)
+                .Distinct()
+                .Count(),
             CompetitorLikeSignalRowCount = cars.Count(HasCompetitorLikeSignal),
             OfficialPositionValidCount = cars.Count(HasOfficialPosition),
             OfficialClassPositionValidCount = cars.Count(car => car.ClassPosition is > 0),
@@ -2917,6 +3495,11 @@ internal sealed class DiagnosticsBundleService
     private static bool HasKnownCarClass(HistoricalCarProximity car)
     {
         return car.CarClass is >= 0;
+    }
+
+    private static bool HasSdkCarIdxSlot(HistoricalCarProximity car)
+    {
+        return car.CarIdx is >= 0 and < 64;
     }
 
     private static bool HasCompetitorLikeSignal(HistoricalCarProximity car)
@@ -3275,6 +3858,90 @@ internal sealed record UpdateCheckEvent(
     }
 }
 
+internal sealed record TrackMapRuntimeLookupDiagnostics(
+    double NativeReloadIntervalSeconds,
+    double BrowserModelFactoryReloadIntervalSeconds,
+    string LocalhostTrackMapRoute,
+    string BrowserOverlayRoute,
+    int BrowserSourceRefreshIntervalMilliseconds,
+    string ReloadPolicy);
+
+internal sealed record TrackMapGenerationEventDiagnosticsSnapshot(
+    string EventsRoot,
+    bool Exists,
+    int RecentEventFilesScanned,
+    int MalformedEventLineCount,
+    int GeneratedCount,
+    int SkippedCount,
+    int RejectedCount,
+    int FailedCount,
+    DateTimeOffset? LatestGeneratedAtUtc,
+    string? LatestGeneratedCaptureId,
+    string? LatestGeneratedMapPath,
+    IReadOnlyDictionary<string, int> EventNameCounts,
+    IReadOnlyDictionary<string, int> ReasonCounts,
+    IReadOnlyList<TrackMapGenerationEventDiagnostics> RecentEvents);
+
+internal sealed record TrackMapGenerationEventDiagnostics(
+    string FileName,
+    DateTimeOffset? TimestampUtc,
+    string Name,
+    string? CaptureId,
+    string? SourcePath,
+    string? SourceFileName,
+    string? MapPath,
+    string? MapFileName,
+    string? Reason,
+    string? Confidence,
+    int? CompleteLapCount,
+    int? MissingBinCount,
+    string? Error)
+{
+    public static TrackMapGenerationEventDiagnostics From(
+        string fileName,
+        DateTimeOffset? timestampUtc,
+        string name,
+        JsonObject? properties)
+    {
+        var sourcePath = (string?)properties?["sourcePath"];
+        var mapPath = (string?)properties?["mapPath"];
+        return new TrackMapGenerationEventDiagnostics(
+            FileName: fileName,
+            TimestampUtc: timestampUtc,
+            Name: name,
+            CaptureId: (string?)properties?["captureId"],
+            SourcePath: sourcePath,
+            SourceFileName: string.IsNullOrWhiteSpace(sourcePath) ? null : Path.GetFileName(sourcePath),
+            MapPath: mapPath,
+            MapFileName: string.IsNullOrWhiteSpace(mapPath) ? null : Path.GetFileName(mapPath),
+            Reason: FirstNonEmpty((string?)properties?["reason"], (string?)properties?["reasons"], (string?)properties?["error"]),
+            Confidence: (string?)properties?["confidence"],
+            CompleteLapCount: ParseInt((string?)properties?["completeLapCount"]),
+            MissingBinCount: ParseInt((string?)properties?["missingBinCount"]),
+            Error: (string?)properties?["error"]);
+    }
+
+    private static int? ParseInt(string? value)
+    {
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
+}
+
 internal sealed record LapDeltaSignalDiagnostic(
     string Key,
     double? Seconds,
@@ -3296,6 +3963,47 @@ internal sealed record LapDeltaQualityDiagnostics(
     bool ValuesPresentWithoutUsableQuality,
     bool AllObservedValuesZero,
     string Interpretation);
+
+internal sealed record LapProfileReadinessDiagnostics(
+    bool EvidenceAvailable,
+    int? ObservedFrames,
+    int? FramesWithTimingRows,
+    int? FramesWithScoringRows,
+    int? FramesWithAnyRows,
+    int? FramesWithAnyBestLap,
+    int? FramesWithAnyLastLap,
+    int? FramesWithBestAndLastLap,
+    int? FramesWithRecentPersonalBest,
+    int? FramesWithClassFastestBestLap,
+    int? FramesWithClassFastestLastLap,
+    int? MaxRows,
+    int? MaxRowsWithBestAndLastLap,
+    int? MaxRowsWithRecentPersonalBest,
+    int? MaxRowsWithClassFastestBestLap,
+    int? MaxRowsWithClassFastestLastLap,
+    IReadOnlyDictionary<string, int> SourceFrameCounts,
+    IReadOnlyDictionary<string, int> SourceRowCounts,
+    string Classification,
+    bool BestVsLastReady,
+    bool RecentPersonalBestEvidenceAvailable,
+    bool ClassFastestEvidenceAvailable,
+    string Interpretation);
+
+internal sealed record LapProfileRowDiagnostic(
+    int CarIdx,
+    int? CarClass,
+    string? CarClassName,
+    string? CarClassColorHex,
+    double? BestLapTimeSeconds,
+    double? LastLapTimeSeconds);
+
+internal sealed record LapProfileFrameReadinessDiagnostic(
+    int RowsWithBestLap,
+    int RowsWithLastLap,
+    int RowsWithBestAndLastLap,
+    int RowsWithRecentPersonalBest,
+    int RowsWithClassFastestBestLap,
+    int RowsWithClassFastestLastLap);
 
 internal sealed record IbtAnalysisDiagnosticsSnapshot(
     bool Enabled,

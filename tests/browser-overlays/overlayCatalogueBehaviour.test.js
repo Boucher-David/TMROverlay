@@ -636,8 +636,8 @@ function browserScenarios() {
             lapReferenceSeconds: 80,
             selectedSeriesCount: 2,
             trendMetrics: [
-              { label: '5L', focusGapChangeSeconds: -1.4, chaser: { carIdx: 14, label: '#14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null },
-              { label: '10L', focusGapChangeSeconds: null, chaser: null, state: 'warming', stateLabel: '0.7L' },
+              { label: '5L', focusGapChangeSeconds: -1.4, chaser: { carIdx: 14, label: 'P14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null },
+              { label: '10L', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null },
               { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null },
               { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null },
               { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, primaryText: '5L', threatText: '6L', comparisonText: '5L' },
@@ -645,7 +645,7 @@ function browserScenarios() {
               { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, primaryText: '1:31.842', threatText: '1:30.913', comparisonText: '1:32.104' },
               { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, primaryText: 'Track', threatText: 'Track', comparisonText: 'Pit' }
             ],
-            activeThreat: { label: 'Threat', focusGapChangeSeconds: null, chaser: { carIdx: 14, label: '#14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null },
+            activeThreat: { label: 'Threat', focusGapChangeSeconds: null, chaser: { carIdx: 14, label: 'P14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null },
             threatCarIdx: 14,
             metricDeadbandSeconds: 0.25,
             scale: {

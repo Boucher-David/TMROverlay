@@ -93,6 +93,63 @@ public sealed class DiagnosticsBundleServiceTests
     }
 
     [Fact]
+    public void LiveTelemetrySynthesisCoverage_CountsDistinctSdkCarIdxSlots()
+    {
+        var method = typeof(DiagnosticsBundleService).GetMethod(
+            "BuildCarFieldCoverage",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+        var coverage = method.Invoke(null, [
+            new[]
+            {
+                new HistoricalCarProximity(
+                    CarIdx: 10,
+                    LapCompleted: 12,
+                    LapDistPct: 0.42d,
+                    F2TimeSeconds: 90d,
+                    EstimatedTimeSeconds: 90d,
+                    Position: 1,
+                    ClassPosition: 1,
+                    CarClass: 0,
+                    TrackSurface: 3,
+                    OnPitRoad: false),
+                new HistoricalCarProximity(
+                    CarIdx: 10,
+                    LapCompleted: 12,
+                    LapDistPct: 0.42d,
+                    F2TimeSeconds: 90d,
+                    EstimatedTimeSeconds: 90d,
+                    Position: 1,
+                    ClassPosition: 1,
+                    CarClass: 0,
+                    TrackSurface: 3,
+                    OnPitRoad: false),
+                new HistoricalCarProximity(
+                    CarIdx: 64,
+                    LapCompleted: -1,
+                    LapDistPct: -1d,
+                    F2TimeSeconds: null,
+                    EstimatedTimeSeconds: null,
+                    Position: null,
+                    ClassPosition: null,
+                    CarClass: null,
+                    TrackSurface: null,
+                    OnPitRoad: null)
+            }
+        ]);
+        var json = System.Text.Json.JsonSerializer.SerializeToNode(
+            coverage,
+            new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            });
+
+        Assert.Equal(3, ((int?)json?["rowCount"]) ?? -1);
+        Assert.Equal(1, ((int?)json?["sdkCarIdxSlotRowCount"]) ?? -1);
+        Assert.Equal(2, ((int?)json?["carClassValidCount"]) ?? -1);
+    }
+
+    [Fact]
     public void CreateBundle_IncludesTriageFilesAndExcludesRawTelemetry()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
@@ -131,6 +188,7 @@ public sealed class DiagnosticsBundleServiceTests
                 {"timestampUtc":"2026-04-26T12:00:00Z","name":"update_check_started","properties":{"source":"startup","repositoryUrl":"https://example.invalid/releases"}}
                 {"timestampUtc":"2026-04-26T12:00:01Z","name":"update_check_failed","properties":{"source":"startup","error":"HttpRequestException"}}
                 {"timestampUtc":"2026-04-26T12:00:30Z","name":"update_check_succeeded","properties":{"source":"manual","result":"up_to_date"}}
+                {"timestampUtc":"2026-04-26T12:01:00Z","name":"track_map_generated","properties":{"captureId":"capture-20260426-120000-000","sourcePath":"/tmp/source.ibt","mapPath":"/tmp/track-map.json","confidence":"High","completeLapCount":"3","missingBinCount":"0"}}
                 """);
             File.WriteAllText(
                 Path.Combine(storage.SettingsRoot, "settings.json"),
@@ -248,6 +306,26 @@ public sealed class DiagnosticsBundleServiceTests
                       "Debris": 3,
                       "OneToGreen": 1
                     },
+                    "rawToDisplayLabelCounts": {
+                      "0x00000008 -> Yellow:Yellow:Yellow": 70
+                    },
+                    "displayLabelStateCounts": {
+                      "Yellow:Yellow:Yellow": 70
+                    },
+                    "displayKindCounts": {
+                      "Yellow": 70,
+                      "Blue": 4
+                    },
+                    "displayCategoryCounts": {
+                      "Yellow": 72,
+                      "Blue": 4
+                    },
+                    "displayLabelCounts": {
+                      "Yellow:Yellow:Yellow": 70
+                    },
+                    "toneCounts": {
+                      "Warning": 72
+                    },
                     "displayTransitionFrames": 3,
                     "displayClearedTransitionFrames": 1,
                     "longestDisplayDurationFrames": 42,
@@ -286,6 +364,33 @@ public sealed class DiagnosticsBundleServiceTests
                       "toSessionBestLap": 454144
                     },
                     "usableFrameCounts": {}
+                  },
+                  "lapProfile": {
+                    "observedFrames": 454144,
+                    "framesWithTimingRows": 450000,
+                    "framesWithScoringRows": 449500,
+                    "framesWithAnyRows": 450000,
+                    "framesWithAnyBestLap": 448000,
+                    "framesWithAnyLastLap": 447000,
+                    "framesWithBestAndLastLap": 446500,
+                    "framesWithRecentPersonalBest": 42,
+                    "framesWithClassFastestBestLap": 900,
+                    "framesWithClassFastestLastLap": 18,
+                    "maxTimingRows": 62,
+                    "maxScoringRows": 62,
+                    "maxRows": 62,
+                    "maxRowsWithBestAndLastLap": 61,
+                    "maxRowsWithRecentPersonalBest": 3,
+                    "maxRowsWithClassFastestBestLap": 2,
+                    "maxRowsWithClassFastestLastLap": 1,
+                    "sourceFrameCounts": {
+                      "merged:best-and-last-lap": 446500,
+                      "merged:recent-personal-best": 42
+                    },
+                    "sourceRowCounts": {
+                      "merged:best-and-last-lap": 1800000,
+                      "merged:recent-personal-best": 48
+                    }
                   }
                 }
                 """);
@@ -992,6 +1097,9 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(2, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsYellowFamilyStateCounts"]?["Debris"]) ?? -1);
                 Assert.Equal(3, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsCarIdxYellowFamilyBitCounts"]?["Debris"]) ?? -1);
                 Assert.Equal(1, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsCarIdxYellowFamilyStateCounts"]?["OneToGreen"]) ?? -1);
+                Assert.Equal(70, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsRawToDisplayLabelCounts"]?["0x00000008 -> Yellow:Yellow:Yellow"]) ?? -1);
+                Assert.Equal(72, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsDisplayCategoryCounts"]?["Yellow"]) ?? -1);
+                Assert.Equal(70, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsDisplayLabelCounts"]?["Yellow:Yellow:Yellow"]) ?? -1);
                 Assert.Equal(3, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsDisplayTransitionFrames"]) ?? -1);
                 Assert.Equal(1, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsDisplayClearedTransitionFrames"]) ?? -1);
                 Assert.Equal(42, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsLongestDisplayDurationFrames"]) ?? -1);
@@ -1008,6 +1116,12 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(451552, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["fuelPitServiceNonPlayerFocusFrames"]) ?? -1);
                 Assert.Equal(454144, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["lapDeltaObservedFrames"]) ?? -1);
                 Assert.Equal("values_present_without_usable_quality_all_zero", (string?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["lapDeltaClassification"]);
+                Assert.Equal("best_vs_last_and_highlight_ready", (string?)latestCaptureEvidenceJson?["lapProfileReadiness"]?["classification"]);
+                Assert.True(((bool?)latestCaptureEvidenceJson?["lapProfileReadiness"]?["bestVsLastReady"]) == true);
+                Assert.Equal(446500, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["lapProfileFramesWithBestAndLastLap"]) ?? -1);
+                Assert.Equal(42, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["lapProfileFramesWithRecentPersonalBest"]) ?? -1);
+                Assert.Equal(18, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["lapProfileFramesWithClassFastestLastLap"]) ?? -1);
+                Assert.Equal(48, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["lapProfileSourceRowCounts"]?["merged:recent-personal-best"]) ?? -1);
             }
 
             var windowZOrderEntry = archive.GetEntry("metadata/window-z-order.json");
@@ -1112,6 +1226,12 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal("Gesamtstrecke VLN", (string?)trackMapsJson?["currentTrack"]?["identity"]?["trackDisplayName"]);
                 Assert.Equal("no_matching_runtime_map", (string?)trackMapsJson?["currentTrack"]?["fallbackReason"]);
                 Assert.True(((bool?)trackMapsJson?["currentTrack"]?["includeUserMaps"]) == true);
+                Assert.Equal(10d, ((double?)trackMapsJson?["runtimeLookup"]?["nativeReloadIntervalSeconds"]) ?? -1d);
+                Assert.Equal("/api/track-map", (string?)trackMapsJson?["runtimeLookup"]?["localhostTrackMapRoute"]);
+                Assert.Equal("/overlays/track-map", (string?)trackMapsJson?["runtimeLookup"]?["browserOverlayRoute"]);
+                Assert.Equal(1, ((int?)trackMapsJson?["buildEvents"]?["generatedCount"]) ?? -1);
+                Assert.Equal("capture-20260426-120000-000", (string?)trackMapsJson?["buildEvents"]?["latestGeneratedCaptureId"]);
+                Assert.Equal(3, ((int?)trackMapsJson?["buildEvents"]?["recentEvents"]?[0]?["completeLapCount"]) ?? -1);
             }
 
             var ibtAnalysisEntry = archive.GetEntry("metadata/ibt-analysis.json");

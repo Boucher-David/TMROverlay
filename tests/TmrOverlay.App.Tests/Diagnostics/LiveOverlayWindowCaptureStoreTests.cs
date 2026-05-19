@@ -360,6 +360,66 @@ public sealed class LiveOverlayWindowCaptureStoreTests
     }
 
     [Fact]
+    public void Snapshot_DoesNotRecordInputInterceptRiskForSettingsProtectionWithoutOverlap()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-window-capture-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var store = new LiveOverlayWindowCaptureStore(storage);
+            var definition = StandingsOverlayDefinition.Definition;
+            var settings = new OverlaySettings
+            {
+                Id = definition.Id,
+                Enabled = true,
+                X = 44,
+                Y = 55,
+                Width = 580,
+                Height = 340,
+                Scale = 1d,
+                Opacity = 0.5d
+            };
+
+            store.RecordOverlayWindow(
+                definition,
+                settings,
+                form: null,
+                enabled: true,
+                sessionAllowed: true,
+                settingsPreview: false,
+                desiredVisible: true,
+                actualVisible: true,
+                topMost: true,
+                liveTelemetryAvailable: true,
+                contextRequirement: definition.ContextRequirement.ToString(),
+                contextAvailable: true,
+                contextReason: "not_required",
+                settingsOverlayActive: false,
+                settingsWindowVisible: true,
+                settingsWindowIntersects: false,
+                settingsWindowInputProtected: true,
+                inputTransparent: false,
+                noActivate: true,
+                implementation: "native-v2",
+                nativeFormType: "StandingsForm",
+                nativeRenderer: "winforms",
+                nativeBodyKind: "table");
+
+            var overlay = Assert.Single(store.Snapshot().Overlays);
+
+            Assert.False(overlay.InputInterceptRisk);
+            Assert.Empty(overlay.InputInterceptRiskReasons);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void ApplyTransparencyKeyForCapture_MakesFallbackBackgroundTransparent()
     {
         using var bitmap = new Bitmap(2, 1);

@@ -240,6 +240,45 @@ describe('browser review server validation contracts', () => {
       });
     }
   });
+
+  it('hides content-driven localhost OBS models when every renderable content row is disabled', async () => {
+    const config = await reviewSettingsConfig('race');
+    const overlayIds = ['standings', 'relative', 'session-weather', 'pit-service', 'input-state', 'flags'];
+
+    for (const overlayId of overlayIds) {
+      const overlay = config.overlays.find((candidate) => candidate.id === overlayId);
+      expect.soft(overlay?.contentRows?.length, `${overlayId}: missing content rows`).toBeGreaterThan(0);
+
+      await reviewServer.postReviewPatch({
+        kind: 'overlayEnabled',
+        overlayId,
+        enabled: true
+      });
+      await reviewServer.postReviewPatch({
+        kind: 'session',
+        overlayId,
+        session: 'Race',
+        enabled: true
+      });
+
+      for (const row of overlay?.contentRows || []) {
+        await reviewServer.postReviewPatch({
+          kind: 'content',
+          overlayId,
+          key: row.key,
+          label: row.label,
+          session: 'Race',
+          enabled: false
+        });
+      }
+
+      const model = (await reviewServer.getJson(`/api/overlay-model/${overlayId}?preview=race`)).model;
+
+      expectHiddenOverlayModel(model, overlayId);
+      expect.soft(model.status, `${overlayId}: no-content hidden status`).toMatch(/no enabled content/i);
+      expect.soft(model.effectiveSettings.rendered.shouldRender, `${overlayId}: effective rendered hidden`).toBe(false);
+    }
+  });
 });
 
 function expectHiddenOverlayModel(model, overlayId) {
@@ -272,4 +311,14 @@ function expectHiddenOverlayModel(model, overlayId) {
   if (model.streamChat) {
     expect.soft(model.streamChat.rows ?? [], `${overlayId}: product-hidden stream chat rows`).toEqual([]);
   }
+}
+
+async function reviewSettingsConfig(preview = 'race') {
+  const html = await reviewServer.getText(`/review/app?preview=${encodeURIComponent(preview)}&tab=general`);
+  const match = /<script[^>]+id="settings-app-config"[^>]*>([\s\S]*?)<\/script>/.exec(html);
+  if (!match) {
+    throw new Error('Missing settings-app-config script in review app HTML');
+  }
+
+  return JSON.parse(match[1]);
 }

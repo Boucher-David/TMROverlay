@@ -220,6 +220,12 @@ public sealed class FuelCalculatorViewModelTests
         Assert.Contains(practiceUsage.Segments, segment => segment.Label == "Avg" && segment.Value == "5.2 L/lap");
         Assert.Contains(practiceUsage.Segments, segment => segment.Label == "Max" && segment.Value == "5.4 L/lap");
         Assert.Contains(practiceUsage.Segments, segment => segment.Label == "Laps" && segment.Value == "3 laps");
+        Assert.DoesNotContain(practice.MetricSections, section => section.Title == "Race Information");
+        Assert.DoesNotContain(practice.MetricSections, section => section.Title == "Stint Targets");
+        Assert.Contains(practice.MetricSections, section => section.Title == "Fuel Range");
+        Assert.Contains(practice.MetricSections.Single(section => section.Title == "Fuel Range").Rows,
+            row => row.Segments.Select(segment => segment.Label).SequenceEqual(new[] { "Level", "Usage", "Range", "Tank" }));
+        Assert.Equal("fuel range", practice.Status);
 
         var qualiUsage = Assert.Single(qualifying.MetricSections.Single(section => section.Title == "Fuel Usage").Rows);
         Assert.Equal("Quali Usage", qualiUsage.Label);

@@ -1714,6 +1714,45 @@ def require_rounded_chrome_contract(
     if max([value for value in [radius, *corner_radii] if value is not None], default=0.0) < 4.0:
         failures.append(f"{path}: rounded chrome radius expected at least 4px")
 
+    background = str(get_manifest_value(styles, "backgroundColor") or "").strip()
+    if is_transparent_background(background):
+        failures.append(f"{path}: rounded chrome backing expected non-transparent overlay background, got {background!r}")
+
+
+def is_transparent_background(value: str) -> bool:
+    normalized = value.strip().lower()
+    if not normalized or normalized in {"transparent", "none"}:
+        return True
+    if normalized == "rgba(0, 0, 0, 0)" or normalized == "rgba(0,0,0,0)":
+        return True
+    if re.fullmatch(r"rgba\([^)]*,\s*0(?:\.0+)?\)", normalized):
+        return True
+    if re.fullmatch(r"#[0-9a-f]{6}00", normalized):
+        return True
+    return False
+
+
+def require_configured_canvas_backing_contract(
+    path: str,
+    values: dict[str, object],
+    overlay_name: str,
+    width: int,
+    height: int,
+    failures: list[str],
+) -> None:
+    if not path.startswith(("browser-overlays/", "localhost-overlays/")):
+        return
+
+    require_equal(path, f"{overlay_name} captureMode", values.get("captureMode"), "configured-browser-source-canvas", failures)
+    require_size_object(path, f"{overlay_name} configuredOverlaySize", values.get("configuredOverlaySize"), width, height, failures)
+    require_equal(path, f"{overlay_name} compositingMode", values.get("compositingMode"), "solid-review-backdrop", failures)
+    backdrop = typed_dict(values.get("captureBackdrop"))
+    if backdrop.get("kind") != "solid-color":
+        failures.append(f"{path}: {overlay_name} captureBackdrop expected solid-color evidence, got {backdrop.get('kind')!r}")
+    color = str(backdrop.get("color") or backdrop.get("colorRgb") or "").strip()
+    if is_transparent_background(color):
+        failures.append(f"{path}: {overlay_name} captureBackdrop expected non-transparent backing color, got {color!r}")
+
 
 def layout_elements(layout: object) -> list[dict[str, object]]:
     if not isinstance(layout, dict):
@@ -3900,6 +3939,7 @@ def validate_input_state_contract(path: str, values: dict[str, object], failures
     rail = typed_dict(inputs.get("rail"))
     graph_bounds = typed_dict(graph.get("bounds"))
     rail_bounds = typed_dict(rail.get("bounds"))
+    require_input_bounds_within_layout(path, values, graph_bounds, rail_bounds, "input-state", failures)
     if rects_intersect(graph_bounds, rail_bounds):
         failures.append(f"{path}: input-state graph bounds intersect rail bounds")
     if rect_number(rail_bounds, "x") is not None and rect_number(graph_bounds, "x") is not None:
@@ -3957,6 +3997,28 @@ def validate_input_state_contract(path: str, values: dict[str, object], failures
                 failures.append(f"{path}: input-state rail missing {kind} group")
 
 
+def require_input_bounds_within_layout(
+    path: str,
+    values: dict[str, object],
+    graph_bounds: dict[str, object],
+    rail_bounds: dict[str, object],
+    label: str,
+    failures: list[str],
+) -> None:
+    layout = typed_dict(values.get("layout"))
+    root = typed_dict(layout.get("root"))
+    if not root:
+        return
+
+    content_bounds = typed_dict(values.get("contentBounds")) or typed_dict(layout.get("contentBounds")) or root
+    for bounds_label, bounds in (
+        (f"{label} graph bounds", graph_bounds),
+        (f"{label} rail bounds", rail_bounds),
+    ):
+        require_rect_within(path, bounds_label, bounds, root, f"{label} root bounds", failures, tolerance=1.0)
+        require_rect_within(path, bounds_label, bounds, content_bounds, f"{label} content bounds", failures, tolerance=1.0)
+
+
 def require_input_min_scale_bounds(path: str, values: dict[str, object], failures: list[str]) -> None:
     inputs = typed_dict(model_evidence(values).get("inputs"))
     graph = typed_dict(inputs.get("graph"))
@@ -4011,9 +4073,7 @@ def require_input_min_scale_bounds(path: str, values: dict[str, object], failure
 
 def validate_car_radar_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
     if path.startswith(("browser-overlays/", "localhost-overlays/")):
-        require_equal(path, "car-radar captureMode", values.get("captureMode"), "configured-browser-source-canvas", failures)
-        require_size_object(path, "car-radar configuredOverlaySize", values.get("configuredOverlaySize"), 300, 300, failures)
-        require_equal(path, "car-radar compositingMode", values.get("compositingMode"), "solid-review-backdrop", failures)
+        require_configured_canvas_backing_contract(path, values, "car-radar", 300, 300, failures)
     radar = typed_dict(model_evidence(values).get("carRadar"))
     if radar.get("shouldRender") is not True:
         failures.append(f"{path}: car-radar evidence did not prove shouldRender=true")
@@ -4196,8 +4256,7 @@ def validate_track_map_contract(path: str, values: dict[str, object], failures: 
         failures.append(f"{path}: expected track map mapKind {expected_kind!r}, got {actual_kind!r}")
     require_size_fields(path, "track-map", track_map, 360, 360, failures)
     if path.startswith(("browser-overlays/", "localhost-overlays/")):
-        require_equal(path, "track-map captureMode", values.get("captureMode"), "configured-browser-source-canvas", failures)
-        require_size_object(path, "track-map configuredOverlaySize", values.get("configuredOverlaySize"), 360, 360, failures)
+        require_configured_canvas_backing_contract(path, values, "track-map", 360, 360, failures)
     marker_count = track_map.get("markerCount")
     if marker_count != 4:
         failures.append(f"{path}: track-map expected 4 markers, got {marker_count!r}")
@@ -4226,6 +4285,8 @@ def validate_track_map_contract(path: str, values: dict[str, object], failures: 
 def validate_flags_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
     flags = typed_dict(model_evidence(values).get("flags"))
     require_equal(path, "flags bodyKind", values.get("bodyKind"), "flags", failures)
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        require_configured_canvas_backing_contract(path, values, "flags", 360, 170, failures)
     if values.get("shouldRender") is not True:
         failures.append(f"{path}: flags expected shouldRender=true, got {values.get('shouldRender')!r}")
     kinds = [normalize_flag_kind(kind) for kind in evidence_list(flags, "kinds")]
@@ -4263,11 +4324,22 @@ def validate_flags_contract(path: str, values: dict[str, object], failures: list
             failures.append(f"{path}: flags cell {index} column mismatch, got {cell_dict.get('column')!r}")
         if normalize_flag_kind(cell_dict.get("kind")) != kind:
             failures.append(f"{path}: flags cell {index} expected kind {kind!r}, got {cell_dict.get('kind')!r}")
+        expected_label = expected_flag_label(kind)
+        if text_value(cell_dict, "label").lower() != expected_label.lower():
+            failures.append(f"{path}: flags cell {index} expected visible label {expected_label!r}, got {cell_dict.get('label')!r}")
         expected_fill = expected_flag_fill(kind)
         if cell_dict.get("fill") != expected_fill:
             failures.append(f"{path}: flags cell {index} expected fill {expected_fill!r}, got {cell_dict.get('fill')!r}")
         require_rect(path, get_manifest_value(cell_dict, "bounds"), f"flags cell {index} bounds", failures)
         require_rect(path, get_manifest_value(cell_dict, "clothBounds"), f"flags cell {index} cloth bounds", failures)
+        require_rect_within(
+            path,
+            f"flags cell {index} visible label bounds",
+            get_manifest_value(cell_dict, "labelBounds"),
+            get_manifest_value(cell_dict, "bounds"),
+            f"flags cell {index} bounds",
+            failures,
+            tolerance=1.0)
         assert_rect_close(path, f"flags cell {index} bounds", get_manifest_value(cell_dict, "bounds"), expected_bounds, 0.75, failures)
         assert_rect_close(path, f"flags cell {index} cloth bounds", get_manifest_value(cell_dict, "clothBounds"), expected_cloth, 0.75, failures)
 
@@ -5179,6 +5251,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="standings table escapes bounded height",
+        path="browser-overlays/standings-race.png",
+        base=mutation_standings_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 6, "bounds", "y"), 320),
+        validate=validate_standings_contract,
+        expected_tokens=("standings rendered table exceeds",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="standings opaque ARGB color remains equivalent but translucent ARGB fails",
         path="browser-overlays/standings-race.png",
         base=mutation_standings_screenshot(),
@@ -5293,6 +5374,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         mutate=mutate_overlay_chrome_radius_flat,
         validate=validate_overlay_chrome_contract,
         expected_tokens=("rounded chrome radius expected at least 4px",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="rounded overlay chrome backing becomes transparent",
+        path="browser-overlays/fuel-calculator-race.png",
+        base=mutation_overlay_chrome_screenshot(),
+        mutate=mutate_overlay_chrome_backing_transparent,
+        validate=validate_overlay_chrome_contract,
+        expected_tokens=("rounded chrome backing expected non-transparent overlay background",),
         failures=failures,
     )
     expect_mutation_failure(
@@ -6114,6 +6204,11 @@ def mutate_overlay_chrome_radius_flat(screenshot: dict[str, object]) -> None:
         styles[key] = "0px"
 
 
+def mutate_overlay_chrome_backing_transparent(screenshot: dict[str, object]) -> None:
+    styles = typed_dict(typed_dict(evidence_list(typed_dict(screenshot.get("layout")), "elements")[5]).get("styles"))
+    styles["backgroundColor"] = "rgba(0, 0, 0, 0)"
+
+
 def mutation_input_waiting_screenshot() -> dict[str, object]:
     return {
         "status": "waiting for car telemetry",
@@ -6195,6 +6290,7 @@ def mutation_overlay_chrome_screenshot() -> dict[str, object]:
                         "borderTopRightRadius": "8px",
                         "borderBottomRightRadius": "8px",
                         "borderBottomLeftRadius": "8px",
+                        "backgroundColor": "rgb(12, 16, 21)",
                     },
                 },
             ],

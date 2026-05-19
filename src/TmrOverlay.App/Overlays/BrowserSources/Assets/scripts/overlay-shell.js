@@ -912,7 +912,7 @@
     }
 
     function gapMetricsTableWidth(width) {
-      const metricsWidth = 204;
+      const metricsWidth = 220;
       const availableAfterTable = width - 58 - 38 - 10 - metricsWidth;
       return availableAfterTable >= 300 ? metricsWidth : 0;
     }
@@ -970,8 +970,8 @@
       ctx.font = '8px "Segoe UI", Arial, sans-serif';
       ctx.fillStyle = themeColor('--tmr-text-muted', '#8caed4');
       ctx.fillText('Metric', rect.left + 8, rect.top + 26);
-      ctx.fillText(graph?.comparisonLabel || '--', rect.left + 62, rect.top + 26);
-      ctx.fillText('Threat', rect.left + 124, rect.top + 26);
+      ctx.fillText(graph?.comparisonLabel || '--', rect.left + 56, rect.top + 26);
+      ctx.fillText('Threat', rect.left + 136, rect.top + 26);
 
       ctx.font = `${rowHeight < 16 ? '8px' : '9px'} "Segoe UI", Arial, sans-serif`;
       visibleMetrics.forEach((metric, index) => {
@@ -979,9 +979,9 @@
         ctx.fillStyle = themeColor('--tmr-text-secondary', '#cdd8e4');
         ctx.fillText(metric?.label || '--', rect.left + 8, y);
         ctx.fillStyle = gapMetricValueColor(metric, numberOr(graph?.metricDeadbandSeconds, 0.25));
-        ctx.fillText(gapMetricValueText(metric), rect.left + 62, y);
+        ctx.fillText(gapMetricValueText(metric), rect.left + 56, y);
         ctx.fillStyle = gapMetricChaserColor(metric);
-        ctx.fillText(gapMetricChaserText(metric), rect.left + 124, y);
+        ctx.fillText(gapMetricChaserText(metric), rect.left + 136, y);
       });
       ctx.restore();
     }

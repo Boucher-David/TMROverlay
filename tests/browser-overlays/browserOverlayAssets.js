@@ -587,16 +587,16 @@ function tableBaseWidth(id, overlayState, fullWidth, previewMode = 'off') {
       'Car number': 50,
       Driver: 250,
       'Class gap': 60,
-      'Focus interval': 60,
+      'Previous interval': 60,
       'Fastest lap': 70,
       'Last lap': 70,
-      'Pit status': 36
+      'Pit status': 48
     },
     relative: {
       'Relative position': 38,
       Driver: 250,
       'Relative delta': 70,
-      'Pit status': 36
+      'Pit status': 48
     }
   }[id] || {};
   const rows = settingsContentRows(id, overlayState);
@@ -678,7 +678,7 @@ function settingsContentRows(id, overlayState = {}) {
         enabled('Car number'),
         enabled('Driver'),
         enabled('Class gap'),
-        enabled('Focus interval'),
+        enabled('Previous interval'),
         enabled('Fastest lap'),
         enabled('Last lap'),
         enabled('Pit status')
@@ -817,7 +817,7 @@ function settingsContentOptionKey(id, label) {
       'Car number': 'standings.content.standings.car-number.enabled',
       Driver: 'standings.content.standings.driver.enabled',
       'Class gap': 'standings.content.standings.gap.enabled',
-      'Focus interval': 'standings.content.standings.interval.enabled',
+      'Previous interval': 'standings.content.standings.interval.enabled',
       'Fastest lap': 'standings.content.standings.fastest-lap.enabled',
       'Last lap': 'standings.content.standings.last-lap.enabled',
       'Pit status': 'standings.content.standings.pit.enabled',

@@ -1671,22 +1671,24 @@ internal static class Program
 
     private static DesignV2OverlayModel ReviewInputNoContentModel()
     {
+        var trace = ReviewInputTrace();
+        var current = trace[^1];
         return new DesignV2OverlayModel(
             "Inputs",
             "no input content enabled",
             string.Empty,
             DesignV2Evidence.Unavailable,
             new DesignV2InputsBody(
-                Throttle: 0.78d,
-                Brake: 0.16d,
-                Clutch: 0d,
+                Throttle: current.Throttle,
+                Brake: current.Brake,
+                Clutch: current.Clutch,
                 SteeringWheelAngle: -0.18d,
                 SpeedMetersPerSecond: 77.889366d,
                 Gear: 6,
                 SpeedText: "280 km/h",
                 GearText: "6",
                 SteeringText: "-10 deg",
-                BrakeAbsActive: true,
+                BrakeAbsActive: current.BrakeAbsActive,
                 ShowThrottleTrace: false,
                 ShowBrakeTrace: false,
                 ShowClutchTrace: false,
@@ -1700,7 +1702,7 @@ internal static class Program
                 HasGraph: false,
                 HasRail: false,
                 HasContent: false,
-                Trace: ReviewInputTrace()),
+                Trace: trace),
             HeaderText: string.Empty,
             ShowFooter: false);
     }
@@ -2020,22 +2022,29 @@ internal static class Program
     {
         var session = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) ?? previewMode;
         var trace = ReviewInputTrace();
+        var current = trace[^1];
+        var status = session == OverlaySessionKind.Race ? "6 | 7900 rpm" : "4 | 7120 rpm";
+        if (current.BrakeAbsActive)
+        {
+            status += " | ABS";
+        }
+
         return new DesignV2OverlayModel(
             "Inputs",
-            session == OverlaySessionKind.Race ? "6 | 7900 rpm | ABS" : "4 | 7120 rpm | ABS",
+            status,
             string.Empty,
             DesignV2Evidence.Live,
             new DesignV2InputsBody(
-                Throttle: 0.78d,
-                Brake: 0.16d,
-                Clutch: 0d,
+                Throttle: current.Throttle,
+                Brake: current.Brake,
+                Clutch: current.Clutch,
                 SteeringWheelAngle: -0.18d,
                 SpeedMetersPerSecond: session == OverlaySessionKind.Race ? 77.889366d : 63.4d,
                 Gear: session == OverlaySessionKind.Race ? 6 : 4,
                 SpeedText: session == OverlaySessionKind.Race ? "280 km/h" : "228 km/h",
                 GearText: session == OverlaySessionKind.Race ? "6" : "4",
                 SteeringText: "-10 deg",
-                BrakeAbsActive: true,
+                BrakeAbsActive: current.BrakeAbsActive,
                 ShowThrottleTrace: true,
                 ShowBrakeTrace: true,
                 ShowClutchTrace: true,
@@ -2059,18 +2068,50 @@ internal static class Program
         return Enumerable.Range(0, InputStateRenderModelBuilder.MaximumTracePoints)
             .Select(index =>
             {
-                var t = index / 10d;
-                var throttle = Math.Clamp(0.58d + Math.Sin(t) * 0.32d, 0d, 1d);
-                var brake = index is >= 52 and <= 138
-                    ? Math.Clamp(throttle + Math.Sin(index / 4d) * 0.018d, 0d, 1d)
-                    : Math.Clamp(0.56d + Math.Sin(t * 0.96d + 0.6d) * 0.32d, 0d, 1d);
+                var t = index / 18d;
+                var braking = Math.Max(
+                    InputPulse(index, 38d, 7d) * 0.94d,
+                    Math.Max(
+                        InputPulse(index, 86d, 8d) * 0.86d,
+                        InputPulse(index, 136d, 7d) * 0.98d));
+                var brake = Math.Clamp(braking, 0d, 1d);
+                var throttle = Math.Clamp(0.82d + Math.Sin(t * 1.15d) * 0.18d, 0d, 1d);
+                throttle = Math.Clamp(throttle * (1d - Math.Min(1d, brake * 1.08d)), 0d, 1d);
+                var clutch = Math.Clamp(1d - Math.Max(
+                    InputPulse(index, 24d, 2.5d) * 0.72d,
+                    Math.Max(
+                        InputPulse(index, 64d, 2.4d) * 0.58d,
+                        Math.Max(
+                            InputPulse(index, 113d, 2.4d) * 0.62d,
+                            InputPulse(index, 154d, 2.6d) * 0.7d))),
+                    0d,
+                    1d);
+                if (index < 16)
+                {
+                    throttle = 1d;
+                    brake = 0d;
+                    clutch = 1d;
+                }
+                else if (index >= 166)
+                {
+                    throttle = 0d;
+                    brake = 1d;
+                    clutch = 1d;
+                }
+
                 return new InputStateTracePoint(
                     Throttle: throttle,
                     Brake: brake,
-                    Clutch: Math.Clamp(0.08d + Math.Sin(t * 0.35d) * 0.06d, 0d, 1d),
-                    BrakeAbsActive: index is > 112 and < 132);
+                    Clutch: clutch,
+                    BrakeAbsActive: index is > 112 and < 132 || index >= 166);
             })
             .ToArray();
+    }
+
+    private static double InputPulse(int index, double center, double width)
+    {
+        var distance = (index - center) / width;
+        return Math.Exp(-(distance * distance));
     }
 
     private static DesignV2OverlayModel ReviewStreamChatModel()

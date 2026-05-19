@@ -128,7 +128,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private const float GapEndpointLabelGap = 1f;
     private const float GapMetricsTableWidth = 220f;
     private const float GapMetricsTableGap = 10f;
-    private const float GapMetricsMinimumPlotWidth = 300f;
+    private const float GapMetricsMinimumPlotWidth = 260f;
     private const float GapMetricsMinimumTableHeight = 164f;
     private const float GapThreatBadgeHeight = 16f;
     private const float GapFocusScaleReferenceRatio = 0.56f;
@@ -353,6 +353,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         _flagsManagedEnabled = managedEnabled;
         _flagsSettingsOverlayActive = settingsOverlayActive;
         Invalidate();
+    }
+
+    internal void RefreshForDiagnostics()
+    {
+        RefreshOverlay();
     }
 
     private static string NormalizeUnitSystem(string unitSystem)

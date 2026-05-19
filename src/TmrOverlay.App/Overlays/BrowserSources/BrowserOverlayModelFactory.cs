@@ -68,6 +68,7 @@ internal sealed class BrowserOverlayModelFactory
     private readonly SessionWeatherOverlayViewModel.StatefulBuilder _sessionWeatherBuilder;
     private readonly PitServiceOverlayViewModel.StatefulBuilder _pitServiceBuilder;
     private readonly TrackMapRenderModelBuilder _trackMapRenderBuilder = new();
+    private readonly object _gapSync = new();
     private readonly List<double> _gapPoints = [];
     private readonly Dictionary<int, List<BrowserGapTrendPoint>> _gapSeries = [];
     private readonly List<BrowserGapWeatherPoint> _gapWeather = [];
@@ -538,28 +539,34 @@ internal sealed class BrowserOverlayModelFactory
         var isRace = OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) == OverlaySessionKind.Race;
         var viewModel = GapToLeaderOverlayViewModel.From(snapshot, now);
         var gap = viewModel.Gap;
-        if (isRace)
-        {
-            RecordGapSnapshot(snapshot, gap, settings);
-        }
-
-        if (isRace
-            && viewModel.FocusedTrendPointSeconds is { } seconds
-            && ShouldAcceptGapPoint(snapshot, seconds))
-        {
-            _gapPoints.Add(seconds);
-            if (_gapPoints.Count > 120)
-            {
-                _gapPoints.RemoveRange(0, _gapPoints.Count - 120);
-            }
-        }
-
         var headerItems = HeaderItems(overlay, snapshot, viewModel.Status, gap.HasData ? "info" : "waiting");
         var shouldRender = isRace && GapWindowEnabled(overlay);
-        var graph = shouldRender ? BuildBrowserGapGraph(settings) : null;
-        IReadOnlyList<double> points = graph?.SelectedSeriesCount > 0
-            ? _gapPoints.ToArray()
-            : Array.Empty<double>();
+        BrowserGapGraph? graph;
+        IReadOnlyList<double> points;
+        lock (_gapSync)
+        {
+            if (isRace)
+            {
+                RecordGapSnapshot(snapshot, gap, settings);
+            }
+
+            if (isRace
+                && viewModel.FocusedTrendPointSeconds is { } seconds
+                && ShouldAcceptGapPoint(snapshot, seconds))
+            {
+                _gapPoints.Add(seconds);
+                if (_gapPoints.Count > 120)
+                {
+                    _gapPoints.RemoveRange(0, _gapPoints.Count - 120);
+                }
+            }
+
+            graph = shouldRender ? BuildBrowserGapGraph(settings) : null;
+            points = graph?.SelectedSeriesCount > 0
+                ? _gapPoints.ToArray()
+                : Array.Empty<double>();
+        }
+
         return new BrowserOverlayDisplayModel(
             GapToLeaderOverlayDefinition.Definition.Id,
             viewModel.Title,

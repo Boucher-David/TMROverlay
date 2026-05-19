@@ -2439,6 +2439,21 @@ internal sealed class DiagnosticsBundleService
         {
             AddFileIfExists(archive, file.SourcePath, file.EntryName);
         }
+
+        var previewCapture = LiveOverlayPreviewScreenshotCapture.Capture(
+            _storageOptions,
+            _liveOverlayWindowCaptureStore.Options,
+            _settingsStore,
+            _trackMapStore,
+            _performanceState);
+        AddTextEntry(
+            archive,
+            "live-overlays/previews/manifest.json",
+            JsonSerializer.Serialize(previewCapture.Manifest, JsonOptions));
+        foreach (var image in previewCapture.Images)
+        {
+            AddBinaryEntry(archive, image.EntryName, image.PngBytes);
+        }
     }
 
     private static object BrowserOverlayDiagnostics()
@@ -3837,6 +3852,13 @@ internal sealed class DiagnosticsBundleService
         }
 
         archive.CreateEntryFromFile(sourcePath, entryName, CompressionLevel.Fastest);
+    }
+
+    private static void AddBinaryEntry(ZipArchive archive, string entryName, byte[] content)
+    {
+        var entry = archive.CreateEntry(entryName, CompressionLevel.Fastest);
+        using var stream = entry.Open();
+        stream.Write(content, 0, content.Length);
     }
 
     private static void AddSanitizedSettingsIfExists(ZipArchive archive, string path)

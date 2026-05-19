@@ -41,14 +41,7 @@ TmrBrowserOverlay.register({
       hasGraph ? '' : 'rail-only',
       railEnabled ? '' : 'no-rail'
     ].filter(Boolean).join(' ');
-    contentEl.innerHTML = `
-      <div class="${layoutClass}">
-        ${hasGraph ? `
-          <div class="input-graph-panel">
-            <canvas class="input-graph" aria-label="Input trace graph"></canvas>
-          </div>` : ''}
-        ${railEnabled ? renderInputRail(inputs, brakeAbsActive) : ''}
-      </div>`;
+    renderInputLayout(layoutClass, hasGraph, railEnabled, inputs, brakeAbsActive);
     if (hasGraph) {
       drawInputGraph(contentEl.querySelector('.input-graph'), inputs);
     }
@@ -351,7 +344,46 @@ function inputGraphEnabled(inputs) {
     || inputs.showClutchTrace;
 }
 
-function renderInputRail(inputs, brakeAbsActive) {
+function renderInputLayout(layoutClass, hasGraph, railEnabled, inputs, brakeAbsActive) {
+  const railContents = railEnabled ? renderInputRailContents(inputs, brakeAbsActive) : '';
+  const existingLayout = contentEl.querySelector(':scope > .input-layout');
+  const existingGraphPanel = existingLayout?.querySelector(':scope > .input-graph-panel') || null;
+  const existingRail = existingLayout?.querySelector(':scope > .input-rail') || null;
+  const canPatchExistingLayout = existingLayout
+    && existingLayout.className === layoutClass
+    && Boolean(existingGraphPanel) === hasGraph
+    && Boolean(existingRail) === railEnabled;
+
+  if (!canPatchExistingLayout) {
+    contentEl.innerHTML = `
+      <div class="${layoutClass}">
+        ${hasGraph ? `
+          <div class="input-graph-panel">
+            <canvas class="input-graph" aria-label="Input trace graph"></canvas>
+          </div>` : ''}
+        ${railEnabled ? renderInputRail(railContents) : ''}
+      </div>`;
+    const rail = contentEl.querySelector('.input-rail');
+    if (rail) {
+      rail.dataset.renderedHtml = railContents;
+    }
+    return;
+  }
+
+  if (railEnabled && existingRail && existingRail.dataset.renderedHtml !== railContents) {
+    existingRail.innerHTML = railContents;
+    existingRail.dataset.renderedHtml = railContents;
+  }
+}
+
+function renderInputRail(contents) {
+  return `
+    <div class="input-rail">
+      ${contents}
+    </div>`;
+}
+
+function renderInputRailContents(inputs, brakeAbsActive) {
   const bars = [
     inputs.showThrottle ? railBar('THR', inputs.throttle, 'var(--tmr-green)') : '',
     inputs.showBrake ? railBar(brakeAbsActive ? 'ABS' : 'BRK', inputs.brake, brakeAbsActive ? 'var(--tmr-amber)' : 'var(--tmr-error)') : '',
@@ -362,11 +394,9 @@ function renderInputRail(inputs, brakeAbsActive) {
     inputs.showSpeed ? railReadout('SPD', inputs.speedText || '--') : ''
   ].filter(Boolean).join('');
   return `
-    <div class="input-rail">
       ${bars ? `<div class="input-bars">${bars}</div>` : ''}
       ${inputs.showSteering ? renderWheel(inputs.steeringWheelAngle, inputs.steeringText) : ''}
-      ${readouts ? `<div class="input-readouts">${readouts}</div>` : ''}
-    </div>`;
+      ${readouts ? `<div class="input-readouts">${readouts}</div>` : ''}`;
 }
 
 function railReadout(label, value) {

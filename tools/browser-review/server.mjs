@@ -482,6 +482,13 @@ function overlayIdFromPath(path) {
 function reviewLiveSnapshot(previewMode = 'off', searchParams = new URLSearchParams()) {
   const sessionKind = previewMode === 'off' ? 'practice' : previewMode;
   const sessionType = sessionKind === 'qualifying' ? 'Qualify' : titleCase(sessionKind);
+  const inputTrace = reviewInputTrace();
+  const currentInputs = inputTrace[inputTrace.length - 1] || {
+    throttle: 0,
+    brake: 0,
+    clutch: 0,
+    brakeAbsActive: false
+  };
   const live = freshLiveSnapshot({
     session: {
       hasData: true,
@@ -498,15 +505,15 @@ function reviewLiveSnapshot(previewMode = 'off', searchParams = new URLSearchPar
     },
     inputs: {
       hasData: true,
-      throttle: 0.78,
-      brake: 0.16,
-      clutch: 0,
+      throttle: currentInputs.throttle,
+      brake: currentInputs.brake,
+      clutch: currentInputs.clutch,
       steeringWheelAngle: -0.18,
       gear: sessionKind === 'race' ? 6 : 4,
       rpm: sessionKind === 'race' ? 7900 : 7120,
       speedMetersPerSecond: sessionKind === 'race' ? 77.889366 : 63.4,
-      brakeAbsActive: true,
-      trace: reviewInputTrace()
+      brakeAbsActive: currentInputs.brakeAbsActive,
+      trace: inputTrace
     },
     raceEvents: {
       hasData: true,
@@ -934,19 +941,40 @@ function reviewTimingRow(carIdx, overallPosition, classPosition, lapDistPct, car
 
 function reviewInputTrace() {
   return Array.from({ length: 180 }, (_, index) => {
-    const t = index / 10;
-    const overlapWindow = index >= 52 && index <= 138;
-    const throttle = Math.max(0, Math.min(1, 0.58 + Math.sin(t) * 0.32));
-    const brake = overlapWindow
-      ? Math.max(0, Math.min(1, throttle + Math.sin(index / 4) * 0.018))
-      : Math.max(0, Math.min(1, 0.56 + Math.sin(t * 0.96 + 0.6) * 0.32));
+    const t = index / 18;
+    const braking = Math.max(
+      inputPulse(index, 38, 7) * 0.94,
+      inputPulse(index, 86, 8) * 0.86,
+      inputPulse(index, 136, 7) * 0.98);
+    let brake = Math.max(0, Math.min(1, braking));
+    let throttle = Math.max(0, Math.min(1, 0.82 + Math.sin(t * 1.15) * 0.18));
+    throttle = Math.max(0, Math.min(1, throttle * (1 - Math.min(1, brake * 1.08))));
+    let clutch = Math.max(0, Math.min(1, 1 - Math.max(
+      inputPulse(index, 24, 2.5) * 0.72,
+      inputPulse(index, 64, 2.4) * 0.58,
+      inputPulse(index, 113, 2.4) * 0.62,
+      inputPulse(index, 154, 2.6) * 0.7)));
+    if (index < 16) {
+      throttle = 1;
+      brake = 0;
+      clutch = 1;
+    } else if (index >= 166) {
+      throttle = 0;
+      brake = 1;
+      clutch = 1;
+    }
     return {
       throttle,
       brake,
-      clutch: Math.max(0, Math.min(1, 0.08 + Math.sin(t * 0.35) * 0.06)),
-      brakeAbsActive: index > 112 && index < 132
+      clutch,
+      brakeAbsActive: index > 112 && index < 132 || index >= 166
     };
   });
+}
+
+function inputPulse(index, center, width) {
+  const distance = (index - center) / width;
+  return Math.exp(-(distance * distance));
 }
 
 function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {

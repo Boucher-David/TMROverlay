@@ -1028,6 +1028,7 @@ public sealed class DiagnosticsBundleServiceTests
             Assert.Contains("metadata/performance.json", entryNames);
             Assert.Contains("metadata/ui-freeze-watch.json", entryNames);
             Assert.Contains("live-overlays/manifest.json", entryNames);
+            Assert.Contains("live-overlays/previews/manifest.json", entryNames);
             Assert.Contains("runtime/runtime-state.json", entryNames);
             Assert.Contains("shared/tmr-overlay-contract.json", entryNames);
             Assert.Contains("shared/tmr-overlay-contract.schema.json", entryNames);
@@ -1088,6 +1089,20 @@ public sealed class DiagnosticsBundleServiceTests
                     string.Equals((string?)warning, "live_overlay_screenshot_capture_disabled", StringComparison.Ordinal));
                 Assert.Contains(evidenceWarnings, warning =>
                     string.Equals((string?)warning, "visible_overlays_without_pixel_evidence", StringComparison.Ordinal));
+            }
+
+            var previewManifestEntry = archive.GetEntry("live-overlays/previews/manifest.json");
+            Assert.NotNull(previewManifestEntry);
+            using (var previewManifestReader = new StreamReader(previewManifestEntry.Open()))
+            {
+                var previewManifestJson = JsonNode.Parse(previewManifestReader.ReadToEnd());
+                Assert.Equal(
+                    "deterministic-session-preview-native-renders",
+                    (string?)previewManifestJson?["captureKind"]);
+                Assert.True(((bool?)previewManifestJson?["capturePreviewScreenshotsEnabled"]) == true);
+                Assert.Equal(32, ((int?)previewManifestJson?["maxPreviewScreenshots"]) ?? -1);
+                Assert.Equal(31, ((int?)previewManifestJson?["coverage"]?["requestedScreenshotCount"]) ?? -1);
+                Assert.Equal(0, ((int?)previewManifestJson?["coverage"]?["omittedByCapCount"]) ?? -1);
             }
 
             var evidenceQualityEntry = archive.GetEntry("metadata/evidence-quality.json");

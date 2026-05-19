@@ -35,6 +35,8 @@ internal sealed class LiveOverlayWindowCaptureStore
 
     public string CaptureRoot => Path.Combine(_storageOptions.LogsRoot, "live-overlay-windows");
 
+    public LiveOverlayWindowCaptureOptions Options => _options;
+
     public void RecordOverlayWindow(
         OverlayDefinition definition,
         OverlaySettings settings,

@@ -25,6 +25,7 @@ internal static class OverlayContentSizing
     private const int FooterChromeHeight = 32;
     private const int CollapsedFooterReserveHeight = 8;
     private const int MinimumChromeAdjustedHeight = 80;
+    private const int FuelNonRaceHeight = 184;
 
     public static Size BaseSizeFor(
         OverlayDefinition definition,
@@ -37,6 +38,13 @@ internal static class OverlayContentSizing
             baseSize = new Size(
                 InputStateRenderModelBuilder.BaseWidthForEnabledContent(settings, definition.DefaultWidth, sessionKind),
                 definition.DefaultHeight);
+            return ApplyChromeHeight(definition, settings, sessionKind, baseSize);
+        }
+
+        if (string.Equals(definition.Id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.Ordinal)
+            && OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) is OverlaySessionKind.Practice or OverlaySessionKind.Qualifying)
+        {
+            baseSize = new Size(definition.DefaultWidth, FuelNonRaceHeight);
             return ApplyChromeHeight(definition, settings, sessionKind, baseSize);
         }
 

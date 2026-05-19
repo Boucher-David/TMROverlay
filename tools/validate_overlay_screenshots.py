@@ -208,6 +208,11 @@ WINDOWS_NATIVE_OVERLAY_SIZES = {
     "gap-to-leader": (654, 336),
 }
 
+OVERLAY_PREVIEW_EXPECTED_SIZES = {
+    ("fuel-calculator", "practice"): (503, 184),
+    ("fuel-calculator", "qualifying"): (503, 184),
+}
+
 WEB_OVERLAY_EXPECTED_SIZES = {
     **WINDOWS_NATIVE_OVERLAY_SIZES,
     # Browser/localhost table captures crop to the browser-source content
@@ -729,7 +734,7 @@ def validate_windows_ci(root: Path, min_unique_bytes: int, failures: list[str]) 
             validate_png(
                 root=root,
                 relative_path=relative_path,
-                expected_size=expected_size,
+                expected_size=expected_overlay_preview_size(overlay_id, mode, expected_size),
                 min_unique_bytes=WINDOWS_MIN_UNIQUE_BYTES.get(relative_path, min_unique_bytes),
                 failures=failures,
             )
@@ -1029,10 +1034,50 @@ def compare_browser_localhost_overlay_parity(
             ("overlayId", "previewMode", "fixtureVariant", "bodyKind", "sourceContract", "moduleAsset", "width", "height", "shouldRender", "rowCount"),
             failures,
         )
+        compare_runtime_asset_evidence(
+            f"web overlay {key}",
+            browser_overlays[key].get("runtimeAssets"),
+            localhost_overlays[key].get("runtimeAssets"),
+            failures,
+        )
 
     alias_paths = {path for path in localhost if path.startswith("localhost-overlays/") and "-alias-" in path}
     expected_aliases = localhost_alias_manifest_paths()
     compare_sets("Localhost alias screenshot manifest parity", alias_paths, expected_aliases, failures)
+
+
+def compare_runtime_asset_evidence(
+    label: str,
+    browser_value: object,
+    localhost_value: object,
+    failures: list[str],
+) -> None:
+    browser = typed_dict(browser_value)
+    localhost = typed_dict(localhost_value)
+    if not browser or not localhost:
+        failures.append(f"{label}: browser/localhost runtime asset evidence missing")
+        return
+    for field in (
+        "expected.bodyClass",
+        "expected.overlayStyleHash",
+        "expected.overlayScriptHash",
+        "actual.bodyClass",
+        "actual.overlayStyleHash",
+        "actual.overlayScriptHash",
+    ):
+        left = dotted_value(browser, field)
+        right = dotted_value(localhost, field)
+        if left != right:
+            failures.append(f"{label}: runtime asset {field} differs, {left!r} vs {right!r}")
+
+
+def dotted_value(value: dict[str, object], path: str) -> object:
+    current: object = value
+    for part in path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
 
 
 def compare_web_windows_overlay_parity(
@@ -1334,14 +1379,15 @@ def validate_web_overlay_pngs(root: Path, prefix: str, min_unique_bytes: int, fa
             minimum_size=None if expected_size is not None else (200, 120),
         )
         for mode in preview_modes_for_overlay(overlay_id):
+            preview_expected_size = expected_overlay_preview_size(overlay_id, mode, expected_size)
             validate_png(
                 root=root,
                 relative_path=f"{prefix}/{overlay_id}-{mode}.png",
-                expected_size=expected_size,
+                expected_size=preview_expected_size,
                 min_unique_bytes=overlay_min_unique_bytes,
                 failures=failures,
                 min_byte_range=overlay_min_byte_range,
-                minimum_size=None if expected_size is not None else (200, 120),
+                minimum_size=None if preview_expected_size is not None else (200, 120),
             )
         for relative_path, (variant_overlay_id, _slug) in web_overlay_variant_manifest_path_map(prefix).items():
             if variant_overlay_id != overlay_id:
@@ -1387,7 +1433,10 @@ def validate_browser_review_settings_component_pngs(root: Path, min_unique_bytes
 def validate_localhost_alias_pngs(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
     for relative_path in localhost_alias_manifest_paths():
         overlay_id = relative_path.removeprefix("localhost-overlays/").split("-alias-", 1)[0]
-        expected_size = WINDOWS_NATIVE_OVERLAY_SIZES.get(overlay_id)
+        expected_size = expected_overlay_preview_size(
+            overlay_id,
+            preview_mode_from_overlay_path(relative_path),
+            WINDOWS_NATIVE_OVERLAY_SIZES.get(overlay_id))
         validate_png(
             root=root,
             relative_path=relative_path,
@@ -1551,6 +1600,7 @@ def validate_browser_review_manifest(
         require_scenario_evidence(path, screenshot.get("scenarioEvidence"), failures)
         if path.startswith(("browser-overlays/", "localhost-overlays/")):
             require_manifest_fields(path, screenshot, ["overlayId", "previewMode", "moduleAsset", "status", "bodyKind"], failures)
+            require_runtime_asset_evidence(path, screenshot.get("runtimeAssets"), failures)
             require_explicit_fixture_variant_for_fixture_query(path, screenshot, failures)
             validate_effective_settings_contract(path, screenshot, failures)
             require_model_evidence(path, screenshot.get("modelEvidence"), failures)
@@ -2144,6 +2194,38 @@ def require_scenario_evidence(path: str, value: object, failures: list[str]) -> 
             require_positive_number(path, source_file.get("bytes"), f"scenario source file {index} bytes", failures)
             if source_file.get("sha256") in (None, ""):
                 failures.append(f"{path}: scenario source file {index} missing sha256")
+
+
+def require_runtime_asset_evidence(path: str, value: object, failures: list[str]) -> None:
+    if not isinstance(value, dict):
+        failures.append(f"{path}: manifest missing runtime asset evidence")
+        return
+
+    if value.get("contract") != "browser-overlay-runtime-assets/v1":
+        failures.append(f"{path}: runtime asset evidence contract unexpected {value.get('contract')!r}")
+    expected = typed_dict(value.get("expected"))
+    actual = typed_dict(value.get("actual"))
+    if not expected:
+        failures.append(f"{path}: runtime asset evidence missing expected hashes")
+    if not actual:
+        failures.append(f"{path}: runtime asset evidence missing actual hashes")
+    for label, evidence in (("expected", expected), ("actual", actual)):
+        for field in ("overlayStyleHash", "overlayScriptHash"):
+            if evidence.get(field) in (None, ""):
+                failures.append(f"{path}: runtime asset {label} missing {field}")
+        if not isinstance(evidence.get("bodyClass"), str):
+            failures.append(f"{path}: runtime asset {label} missing bodyClass")
+        require_positive_number(path, evidence.get("overlayStyleBytes"), f"runtime asset {label} style bytes", failures)
+        require_positive_number(path, evidence.get("overlayScriptBytes"), f"runtime asset {label} script bytes", failures)
+
+    if expected and actual:
+        for field in ("bodyClass", "overlayStyleHash", "overlayScriptHash"):
+            if expected.get(field) != actual.get(field):
+                failures.append(
+                    f"{path}: runtime asset {field} does not match generated overlay source, "
+                    f"{actual.get(field)!r} vs {expected.get(field)!r}")
+    if value.get("matchesExpected") is not True:
+        failures.append(f"{path}: runtime asset evidence did not confirm served localhost/browser bundle freshness")
 
 
 def require_scenario_source_paths(
@@ -4134,28 +4216,36 @@ def validate_relative_contract(path: str, values: dict[str, object], failures: l
 
 def validate_fuel_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
     require_equal(path, "fuel bodyKind", values.get("bodyKind"), "metrics", failures)
-    require_equal(path, "fuel status", values.get("status"), "3 stints / 2 stops", failures)
+    mode = str(values.get("previewMode") or "race")
+    expected_status = "fuel range" if mode in ("practice", "qualifying") else "3 stints / 2 stops"
+    require_equal(path, "fuel status", values.get("status"), expected_status, failures)
     source = str(values.get("source") or "")
-    for token in ("burn 3.1 L/lap", "34.2 laps/tank", "history user", "gap O0.18 C0.04"):
+    source_tokens = (
+        ("usage 3.1 L/lap", "range 23.9 laps", "34.2 laps/tank", "history user", "measured min/avg/max")
+        if mode in ("practice", "qualifying")
+        else ("burn 3.1 L/lap", "34.2 laps/tank", "history user", "gap O0.18 C0.04")
+    )
+    for token in source_tokens:
         if token not in source:
             failures.append(f"{path}: fuel source missing {token!r}")
     model = model_evidence(values)
     sections = section_map(model)
-    mode = str(values.get("previewMode") or "race")
-    expected_sections = ["Race Information", "Fuel Usage", "Stint Targets"] if mode in ("practice", "qualifying") else ["Race Information", "Stint Targets"]
+    expected_sections = ["Fuel Range", "Fuel Usage"] if mode in ("practice", "qualifying") else ["Race Information", "Stint Targets"]
     require_sequence(path, "fuel metric sections", list(sections), expected_sections, failures)
-    require_section_rows(path, sections, "Race Information", ["Plan", "Fuel"], failures)
     if mode == "practice":
+        require_section_rows(path, sections, "Fuel Range", ["Fuel"], failures)
         require_section_rows(path, sections, "Fuel Usage", ["Practice Usage"], failures)
-        require_section_rows(path, sections, "Stint Targets", ["Stint 1"], failures)
+        require_segments(path, sections, "Fuel Range", "Fuel", [("Level", "74.0 L"), ("Usage", "3.1 L/lap"), ("Range", "23.9 laps"), ("Tank", "34.2 laps")], failures)
     elif mode == "qualifying":
+        require_section_rows(path, sections, "Fuel Range", ["Fuel"], failures)
         require_section_rows(path, sections, "Fuel Usage", ["Quali Usage"], failures)
-        require_section_rows(path, sections, "Stint Targets", ["Stint 1"], failures)
+        require_segments(path, sections, "Fuel Range", "Fuel", [("Level", "74.0 L"), ("Usage", "3.1 L/lap"), ("Range", "23.9 laps"), ("Tank", "34.2 laps")], failures)
     else:
+        require_section_rows(path, sections, "Race Information", ["Plan", "Fuel"], failures)
         require_section_rows(path, sections, "Stint Targets", ["Stint 1", "Stint 2", "Stint 3"], failures)
-    require_row_value(path, sections, "Race Information", "Plan", "31 laps | 3 stints | 2 stops", failures)
-    require_segments(path, sections, "Race Information", "Plan", [("Race", "31 laps"), ("Remain", "30.4 laps"), ("Stints", "3"), ("Stops", "2"), ("Save", "0.2 L/lap")], failures)
-    require_segments(path, sections, "Race Information", "Fuel", [("Current", "74.0 L"), ("Burn", "3.1 L/lap"), ("Tank", "34.2 laps"), ("Need", "Covered")], failures)
+        require_row_value(path, sections, "Race Information", "Plan", "31 laps | 3 stints | 2 stops", failures)
+        require_segments(path, sections, "Race Information", "Plan", [("Race", "31 laps"), ("Remain", "30.4 laps"), ("Stints", "3"), ("Stops", "2"), ("Save", "0.2 L/lap")], failures)
+        require_segments(path, sections, "Race Information", "Fuel", [("Current", "74.0 L"), ("Burn", "3.1 L/lap"), ("Tank", "34.2 laps"), ("Need", "Covered")], failures)
 
 
 def validate_session_weather_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -4306,6 +4396,15 @@ def validate_input_state_contract(path: str, values: dict[str, object], failures
             failures.append(f"{path}: input-state {kind or 'unknown'} rail item missing visible text")
         elif expected_label is not None and not visible_text.upper().startswith(f"{expected_label} "):
             failures.append(f"{path}: input-state {kind} rail visible text expected label {expected_label!r}, got {visible_text!r}")
+        if kind == "SteeringWheel" and path.startswith(("browser-overlays/", "localhost-overlays/")) and screenshot_variant_key(path) != ("input-state", "min-scale"):
+            svg = next((child for child in evidence_list(item, "children") if text_value(child, "role") == "input-wheel-svg"), None)
+            svg_bounds = typed_dict(get_manifest_value(svg, "bounds")) if isinstance(svg, dict) else {}
+            svg_width = rect_number(svg_bounds, "width")
+            svg_height = rect_number(svg_bounds, "height")
+            if svg_width is None or svg_height is None:
+                failures.append(f"{path}: input-state SteeringWheel missing browser wheel svg bounds")
+            elif max(svg_width, svg_height) > 40:
+                failures.append(f"{path}: input-state SteeringWheel svg {svg_width:g}x{svg_height:g} is too large for native/browser rail parity")
     brake_item = next((item for item in rail_items if text_value(item, "kind") == "Brake"), None)
     if not isinstance(brake_item, dict) or "ABS" not in input_rail_item_visible_text(brake_item).upper():
         failures.append(f"{path}: input-state brake rail item did not retain ABS label")
@@ -4450,7 +4549,25 @@ def validate_gap_to_leader_contract(path: str, values: dict[str, object], failur
     if metric_rows:
         labels = [text_value(row, "text") for row in metric_rows]
         require_sequence(path, "gap rendered metric row labels", labels, expected_metric_labels, failures)
+        validate_gap_rendered_trend_cells(path, metric_rows, failures)
+    elif path.startswith(("browser-overlays/", "localhost-overlays/")) and screenshot_variant_key(path) != ("gap-to-leader", "no-cars"):
+        failures.append(f"{path}: Gap To Leader trend section missing rendered metric row evidence")
     validate_gap_v102_feedback_contract(path, graph, geometry, failures)
+
+
+def validate_gap_rendered_trend_cells(path: str, metric_rows: list[object], failures: list[str]) -> None:
+    for row_index, row in enumerate(metric_rows):
+        if not isinstance(row, dict):
+            continue
+        for cell in evidence_list(row, "cells"):
+            if not isinstance(cell, dict):
+                continue
+            column = text_value(cell, "column")
+            if column.lower() in {"metric", ""}:
+                continue
+            text = text_value(cell, "text")
+            if not text or text == "--":
+                failures.append(f"{path}: Gap To Leader trend row {row_index} {column or 'value'} cell lacks populated data")
 
 
 def validate_gap_v102_feedback_contract(
@@ -6499,7 +6616,16 @@ def mutation_input_screenshot() -> dict[str, object]:
                         {"kind": "Throttle", "text": "THR 78%"},
                         {"kind": "Brake", "text": "ABS 16%"},
                         {"kind": "Clutch", "text": "CLT 0%"},
-                        {"kind": "SteeringWheel", "text": "WHEEL -10 deg"},
+                        {
+                            "kind": "SteeringWheel",
+                            "text": "WHEEL -10 deg",
+                            "children": [
+                                {
+                                    "role": "input-wheel-svg",
+                                    "bounds": {"x": 434, "y": 112, "width": 32, "height": 32},
+                                }
+                            ],
+                        },
                         {"kind": "Gear", "text": "GEAR 6"},
                         {"kind": "Speed", "text": "SPD 280 km/h"},
                     ],
@@ -7116,6 +7242,21 @@ def regions_for_overlay(overlay_id: str) -> tuple[str, ...]:
 
 def preview_modes_for_overlay(overlay_id: str) -> tuple[str, ...]:
     return ("race",) if overlay_id == "gap-to-leader" else PREVIEW_MODES
+
+
+def expected_overlay_preview_size(
+    overlay_id: str,
+    preview_mode: str,
+    fallback: Optional[tuple[int, int]],
+) -> Optional[tuple[int, int]]:
+    return OVERLAY_PREVIEW_EXPECTED_SIZES.get((overlay_id, preview_mode), fallback)
+
+
+def preview_mode_from_overlay_path(relative_path: str) -> str:
+    for mode in PREVIEW_MODES:
+        if relative_path.endswith(f"-{mode}.png"):
+            return mode
+    return "race"
 
 
 def read_overlay_definition_size(

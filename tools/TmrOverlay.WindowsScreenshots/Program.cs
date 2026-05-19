@@ -730,6 +730,13 @@ internal static class Program
             "Metric",
             Noop);
 
+        form.ClientSize = OverlayManager.TargetOverlayClientSizeForApply(
+            overlay.Definition,
+            settings,
+            form.ClientSize,
+            sessionPreviewActive: true,
+            sessionKind: previewMode);
+
         if (overlay.Kind == DesignV2LiveOverlayKind.CarRadar)
         {
             form.SetSettingsPreviewVisible(true);
@@ -1195,13 +1202,31 @@ internal static class Program
                     ReviewSegment("Laps", "3 laps", DesignV2Evidence.Measured)
                 ])
             };
-            sections.Add(new DesignV2MetricSection("Fuel Usage", usageRows));
+            var nonRaceSections = new[]
+            {
+                new DesignV2MetricSection("Fuel Range",
+                [
+                    ReviewMetric("Fuel", "74.0 L | range 23.9 laps | tank 34.2 laps", DesignV2Evidence.Live,
+                    [
+                        ReviewSegment("Level", "74.0 L", DesignV2Evidence.Measured),
+                        ReviewSegment("Usage", "3.1 L/lap", DesignV2Evidence.Measured),
+                        ReviewSegment("Range", "23.9 laps", DesignV2Evidence.Measured),
+                        ReviewSegment("Tank", "34.2 laps", DesignV2Evidence.Measured)
+                    ])
+                ]),
+                new DesignV2MetricSection("Fuel Usage", usageRows)
+            };
+            return new DesignV2OverlayModel(
+                "Fuel Calculator",
+                "fuel range",
+                "usage 3.1 L/lap (measured green lap) | range 23.9 laps | 34.2 laps/tank | history user | measured min/avg/max 3.0/3.1/3.2 L/lap",
+                DesignV2Evidence.Live,
+                new DesignV2MetricRowsBody(nonRaceSections.SelectMany(section => section.Rows).ToArray(), nonRaceSections, []),
+                HeaderText: "06:37:08",
+                ShowFooter: false);
         }
 
-        var visibleStintRows = usageLabel is not null
-            ? stintRows.Take(1).ToArray()
-            : stintRows;
-        sections.Add(new DesignV2MetricSection("Stint Targets", visibleStintRows));
+        sections.Add(new DesignV2MetricSection("Stint Targets", stintRows));
         return new DesignV2OverlayModel(
             "Fuel Calculator",
             "3 stints / 2 stops",
@@ -1719,6 +1744,12 @@ internal static class Program
 
         var referencePoints = trend.Select((sample, index) => Point(sample, 42, sample.Focus, true, false, 24, index)).ToArray();
         var activeThreat = new DesignV2BehindGainMetric(43, "P25", 5.3d);
+        var focusPit = new DesignV2PitMetricValue(82d, 12, true);
+        var comparisonPit = new DesignV2PitMetricValue(88d, 12, false);
+        var threatPit = new DesignV2PitMetricValue(91d, 13, false);
+        var focusTire = new DesignV2TireMetricValue("Dry", "D", false);
+        var comparisonTire = new DesignV2TireMetricValue("Dry", "D", false);
+        var threatTire = new DesignV2TireMetricValue("Wet", "W", true);
         var series = new[]
         {
             new DesignV2GapSeries(
@@ -1773,10 +1804,10 @@ internal static class Program
             [
                 new DesignV2GapTrendMetric("5L", -1.8d, activeThreat, "ready", null),
                 new DesignV2GapTrendMetric("10L", -3.4d, activeThreat, "ready", null),
-                new DesignV2GapTrendMetric("Pit", null, null, "pit", null),
-                new DesignV2GapTrendMetric("PLap", null, null, "pitLap", null),
+                new DesignV2GapTrendMetric("Pit", null, null, "pit", null, focusPit, threatPit, comparisonPit),
+                new DesignV2GapTrendMetric("PLap", null, null, "pitLap", null, focusPit, threatPit, comparisonPit),
                 new DesignV2GapTrendMetric("Stint", null, null, "stint", null, ThreatText: "17L", ComparisonText: "18L"),
-                new DesignV2GapTrendMetric("Tire", null, null, "tire", null),
+                new DesignV2GapTrendMetric("Tire", null, null, "tire", null, PrimaryTire: focusTire, ThreatTire: threatTire, ComparisonTire: comparisonTire),
                 new DesignV2GapTrendMetric("Last", null, null, "last", null, ThreatText: "8:12.120", ComparisonText: "8:13.000"),
                 new DesignV2GapTrendMetric("Status", null, null, "status", null, ThreatText: "Track", ComparisonText: "Track")
             ],

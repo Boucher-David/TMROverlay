@@ -1412,29 +1412,52 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
             metricSegment('Save', 'None', 'success')
           ])
         ];
-        const metricSections = [
-          { title: 'Race Information', rows: raceRows }
-        ];
         const usageLabel = session === 'qualifying'
           ? 'Quali Usage'
           : session === 'practice'
             ? 'Practice Usage'
             : null;
+        const usageSection = usageLabel == null ? null : {
+          title: 'Fuel Usage',
+          rows: [
+            metricRow(usageLabel, `min ${formatFuelPerLap(3.0)} | avg ${formatFuelPerLap(3.1)} | max ${formatFuelPerLap(3.2)}`, 'info', [
+              metricSegment('Min', formatFuelPerLap(3.0), 'info'),
+              metricSegment('Avg', formatFuelPerLap(3.1), 'info'),
+              metricSegment('Max', formatFuelPerLap(3.2), 'info'),
+              metricSegment('Laps', '3 laps', 'info')
+            ])
+          ]
+        };
+        const metricSections = usageLabel == null
+          ? [{ title: 'Race Information', rows: raceRows }]
+          : [
+              {
+                title: 'Fuel Range',
+                rows: [
+                  metricRow('Fuel', `${formatFuelVolume(74.0)} | range 23.9 laps | tank 34.2 laps`, 'info', [
+                    metricSegment('Level', formatFuelVolume(74.0), 'info'),
+                    metricSegment('Usage', formatFuelPerLap(3.1), 'info'),
+                    metricSegment('Range', '23.9 laps', 'info'),
+                    metricSegment('Tank', '34.2 laps', 'info')
+                  ])
+                ]
+              },
+              usageSection
+            ].filter(Boolean);
         if (usageLabel != null) {
-          metricSections.push({
-            title: 'Fuel Usage',
-            rows: [
-              metricRow(usageLabel, `min ${formatFuelPerLap(3.0)} | avg ${formatFuelPerLap(3.1)} | max ${formatFuelPerLap(3.2)}`, 'info', [
-                metricSegment('Min', formatFuelPerLap(3.0), 'info'),
-                metricSegment('Avg', formatFuelPerLap(3.1), 'info'),
-                metricSegment('Max', formatFuelPerLap(3.2), 'info'),
-                metricSegment('Laps', '3 laps', 'info')
-              ])
-            ]
-          });
+          return withChrome(metricsModel(
+            'fuel-calculator',
+            'Fuel Calculator',
+            'fuel range',
+            metricSections.flatMap((section) => section.rows),
+            `usage ${formatFuelPerLap(3.1)} (measured green lap) | range 23.9 laps | 34.2 laps/tank | history user | measured min/avg/max 3.0/3.1/3.2 L/lap`,
+            [],
+            metricSections,
+            [
+              { key: 'timeRemaining', value: '06:37:08' }
+            ]));
         }
-        const visibleStintRows = usageLabel != null ? stintRows.slice(0, 1) : stintRows;
-        metricSections.push({ title: 'Stint Targets', rows: visibleStintRows });
+        metricSections.push({ title: 'Stint Targets', rows: stintRows });
         return withChrome(metricsModel(
           'fuel-calculator',
           'Fuel Calculator',
@@ -1787,7 +1810,7 @@ function reviewGapPoints(overlayState) {
     return [];
   }
 
-  return [7.2, 6.8, 6.3, 5.9, 5.5, 5.1];
+  return [240.8, 240.1, 239.5, 238.8, 238.2, 237.6, 237.1, 236.5];
 }
 
 function reviewEmptyGapGraph() {
@@ -1822,14 +1845,14 @@ function reviewGapGraph() {
   const endSeconds = startSeconds + 420;
   const timestampStart = Date.parse('2026-05-17T12:00:00.000Z');
   const trend = [
-    { offset: 0, leader: 0, ahead: 231.7, focus: 238.9, threat: 250.6 },
-    { offset: 60, leader: 0.4, ahead: 232.1, focus: 238.5, threat: 249.2 },
-    { offset: 120, leader: 0.1, ahead: 232.5, focus: 238.1, threat: 247.8 },
-    { offset: 180, leader: 0.6, ahead: 232.8, focus: 237.7, threat: 246.1 },
-    { offset: 240, leader: 0.3, ahead: 233.1, focus: 237.4, threat: 244.8 },
-    { offset: 300, leader: 0.2, ahead: 233.4, focus: 237.1, threat: 243.2 },
-    { offset: 360, leader: 0.5, ahead: 233.8, focus: 236.8, threat: 241.8 },
-    { offset: 420, leader: 0.0, ahead: 234.2, focus: 236.5, threat: 240.4 }
+    { offset: 0, leader: 0, ahead: 234.0, focus: 240.8, threat: 251.0 },
+    { offset: 60, leader: 0.4, ahead: 234.2, focus: 240.1, threat: 249.4 },
+    { offset: 120, leader: 0.1, ahead: 234.4, focus: 239.5, threat: 247.8 },
+    { offset: 180, leader: 0.6, ahead: 234.6, focus: 238.8, threat: 246.2 },
+    { offset: 240, leader: 0.3, ahead: 234.8, focus: 238.2, threat: 244.6 },
+    { offset: 300, leader: 0.2, ahead: 235.0, focus: 237.6, threat: 243.2 },
+    { offset: 360, leader: 0.5, ahead: 235.2, focus: 237.1, threat: 241.8 },
+    { offset: 420, leader: 0.0, ahead: 235.4, focus: 236.5, threat: 240.4 }
   ];
   const point = (sample, carIdx, gapSeconds, isReference, isClassLeader, classPosition, index) => ({
     timestampUtc: new Date(timestampStart + sample.offset * 1000).toISOString(),
@@ -1843,6 +1866,12 @@ function reviewGapGraph() {
   });
   const referencePoints = trend.map((sample, index) => point(sample, 42, sample.focus, true, false, 24, index));
   const threat = { carIdx: 43, label: 'P25', gainSeconds: 5.3 };
+  const focusPit = { seconds: 82, lap: 12, isActive: true };
+  const comparisonPit = { seconds: 88, lap: 12, isActive: false };
+  const threatPit = { seconds: 91, lap: 13, isActive: false };
+  const focusTire = { label: 'Dry', shortLabel: 'D', isWet: false };
+  const comparisonTire = { label: 'Dry', shortLabel: 'D', isWet: false };
+  const threatTire = { label: 'Wet', shortLabel: 'W', isWet: true };
   const series = [
     reviewGapSeries(8, false, true, 1, trend.map((sample, index) => point(sample, 8, sample.leader, false, true, 1, index))),
     reviewGapSeries(41, false, false, 23, trend.map((sample, index) => point(sample, 41, sample.ahead, false, false, 23, index))),
@@ -1856,17 +1885,17 @@ function reviewGapGraph() {
     driverChanges: [],
     startSeconds,
     endSeconds,
-    maxGapSeconds: 20,
-    lapReferenceSeconds: 40.5,
+    maxGapSeconds: 250,
+    lapReferenceSeconds: 525.8,
     selectedSeriesCount: series.length,
     trendMetrics: [
       { label: '5L', focusGapChangeSeconds: -1.8, chaser: threat, state: 'ready', stateLabel: null },
       { label: '10L', focusGapChangeSeconds: -3.4, chaser: threat, state: 'ready', stateLabel: null },
-      { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'pit', stateLabel: null },
-      { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'pitLap', stateLabel: null },
+      { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'pit', stateLabel: null, primaryPit: focusPit, comparisonPit, threatPit },
+      { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'pitLap', stateLabel: null, primaryPit: focusPit, comparisonPit, threatPit },
       { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, comparisonText: '18L', threatText: '17L' },
-      { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null },
-      { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, comparisonText: '1:32.540', threatText: '1:32.120' },
+      { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null, primaryTire: focusTire, comparisonTire, threatTire },
+      { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, comparisonText: '8:13.000', threatText: '8:12.120' },
       { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track', threatText: 'Track' }
     ],
     activeThreat: { label: '5L', chaser: threat, state: 'ready', focusGapChangeSeconds: null },
@@ -1890,7 +1919,7 @@ function reviewGapSeries(carIdx, isReference, isClassLeader, classPosition, poin
     isReference,
     isClassLeader,
     classPosition,
-    alpha: 0.35,
+    alpha: 1,
     isStickyExit: false,
     isStale: false,
     points

@@ -227,8 +227,8 @@ function ensureInputStyle() {
       grid-row: 2;
       align-self: center;
       justify-self: center;
-      width: min(52px, 100%);
-      height: min(52px, 100%);
+      width: min(32px, 100%);
+      height: min(32px, 100%);
       max-height: 100%;
     }
 

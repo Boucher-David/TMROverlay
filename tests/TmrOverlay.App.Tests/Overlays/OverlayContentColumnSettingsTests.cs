@@ -3,6 +3,7 @@ using System.Reflection;
 using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.Content;
+using TmrOverlay.App.Overlays.FuelCalculator;
 using TmrOverlay.App.Overlays.Flags;
 using TmrOverlay.App.Overlays.InputState;
 using TmrOverlay.App.Overlays.PitService;
@@ -278,6 +279,33 @@ public sealed class OverlayContentColumnSettingsTests
         Assert.Equal(
             new Size(665, 275),
             ScaledSize(method, StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Practice));
+    }
+
+    [Fact]
+    public void FuelCalculatorSizingUsesCompactNonRaceBrowserSourceHeight()
+    {
+        var method = typeof(OverlayManager).GetMethod(
+            "ScaledOverlaySize",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var fuel = new ApplicationSettings().GetOrAddOverlay(
+            FuelCalculatorOverlayDefinition.Definition.Id,
+            FuelCalculatorOverlayDefinition.Definition.DefaultWidth,
+            FuelCalculatorOverlayDefinition.Definition.DefaultHeight);
+
+        Assert.Equal(
+            new Size(503, 184),
+            BrowserOverlayRecommendedSize.For(FuelCalculatorOverlayDefinition.Definition, fuel, OverlaySessionKind.Practice));
+        Assert.Equal(
+            new Size(503, 184),
+            BrowserOverlayRecommendedSize.For(FuelCalculatorOverlayDefinition.Definition, fuel, OverlaySessionKind.Qualifying));
+        Assert.Equal(
+            new Size(503, 315),
+            BrowserOverlayRecommendedSize.For(FuelCalculatorOverlayDefinition.Definition, fuel, OverlaySessionKind.Race));
+        Assert.Equal(
+            new Size(503, 184),
+            ScaledSize(method, FuelCalculatorOverlayDefinition.Definition, fuel, OverlaySessionKind.Practice));
     }
 
     [Fact]

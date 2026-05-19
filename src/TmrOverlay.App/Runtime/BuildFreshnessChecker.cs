@@ -7,6 +7,10 @@ internal static class BuildFreshnessChecker
     [
         "*.cs",
         "*.csproj",
+        "*.css",
+        "*.html",
+        "*.js",
+        "*.json",
         "appsettings.json",
         "Package.swift",
         "*.swift",
@@ -15,8 +19,13 @@ internal static class BuildFreshnessChecker
 
     public static BuildFreshnessResult Check()
     {
-        var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
-        var buildStamp = FindBuildStamp(AppContext.BaseDirectory);
+        return Check(AppContext.BaseDirectory);
+    }
+
+    internal static BuildFreshnessResult Check(string appBaseDirectory)
+    {
+        var repositoryRoot = FindRepositoryRoot(appBaseDirectory);
+        var buildStamp = FindBuildStamp(appBaseDirectory);
 
         if (repositoryRoot is null || buildStamp is null)
         {

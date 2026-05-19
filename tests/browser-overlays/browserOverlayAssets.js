@@ -524,6 +524,8 @@ export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = '
   }[id] || [400, 300];
   if (id === 'input-state') {
     base[0] = inputStateBaseWidth(overlayState, base[0], previewMode);
+  } else if (id === 'fuel-calculator') {
+    base[1] = fuelCalculatorBaseHeight(previewMode, base[1]);
   } else if (id === 'standings' || id === 'relative') {
     base[0] = tableBaseWidth(id, overlayState, base[0], previewMode);
     if (id === 'relative') {
@@ -549,6 +551,11 @@ export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = '
 function settingsBrowserSize(id, overlayState = {}, previewMode = 'off') {
   const size = settingsBrowserSourceSize(id, overlayState, previewMode);
   return `${size.width} x ${size.height}`;
+}
+
+function fuelCalculatorBaseHeight(previewMode, fullHeight) {
+  const session = sizingSession('fuel-calculator', previewMode);
+  return session === 'practice' || session === 'qualifying' ? 184 : fullHeight;
 }
 
 function settingsChromeAdjustedBaseHeight(id, overlayState, fullHeight, previewMode = 'off') {
@@ -1213,17 +1220,36 @@ function fuelStrategy(live, unitSystem) {
     { title: 'Race Information', rows: [planRow, fuelRow] }
   ];
   if (usageLabel != null) {
-    metricSections.push({ title: 'Fuel Usage', rows: [fuelUsageRow(usageLabel, fuel, unitSystem)] });
+    const nonRaceSections = [
+      {
+        title: 'Fuel Range',
+        rows: [fuelMetricRow('Fuel', fuelNonRaceFuelText(currentFuel, fuelPerLap, fullTankLaps, unitSystem), currentFuel == null ? 'waiting' : 'info', [
+          fuelMetricSegment('Level', formatFuelVolume(currentFuel, unitSystem), currentFuel == null ? 'waiting' : 'info'),
+          fuelMetricSegment('Usage', formatFuelPerLap(fuelPerLap, unitSystem), fuelPerLap == null ? 'waiting' : 'info'),
+          fuelMetricSegment('Range', formatFuelLaps(currentFuel != null && fuelPerLap != null ? currentFuel / fuelPerLap : null), currentFuel != null && fuelPerLap != null ? 'info' : 'waiting'),
+          fuelMetricSegment('Tank', formatFuelLaps(fullTankLaps), fullTankLaps == null ? 'waiting' : 'info')
+        ])]
+      },
+      { title: 'Fuel Usage', rows: [fuelUsageRow(usageLabel, fuel, unitSystem)] }
+    ];
+    const source = fuelPerLap != null
+      ? `usage ${formatFuelPerLap(fuelPerLap, unitSystem)} (measured green lap) | range ${formatFuelLaps(currentFuel != null ? currentFuel / fuelPerLap : null)} | ${formatFuelLaps(fullTankLaps, ' laps/tank')} | history none`
+      : 'source: waiting';
+    return { status: currentFuel == null ? 'waiting for fuel' : fuelPerLap == null ? 'fuel level' : 'fuel range', metricSections: nonRaceSections, source };
   }
-  const visibleStintRows = usageLabel != null ? stintRows.slice(0, 1) : stintRows;
-  if (visibleStintRows.length > 0) {
-    metricSections.push({ title: 'Stint Targets', rows: visibleStintRows });
+  if (stintRows.length > 0) {
+    metricSections.push({ title: 'Stint Targets', rows: stintRows });
   }
 
   const source = fuelPerLap != null
     ? `burn ${formatFuelPerLap(fuelPerLap, unitSystem)} (measured green lap) | ${formatFuelLaps(fullTankLaps, ' laps/tank')} | history none`
     : 'source: waiting';
   return { status, metricSections, source };
+}
+
+function fuelNonRaceFuelText(currentFuel, fuelPerLap, fullTankLaps, unitSystem) {
+  const range = currentFuel != null && fuelPerLap != null ? currentFuel / fuelPerLap : null;
+  return `${formatFuelVolume(currentFuel, unitSystem)} | range ${formatFuelLaps(range)} | tank ${formatFuelLaps(fullTankLaps)}`;
 }
 
 function fuelUsageLabel(session) {

@@ -12,7 +12,10 @@ import {
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { browserOverlayPages } from '../../tests/browser-overlays/browserOverlayAssets.js';
+import {
+  browserOverlayPages,
+  renderOverlayHtml
+} from '../../tests/browser-overlays/browserOverlayAssets.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const overlayPages = browserOverlayPages();
@@ -358,6 +361,7 @@ async function captureRoute(page, route, manifest) {
   await page.waitForTimeout(settleMilliseconds);
   const model = await readOverlayModel(route);
   const dom = await readDomDiagnostics(element);
+  const runtimeAssets = await readRuntimeAssetEvidence(page, route);
 
   const screenshotPath = join(outputRoot, route.relativePath);
   mkdirSync(dirname(screenshotPath), { recursive: true });
@@ -428,6 +432,7 @@ async function captureRoute(page, route, manifest) {
     layout: dom.layout,
     uiEvidence: uiEvidence(route, dom),
     modelEvidence: modelLayoutEvidence(model, dom.layout),
+    runtimeAssets,
     scenarioEvidence: scenarioEvidence(route, model, dom.layout),
     width: artifact.width,
     height: artifact.height,
@@ -512,6 +517,80 @@ async function readOverlayModel(route) {
 
   const payload = await response.json();
   return payload?.model || null;
+}
+
+async function readRuntimeAssetEvidence(page, route) {
+  if (!route.overlayId || !route.surface?.endsWith('-overlay')) {
+    return null;
+  }
+
+  const expected = expectedRuntimeAssetEvidence(route.overlayId);
+  const actualText = await page.evaluate(() => {
+    const styleText = document.querySelector('style')?.textContent || '';
+    const overlayScripts = Array.from(document.querySelectorAll('script'))
+      .map((node) => node.textContent || '')
+      .filter((text) => !text.includes("/review/events") && !text.includes("EventSource('/review/events')"));
+    const scriptText = overlayScripts
+      .sort((left, right) => right.length - left.length)[0] || '';
+    return {
+      bodyClass: document.body?.className || '',
+      styleText,
+      scriptText,
+      styleCount: document.querySelectorAll('style').length,
+      scriptCount: document.querySelectorAll('script').length
+    };
+  });
+  const actual = {
+    bodyClass: actualText.bodyClass,
+    styleCount: actualText.styleCount,
+    scriptCount: actualText.scriptCount,
+    overlayStyleBytes: actualText.styleText.length,
+    overlayStyleHash: sha256Text(actualText.styleText),
+    overlayScriptBytes: actualText.scriptText.length,
+    overlayScriptHash: sha256Text(actualText.scriptText)
+  };
+
+  return {
+    contract: 'browser-overlay-runtime-assets/v1',
+    overlayId: route.overlayId,
+    expected,
+    actual,
+    matchesExpected:
+      actual.bodyClass === expected.bodyClass
+      && actual.overlayStyleHash === expected.overlayStyleHash
+      && actual.overlayScriptHash === expected.overlayScriptHash
+  };
+}
+
+function expectedRuntimeAssetEvidence(overlayId) {
+  const html = renderOverlayHtml(overlayId);
+  const styleText = extractTagText(html, 'style').join('\n');
+  const scriptText = extractTagText(html, 'script')
+    .filter((text) => !text.includes('/review/events'))
+    .sort((left, right) => right.length - left.length)[0] || '';
+  const bodyClass = /<body\s+class="([^"]*)"/i.exec(html)?.[1] || '';
+  return {
+    source: 'tests/browser-overlays/renderOverlayHtml',
+    bodyClass,
+    overlayStyleBytes: styleText.length,
+    overlayStyleHash: sha256Text(styleText),
+    overlayScriptBytes: scriptText.length,
+    overlayScriptHash: sha256Text(scriptText)
+  };
+}
+
+function extractTagText(html, tagName) {
+  const blocks = [];
+  const expression = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'gi');
+  let match;
+  while ((match = expression.exec(html)) !== null) {
+    blocks.push(match[1] || '');
+  }
+  return blocks;
+}
+
+function sha256Text(value) {
+  return createHash('sha256').update(String(value || '')).digest('hex');
 }
 
 async function readDomDiagnostics(element) {
@@ -1954,7 +2033,7 @@ function browserFallbackGraphGeometry(graph, canvasBounds, local) {
 }
 
 function graphSeriesGeometry(graph, scale, plot, maxGapSeconds, canvasBounds, series, sourceIndex, drawIndex) {
-  const baseColor = graphSeriesColor(series, drawIndex, graph?.threatCarIdx);
+  const baseColor = graphSeriesColor(series, sourceIndex, graph?.threatCarIdx);
   const alpha = clamp01(numberOr(series?.alpha, 1));
   const effectiveAlpha = alpha * graphSeriesAlphaMultiplier(series, graph?.threatCarIdx);
   const points = (Array.isArray(series?.points) ? series.points : [])
@@ -2326,7 +2405,7 @@ function browserGapGraphLayout(width, height) {
 function gapMetricsTableWidth(width) {
   const metricsWidth = 220;
   const availableAfterTable = width - 58 - 38 - 10 - metricsWidth;
-  return availableAfterTable >= 300 ? metricsWidth : 0;
+  return availableAfterTable >= 260 ? metricsWidth : 0;
 }
 
 function graphGridLines(graph, scale, plot, maxGapSeconds, canvasBounds) {
@@ -2341,13 +2420,13 @@ function graphGridLines(graph, scale, plot, maxGapSeconds, canvasBounds) {
     const aheadStep = niceGridStep(numberOr(scale?.aheadSeconds, 1) / 2);
     for (let value = aheadStep; value < numberOr(scale?.aheadSeconds, 0); value += aheadStep) {
       const y = gapDeltaToY(-value, scale, plot);
-      lines.push(graphLine('gap-grid-ahead', plot.x, y, plot.x + plot.width, y, 'rgba(140, 174, 212, 0.18)', 1, canvasBounds));
+      lines.push(graphLine('focus-ahead-grid', plot.x, y, plot.x + plot.width, y, 'rgba(140, 174, 212, 0.18)', 1, canvasBounds));
     }
 
     const behindStep = niceGridStep(numberOr(scale?.behindSeconds, 1) / 2);
     for (let value = behindStep; value < numberOr(scale?.behindSeconds, 0); value += behindStep) {
       const y = gapDeltaToY(value, scale, plot);
-      lines.push(graphLine('gap-grid-behind', plot.x, y, plot.x + plot.width, y, 'rgba(140, 174, 212, 0.18)', 1, canvasBounds));
+      lines.push(graphLine('focus-behind-grid', plot.x, y, plot.x + plot.width, y, 'rgba(140, 174, 212, 0.18)', 1, canvasBounds));
     }
 
     return lines;

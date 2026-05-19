@@ -185,6 +185,10 @@
       min-width: 0;
     }
 
+    body.fuel-calculator-page .overlay.fuel-non-race {
+      height: min(184px, calc(100vh - 16px));
+    }
+
     body.relative-page .overlay {
       width: min(360px, calc(100vw - 16px));
       min-width: 0;

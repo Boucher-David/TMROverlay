@@ -367,6 +367,7 @@
     }
 
     function renderOverlayModel(model) {
+      updateOverlayRuntimeClasses(model);
       if (!model) {
         contentEl.innerHTML = '<div class="empty">Waiting for overlay model.</div>';
         renderHeaderItems(null, 'waiting for model');
@@ -416,6 +417,24 @@
 
       renderHeaderItems(model, model.status || 'live');
       renderFooterSource(model);
+    }
+
+    function updateOverlayRuntimeClasses(model) {
+      if (!overlayEl) return;
+      overlayEl.classList.toggle('fuel-non-race', isFuelNonRaceModel(model));
+    }
+
+    function isFuelNonRaceModel(model) {
+      if (model?.overlayId !== 'fuel-calculator') {
+        return false;
+      }
+
+      const titles = Array.isArray(model.metricSections)
+        ? model.metricSections.map((section) => String(section?.title || '').trim())
+        : [];
+      return titles.includes('Fuel Range')
+        && !titles.includes('Race Information')
+        && !titles.includes('Stint Targets');
     }
 
     function renderHeaderItems(model, fallbackStatus) {
@@ -589,13 +608,15 @@
       drawGapLeaderMarkers(ctx, graph, plot);
 
       const labels = [];
-      const orderedSeries = [...series].sort((a, b) =>
-        Number(Boolean(a?.isClassLeader)) - Number(Boolean(b?.isClassLeader))
-        || Number(Boolean(a?.isReference)) - Number(Boolean(b?.isReference)));
-      orderedSeries.forEach((item, index) => {
+      const orderedSeries = series
+        .map((item, sourceIndex) => ({ item, sourceIndex }))
+        .sort((a, b) =>
+          Number(Boolean(a.item?.isClassLeader)) - Number(Boolean(b.item?.isClassLeader))
+          || Number(Boolean(a.item?.isReference)) - Number(Boolean(b.item?.isReference)));
+      orderedSeries.forEach(({ item, sourceIndex }) => {
         if (scale?.isFocusRelative === true && item?.isClassLeader) return;
 
-        const color = graphSeriesColor(item, index, graph?.threatCarIdx);
+        const color = graphSeriesColor(item, sourceIndex, graph?.threatCarIdx);
         const alpha = clamp01(numberOr(item?.alpha, 1)) * graphSeriesAlphaMultiplier(item, graph?.threatCarIdx);
         const pointsForSeries = (Array.isArray(item?.points) ? item.points : [])
           .filter((point) => Number.isFinite(point?.axisSeconds) && Number.isFinite(point?.gapSeconds))
@@ -914,7 +935,7 @@
     function gapMetricsTableWidth(width) {
       const metricsWidth = 220;
       const availableAfterTable = width - 58 - 38 - 10 - metricsWidth;
-      return availableAfterTable >= 300 ? metricsWidth : 0;
+      return availableAfterTable >= 260 ? metricsWidth : 0;
     }
 
     function drawGapThreatAnnotation(ctx, metric, plot) {

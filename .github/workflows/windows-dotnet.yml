@@ -367,6 +367,7 @@ jobs:
     needs:
       - windows_screenshots
       - windows_installer_screenshots
+    if: ${{ needs.windows_screenshots.result == 'success' && needs.windows_installer_screenshots.result == 'success' }}
 
     steps:
       - name: Download Windows overlay screenshots

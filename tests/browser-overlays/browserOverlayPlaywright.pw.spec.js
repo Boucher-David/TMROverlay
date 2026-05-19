@@ -318,6 +318,49 @@ test.describe('browser overlay Playwright integration', () => {
     expect(overlayWidth).toBeLessThanOrEqual(386);
   });
 
+  test('keeps input steering wheel compact inside the browser rail', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'input-state', {
+      live: inputStateLiveSnapshot(0, 0.72)
+    });
+
+    await page.setViewportSize({ width: 520, height: 260 });
+    await page.goto('http://localhost:8765/overlays/input-state');
+
+    await expect(page.locator('.input-wheel svg')).toBeVisible();
+    const wheel = await page.locator('.input-wheel svg').boundingBox();
+    const rail = await page.locator('.input-rail').boundingBox();
+
+    expect(wheel).not.toBeNull();
+    expect(rail).not.toBeNull();
+    expect(wheel?.width).toBeGreaterThan(20);
+    expect(wheel?.height).toBeGreaterThan(20);
+    expect(wheel?.width).toBeLessThanOrEqual(40);
+    expect(wheel?.height).toBeLessThanOrEqual(40);
+    expect(wheel.x).toBeGreaterThanOrEqual(rail.x);
+    expect(wheel.x + wheel.width).toBeLessThanOrEqual(rail.x + rail.width);
+  });
+
+  test('renders fuel practice as compact range and usage sections', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'fuel-calculator', {
+      live: freshLiveSnapshot({}),
+      model: fuelPracticeDisplayModel()
+    });
+
+    await page.setViewportSize({ width: 520, height: 260 });
+    await page.goto('http://localhost:8765/overlays/fuel-calculator?preview=practice');
+
+    await expect(page.locator('.overlay')).toHaveClass(/fuel-non-race/);
+    await expect(page.locator('.metric-section-title')).toHaveText(['Fuel Range', 'Fuel Usage']);
+    await expect(page.locator('#content')).toContainText('Practice Usage');
+    await expect(page.locator('#content')).not.toContainText('Race Information');
+    await expect(page.locator('#content')).not.toContainText('Stint Targets');
+
+    const overlay = await page.locator('.overlay').boundingBox();
+    expect(overlay?.width).toBe(503);
+    expect(overlay?.height).toBe(184);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
   test('updates table chrome and columns while localhost overlay stays mounted', async ({ page }) => {
     const initial = standingsDisplayModel({
       headerItems: [{ key: 'timeRemaining', value: '06:37:08', tone: 'success' }]
@@ -1252,6 +1295,49 @@ function standingsWithoutPitColumn(overrides = {}) {
           isPit: false
         }
       : row)
+  };
+}
+
+function fuelPracticeDisplayModel(overrides = {}) {
+  return {
+    overlayId: 'fuel-calculator',
+    title: 'Fuel Calculator',
+    status: 'fuel range',
+    source: 'usage 3.1 L/lap (measured green lap) | range 23.9 laps | 34.2 laps/tank',
+    bodyKind: 'metrics',
+    metrics: [],
+    metricSections: [
+      {
+        title: 'Fuel Range',
+        rows: [{
+          label: 'Fuel',
+          value: '74.0 L | range 23.9 laps | tank 34.2 laps',
+          tone: 'info',
+          segments: [
+            { label: 'Level', value: '74.0 L', tone: 'info' },
+            { label: 'Usage', value: '3.1 L/lap', tone: 'info' },
+            { label: 'Range', value: '23.9 laps', tone: 'info' },
+            { label: 'Tank', value: '34.2 laps', tone: 'info' }
+          ]
+        }]
+      },
+      {
+        title: 'Fuel Usage',
+        rows: [{
+          label: 'Practice Usage',
+          value: 'min 3.0 L/lap | avg 3.1 L/lap | max 3.2 L/lap',
+          tone: 'info',
+          segments: [
+            { label: 'Min', value: '3.0 L/lap', tone: 'info' },
+            { label: 'Avg', value: '3.1 L/lap', tone: 'info' },
+            { label: 'Max', value: '3.2 L/lap', tone: 'info' },
+            { label: 'Laps', value: '3 laps', tone: 'info' }
+          ]
+        }]
+      }
+    ],
+    headerItems: [{ key: 'timeRemaining', value: '06:37:08', tone: 'success' }],
+    ...overrides
   };
 }
 

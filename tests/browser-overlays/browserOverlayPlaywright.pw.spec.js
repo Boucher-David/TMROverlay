@@ -9,6 +9,7 @@ import {
   renderInstallerReviewHtml,
   renderSettingsGeneralReviewHtml
 } from './browserOverlayAssets.js';
+import { startReviewServer } from './reviewServerTestHost.js';
 
 test.describe('browser overlay Playwright integration', () => {
   test('renders standings in a real browser layout without horizontal overflow', async ({ page }) => {
@@ -315,6 +316,92 @@ test.describe('browser overlay Playwright integration', () => {
     const overlayWidth = await boundingBoxWidth(page.locator('.overlay'));
     expect(overlayWidth).toBeGreaterThanOrEqual(374);
     expect(overlayWidth).toBeLessThanOrEqual(386);
+  });
+
+  test('updates table chrome and columns while localhost overlay stays mounted', async ({ page }) => {
+    const initial = standingsDisplayModel({
+      headerItems: [{ key: 'timeRemaining', value: '06:37:08', tone: 'success' }]
+    });
+    const compact = standingsWithoutPitColumn({
+      headerItems: [{ key: 'timeRemaining', value: '00:42', tone: 'warning' }]
+    });
+    await installBrowserOverlayRoutes(page, 'standings', {
+      live: freshLiveSnapshot({}),
+      model: [initial, compact]
+    });
+
+    await page.setViewportSize({ width: 692, height: 520 });
+    await page.goto('http://localhost:8765/overlays/standings');
+
+    await expect(page.locator('thead th')).toHaveText(['CLS', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST', 'PIT']);
+    await expect(page.locator('.header-item')).toHaveAttribute('data-tone', 'success');
+    await expect(page.locator('tbody tr').last()).toContainText('IN');
+
+    await expect.poll(async () => page.locator('.header-item').getAttribute('data-tone'), {
+      timeout: 3500
+    }).toBe('warning');
+    await expect(page.locator('.header-item')).toHaveAttribute('data-key', 'timeRemaining');
+    await expect(page.locator('.header-item')).toHaveText('00:42');
+    await expect(page.locator('thead th')).toHaveText(['CLS', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST']);
+    await expect(page.locator('tbody tr').last()).not.toContainText('IN');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('clears stale rendered DOM when localhost model becomes product-hidden', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'standings', {
+      live: freshLiveSnapshot({}),
+      model: [
+        standingsDisplayModel(),
+        hiddenDisplayModel('standings', 'disabled by settings')
+      ]
+    });
+
+    await page.setViewportSize({ width: 692, height: 520 });
+    await page.goto('http://localhost:8765/overlays/standings');
+
+    await expect(page.locator('tbody tr')).toHaveCount(6);
+    await expect(page.locator('.header-item')).toHaveCount(1);
+
+    await expect.poll(async () => page.locator('.overlay').evaluate((element) =>
+      window.getComputedStyle(element).opacity
+    ), { timeout: 3500 }).toBe('0');
+    await expect(page.locator('tbody tr')).toHaveCount(0);
+    await expect(page.locator('thead th')).toHaveCount(0);
+    await expect(page.locator('.header-item')).toHaveCount(0);
+    await expect(page.locator('#content')).toBeEmpty();
+  });
+
+  test('clears stale input graph and rail when all input content becomes disabled', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'input-state', {
+      live: inputStateLiveSnapshot(0, 0.72),
+      settings: [
+        {},
+        {
+          showThrottleTrace: false,
+          showBrakeTrace: false,
+          showClutchTrace: false,
+          showThrottle: false,
+          showBrake: false,
+          showClutch: false,
+          showSteering: false,
+          showGear: false,
+          showSpeed: false
+        }
+      ]
+    });
+
+    await page.setViewportSize({ width: 520, height: 260 });
+    await page.goto('http://localhost:8765/overlays/input-state');
+
+    await expect(page.locator('.input-graph')).toBeVisible();
+    await expect(page.locator('.input-rail')).toBeVisible();
+
+    await expect.poll(async () => page.locator('.overlay').evaluate((element) =>
+      element.classList.contains('input-empty')
+    ), { timeout: 3500 }).toBe(true);
+    await expect(page.locator('.input-graph')).toHaveCount(0);
+    await expect(page.locator('.input-rail')).toHaveCount(0);
+    await expect(page.locator('.empty')).toHaveText('no input content enabled');
   });
 
   test('renders General settings preview controls without forcing hidden overlays', async ({ page }) => {
@@ -782,6 +869,63 @@ test.describe('browser overlay Playwright integration', () => {
     expect(streamChatModelResponse.model.rootOpacity).toBe(0.9);
   });
 
+  test('application settings patches update real review-server model evidence', async ({ page }) => {
+    const reviewServer = await startReviewServer();
+    try {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.goto(`${reviewServer.baseUrl}/review/app?preview=race&tab=relative&region=content`);
+
+      await (await sessionToggleForMatrixItem(page, 'Pit status', 'Race')).click();
+      await expect.poll(async () => {
+        const model = await fetchOverlayModelFromPage(page, 'relative', 'race');
+        return (model.columns || []).some((column) => column.dataKey === 'pit');
+      }, { timeout: 3500 }).toBe(true);
+
+      const modelWithPit = await fetchOverlayModelFromPage(page, 'relative', 'race');
+      expect(modelWithPit.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+        key: 'relative.content.relative.pit.enabled',
+        session: 'race',
+        value: true
+      }));
+
+      await (await sessionToggleForMatrixItem(page, 'Pit status', 'Race')).click();
+      await expect.poll(async () => {
+        const model = await fetchOverlayModelFromPage(page, 'relative', 'race');
+        return (model.columns || []).some((column) => column.dataKey === 'pit');
+      }, { timeout: 3500 }).toBe(false);
+
+      const modelWithoutPit = await fetchOverlayModelFromPage(page, 'relative', 'race');
+      expect(modelWithoutPit.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+        key: 'relative.content.relative.pit.enabled',
+        session: 'race',
+        value: false
+      }));
+      expect(modelWithoutPit.effectiveSettings.rendered.rowCount).toBe(11);
+
+      await page.getByRole('tab', { name: 'Header' }).click();
+      await page.locator('.chrome-check button').nth(2).click();
+      await page.getByRole('tab', { name: 'General' }).click();
+
+      await expect(page.getByText('OBS size 360 x 314')).toBeVisible();
+      const modelWithoutHeader = await fetchOverlayModelFromPage(page, 'relative', 'race');
+      expect(modelWithoutHeader.headerItems || []).toEqual([]);
+      expect(modelWithoutHeader.effectiveSettings.rendered.headerItems).toEqual([]);
+      expect(modelWithoutHeader.effectiveSettings.rendered.browserSource).toMatchObject({
+        baseWidth: 360,
+        baseHeight: 314,
+        width: 360,
+        height: 314,
+        scalePercent: 100
+      });
+      expect(modelWithoutHeader.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+        key: 'chrome.header.time-remaining.race',
+        value: false
+      }));
+    } finally {
+      await reviewServer.stop();
+    }
+  });
+
   test('application browser source copy button writes the localhost overlay URL', async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'clipboard', {
@@ -945,9 +1089,12 @@ async function installBrowserOverlayRoutes(page, overlayId, fixture) {
     }
 
     const advancesLiveFrame = url.pathname === `/api/overlay-model/${overlayId}`;
+    const frameKey = advancesLiveFrame ? 'frame' : url.pathname;
     const payload = browserOverlayApiResponse(overlayId, url.pathname, {
       ...fixture,
-      live: resolveLiveFixture(fixture.live, advancesLiveFrame ? 'frame' : url.pathname, liveFrameIndex)
+      live: resolveFrameFixture(fixture.live, frameKey, liveFrameIndex),
+      settings: resolveFrameFixture(fixture.settings, frameKey, liveFrameIndex),
+      model: resolveFrameFixture(fixture.model, frameKey, liveFrameIndex)
     });
     if (advancesLiveFrame) {
       liveFrameIndex += 1;
@@ -986,16 +1133,37 @@ async function boundingBoxWidth(locator) {
   return width;
 }
 
-function resolveLiveFixture(live, path, frameIndex) {
+function resolveFrameFixture(value, path, frameIndex) {
   if (path !== 'frame') {
-    return Array.isArray(live) ? live[0] : typeof live === 'function' ? live(0) : live;
+    return Array.isArray(value) ? value[0] : typeof value === 'function' ? value(0) : value;
   }
 
-  if (Array.isArray(live)) {
-    return live[Math.min(frameIndex, live.length - 1)];
+  if (Array.isArray(value)) {
+    return value[Math.min(frameIndex, value.length - 1)];
   }
 
-  return typeof live === 'function' ? live(frameIndex) : live;
+  return typeof value === 'function' ? value(frameIndex) : value;
+}
+
+async function sessionToggleForMatrixItem(page, label, session) {
+  const sessionIndex = { Practice: 0, Qualifying: 1, Race: 2 }[session];
+  expect(sessionIndex).toBeDefined();
+  const labels = (await page.locator('.matrix-item').allTextContents())
+    .map((text) => text.trim());
+  const rowIndex = labels.findIndex((candidate) => candidate === label);
+  expect(rowIndex).toBeGreaterThanOrEqual(0);
+  return page.locator('.matrix-session button').nth(rowIndex * 3 + sessionIndex);
+}
+
+async function fetchOverlayModelFromPage(page, overlayId, preview = 'race') {
+  return page.evaluate(async ({ overlayId, preview }) => {
+    const response = await fetch(`/api/overlay-model/${overlayId}?preview=${preview}`);
+    if (!response.ok) {
+      throw new Error(`overlay model fetch failed ${response.status}`);
+    }
+    const payload = await response.json();
+    return payload.model;
+  }, { overlayId, preview });
 }
 
 function inputStateLiveSnapshot(index, throttle) {
@@ -1041,7 +1209,7 @@ function inputStateLiveSnapshot(index, throttle) {
   };
 }
 
-function standingsDisplayModel() {
+function standingsDisplayModel(overrides = {}) {
   return {
     overlayId: 'standings',
     title: 'Standings',
@@ -1067,7 +1235,39 @@ function standingsDisplayModel() {
       carRow(['3', '#91', 'Chaser', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
     ],
     metrics: [],
-    headerItems: [{ key: 'timeRemaining', value: '06:37:08' }]
+    headerItems: [{ key: 'timeRemaining', value: '06:37:08' }],
+    ...overrides
+  };
+}
+
+function standingsWithoutPitColumn(overrides = {}) {
+  const model = standingsDisplayModel(overrides);
+  return {
+    ...model,
+    columns: model.columns.filter((column) => column.dataKey !== 'pit'),
+    rows: model.rows.map((row) => row.cells.length > 0
+      ? {
+          ...row,
+          cells: row.cells.slice(0, -1),
+          isPit: false
+        }
+      : row)
+  };
+}
+
+function hiddenDisplayModel(overlayId, status) {
+  return {
+    overlayId,
+    title: overlayId,
+    status,
+    source: '',
+    bodyKind: 'table',
+    columns: [],
+    rows: [],
+    metrics: [],
+    points: [],
+    headerItems: [],
+    shouldRender: false
   };
 }
 

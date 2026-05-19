@@ -50,6 +50,7 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'pit-service', slug: 'idle', query: 'fixture=pit-service-idle' },
   { overlayId: 'input-state', slug: 'waiting', query: 'fixture=input-waiting' },
   { overlayId: 'input-state', slug: 'no-content', query: 'fixture=input-no-content' },
+  { overlayId: 'input-state', slug: 'min-scale', query: 'fixture=input-min-scale', viewport: { width: 328, height: 172 }, minScale: 0.6 },
   { overlayId: 'car-radar', slug: 'left', query: 'fixture=car-radar-left' },
   { overlayId: 'car-radar', slug: 'right', query: 'fixture=car-radar-right' },
   { overlayId: 'car-radar', slug: 'both-sides', query: 'fixture=car-radar-both-sides' },
@@ -159,7 +160,7 @@ function screenshotRoutes(surface) {
         routes.push(overlayRoute(
           `browser-overlays/${overlayId}-${variant.slug}.png`,
           `${withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
-          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant) }));
+          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null }));
       }
     }
     if (surface === 'localhost' || surface === 'all') {
@@ -177,7 +178,7 @@ function screenshotRoutes(surface) {
         routes.push(overlayRoute(
           `localhost-overlays/${overlayId}-${variant.slug}.png`,
           `${withPreview(`/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
-          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant) }));
+          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null }));
       }
       for (const alias of localhostAliasesForOverlay(overlayId)) {
         routes.push(overlayRoute(
@@ -314,7 +315,7 @@ function overlayRoute(relativePath, urlPath, metadata = {}) {
     relativePath,
     urlPath,
     selector: '.overlay',
-    viewport: configuredCanvasSize || { width: 1440, height: 900 },
+    viewport: metadata.viewport || configuredCanvasSize || { width: 1440, height: 900 },
     minBytes: 1_000,
     renderer: 'browser-overlay-assets',
     moduleAsset: metadata.overlayId ? `src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/${metadata.overlayId}.js` : null,
@@ -325,6 +326,7 @@ function overlayRoute(relativePath, urlPath, metadata = {}) {
     comparisonLimit: null,
     compositingMode: configuredCanvasSize ? 'solid-review-backdrop' : null,
     captureBackdrop: configuredCanvasSize ? configuredCanvasCaptureBackdrop : null,
+    minScale: metadata.minScale || null,
     ...metadata
   };
 }
@@ -394,6 +396,7 @@ async function captureRoute(page, route, manifest) {
     captureMode: route.captureMode || null,
     cropBounds: route.clip || null,
     configuredOverlaySize: route.configuredOverlaySize || null,
+    minScale: route.minScale || null,
     comparisonMode: route.comparisonMode || null,
     comparisonLimit: route.comparisonLimit || null,
     compositingMode: route.compositingMode || null,
@@ -567,7 +570,12 @@ async function readDomDiagnostics(element) {
           : null,
         gridTemplateRows: style.gridTemplateRows && style.gridTemplateRows !== 'none'
           ? style.gridTemplateRows
-          : null
+          : null,
+        borderRadius: style.borderRadius || null,
+        borderTopLeftRadius: style.borderTopLeftRadius || null,
+        borderTopRightRadius: style.borderTopRightRadius || null,
+        borderBottomRightRadius: style.borderBottomRightRadius || null,
+        borderBottomLeftRadius: style.borderBottomLeftRadius || null
       };
     };
     const controlKindFor = (tag, element) => {
@@ -660,6 +668,7 @@ async function readDomDiagnostics(element) {
       ['graph-canvas', '.model-graph, canvas'],
       ['flags', '.flags-v2'],
       ['flag-cell', '.flag-cell'],
+      ['flag-label', '.flag-label, .flag-cell text'],
       ['car-radar', '.radar-v2, .car-radar-v2'],
       ['radar-shape', '.radar-v2 rect, .radar-v2 circle, .radar-v2 path, .radar-v2 text, .car-radar-v2 rect, .car-radar-v2 circle, .car-radar-v2 path, .car-radar-v2 text'],
       ['track-map', '.track-map-v2, .track'],
@@ -1012,6 +1021,7 @@ function modelLayoutEvidence(model, layout) {
     flags: model.flags ? {
       count: arrayLength(model.flags?.flags),
       kinds: (Array.isArray(model.flags?.flags) ? model.flags.flags : []).map((flag) => stringOrNull(flag?.kind)),
+      visualKinds: (Array.isArray(model.flags?.flags) ? model.flags.flags : []).map((flag) => flagVisualKind(flag)),
       gridColumns: flagGrid(arrayLength(model.flags?.flags)).columns,
       gridRows: flagGrid(arrayLength(model.flags?.flags)).rows,
       grid: {
@@ -1260,18 +1270,24 @@ function flagCellEvidence(flags, layout) {
   const grid = flagGrid(renderedFlags.length);
   const svgBounds = findElementBounds(layout, 'flags', 'flags-v2') || findElementBounds(layout, 'content');
   const cells = svgBounds ? computedFlagCells(svgBounds, grid, renderedFlags.length) : elementsForRole(layout, 'flag-cell').map((element) => element.bounds);
+  const labelElements = elementsForRole(layout, 'flag-label');
   return renderedFlags.map((flag, index) => {
     const cellBounds = cells[index] || null;
+    const labelElement = labelElements.find((element) =>
+      rectIntersects(element.bounds, cellBounds)
+      && (!flag?.label || String(element.text || '').includes(String(flag.label))));
     return {
       index,
       row: Math.floor(index / Math.max(1, grid.columns)),
       column: index % Math.max(1, grid.columns),
       kind: stringOrNull(flag?.kind),
+      visualKind: flagVisualKind(flag),
       label: stringOrNull(flag?.label),
       detail: stringOrNull(flag?.detail),
       fill: flagColor(flag?.kind),
       bounds: cellBounds,
-      clothBounds: cellBounds ? flagClothBounds(cellBounds) : null
+      clothBounds: cellBounds ? flagClothBounds(cellBounds) : null,
+      labelBounds: labelElement?.bounds || null
     };
   });
 }
@@ -1319,6 +1335,13 @@ function flagClothBounds(cell) {
     width: clothWidth,
     height: clothHeight
   });
+}
+
+function flagVisualKind(flag) {
+  const kind = String(flag?.kind || '').trim().toLowerCase();
+  const label = String(flag?.label || '').trim().toLowerCase();
+  if (kind === 'debris' || label === 'debris') return 'debris';
+  return kind || null;
 }
 
 function flagColor(kind) {

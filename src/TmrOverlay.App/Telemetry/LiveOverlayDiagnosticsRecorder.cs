@@ -19,6 +19,24 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private const double MaximumContinuousSectorProgressDelta = 0.12d;
     private const int MaxPitWindowSamples = 20;
     private const int BlackFlagMask = 0x00010000 | 0x00020000 | 0x00080000 | 0x00200000 | 0x00400000;
+    private const int YellowFamilyFlagMask = 0x00000008
+        | 0x00000040
+        | 0x00000100
+        | 0x00000200
+        | 0x00002000
+        | 0x00004000
+        | 0x00008000;
+
+    private static readonly FlagBitDefinition[] YellowFamilyFlagBits =
+    [
+        new("Yellow", 0x00000008),
+        new("Debris", 0x00000040),
+        new("WavingYellow", 0x00000100),
+        new("OneToGreen", 0x00000200),
+        new("RandomWaving", 0x00002000),
+        new("Caution", 0x00004000),
+        new("WavingCaution", 0x00008000)
+    ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -34,8 +52,18 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private readonly object _sync = new();
     private readonly Dictionary<string, int> _sessionFrameCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _flagsRawFlagCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsYellowFamilyBitCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsYellowFamilyStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsCarIdxYellowFamilyBitCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsCarIdxYellowFamilyStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsRawToDisplayCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsRawToDisplayLabelCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsDisplayStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsDisplayLabelStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsDisplayTransitionCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _flagsDisplayKindCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _flagsDisplayCategoryCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsDisplayLabelCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _flagsToneCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _focusUnavailableReasonCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _focusUnavailableSessionKindCounts = new(StringComparer.OrdinalIgnoreCase);
@@ -45,6 +73,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private readonly Dictionary<string, int> _gapClassEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _gapOverallEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _radarSideStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _radarSideTransitionCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _radarFocusFrameCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _radarPlacementEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _fuelLevelEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
@@ -83,11 +112,22 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private int _flagsFramesWithSessionState;
     private int _flagsFramesWithRawFlags;
     private int _flagsFramesWithActiveRawFlags;
+    private int _flagsFramesWithYellowFamilyRawFlags;
+    private int _flagsFramesWithCarIdxYellowFamilyFlags;
     private int _flagsFramesWithDisplayFlags;
     private int _flagsWaitingFrames;
     private int _flagsRawActiveWithoutDisplayFrames;
     private int _flagsStateOnlyDisplayFrames;
     private int _maxFlagsDisplayFlags;
+    private int _flagsDisplayTransitionFrames;
+    private int _flagsDisplayClearedTransitionFrames;
+    private int _longestFlagsDisplayDurationFrames;
+    private double? _longestFlagsDisplayDurationSeconds;
+    private string? _longestFlagsDisplayState;
+    private string? _currentFlagsDisplayState;
+    private string? _currentFlagsDisplayStatus;
+    private DateTimeOffset? _currentFlagsDisplayStartedAtUtc;
+    private int _currentFlagsDisplayFrameCount;
     private int _gapFramesWithData;
     private int _gapNonRaceFramesWithData;
     private int _gapClassLargeFrames;
@@ -127,9 +167,16 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private int _radarTimingOnlyRowFrames;
     private int _radarSpatialRowFrames;
     private int _radarMulticlassApproachFrames;
+    private int _radarSideTransitionFrames;
+    private int _radarOppositeSideFlipFrames;
+    private int _radarSideTransitionWithoutPlacementFrames;
     private int _maxRadarNearbyCars;
     private int _maxRadarTimingRows;
     private int _maxRadarSpatialCars;
+    private int? _previousRadarRawSide;
+    private string? _previousRadarSideStatus;
+    private string? _previousRadarSideGroup;
+    private DateTimeOffset? _previousRadarSideAtUtc;
     private int _fuelFramesWithLevel;
     private int _fuelFramesWithInstantaneousBurn;
     private int _fuelInstantaneousBurnWithoutLevelFrames;
@@ -235,11 +282,22 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _flagsFramesWithSessionState = 0;
             _flagsFramesWithRawFlags = 0;
             _flagsFramesWithActiveRawFlags = 0;
+            _flagsFramesWithYellowFamilyRawFlags = 0;
+            _flagsFramesWithCarIdxYellowFamilyFlags = 0;
             _flagsFramesWithDisplayFlags = 0;
             _flagsWaitingFrames = 0;
             _flagsRawActiveWithoutDisplayFrames = 0;
             _flagsStateOnlyDisplayFrames = 0;
             _maxFlagsDisplayFlags = 0;
+            _flagsDisplayTransitionFrames = 0;
+            _flagsDisplayClearedTransitionFrames = 0;
+            _longestFlagsDisplayDurationFrames = 0;
+            _longestFlagsDisplayDurationSeconds = null;
+            _longestFlagsDisplayState = null;
+            _currentFlagsDisplayState = null;
+            _currentFlagsDisplayStatus = null;
+            _currentFlagsDisplayStartedAtUtc = null;
+            _currentFlagsDisplayFrameCount = 0;
             _gapFramesWithData = 0;
             _gapNonRaceFramesWithData = 0;
             _gapClassLargeFrames = 0;
@@ -279,9 +337,16 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _radarTimingOnlyRowFrames = 0;
             _radarSpatialRowFrames = 0;
             _radarMulticlassApproachFrames = 0;
+            _radarSideTransitionFrames = 0;
+            _radarOppositeSideFlipFrames = 0;
+            _radarSideTransitionWithoutPlacementFrames = 0;
             _maxRadarNearbyCars = 0;
             _maxRadarTimingRows = 0;
             _maxRadarSpatialCars = 0;
+            _previousRadarRawSide = null;
+            _previousRadarSideStatus = null;
+            _previousRadarSideGroup = null;
+            _previousRadarSideAtUtc = null;
             _fuelFramesWithLevel = 0;
             _fuelFramesWithInstantaneousBurn = 0;
             _fuelInstantaneousBurnWithoutLevelFrames = 0;
@@ -347,8 +412,18 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _trackMapFullLapHighlightFrames = 0;
             _sessionFrameCounts.Clear();
             _flagsRawFlagCounts.Clear();
+            _flagsYellowFamilyBitCounts.Clear();
+            _flagsYellowFamilyStateCounts.Clear();
+            _flagsCarIdxYellowFamilyBitCounts.Clear();
+            _flagsCarIdxYellowFamilyStateCounts.Clear();
+            _flagsRawToDisplayCounts.Clear();
+            _flagsRawToDisplayLabelCounts.Clear();
+            _flagsDisplayStateCounts.Clear();
+            _flagsDisplayLabelStateCounts.Clear();
+            _flagsDisplayTransitionCounts.Clear();
             _flagsDisplayKindCounts.Clear();
             _flagsDisplayCategoryCounts.Clear();
+            _flagsDisplayLabelCounts.Clear();
             _flagsToneCounts.Clear();
             _focusUnavailableReasonCounts.Clear();
             _focusUnavailableSessionKindCounts.Clear();
@@ -358,6 +433,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _gapClassEvidenceCounts.Clear();
             _gapOverallEvidenceCounts.Clear();
             _radarSideStateCounts.Clear();
+            _radarSideTransitionCounts.Clear();
             _radarFocusFrameCounts.Clear();
             _radarPlacementEvidenceCounts.Clear();
             _fuelLevelEvidenceCounts.Clear();
@@ -442,6 +518,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             try
             {
                 FinalizeActivePitWindow(finishedAtUtc);
+                FinalizeFlagDisplayState(finishedAtUtc);
                 var artifact = new LiveOverlayDiagnosticsArtifact(
                     FormatVersion: 1,
                     SourceId: _sourceId,
@@ -476,14 +553,31 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                         FramesWithSessionState: _flagsFramesWithSessionState,
                         FramesWithRawFlags: _flagsFramesWithRawFlags,
                         FramesWithActiveRawFlags: _flagsFramesWithActiveRawFlags,
+                        FramesWithYellowFamilyRawFlags: _flagsFramesWithYellowFamilyRawFlags,
+                        FramesWithCarIdxYellowFamilyFlags: _flagsFramesWithCarIdxYellowFamilyFlags,
                         FramesWithDisplayFlags: _flagsFramesWithDisplayFlags,
                         WaitingFrames: _flagsWaitingFrames,
                         RawActiveWithoutDisplayFrames: _flagsRawActiveWithoutDisplayFrames,
                         StateOnlyDisplayFrames: _flagsStateOnlyDisplayFrames,
                         MaxDisplayFlags: _maxFlagsDisplayFlags,
+                        DisplayTransitionFrames: _flagsDisplayTransitionFrames,
+                        DisplayClearedTransitionFrames: _flagsDisplayClearedTransitionFrames,
+                        LongestDisplayDurationFrames: _longestFlagsDisplayDurationFrames,
+                        LongestDisplayDurationSeconds: Round(_longestFlagsDisplayDurationSeconds),
+                        LongestDisplayState: _longestFlagsDisplayState,
                         RawFlagCounts: Sorted(_flagsRawFlagCounts),
+                        YellowFamilyBitCounts: Sorted(_flagsYellowFamilyBitCounts),
+                        YellowFamilyStateCounts: Sorted(_flagsYellowFamilyStateCounts),
+                        CarIdxYellowFamilyBitCounts: Sorted(_flagsCarIdxYellowFamilyBitCounts),
+                        CarIdxYellowFamilyStateCounts: Sorted(_flagsCarIdxYellowFamilyStateCounts),
+                        RawToDisplayCounts: Sorted(_flagsRawToDisplayCounts),
+                        RawToDisplayLabelCounts: Sorted(_flagsRawToDisplayLabelCounts),
+                        DisplayStateCounts: Sorted(_flagsDisplayStateCounts),
+                        DisplayLabelStateCounts: Sorted(_flagsDisplayLabelStateCounts),
+                        DisplayTransitionCounts: Sorted(_flagsDisplayTransitionCounts),
                         DisplayKindCounts: Sorted(_flagsDisplayKindCounts),
                         DisplayCategoryCounts: Sorted(_flagsDisplayCategoryCounts),
+                        DisplayLabelCounts: Sorted(_flagsDisplayLabelCounts),
                         ToneCounts: Sorted(_flagsToneCounts)),
                     Scoring: new ScoringOverlayDiagnosticsSummary(
                         FramesWithData: _scoringFramesWithData,
@@ -522,10 +616,14 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                         TimingOnlyRowFrames: _radarTimingOnlyRowFrames,
                         SpatialRowFrames: _radarSpatialRowFrames,
                         MulticlassApproachFrames: _radarMulticlassApproachFrames,
+                        SideTransitionFrames: _radarSideTransitionFrames,
+                        OppositeSideFlipFrames: _radarOppositeSideFlipFrames,
+                        SideTransitionWithoutPlacementFrames: _radarSideTransitionWithoutPlacementFrames,
                         MaxNearbyCars: _maxRadarNearbyCars,
                         MaxTimingRows: _maxRadarTimingRows,
                         MaxSpatialCars: _maxRadarSpatialCars,
                         SideStateCounts: Sorted(_radarSideStateCounts),
+                        SideTransitionCounts: Sorted(_radarSideTransitionCounts),
                         FocusFrameCounts: Sorted(_radarFocusFrameCounts),
                         PlacementEvidenceCounts: Sorted(_radarPlacementEvidenceCounts)),
                     Fuel: new FuelOverlayDiagnosticsSummary(
@@ -666,13 +764,17 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         {
             _flagsFramesWithRawFlags++;
             Increment(_flagsRawFlagCounts, FormatRawFlagsHex(rawValue));
+            RecordYellowFamilyFlags(rawValue, _flagsYellowFamilyBitCounts, _flagsYellowFamilyStateCounts, ref _flagsFramesWithYellowFamilyRawFlags);
             if (rawValue != 0)
             {
                 _flagsFramesWithActiveRawFlags++;
             }
         }
 
+        RecordCarIdxYellowFamilyFlags(snapshot.LatestSample);
+
         var viewModel = FlagsOverlayViewModel.ForDisplay(snapshot, capturedAtUtc);
+        RecordFlagDisplayState(snapshot, capturedAtUtc, rawFlags, viewModel);
         if (viewModel.IsWaiting)
         {
             _flagsWaitingFrames++;
@@ -707,6 +809,178 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                 snapshot,
                 capturedAtUtc);
         }
+    }
+
+    private void RecordFlagDisplayState(
+        LiveTelemetrySnapshot snapshot,
+        DateTimeOffset capturedAtUtc,
+        int? rawFlags,
+        FlagOverlayDisplayViewModel viewModel)
+    {
+        var state = FlagDisplayStateKey(viewModel);
+        var labelState = FlagDisplayLabelStateKey(viewModel);
+        Increment(_flagsDisplayStateCounts, state);
+        Increment(_flagsDisplayLabelStateCounts, labelState);
+        if (rawFlags is not null)
+        {
+            Increment(_flagsRawToDisplayCounts, $"{FormatRawFlagsHex(rawFlags)} -> {state}");
+            Increment(_flagsRawToDisplayLabelCounts, $"{FormatRawFlagsHex(rawFlags)} -> {labelState}");
+        }
+
+        foreach (var flag in viewModel.Flags)
+        {
+            Increment(_flagsDisplayLabelCounts, FlagDisplayLabelKey(flag));
+        }
+
+        if (_currentFlagsDisplayState is null)
+        {
+            _currentFlagsDisplayState = state;
+            _currentFlagsDisplayStatus = viewModel.Status;
+            _currentFlagsDisplayStartedAtUtc = capturedAtUtc;
+            _currentFlagsDisplayFrameCount = 1;
+            return;
+        }
+
+        if (string.Equals(_currentFlagsDisplayState, state, StringComparison.OrdinalIgnoreCase))
+        {
+            _currentFlagsDisplayFrameCount++;
+            return;
+        }
+
+        var previousState = _currentFlagsDisplayState;
+        var previousStatus = _currentFlagsDisplayStatus;
+        FinalizeFlagDisplayState(capturedAtUtc);
+        _flagsDisplayTransitionFrames++;
+        Increment(_flagsDisplayTransitionCounts, $"{previousState} -> {state}");
+        if (IsActiveFlagDisplayState(previousState) && !IsActiveFlagDisplayState(state))
+        {
+            _flagsDisplayClearedTransitionFrames++;
+        }
+
+        AddEvent(
+            "flags.display-transition",
+            $"display {previousState} -> {state}; status {previousStatus ?? "--"} -> {viewModel.Status}",
+            snapshot,
+            capturedAtUtc);
+
+        _currentFlagsDisplayState = state;
+        _currentFlagsDisplayStatus = viewModel.Status;
+        _currentFlagsDisplayStartedAtUtc = capturedAtUtc;
+        _currentFlagsDisplayFrameCount = 1;
+    }
+
+    private void RecordCarIdxYellowFamilyFlags(HistoricalTelemetrySample? sample)
+    {
+        if (sample is null)
+        {
+            return;
+        }
+
+        var carFlagsByIndex = new Dictionary<int, int>();
+        AddCarFlags(sample.AllCars);
+        AddCarFlags(sample.FocusClassCars);
+        AddCarFlags(sample.ClassCars);
+        AddCarFlags(sample.NearbyCars);
+
+        var frameHasCarIdxYellowFamilyFlags = false;
+        foreach (var flags in carFlagsByIndex.Values)
+        {
+            if (RecordYellowFamilyFlags(flags, _flagsCarIdxYellowFamilyBitCounts, _flagsCarIdxYellowFamilyStateCounts))
+            {
+                frameHasCarIdxYellowFamilyFlags = true;
+            }
+        }
+
+        if (frameHasCarIdxYellowFamilyFlags)
+        {
+            _flagsFramesWithCarIdxYellowFamilyFlags++;
+        }
+
+        void AddCarFlags(IReadOnlyList<HistoricalCarProximity>? cars)
+        {
+            if (cars is null)
+            {
+                return;
+            }
+
+            foreach (var car in cars)
+            {
+                if (car.SessionFlags is { } flags)
+                {
+                    carFlagsByIndex.TryAdd(car.CarIdx, flags);
+                }
+            }
+        }
+    }
+
+    private static bool RecordYellowFamilyFlags(
+        int flags,
+        Dictionary<string, int> bitCounts,
+        Dictionary<string, int> stateCounts)
+    {
+        if ((flags & YellowFamilyFlagMask) == 0)
+        {
+            return false;
+        }
+
+        Increment(stateCounts, YellowFamilyStateKey(flags));
+        foreach (var bit in YellowFamilyFlagBits)
+        {
+            if ((flags & bit.Mask) != 0)
+            {
+                Increment(bitCounts, bit.Name);
+            }
+        }
+
+        return true;
+    }
+
+    private static void RecordYellowFamilyFlags(
+        int flags,
+        Dictionary<string, int> bitCounts,
+        Dictionary<string, int> stateCounts,
+        ref int frameCount)
+    {
+        if (RecordYellowFamilyFlags(flags, bitCounts, stateCounts))
+        {
+            frameCount++;
+        }
+    }
+
+    private static string YellowFamilyStateKey(int flags)
+    {
+        return string.Join(
+            "+",
+            YellowFamilyFlagBits
+                .Where(bit => (flags & bit.Mask) != 0)
+                .Select(bit => bit.Name));
+    }
+
+    private void FinalizeFlagDisplayState(DateTimeOffset endedAtUtc)
+    {
+        if (_currentFlagsDisplayState is null)
+        {
+            return;
+        }
+
+        if (IsActiveFlagDisplayState(_currentFlagsDisplayState))
+        {
+            var durationSeconds = _currentFlagsDisplayStartedAtUtc is { } startedAtUtc
+                ? Math.Max(0d, (endedAtUtc - startedAtUtc).TotalSeconds)
+                : (double?)null;
+            if (_currentFlagsDisplayFrameCount > _longestFlagsDisplayDurationFrames
+                || (_currentFlagsDisplayFrameCount == _longestFlagsDisplayDurationFrames
+                    && durationSeconds is { } duration
+                    && duration > (_longestFlagsDisplayDurationSeconds ?? -1d)))
+            {
+                _longestFlagsDisplayDurationFrames = _currentFlagsDisplayFrameCount;
+                _longestFlagsDisplayDurationSeconds = durationSeconds;
+                _longestFlagsDisplayState = _currentFlagsDisplayState;
+            }
+        }
+
+        _currentFlagsDisplayStartedAtUtc = endedAtUtc;
+        _currentFlagsDisplayFrameCount = 0;
     }
 
     private void RecordFocus(LiveTelemetrySnapshot snapshot, DateTimeOffset capturedAtUtc)
@@ -957,6 +1231,8 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _radarSideSignalFrames++;
         }
 
+        RecordRadarSideTransition(snapshot, capturedAtUtc);
+
         var timingRows = snapshot.Models.Timing.OverallRows;
         var timingOnlyRows = timingRows.Count(row => row.HasTiming && !row.CanUseForRadarPlacement);
         var spatialRows = timingRows.Count(row => row.CanUseForRadarPlacement);
@@ -993,6 +1269,58 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                 snapshot,
                 capturedAtUtc);
         }
+    }
+
+    private void RecordRadarSideTransition(LiveTelemetrySnapshot snapshot, DateTimeOffset capturedAtUtc)
+    {
+        var currentStatus = snapshot.Proximity.SideStatus;
+        var currentGroup = RadarSideGroup(currentStatus);
+        var currentRawSide = snapshot.Proximity.CarLeftRight;
+        if (_previousRadarSideStatus is null)
+        {
+            _previousRadarSideStatus = currentStatus;
+            _previousRadarSideGroup = currentGroup;
+            _previousRadarRawSide = currentRawSide;
+            _previousRadarSideAtUtc = capturedAtUtc;
+            return;
+        }
+
+        if (string.Equals(_previousRadarSideStatus, currentStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _radarSideTransitionFrames++;
+        Increment(_radarSideTransitionCounts, $"{_previousRadarSideStatus} -> {currentStatus}");
+        var hasPlacementCandidate = HasSidePlacementCandidate(snapshot);
+        if (!hasPlacementCandidate)
+        {
+            _radarSideTransitionWithoutPlacementFrames++;
+        }
+
+        var elapsedSeconds = _previousRadarSideAtUtc is { } previousAtUtc
+            ? Math.Max(0d, (capturedAtUtc - previousAtUtc).TotalSeconds)
+            : (double?)null;
+        AddEvent(
+            "radar.side-transition",
+            $"side {_previousRadarSideStatus} -> {currentStatus}; raw {_previousRadarRawSide?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "--"} -> {currentRawSide?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "--"}; placement {hasPlacementCandidate}; elapsed {FormatSeconds(elapsedSeconds)}",
+            snapshot,
+            capturedAtUtc);
+
+        if (IsOppositeRadarSideFlip(_previousRadarSideGroup, currentGroup))
+        {
+            _radarOppositeSideFlipFrames++;
+            AddEvent(
+                "radar.opposite-side-flip",
+                $"opposite side {_previousRadarSideStatus} -> {currentStatus}; placement {hasPlacementCandidate}; nearby {snapshot.Proximity.NearbyCars.Count}; spatial {snapshot.Models.Spatial.Cars.Count}; timing {snapshot.Models.Timing.OverallRows.Count}",
+                snapshot,
+                capturedAtUtc);
+        }
+
+        _previousRadarSideStatus = currentStatus;
+        _previousRadarSideGroup = currentGroup;
+        _previousRadarRawSide = currentRawSide;
+        _previousRadarSideAtUtc = capturedAtUtc;
     }
 
     private void RecordFuel(LiveTelemetrySnapshot snapshot, DateTimeOffset capturedAtUtc)
@@ -2272,6 +2600,85 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         return carLeftRight is 2 or 3 or 4 or 5 or 6;
     }
 
+    private static string FlagDisplayStateKey(FlagOverlayDisplayViewModel viewModel)
+    {
+        if (viewModel.IsWaiting)
+        {
+            return "waiting";
+        }
+
+        if (viewModel.Flags.Count == 0)
+        {
+            return "none";
+        }
+
+        return string.Join(
+            "+",
+            viewModel.Flags.Select(flag => $"{flag.Category}:{flag.Kind}"));
+    }
+
+    private static string FlagDisplayLabelStateKey(FlagOverlayDisplayViewModel viewModel)
+    {
+        if (viewModel.IsWaiting)
+        {
+            return "waiting";
+        }
+
+        if (viewModel.Flags.Count == 0)
+        {
+            return "none";
+        }
+
+        return string.Join("+", viewModel.Flags.Select(FlagDisplayLabelKey));
+    }
+
+    private static string FlagDisplayLabelKey(FlagOverlayDisplayItem flag)
+    {
+        var label = string.IsNullOrWhiteSpace(flag.Label)
+            ? "--"
+            : flag.Label.Trim();
+        var detail = string.IsNullOrWhiteSpace(flag.Detail)
+            ? null
+            : flag.Detail.Trim();
+        return detail is null
+            ? $"{flag.Category}:{flag.Kind}:{label}"
+            : $"{flag.Category}:{flag.Kind}:{label} ({detail})";
+    }
+
+    private static bool IsActiveFlagDisplayState(string? state)
+    {
+        return !string.IsNullOrWhiteSpace(state)
+            && !string.Equals(state, "none", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(state, "waiting", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string RadarSideGroup(string? sideStatus)
+    {
+        return sideStatus?.ToLowerInvariant() switch
+        {
+            "left" or "two left" => "left",
+            "right" or "two right" => "right",
+            "both sides" => "both",
+            "clear" or "off" => "clear",
+            _ => "waiting"
+        };
+    }
+
+    private static bool IsOppositeRadarSideFlip(string? previousGroup, string? currentGroup)
+    {
+        return (string.Equals(previousGroup, "left", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(currentGroup, "right", StringComparison.OrdinalIgnoreCase))
+            || (string.Equals(previousGroup, "right", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(currentGroup, "left", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string FormatSeconds(double? seconds)
+    {
+        return seconds is { } value && IsFinite(value)
+            ? value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
+            : "--";
+    }
+
     private static PositionObservation FromCar(HistoricalCarProximity car)
     {
         return new PositionObservation(
@@ -2917,15 +3324,34 @@ internal sealed record FlagsOverlayDiagnosticsSummary(
     int FramesWithSessionState,
     int FramesWithRawFlags,
     int FramesWithActiveRawFlags,
+    int FramesWithYellowFamilyRawFlags,
+    int FramesWithCarIdxYellowFamilyFlags,
     int FramesWithDisplayFlags,
     int WaitingFrames,
     int RawActiveWithoutDisplayFrames,
     int StateOnlyDisplayFrames,
     int MaxDisplayFlags,
+    int DisplayTransitionFrames,
+    int DisplayClearedTransitionFrames,
+    int LongestDisplayDurationFrames,
+    double? LongestDisplayDurationSeconds,
+    string? LongestDisplayState,
     IReadOnlyDictionary<string, int> RawFlagCounts,
+    IReadOnlyDictionary<string, int> YellowFamilyBitCounts,
+    IReadOnlyDictionary<string, int> YellowFamilyStateCounts,
+    IReadOnlyDictionary<string, int> CarIdxYellowFamilyBitCounts,
+    IReadOnlyDictionary<string, int> CarIdxYellowFamilyStateCounts,
+    IReadOnlyDictionary<string, int> RawToDisplayCounts,
+    IReadOnlyDictionary<string, int> RawToDisplayLabelCounts,
+    IReadOnlyDictionary<string, int> DisplayStateCounts,
+    IReadOnlyDictionary<string, int> DisplayLabelStateCounts,
+    IReadOnlyDictionary<string, int> DisplayTransitionCounts,
     IReadOnlyDictionary<string, int> DisplayKindCounts,
     IReadOnlyDictionary<string, int> DisplayCategoryCounts,
+    IReadOnlyDictionary<string, int> DisplayLabelCounts,
     IReadOnlyDictionary<string, int> ToneCounts);
+
+internal sealed record FlagBitDefinition(string Name, int Mask);
 
 internal sealed record ScoringOverlayDiagnosticsSummary(
     int FramesWithData,
@@ -2966,10 +3392,14 @@ internal sealed record RadarOverlayDiagnosticsSummary(
     int TimingOnlyRowFrames,
     int SpatialRowFrames,
     int MulticlassApproachFrames,
+    int SideTransitionFrames,
+    int OppositeSideFlipFrames,
+    int SideTransitionWithoutPlacementFrames,
     int MaxNearbyCars,
     int MaxTimingRows,
     int MaxSpatialCars,
     IReadOnlyDictionary<string, int> SideStateCounts,
+    IReadOnlyDictionary<string, int> SideTransitionCounts,
     IReadOnlyDictionary<string, int> FocusFrameCounts,
     IReadOnlyDictionary<string, int> PlacementEvidenceCounts);
 

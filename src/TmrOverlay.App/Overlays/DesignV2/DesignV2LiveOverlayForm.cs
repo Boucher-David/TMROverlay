@@ -3940,6 +3940,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 row,
                 column,
                 body.Flags[index].Kind.ToString(),
+                body.Flags[index].Label,
+                body.Flags[index].Detail,
                 LayoutRect(cell),
                 LayoutRect(new RectangleF(clothLeft, clothTop, clothWidth, clothHeight))));
         }
@@ -8297,6 +8299,8 @@ internal sealed record DesignV2LayoutFlagCell(
     int Row,
     int Column,
     string Kind,
+    string Label,
+    string? Detail,
     DesignV2LayoutRect Bounds,
     DesignV2LayoutRect ClothBounds);
 

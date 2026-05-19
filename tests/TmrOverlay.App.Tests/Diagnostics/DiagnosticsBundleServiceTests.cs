@@ -164,7 +164,58 @@ public sealed class DiagnosticsBundleServiceTests
                 """);
             File.WriteAllText(Path.Combine(captureDirectory, "capture-synthesis.json"), "{}");
             File.WriteAllText(Path.Combine(captureDirectory, "live-model-parity.json"), "{}");
-            File.WriteAllText(Path.Combine(captureDirectory, "live-overlay-diagnostics.json"), "{}");
+            File.WriteAllText(
+                Path.Combine(captureDirectory, "live-overlay-diagnostics.json"),
+                """
+                {
+                  "totals": { "frameCount": 120 },
+                  "flags": {
+                    "framesWithDisplayFlags": 80,
+                    "framesWithYellowFamilyRawFlags": 72,
+                    "framesWithCarIdxYellowFamilyFlags": 11,
+                    "yellowFamilyBitCounts": {
+                      "Yellow": 70,
+                      "Debris": 2,
+                      "Caution": 6,
+                      "OneToGreen": 1
+                    },
+                    "yellowFamilyStateCounts": {
+                      "Yellow": 66,
+                      "Debris": 2,
+                      "Caution": 3,
+                      "Caution+OneToGreen": 1
+                    },
+                    "carIdxYellowFamilyBitCounts": {
+                      "Debris": 3,
+                      "OneToGreen": 1
+                    },
+                    "carIdxYellowFamilyStateCounts": {
+                      "Debris": 3,
+                      "OneToGreen": 1
+                    },
+                    "displayTransitionFrames": 3,
+                    "displayClearedTransitionFrames": 1,
+                    "longestDisplayDurationFrames": 42,
+                    "longestDisplayDurationSeconds": 12.5,
+                    "longestDisplayState": "Yellow:Yellow"
+                  },
+                  "radar": {
+                    "sideTransitionFrames": 4,
+                    "oppositeSideFlipFrames": 1,
+                    "sideTransitionWithoutPlacementFrames": 2
+                  },
+                  "trackMap": {
+                    "framesWithSectors": 90,
+                    "framesWithLiveTiming": 110,
+                    "framesWithHighlightedSectors": 8
+                  },
+                  "fuel": {
+                    "pitWindowCount": 2,
+                    "pitWindowsWithFuelIncrease": 1,
+                    "pitWindowsWithBlackFlag": 0
+                  }
+                }
+                """);
             File.WriteAllText(Path.Combine(captureDirectory, "telemetry.bin"), "raw");
             var ibtAnalysisDirectory = Path.Combine(captureDirectory, "ibt-analysis");
             Directory.CreateDirectory(ibtAnalysisDirectory);
@@ -834,6 +885,26 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal("Race", (string?)latestCaptureEvidenceJson?["latestSession"]?["sessionType"]);
                 Assert.True(((bool?)latestCaptureEvidenceJson?["latestSession"]?["isRaceSession"]) == true);
                 Assert.True(((bool?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["exists"]) == true);
+                Assert.Equal(120, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["frameCount"]) ?? -1);
+                Assert.Equal(80, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsFramesWithDisplayFlags"]) ?? -1);
+                Assert.Equal(72, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsFramesWithYellowFamilyRawFlags"]) ?? -1);
+                Assert.Equal(11, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsFramesWithCarIdxYellowFamilyFlags"]) ?? -1);
+                Assert.Equal(2, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsYellowFamilyBitCounts"]?["Debris"]) ?? -1);
+                Assert.Equal(1, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsYellowFamilyBitCounts"]?["OneToGreen"]) ?? -1);
+                Assert.Equal(2, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsYellowFamilyStateCounts"]?["Debris"]) ?? -1);
+                Assert.Equal(3, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsCarIdxYellowFamilyBitCounts"]?["Debris"]) ?? -1);
+                Assert.Equal(1, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsCarIdxYellowFamilyStateCounts"]?["OneToGreen"]) ?? -1);
+                Assert.Equal(3, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsDisplayTransitionFrames"]) ?? -1);
+                Assert.Equal(1, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsDisplayClearedTransitionFrames"]) ?? -1);
+                Assert.Equal(42, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsLongestDisplayDurationFrames"]) ?? -1);
+                Assert.Equal(12.5d, ((double?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsLongestDisplayDurationSeconds"]) ?? -1d);
+                Assert.Equal("Yellow:Yellow", (string?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsLongestDisplayState"]);
+                Assert.Equal(4, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["radarSideTransitionFrames"]) ?? -1);
+                Assert.Equal(1, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["radarOppositeSideFlipFrames"]) ?? -1);
+                Assert.Equal(2, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["radarSideTransitionWithoutPlacementFrames"]) ?? -1);
+                Assert.Equal(90, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["trackMapFramesWithSectors"]) ?? -1);
+                Assert.Equal(110, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["trackMapFramesWithLiveTiming"]) ?? -1);
+                Assert.Equal(8, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["trackMapHighlightedSectorFrames"]) ?? -1);
             }
 
             var windowZOrderEntry = archive.GetEntry("metadata/window-z-order.json");

@@ -269,6 +269,7 @@ OVERLAY_VARIANT_SPECS = (
     ("pit-service", "idle", "fixture=pit-service-idle", True, None),
     ("input-state", "waiting", "fixture=input-waiting", True, None),
     ("input-state", "no-content", "fixture=input-no-content", True, None),
+    ("input-state", "min-scale", "fixture=input-min-scale", True, None),
     ("car-radar", "left", "fixture=car-radar-left", True, None),
     ("car-radar", "right", "fixture=car-radar-right", True, None),
     ("car-radar", "both-sides", "fixture=car-radar-both-sides", True, None),
@@ -335,10 +336,12 @@ OVERLAY_VARIANT_MIN_BYTE_RANGE = {
 
 WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS = {
     ("gap-to-leader", "no-cars"),
+    ("input-state", "min-scale"),
 }
 
 WEB_OVERLAY_VARIANT_MINIMUM_SIZES = {
     ("gap-to-leader", "no-cars"): (300, 60),
+    ("input-state", "min-scale"): (300, 140),
 }
 
 WINDOWS_NATIVE_OVERLAY_BODIES = {
@@ -689,7 +692,7 @@ def validate_windows_ci(root: Path, min_unique_bytes: int, failures: list[str]) 
             )
 
     for relative_path, (overlay_id, _slug) in windows_native_variant_manifest_path_map().items():
-        expected_size = WINDOWS_NATIVE_OVERLAY_SIZES.get(overlay_id)
+        expected_size = (312, 156) if (overlay_id, _slug) == ("input-state", "min-scale") else WINDOWS_NATIVE_OVERLAY_SIZES.get(overlay_id)
         validate_png(
             root=root,
             relative_path=relative_path,
@@ -1576,7 +1579,39 @@ def validate_overlay_chrome_contract(path: str, values: dict[str, object], failu
     if source and source in footer_text:
         failures.append(f"{path}: semantic source {source!r} is still present in rendered footer chrome")
 
+    require_rounded_chrome_contract(path, values, elements, failures)
     require_header_item_tone_contract(path, values, elements, failures)
+
+
+def require_rounded_chrome_contract(
+    path: str,
+    values: dict[str, object],
+    elements: list[dict[str, object]],
+    failures: list[str],
+) -> None:
+    if not path.startswith(("browser-overlays/", "localhost-overlays/")):
+        return
+
+    overlay_id = str(values.get("overlayId") or "")
+    if overlay_id in {"car-radar", "track-map", "flags", "garage-cover"}:
+        return
+
+    overlay = next((element for element in elements if element_role(element) == "overlay"), None)
+    if overlay is None:
+        failures.append(f"{path}: rounded chrome contract missing overlay element evidence")
+        return
+
+    styles = typed_dict(get_manifest_value(overlay, "styles"))
+    radius = css_pixel_value(get_manifest_value(styles, "borderRadius"))
+    corner_radii = [
+        css_pixel_value(get_manifest_value(styles, key))
+        for key in ("borderTopLeftRadius", "borderTopRightRadius", "borderBottomRightRadius", "borderBottomLeftRadius")
+    ]
+    if radius is None and all(value is None for value in corner_radii):
+        failures.append(f"{path}: rounded chrome contract missing border radius style evidence")
+        return
+    if max([value for value in [radius, *corner_radii] if value is not None], default=0.0) < 4.0:
+        failures.append(f"{path}: rounded chrome radius expected at least 4px")
 
 
 def layout_elements(layout: object) -> list[dict[str, object]]:
@@ -3099,6 +3134,8 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
         validate_input_waiting_variant(path, values, failures)
     elif overlay_id == "input-state" and slug == "no-content":
         validate_input_no_content_variant(path, values, failures)
+    elif overlay_id == "input-state" and slug == "min-scale":
+        validate_input_min_scale_variant(path, values, failures)
     elif overlay_id == "car-radar":
         validate_car_radar_variant(path, values, slug, failures)
     elif overlay_id == "gap-to-leader" and slug == "no-cars":
@@ -3317,6 +3354,17 @@ def validate_input_no_content_variant(path: str, values: dict[str, object], fail
         failures.append(f"{path}: input no-content should not expose rail geometry")
 
 
+def validate_input_min_scale_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "input min-scale bodyKind", values.get("bodyKind"), "inputs", failures)
+    validate_input_state_contract(path, values, failures)
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        require_equal(path, "input min-scale manifest scale", values.get("minScale"), 0.6, failures)
+        require_size_object(path, "input min-scale configured/min viewport", {"width": values.get("width"), "height": values.get("height")}, 312, 156, failures, required=False)
+    else:
+        require_size_object(path, "input min-scale native configured size", {"width": values.get("width"), "height": values.get("height")}, 312, 156, failures, required=False)
+    require_input_min_scale_bounds(path, values, failures)
+
+
 def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
     radar = typed_dict(model_evidence(values).get("carRadar"))
     expected_status = {
@@ -3389,11 +3437,11 @@ def validate_track_map_variant(path: str, values: dict[str, object], slug: str, 
 
 def validate_flags_all_kinds_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
     flags = typed_dict(model_evidence(values).get("flags"))
-    expected = ["green", "blue", "yellow", "caution", "red", "black", "meatball", "white", "checkered"]
+    expected = ["green", "blue", "yellow", "debris", "caution", "red", "black", "meatball", "white", "checkered"]
     expected_columns, expected_rows = expected_flag_grid(len(expected))
     require_equal(path, "flags all-kinds bodyKind", values.get("bodyKind"), "flags", failures)
     require_equal(path, "flags all-kinds flagCount", values.get("flagCount"), len(expected), failures)
-    require_sequence(path, "flags all-kinds kinds", [normalize_flag_kind(kind) for kind in evidence_list(flags, "kinds")], expected, failures)
+    require_sequence(path, "flags all-kinds visual kinds", [normalize_flag_kind(kind) for kind in evidence_list(flags, "visualKinds")], expected, failures)
     for field, expected_value in (("gridColumns", expected_columns), ("gridRows", expected_rows), ("count", len(expected))):
         if flags.get(field) != expected_value:
             failures.append(f"{path}: flags all-kinds expected {field} {expected_value}, got {flags.get(field)!r}")
@@ -3403,14 +3451,25 @@ def validate_flags_all_kinds_variant(path: str, values: dict[str, object], failu
     for index, cell in enumerate(cells):
         cell_dict = typed_dict(cell)
         kind = expected[index] if index < len(expected) else ""
-        if normalize_flag_kind(cell_dict.get("kind")) != kind:
-            failures.append(f"{path}: flags all-kinds cell {index} expected kind {kind!r}, got {cell_dict.get('kind')!r}")
+        expected_label = expected_flag_label(kind)
+        if normalize_flag_kind(cell_dict.get("visualKind")) != kind:
+            failures.append(f"{path}: flags all-kinds cell {index} expected visualKind {kind!r}, got {cell_dict.get('visualKind')!r}")
+        if text_value(cell_dict, "label").lower() != expected_label.lower():
+            failures.append(f"{path}: flags all-kinds cell {index} expected visible label {expected_label!r}, got {cell_dict.get('label')!r}")
         if cell_dict.get("fill") != expected_flag_fill(kind):
             failures.append(f"{path}: flags all-kinds cell {index} expected fill {expected_flag_fill(kind)!r}, got {cell_dict.get('fill')!r}")
         if cell_dict.get("row") != index // expected_columns or cell_dict.get("column") != index % expected_columns:
             failures.append(f"{path}: flags all-kinds cell {index} grid position mismatch")
         require_rect(path, get_manifest_value(cell_dict, "bounds"), f"flags all-kinds cell {index} bounds", failures)
         require_rect(path, get_manifest_value(cell_dict, "clothBounds"), f"flags all-kinds cell {index} cloth bounds", failures)
+        require_rect_within(
+            path,
+            f"flags all-kinds cell {index} visible label bounds",
+            get_manifest_value(cell_dict, "labelBounds"),
+            get_manifest_value(cell_dict, "bounds"),
+            f"flags all-kinds cell {index} bounds",
+            failures,
+            tolerance=1.0)
 
 
 def validate_garage_cover_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
@@ -3481,7 +3540,7 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
     model = model_evidence(values)
     columns = evidence_list(model, "columns")
     require_sequence(path, "standings column labels", [text_value(column, "label") for column in columns], ["CLS", "CAR", "Driver", "GAP", "INT", "FAST", "LAST", "PIT"], failures)
-    require_sequence(path, "standings column widths", [get_manifest_value(column, "configuredWidth") for column in columns], [35, 50, 250, 60, 60, 70, 70, 30], failures)
+    require_sequence(path, "standings column widths", [get_manifest_value(column, "configuredWidth") for column in columns], [35, 50, 250, 60, 60, 70, 70, 36], failures)
     require_sequence(path, "standings column alignments", [text_value(column, "alignment") for column in columns], ["right", "right", "left", "right", "right", "right", "right", "right"], failures)
     require_pit_column_validation_capacity(path, columns, "standings", failures)
     rows = evidence_list(model, "rows")
@@ -3500,6 +3559,7 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
     if not pit_rows or "#60" not in combined_row_text(pit_rows[0]):
         failures.append(f"{path}: standings expected #60 pit row with IN marker")
     validate_rows_monotonic(path, rows, failures)
+    validate_standings_bounded_height(path, values, rows, failures)
     assert_cell_foreground(path, rows, "#8", "FAST", ("182, 92, 255", "#B65CFF"), failures)
     assert_cell_foreground(path, rows, "#000", "FAST", ("182, 92, 255", "#B65CFF"), failures)
     assert_cell_foreground(path, rows, "#000", "LAST", ("182, 92, 255", "#B65CFF"), failures)
@@ -3508,12 +3568,46 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
     require_rightmost_column_fit(path, rows, "PIT", "V102-020 standings Pit/rightmost column", failures)
 
 
+def validate_standings_bounded_height(
+    path: str,
+    values: dict[str, object],
+    rows: list[object],
+    failures: list[str],
+) -> None:
+    row_count = values.get("rowCount")
+    if isinstance(row_count, int):
+        if row_count != len(rows):
+            failures.append(f"{path}: standings rowCount {row_count} does not match model evidence rows {len(rows)}")
+        if row_count > 80:
+            failures.append(f"{path}: standings rowCount {row_count} exceeds validation evidence cap 80")
+
+    rendered_rows = [row for row in rows if isinstance(row, dict)]
+    bottoms = [rect_bottom(get_manifest_value(row, "bounds")) for row in rendered_rows]
+    finite_bottoms = [bottom for bottom in bottoms if bottom is not None]
+    if not finite_bottoms:
+        return
+
+    layout = typed_dict(values.get("layout"))
+    root = typed_dict(layout.get("root"))
+    content_bounds = typed_dict(values.get("contentBounds")) or typed_dict(layout.get("contentBounds")) or root
+    root_height = rect_number(root, "height")
+    content_bottom = rect_bottom(content_bounds)
+    table_bottom = max(finite_bottoms)
+    if root_height is not None and table_bottom > root_height + 1:
+        failures.append(f"{path}: standings rendered table exceeds root height")
+    if content_bottom is not None and table_bottom > content_bottom + 1:
+        failures.append(f"{path}: standings rendered table exceeds content bounds")
+    screenshot_height = numeric(values.get("height"))
+    if screenshot_height > 0 and table_bottom > screenshot_height + 1:
+        failures.append(f"{path}: standings rendered table exceeds screenshot height")
+
+
 def validate_relative_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
     model = model_evidence(values)
     columns = evidence_list(model, "columns")
-    require_sequence(path, "relative column labels", [text_value(column, "label") for column in columns], ["Pos", "Driver", "Delta"], failures, casefold=True)
-    require_sequence(path, "relative column widths", [get_manifest_value(column, "configuredWidth") for column in columns], [38, 250, 70], failures)
-    require_sequence(path, "relative column alignments", [text_value(column, "alignment") for column in columns], ["right", "left", "right"], failures)
+    require_sequence(path, "relative column labels", [text_value(column, "label") for column in columns], ["Pos", "Driver", "Delta", "Pit"], failures, casefold=True)
+    require_sequence(path, "relative column widths", [get_manifest_value(column, "configuredWidth") for column in columns], [38, 250, 70, 36], failures)
+    require_sequence(path, "relative column alignments", [text_value(column, "alignment") for column in columns], ["right", "left", "right", "right"], failures)
     if not any(text_value(column, "label").lower() == "pit" for column in columns):
         failures.append(f"{path}: V102-020 Relative validation fixture does not include the Pit/rightmost column, so clipping cannot be proven")
     else:
@@ -3742,6 +3836,58 @@ def validate_input_state_contract(path: str, values: dict[str, object], failures
         for kind in ("Bars", "Readouts"):
             if kind not in group_kinds:
                 failures.append(f"{path}: input-state rail missing {kind} group")
+
+
+def require_input_min_scale_bounds(path: str, values: dict[str, object], failures: list[str]) -> None:
+    inputs = typed_dict(model_evidence(values).get("inputs"))
+    graph = typed_dict(inputs.get("graph"))
+    rail = typed_dict(inputs.get("rail"))
+    graph_bounds = typed_dict(graph.get("bounds"))
+    rail_bounds = typed_dict(rail.get("bounds"))
+    layout = typed_dict(values.get("layout"))
+    root = typed_dict(layout.get("root"))
+    content_bounds = typed_dict(values.get("contentBounds")) or typed_dict(layout.get("contentBounds")) or root
+
+    for label, bounds in (
+        ("input min-scale graph bounds", graph_bounds),
+        ("input min-scale rail bounds", rail_bounds),
+    ):
+        require_rect_within(path, label, bounds, root, "input min-scale root bounds", failures, tolerance=1.0)
+        require_rect_within(path, label, bounds, content_bounds, "input min-scale content bounds", failures, tolerance=1.0)
+
+    for group in evidence_list(rail, "groups"):
+        if isinstance(group, dict):
+            require_rect_within(
+                path,
+                f"input min-scale rail group {text_value(group, 'kind') or '?'} bounds",
+                get_manifest_value(group, "bounds"),
+                rail_bounds,
+                "input min-scale rail bounds",
+                failures,
+                tolerance=1.0)
+
+    for item_index, item in enumerate(evidence_list(rail, "items")):
+        if not isinstance(item, dict):
+            continue
+        item_bounds = get_manifest_value(item, "bounds")
+        require_rect_within(
+            path,
+            f"input min-scale rail item {item_index} bounds",
+            item_bounds,
+            rail_bounds,
+            "input min-scale rail bounds",
+            failures,
+            tolerance=1.0)
+        for child_index, child in enumerate(evidence_list(item, "children")):
+            if isinstance(child, dict):
+                require_rect_within(
+                    path,
+                    f"input min-scale rail item {item_index} child {child_index} bounds",
+                    get_manifest_value(child, "bounds"),
+                    item_bounds,
+                    "input min-scale rail item bounds",
+                    failures,
+                    tolerance=1.0)
 
 
 def validate_car_radar_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -4302,6 +4448,50 @@ def rects_intersect(first: dict[str, object], second: dict[str, object]) -> bool
     return fx + fw > sx and fx < sx + sw and fy + fh > sy and fy < sy + sh
 
 
+def rect_contains(outer: object, inner: object, tolerance: float = 0.5) -> bool:
+    outer_dict = typed_dict(outer)
+    inner_dict = typed_dict(inner)
+    ox = rect_number(outer_dict, "x")
+    oy = rect_number(outer_dict, "y")
+    ow = rect_number(outer_dict, "width")
+    oh = rect_number(outer_dict, "height")
+    ix = rect_number(inner_dict, "x")
+    iy = rect_number(inner_dict, "y")
+    iw = rect_number(inner_dict, "width")
+    ih = rect_number(inner_dict, "height")
+    if None in (ox, oy, ow, oh, ix, iy, iw, ih):
+        return False
+    return (
+        ix >= ox - tolerance
+        and iy >= oy - tolerance
+        and ix + iw <= ox + ow + tolerance
+        and iy + ih <= oy + oh + tolerance
+    )
+
+
+def require_rect_within(path: str, label: str, inner: object, outer: object, outer_label: str, failures: list[str], *, tolerance: float = 0.5) -> None:
+    require_rect(path, inner, label, failures)
+    require_rect(path, outer, outer_label, failures)
+    if isinstance(inner, dict) and isinstance(outer, dict) and not rect_contains(outer, inner, tolerance):
+        failures.append(f"{path}: {label} must fit within {outer_label}")
+
+
+def rect_bottom(rect: object) -> float | None:
+    y = rect_number(rect, "y")
+    height = rect_number(rect, "height")
+    if y is None or height is None:
+        return None
+    return y + height
+
+
+def css_pixel_value(value: object) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value or "").strip().lower()
+    match = re.search(r"(-?\d+(?:\.\d+)?)px", text)
+    return float(match.group(1)) if match else None
+
+
 def point_in_rect(point: object, rect: dict[str, object]) -> bool:
     if not isinstance(point, dict):
         return False
@@ -4418,6 +4608,7 @@ def expected_flag_fill(kind: str) -> str:
         "green": "rgb(48, 214, 109)",
         "blue": "rgb(55, 162, 255)",
         "yellow": "rgb(255, 207, 74)",
+        "debris": "orange-yellow-striped",
         "caution": "rgb(255, 207, 74)",
         "red": "rgb(236, 76, 86)",
         "black": "rgb(8, 10, 12)",
@@ -4425,6 +4616,21 @@ def expected_flag_fill(kind: str) -> str:
         "white": "rgb(246, 248, 250)",
         "checkered": "checkered",
     }.get(kind, "")
+
+
+def expected_flag_label(kind: str) -> str:
+    return {
+        "green": "Green",
+        "blue": "Blue",
+        "yellow": "Yellow",
+        "debris": "Debris",
+        "caution": "Caution",
+        "red": "Red",
+        "black": "Black",
+        "meatball": "Repair",
+        "white": "White",
+        "checkered": "Checkered",
+    }.get(kind, kind)
 
 
 def expected_flag_rects_for_values(values: dict[str, object], index: int, count: int) -> tuple[dict[str, float], dict[str, float]]:
@@ -4663,7 +4869,7 @@ def read_browser_review_variant_specs(repo_root: Path, failures: list[str]) -> d
 
     variants: dict[tuple[str, str], str] = {}
     pattern = re.compile(
-        r"\{\s*overlayId:\s*'([^']+)',\s*slug:\s*'([^']+)',\s*query:\s*'([^']+)'\s*\}"
+        r"\{\s*overlayId:\s*'([^']+)',\s*slug:\s*'([^']+)',\s*query:\s*'([^']+)'[^}]*\}"
     )
     for match in pattern.finditer(content):
         key = (match.group(1), match.group(2))
@@ -4810,6 +5016,24 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="flags debris collapses to yellow visual",
+        path="browser-overlays/flags-all-kinds.png",
+        base=mutation_flags_all_kinds_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "flags", "cells", 3, "fill"), "rgb(255, 207, 74)"),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("flags all-kinds cell 3 expected fill 'orange-yellow-striped'",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="flags yellow-family labels disappear",
+        path="browser-overlays/flags-all-kinds.png",
+        base=mutation_flags_all_kinds_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "flags", "cells", 3, "labelBounds"), None),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("flags all-kinds cell 3 visible label bounds",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="standings class header detail disappears",
         path="browser-overlays/standings-race.png",
         base=mutation_standings_screenshot(),
@@ -4825,6 +5049,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 2, "renderedCells", 5, "foreground"), "#80B65CFF"),
         validate=validate_standings_contract,
         expected_tokens=("#8 FAST foreground expected",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="standings rendered table runs past screenshot height",
+        path="browser-overlays/standings-race.png",
+        base=mutation_standings_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 6, "bounds", "y"), 330),
+        validate=validate_standings_contract,
+        expected_tokens=("standings rendered table exceeds",),
         failures=failures,
     )
     expect_mutation_failure(
@@ -4873,6 +5106,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="input min-scale rail item escapes rail bounds",
+        path="browser-overlays/input-state-min-scale.png",
+        base=mutation_input_min_scale_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "inputs", "rail", "items", 5, "bounds", "y"), 142),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("input min-scale rail item 5 bounds must fit within input min-scale rail bounds",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="input waiting rail leaks stale live values",
         path="browser-overlays/input-state-waiting.png",
         base=mutation_input_waiting_screenshot(),
@@ -4906,6 +5148,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         mutate=lambda screenshot: set_nested_value(screenshot, ("layout", "elements", 1, "text"), "06:37:08"),
         validate=validate_chrome_off_variant,
         expected_tokens=("chrome-off variant header item",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="rounded overlay chrome radius is flattened",
+        path="browser-overlays/fuel-calculator-race.png",
+        base=mutation_overlay_chrome_screenshot(),
+        mutate=mutate_overlay_chrome_radius_flat,
+        validate=validate_overlay_chrome_contract,
+        expected_tokens=("rounded chrome radius expected at least 4px",),
         failures=failures,
     )
     expect_mutation_failure(
@@ -5138,11 +5389,12 @@ def mutation_relative_screenshot() -> dict[str, object]:
         {"label": "Pos", "configuredWidth": 38, "alignment": "right"},
         {"label": "Driver", "configuredWidth": 250, "alignment": "left"},
         {"label": "Delta", "configuredWidth": 70, "alignment": "right"},
+        {"label": "Pit", "configuredWidth": 36, "alignment": "right"},
     ]
     populated_cells = {
-        4: ["3", "#34 Near Ahead", "-2.350"],
-        5: ["5", "#55 Focus Driver", "0.000"],
-        6: ["6", "#61 Near Behind", "+1.200"],
+        4: ["3", "#34 Near Ahead", "-2.350", ""],
+        5: ["5", "#55 Focus Driver", "0.000", ""],
+        6: ["6", "#61 Near Behind", "+1.200", "IN"],
     }
     row_classes = {
         4: ["lap-ahead-1"],
@@ -5158,6 +5410,16 @@ def mutation_relative_screenshot() -> dict[str, object]:
         rows.append(
             {
                 "cells": populated_cells.get(index, []),
+                "renderedCells": [
+                    {
+                        "column": column["label"],
+                        "text": populated_cells[index][cell_index],
+                        "value": populated_cells[index][cell_index],
+                        "bounds": {"x": cell_index * 40, "y": y, "width": 36, "height": 24},
+                        "textMetrics": {"fitsWidth": True, "fitsHeight": True},
+                    }
+                    for cell_index, column in enumerate(columns)
+                ] if populated else [],
                 "bounds": {"x": 0, "y": y, "width": 360, "height": height},
                 "isReference": index == 5,
                 "classList": row_classes.get(index, []),
@@ -5206,7 +5468,7 @@ def mutation_track_map_variant_screenshot() -> dict[str, object]:
 
 
 def mutation_flags_all_kinds_screenshot() -> dict[str, object]:
-    kinds = ["green", "blue", "yellow", "caution", "red", "black", "meatball", "white", "checkered"]
+    kinds = ["green", "blue", "yellow", "debris", "caution", "red", "black", "meatball", "white", "checkered"]
     columns, rows = expected_flag_grid(len(kinds))
     cells: list[dict[str, object]] = []
     for index, kind in enumerate(kinds):
@@ -5215,11 +5477,19 @@ def mutation_flags_all_kinds_screenshot() -> dict[str, object]:
             {
                 "index": index,
                 "kind": kind,
+                "visualKind": kind,
+                "label": expected_flag_label(kind),
                 "fill": expected_flag_fill(kind),
                 "row": index // columns,
                 "column": index % columns,
                 "bounds": bounds,
                 "clothBounds": cloth_bounds,
+                "labelBounds": {
+                    "x": bounds["x"] + 4,
+                    "y": bounds["y"] + bounds["height"] - 18,
+                    "width": max(24, bounds["width"] - 8),
+                    "height": 14,
+                },
             }
         )
     return {
@@ -5240,6 +5510,7 @@ def mutation_flags_all_kinds_screenshot() -> dict[str, object]:
         "modelEvidence": {
             "flags": {
                 "kinds": kinds,
+                "visualKinds": kinds,
                 "gridColumns": columns,
                 "gridRows": rows,
                 "count": len(kinds),
@@ -5259,7 +5530,7 @@ def mutation_standings_screenshot() -> dict[str, object]:
         {"label": "INT", "configuredWidth": 60, "alignment": "right"},
         {"label": "FAST", "configuredWidth": 70, "alignment": "right"},
         {"label": "LAST", "configuredWidth": 70, "alignment": "right"},
-        {"label": "PIT", "configuredWidth": 30, "alignment": "right"},
+        {"label": "PIT", "configuredWidth": 36, "alignment": "right"},
     ]
     rows = [
         mutation_table_row(0, "class-header", "LMP2", [], detail="2 cars | ~10 laps", height=35),
@@ -5272,6 +5543,13 @@ def mutation_standings_screenshot() -> dict[str, object]:
     ]
     return {
         "previewMode": "race",
+        "rowCount": len(rows),
+        "height": 313,
+        "contentBounds": {"x": 0, "y": 0, "width": 659, "height": 313},
+        "layout": {
+            "root": {"x": 0, "y": 0, "width": 659, "height": 313},
+            "contentBounds": {"x": 0, "y": 0, "width": 659, "height": 313},
+        },
         "modelEvidence": {
             "columns": columns,
             "rows": rows,
@@ -5302,6 +5580,7 @@ def mutation_table_row(
                 "value": value,
                 "foreground": foreground,
                 "bounds": {"x": cell_index * 40, "y": index * 32, "width": 36, "height": 24},
+                "textMetrics": {"fitsWidth": True, "fitsHeight": True},
             }
         )
     return {
@@ -5489,6 +5768,112 @@ def mutation_input_screenshot() -> dict[str, object]:
     }
 
 
+def mutation_input_min_scale_screenshot() -> dict[str, object]:
+    graph_bounds = {"x": 8, "y": 46, "width": 172, "height": 96}
+    rail_bounds = {"x": 192, "y": 46, "width": 112, "height": 96}
+    throttle_points = [
+        {"x": 12 + index * (164 / 179), "y": 82 + (index % 8)}
+        for index in range(180)
+    ]
+    brake_points = [
+        {"x": point["x"], "y": point["y"] + (5 if index < 40 else 42)}
+        for index, point in enumerate(throttle_points)
+    ]
+    clutch_points = [
+        {"x": 12 + index * (164 / 179), "y": 118 + (index % 5)}
+        for index in range(180)
+    ]
+    item_bounds = [
+        {"x": 198, "y": 50 + index * 14, "width": 98, "height": 12}
+        for index in range(6)
+    ]
+    item_texts = [
+        ("Throttle", "THR 78%"),
+        ("Brake", "ABS 16%"),
+        ("Clutch", "CLT 0%"),
+        ("SteeringWheel", "WHEEL -10 deg"),
+        ("Gear", "GEAR 6"),
+        ("Speed", "SPD 280 km/h"),
+    ]
+    return {
+        "overlayId": "input-state",
+        "fixtureVariant": "min-scale",
+        "previewMode": "race",
+        "bodyKind": "inputs",
+        "status": "trace live | ABS active",
+        "textSample": "Throttle Brake ABS Clutch",
+        "minScale": 0.6,
+        "width": 312,
+        "height": 156,
+        "contentBounds": {"x": 0, "y": 0, "width": 312, "height": 156},
+        "layout": {
+            "root": {"x": 0, "y": 0, "width": 312, "height": 156},
+            "contentBounds": {"x": 0, "y": 0, "width": 312, "height": 156},
+        },
+        "scenarioEvidence": mutation_scenario_evidence(
+            slug="min-scale",
+            query="fixture=input-min-scale",
+            body_kind="inputs",
+            status="trace live | ABS active",
+            should_render=True,
+        ),
+        "modelEvidence": {
+            "inputs": {
+                "hasContent": True,
+                "hasGraph": True,
+                "hasRail": True,
+                "isAvailable": True,
+                "tracePointCount": 180,
+                "graph": {
+                    "bounds": graph_bounds,
+                    "gridLines": [{"kind": "input-grid"}, {"kind": "input-grid"}, {"kind": "input-grid"}],
+                },
+                "rail": {
+                    "bounds": rail_bounds,
+                    "items": [
+                        {
+                            "kind": kind,
+                            "text": text,
+                            "bounds": item_bounds[index],
+                            "children": [
+                                {
+                                    "role": "input-readout-label",
+                                    "bounds": {
+                                        "x": item_bounds[index]["x"] + 2,
+                                        "y": item_bounds[index]["y"] + 1,
+                                        "width": 34,
+                                        "height": 10,
+                                    },
+                                },
+                                {
+                                    "role": "input-readout-value",
+                                    "bounds": {
+                                        "x": item_bounds[index]["x"] + 40,
+                                        "y": item_bounds[index]["y"] + 1,
+                                        "width": 54,
+                                        "height": 10,
+                                    },
+                                },
+                            ],
+                        }
+                        for index, (kind, text) in enumerate(item_texts)
+                    ],
+                    "groups": [
+                        {"kind": "Bars", "bounds": {"x": 196, "y": 48, "width": 104, "height": 42}},
+                        {"kind": "Readouts", "bounds": {"x": 196, "y": 92, "width": 104, "height": 48}},
+                    ],
+                },
+                "series": [
+                    {"kind": "throttle", "points": throttle_points, "strokeWidth": 2},
+                    {"kind": "brake", "points": brake_points, "strokeWidth": 2},
+                    {"kind": "clutch", "points": clutch_points, "strokeWidth": 2},
+                    {"kind": "brake-abs", "points": [], "pointCount": 0, "curveCount": 2, "strokeWidth": 4},
+                ],
+            },
+        },
+    }
+
+
 def mutate_input_trace_without_visual_overlap(screenshot: dict[str, object]) -> None:
     series = evidence_list(typed_dict(typed_dict(screenshot.get("modelEvidence")).get("inputs")), "series")
     brake = next((item for item in series if isinstance(item, dict) and text_value(item, "kind") == "brake"), None)
@@ -5497,6 +5882,18 @@ def mutate_input_trace_without_visual_overlap(screenshot: dict[str, object]) -> 
     for point in evidence_list(brake, "points"):
         if isinstance(point, dict):
             point["y"] = 205
+
+
+def mutate_overlay_chrome_radius_flat(screenshot: dict[str, object]) -> None:
+    styles = typed_dict(typed_dict(evidence_list(typed_dict(screenshot.get("layout")), "elements")[5]).get("styles"))
+    for key in (
+        "borderRadius",
+        "borderTopLeftRadius",
+        "borderTopRightRadius",
+        "borderBottomRightRadius",
+        "borderBottomLeftRadius",
+    ):
+        styles[key] = "0px"
 
 
 def mutation_input_waiting_screenshot() -> dict[str, object]:
@@ -5569,6 +5966,18 @@ def mutation_overlay_chrome_screenshot() -> dict[str, object]:
                     "role": "source",
                     "text": "",
                     "bounds": {"x": 1, "y": 292, "width": 1, "height": 1},
+                },
+                {
+                    "role": "overlay",
+                    "text": "Fuel Calculator 06:37:08",
+                    "bounds": {"x": 0, "y": 0, "width": 503, "height": 315},
+                    "styles": {
+                        "borderRadius": "8px",
+                        "borderTopLeftRadius": "8px",
+                        "borderTopRightRadius": "8px",
+                        "borderBottomRightRadius": "8px",
+                        "borderBottomLeftRadius": "8px",
+                    },
                 },
             ],
         },

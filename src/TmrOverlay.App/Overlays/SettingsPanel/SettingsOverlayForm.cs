@@ -433,6 +433,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        RecordSettingsCloseEvent("settings_menu_close_requested", e.CloseReason, e.Cancel);
         if (_pendingSaveApplyRequestCount > 0)
         {
             FlushPendingSaveAndApply();
@@ -445,11 +446,30 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         }
 
         base.OnFormClosing(e);
+        RecordSettingsCloseEvent("settings_menu_close_completed", e.CloseReason, e.Cancel);
 
         if (shouldRequestApplicationExit && !e.Cancel)
         {
             _requestApplicationExit();
         }
+    }
+
+    private void RecordSettingsCloseEvent(string name, CloseReason closeReason, bool? cancel)
+    {
+        var snapshot = _releaseUpdates.Snapshot();
+        _events.Record(name, new Dictionary<string, string?>
+        {
+            ["closeReason"] = closeReason.ToString(),
+            ["cancel"] = cancel?.ToString(),
+            ["applicationExitRequested"] = _applicationExitRequested.ToString(),
+            ["pendingSaveApplyRequestCount"] = _pendingSaveApplyRequestCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["releaseUpdateStatus"] = snapshot.Status.ToString(),
+            ["releaseUpdateOperationInProgress"] = snapshot.OperationInProgress.ToString(),
+            ["releaseUpdateCanCheck"] = snapshot.CanCheck.ToString(),
+            ["releaseUpdateCanDownload"] = snapshot.CanDownload.ToString(),
+            ["releaseUpdateCanRestartToApply"] = snapshot.CanRestartToApply.ToString(),
+            ["releaseUpdateLastError"] = snapshot.LastError
+        });
     }
 
     protected override bool UseToolWindowStyle => false;
@@ -555,6 +575,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
     {
         if (_applicationExitRequested)
         {
+            RecordSettingsCloseEvent("settings_menu_exit_request_ignored", CloseReason.None, cancel: null);
             return;
         }
 
@@ -564,6 +585,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         }
 
         _applicationExitRequested = true;
+        RecordSettingsCloseEvent("settings_menu_exit_requested", CloseReason.ApplicationExitCall, cancel: false);
         _requestApplicationExit();
     }
 

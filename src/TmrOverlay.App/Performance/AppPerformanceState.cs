@@ -314,13 +314,16 @@ internal sealed class AppPerformanceState
             var prefix = $"overlay.{normalizedOverlayId}.window";
             var clampedOpacity = Math.Clamp(opacity, 0d, 1d);
             var effectiveSettingsOverlayActive = settingsOverlayActive && settingsWindowVisible;
+            var inputInterceptRiskReasons = OverlayWindowInputInterceptRiskReasons(
+                actualVisible,
+                inputTransparent,
+                effectiveSettingsOverlayActive,
+                settingsWindowInputProtected,
+                intersectsSettingsWindow,
+                clampedOpacity);
             var inputInterceptRisk = actualVisible
                 && !inputTransparent
-                && (effectiveSettingsOverlayActive
-                    || settingsWindowInputProtected
-                    || intersectsSettingsWindow
-                    || (settingsWindowVisible && topMost && noActivate)
-                    || clampedOpacity <= 0.01d);
+                && inputInterceptRiskReasons.Count > 0;
             RecordOverlayUpdateValue($"{prefix}.visible", actualVisible ? 1d : 0d, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.top_most", topMost ? 1d : 0d, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.always_on_top_setting", alwaysOnTopSetting ? 1d : 0d, timestampUtc);
@@ -331,6 +334,11 @@ internal sealed class AppPerformanceState
             RecordOverlayUpdateValue($"{prefix}.settings_window_intersects", intersectsSettingsWindow ? 1d : 0d, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.settings_window_input_protected", settingsWindowInputProtected ? 1d : 0d, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.input_intercept_risk", inputInterceptRisk ? 1d : 0d, timestampUtc);
+            RecordOverlayUpdateValue($"{prefix}.input_intercept_risk_reason_count", inputInterceptRiskReasons.Count, timestampUtc);
+            RecordOverlayUpdateValue(
+                $"{prefix}.topmost_noactivate_settings_visible_without_overlap",
+                settingsWindowVisible && topMost && noActivate && !intersectsSettingsWindow && !settingsWindowInputProtected ? 1d : 0d,
+                timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.opacity", clampedOpacity, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.x", x, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.y", y, timestampUtc);
@@ -350,6 +358,7 @@ internal sealed class AppPerformanceState
                 SettingsWindowIntersects: intersectsSettingsWindow,
                 SettingsWindowInputProtected: settingsWindowInputProtected,
                 InputInterceptRisk: inputInterceptRisk,
+                InputInterceptRiskReasons: inputInterceptRiskReasons,
                 X: x,
                 Y: y,
                 Width: Math.Max(0, width),
@@ -523,6 +532,43 @@ internal sealed class AppPerformanceState
         return elapsedSeconds <= 0d
             ? 0d
             : Math.Round((_telemetryFrameCount - 1) / elapsedSeconds, 2);
+    }
+
+    private static IReadOnlyList<string> OverlayWindowInputInterceptRiskReasons(
+        bool actualVisible,
+        bool inputTransparent,
+        bool effectiveSettingsOverlayActive,
+        bool settingsWindowInputProtected,
+        bool intersectsSettingsWindow,
+        double clampedOpacity)
+    {
+        if (!actualVisible || inputTransparent)
+        {
+            return [];
+        }
+
+        var reasons = new List<string>();
+        if (effectiveSettingsOverlayActive)
+        {
+            reasons.Add("settings-overlay-active");
+        }
+
+        if (settingsWindowInputProtected)
+        {
+            reasons.Add("settings-window-input-protected");
+        }
+
+        if (intersectsSettingsWindow)
+        {
+            reasons.Add("settings-window-intersects");
+        }
+
+        if (clampedOpacity <= 0.01d)
+        {
+            reasons.Add("effectively-invisible");
+        }
+
+        return reasons;
     }
 
     private void RecordIRacingSystemValue(string id, double? value, DateTimeOffset timestampUtc)
@@ -923,6 +969,7 @@ internal sealed record OverlayWindowDiagnosticSnapshot(
     bool SettingsWindowIntersects,
     bool SettingsWindowInputProtected,
     bool InputInterceptRisk,
+    IReadOnlyList<string> InputInterceptRiskReasons,
     int X,
     int Y,
     int Width,

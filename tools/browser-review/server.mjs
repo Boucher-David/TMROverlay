@@ -817,6 +817,7 @@ function reviewAllFlags() {
     { kind: 'green', category: 'green', label: 'Green', detail: null, tone: 'success' },
     { kind: 'blue', category: 'blue', label: 'Blue', detail: null, tone: 'info' },
     { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: null, tone: 'warning' },
+    { kind: 'debris', category: 'yellow', label: 'Debris', detail: null, tone: 'warning' },
     { kind: 'caution', category: 'yellow', label: 'Caution', detail: 'waving', tone: 'warning' },
     { kind: 'red', category: 'critical', label: 'Red', detail: null, tone: 'error' },
     { kind: 'black', category: 'critical', label: 'Black', detail: null, tone: 'error' },

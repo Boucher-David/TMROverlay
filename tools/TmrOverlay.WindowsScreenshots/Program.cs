@@ -464,7 +464,10 @@ internal static class Program
                 outputRoot,
                 $"{variant.OverlayId}-{variant.Slug}",
                 $"Native {overlay.Definition.DisplayName} - {variant.Label}",
-                () => CreateDesignV2LiveOverlayForm(overlay, OverlaySessionKind.Race),
+                () => CreateDesignV2LiveOverlayForm(
+                    overlay,
+                    OverlaySessionKind.Race,
+                    NativeVariantSettings(overlay.Definition, variant.Slug)),
                 postProcess: overlay.UsesTransparentBackdrop
                     ? bitmap => ReplaceColorWithReviewBackdrop(bitmap, Color.FromArgb(1, 2, 3))
                     : null,
@@ -854,6 +857,7 @@ internal static class Program
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "idle", "Idle"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "waiting", "Waiting"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "no-content", "No Content"),
+            new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "left", "Left"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "right", "Right"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "both-sides", "Both Sides"),
@@ -984,6 +988,7 @@ internal static class Program
             {
                 var value when string.Equals(value, "waiting", StringComparison.OrdinalIgnoreCase) => ReviewInputWaitingModel(),
                 var value when string.Equals(value, "no-content", StringComparison.OrdinalIgnoreCase) => ReviewInputNoContentModel(),
+                var value when string.Equals(value, "min-scale", StringComparison.OrdinalIgnoreCase) => ReviewInputModel(OverlaySessionKind.Race),
                 _ => throw new InvalidOperationException($"Unknown input-state native overlay fixture variant {slug}.")
             };
         }
@@ -1837,6 +1842,7 @@ internal static class Program
             new FlagOverlayDisplayItem(FlagDisplayKind.Green, FlagDisplayCategory.Green, "Green", null, SimpleTelemetryTone.Success),
             new FlagOverlayDisplayItem(FlagDisplayKind.Blue, FlagDisplayCategory.Blue, "Blue", null, SimpleTelemetryTone.Info),
             new FlagOverlayDisplayItem(FlagDisplayKind.Yellow, FlagDisplayCategory.Yellow, "Yellow", null, SimpleTelemetryTone.Warning),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Yellow, FlagDisplayCategory.Yellow, "Debris", null, SimpleTelemetryTone.Warning),
             new FlagOverlayDisplayItem(FlagDisplayKind.Caution, FlagDisplayCategory.Yellow, "Caution", "waving", SimpleTelemetryTone.Warning),
             new FlagOverlayDisplayItem(FlagDisplayKind.Red, FlagDisplayCategory.Critical, "Red", null, SimpleTelemetryTone.Error),
             new FlagOverlayDisplayItem(FlagDisplayKind.Black, FlagDisplayCategory.Critical, "Black", null, SimpleTelemetryTone.Error),
@@ -1846,7 +1852,7 @@ internal static class Program
         };
         return new DesignV2OverlayModel(
             "Flags",
-            "green + blue + yellow + caution + red + black + repair + white + checkered",
+            "green + blue + yellow + debris + caution + red + black + repair + white + checkered",
             "source: session flags telemetry",
             DesignV2Evidence.Live,
             new DesignV2FlagsBody(flags, IsWaiting: false, ManagedEnabled: true, SettingsOverlayActive: false),
@@ -3996,6 +4002,7 @@ internal static class Program
                 {
                     count = body.FlagCells.Count,
                     kinds = body.FlagCells.Select(flag => flag.Kind).ToArray(),
+                    visualKinds = body.FlagCells.Select(FlagVisualKind).ToArray(),
                     gridColumns = body.GridColumns,
                     gridRows = body.GridRows,
                     grid = new
@@ -4432,9 +4439,13 @@ internal static class Program
             row = cell.Row,
             column = cell.Column,
             kind = cell.Kind,
+            visualKind = FlagVisualKind(cell),
+            label = cell.Label,
+            detail = cell.Detail,
             fill = FlagFillColor(cell.Kind),
             bounds = RectEvidence(cell.Bounds),
-            clothBounds = RectEvidence(cell.ClothBounds)
+            clothBounds = RectEvidence(cell.ClothBounds),
+            labelBounds = (object?)null
         };
     }
 
@@ -4515,6 +4526,17 @@ internal static class Program
             "black" or "meatball" => "rgb(8, 10, 12)",
             _ => null
         };
+    }
+
+    private static string FlagVisualKind(DesignV2LayoutFlagCell cell)
+    {
+        if (string.Equals(cell.Kind, "Debris", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(cell.Label, "Debris", StringComparison.OrdinalIgnoreCase))
+        {
+            return "debris";
+        }
+
+        return cell.Kind.Trim().ToLowerInvariant();
     }
 
     private static object CarRadarEvidence(DesignV2LayoutVector vector)
@@ -4920,6 +4942,23 @@ internal static class Program
         settings.SetBooleanOption(OverlayOptionKeys.FlagsShowYellow, true);
         settings.SetBooleanOption(OverlayOptionKeys.FlagsShowCritical, true);
         settings.SetBooleanOption(OverlayOptionKeys.FlagsShowFinish, true);
+        return settings;
+    }
+
+    private static OverlaySettings? NativeVariantSettings(OverlayDefinition definition, string slug)
+    {
+        if (!string.Equals(definition.Id, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var scale = 0.6d;
+        var settings = OverlaySettingsFor(
+            definition,
+            width: Math.Max(80, (int)Math.Round(definition.DefaultWidth * scale)),
+            height: Math.Max(80, (int)Math.Round(definition.DefaultHeight * scale)));
+        settings.Scale = scale;
         return settings;
     }
 

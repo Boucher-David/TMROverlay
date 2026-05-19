@@ -178,8 +178,11 @@ public sealed class AppPerformanceStateTests
 
         Assert.Contains(snapshot.OverlayUpdates, metric =>
             metric.Id == "overlay.standings.window.input_intercept_risk" && metric.Last == 1d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.standings.window.input_intercept_risk_reason_count" && metric.Last == 1d);
         var window = Assert.Single(snapshot.OverlayWindows);
         Assert.True(window.InputInterceptRisk);
+        Assert.Equal(["effectively-invisible"], window.InputInterceptRiskReasons);
     }
 
     [Fact]
@@ -212,11 +215,16 @@ public sealed class AppPerformanceStateTests
             metric.Id == "overlay.relative.window.settings_window_visible" && metric.Last == 1d);
         Assert.Contains(snapshot.OverlayUpdates, metric =>
             metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 0d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.input_intercept_risk_reason_count" && metric.Last == 0d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.topmost_noactivate_settings_visible_without_overlap" && metric.Last == 1d);
         var window = Assert.Single(snapshot.OverlayWindows);
         Assert.True(window.SettingsWindowVisible);
         Assert.False(window.SettingsWindowIntersects);
         Assert.False(window.SettingsWindowInputProtected);
         Assert.False(window.InputInterceptRisk);
+        Assert.Empty(window.InputInterceptRiskReasons);
     }
 
     [Theory]
@@ -251,8 +259,13 @@ public sealed class AppPerformanceStateTests
 
         Assert.Contains(snapshot.OverlayUpdates, metric =>
             metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 1d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.input_intercept_risk_reason_count" && metric.Last == 1d);
         var window = Assert.Single(snapshot.OverlayWindows);
         Assert.True(window.InputInterceptRisk);
+        Assert.Equal(
+            intersectsSettingsWindow ? "settings-window-intersects" : "settings-window-input-protected",
+            Assert.Single(window.InputInterceptRiskReasons));
     }
 
     [Fact]
@@ -285,10 +298,13 @@ public sealed class AppPerformanceStateTests
             metric.Id == "overlay.relative.window.settings_overlay_active" && metric.Last == 0d);
         Assert.Contains(snapshot.OverlayUpdates, metric =>
             metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 0d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.input_intercept_risk_reason_count" && metric.Last == 0d);
         var window = Assert.Single(snapshot.OverlayWindows);
         Assert.False(window.SettingsOverlayActive);
         Assert.False(window.SettingsWindowVisible);
         Assert.False(window.InputInterceptRisk);
+        Assert.Empty(window.InputInterceptRiskReasons);
     }
 
     [Fact]

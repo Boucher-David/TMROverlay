@@ -367,7 +367,6 @@ jobs:
     needs:
       - windows_screenshots
       - windows_installer_screenshots
-    if: always()
 
     steps:
       - name: Download Windows overlay screenshots

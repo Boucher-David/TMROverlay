@@ -230,23 +230,23 @@ public sealed class OverlayContentColumnSettingsTests
         Assert.NotNull(method);
 
         var full = NewInputStateSettings();
-        Assert.Equal(new Size(520, 222), ScaledInputStateSize(method, full));
-        Assert.Equal(new Size(520, 222), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, full));
+        Assert.Equal(new Size(520, 260), ScaledInputStateSize(method, full));
+        Assert.Equal(new Size(520, 260), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, full));
 
         var railOnly = NewInputStateSettings();
         SetInputBlocks(railOnly, InputGraphBlockIds, false);
-        Assert.Equal(new Size(276, 222), ScaledInputStateSize(method, railOnly));
-        Assert.Equal(new Size(276, 222), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, railOnly));
+        Assert.Equal(new Size(276, 260), ScaledInputStateSize(method, railOnly));
+        Assert.Equal(new Size(276, 260), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, railOnly));
 
         var graphOnly = NewInputStateSettings();
         SetInputBlocks(graphOnly, InputRailBlockIds, false);
-        Assert.Equal(new Size(380, 222), ScaledInputStateSize(method, graphOnly));
-        Assert.Equal(new Size(380, 222), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, graphOnly));
+        Assert.Equal(new Size(380, 260), ScaledInputStateSize(method, graphOnly));
+        Assert.Equal(new Size(380, 260), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, graphOnly));
 
         var empty = NewInputStateSettings();
         SetInputBlocks(empty, InputGraphBlockIds, false);
         SetInputBlocks(empty, InputRailBlockIds, false);
-        Assert.Equal(new Size(276, 222), ScaledInputStateSize(method, empty));
+        Assert.Equal(new Size(276, 260), ScaledInputStateSize(method, empty));
         Assert.False(InputStateRenderModelBuilder.HasEnabledContent(empty));
     }
 

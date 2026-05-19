@@ -4249,8 +4249,12 @@ internal static class Program
             maxGapSeconds = graph.MaxGapSeconds,
             lapReferenceSeconds = graph.LapReferenceSeconds,
             selectedSeriesCount = graph.SeriesCount,
-            metricDeadbandSeconds = (double?)null,
+            metricDeadbandSeconds = graph.MetricDeadbandSeconds,
             comparisonLabel = graph.ComparisonLabel,
+            activeThreat = graph.ActiveThreat is { } activeThreat
+                ? GraphTrendMetricEvidence(activeThreat)
+                : null,
+            threatCarIdx = graph.ThreatCarIdx,
             canvasBounds = RectEvidence(graph.Frame),
             series = graph.Series.Select((series, index) => new
             {
@@ -4273,7 +4277,7 @@ internal static class Program
                 points = series.Points.Select(GraphPointEvidence).ToArray()
             }).ToArray(),
             trendMetricCount = graph.TrendMetricCount,
-            trendMetrics = graph.MetricRows.Select(GraphMetricRowEvidence).ToArray(),
+            trendMetrics = graph.TrendMetrics.Select(GraphTrendMetricEvidence).ToArray(),
             weatherCount = graph.WeatherBands.Count,
             markerCount = graph.Markers.Count,
             gridLineCount = graph.GridLines.Count,
@@ -4295,6 +4299,30 @@ internal static class Program
                 metricRows = graph.MetricRows.Select(GraphMetricRowEvidence).ToArray(),
                 series = graph.Series.Select(GraphSeriesEvidence).ToArray()
             }
+        };
+    }
+
+    private static object GraphTrendMetricEvidence(DesignV2LayoutGraphTrendMetric metric)
+    {
+        return new
+        {
+            label = metric.Label,
+            focusGapChangeSeconds = metric.FocusGapChangeSeconds,
+            state = metric.State,
+            stateLabel = metric.StateLabel,
+            valueText = metric.ValueText,
+            chaserText = metric.ChaserText,
+            primaryText = metric.PrimaryText,
+            threatText = metric.ThreatText,
+            comparisonText = metric.ComparisonText,
+            chaser = metric.Chaser is { } chaser
+                ? new
+                {
+                    carIdx = chaser.CarIdx,
+                    label = chaser.Label,
+                    gainSeconds = chaser.GainSeconds
+                }
+                : null
         };
     }
 

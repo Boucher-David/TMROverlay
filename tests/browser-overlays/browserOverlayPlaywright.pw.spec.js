@@ -635,7 +635,7 @@ test.describe('browser overlay Playwright integration', () => {
     await page.locator('.matrix-session button').nth(3).click();
     await page.locator('.matrix-session button').nth(6).click();
     await page.getByRole('tab', { name: 'General' }).click();
-    await expect(page.getByText('OBS size 276 x 222')).toBeVisible();
+    await expect(page.getByText('OBS size 276 x 260')).toBeVisible();
 
     await page.getByRole('link', { name: 'Pit Service' }).click();
     await page.getByRole('tab', { name: 'Header' }).click();
@@ -737,7 +737,7 @@ test.describe('browser overlay Playwright integration', () => {
     await scaleSlider.focus();
     await page.keyboard.press('ArrowRight');
     await expect(page.getByText('125%')).toBeVisible();
-    await expect(page.getByText('OBS size 650 x 278')).toBeVisible();
+    await expect(page.getByText('OBS size 650 x 325')).toBeVisible();
     expect(patches).toContainEqual({
       kind: 'number',
       overlayId: 'input-state',

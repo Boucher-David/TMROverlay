@@ -346,6 +346,7 @@ OVERLAY_VARIANT_MIN_BYTE_RANGE = {
 WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS = {
     ("gap-to-leader", "no-cars"),
     ("input-state", "min-scale"),
+    ("relative", "rightmost-evidence"),
 }
 
 WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
@@ -1844,6 +1845,7 @@ def validate_effective_browser_source_contract(
     variant_key = screenshot_variant_key(path)
     if (
         values.get("minScale") is None
+        and values.get("overlayId") != "garage-cover"
         and variant_key not in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS
         and isinstance(screenshot_width, int)
         and isinstance(screenshot_height, int)

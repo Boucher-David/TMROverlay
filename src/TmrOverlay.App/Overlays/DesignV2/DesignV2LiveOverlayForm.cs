@@ -3418,7 +3418,13 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 WeatherBands = BuildGraphWeatherBands(graph, plot),
                 Markers = BuildGraphMarkers(graph, plot, maxGapSeconds),
                 GridLines = BuildGraphGridLines(graph, scale, plot),
+                TrendMetrics = BuildGraphTrendMetrics(graph.TrendMetrics),
+                ActiveThreat = graph.ActiveThreat is { } activeThreat
+                    ? BuildGraphTrendMetric(activeThreat)
+                    : null,
+                ThreatCarIdx = graph.ThreatCarIdx,
                 MetricRows = BuildGraphMetricRows(metricsTableRect, graph),
+                MetricDeadbandSeconds = graph.MetricDeadbandSeconds,
                 Scale = scale.IsFocusRelative ? "focus-relative" : "leader",
                 AheadSeconds = scale.IsFocusRelative ? scale.AheadSeconds : null,
                 BehindSeconds = scale.IsFocusRelative ? scale.BehindSeconds : null,
@@ -3428,6 +3434,27 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 ComparisonLabel = graph.ComparisonLabel
             }
         };
+    }
+
+    private static IReadOnlyList<DesignV2LayoutGraphTrendMetric> BuildGraphTrendMetrics(
+        IReadOnlyList<DesignV2GapTrendMetric> metrics)
+    {
+        return metrics.Select(BuildGraphTrendMetric).ToArray();
+    }
+
+    private static DesignV2LayoutGraphTrendMetric BuildGraphTrendMetric(DesignV2GapTrendMetric metric)
+    {
+        return new DesignV2LayoutGraphTrendMetric(
+            metric.Label,
+            metric.FocusGapChangeSeconds,
+            metric.Chaser,
+            metric.State,
+            metric.StateLabel,
+            GapMetricValueText(metric),
+            GapMetricChaserText(metric),
+            metric.PrimaryText,
+            metric.ThreatText,
+            metric.ComparisonText);
     }
 
     private static DesignV2LayoutGraphSeries BuildGraphSeriesLayout(
@@ -8276,7 +8303,15 @@ internal sealed record DesignV2LayoutGraph(
 
     public IReadOnlyList<DesignV2LayoutLine> GridLines { get; init; } = [];
 
+    public IReadOnlyList<DesignV2LayoutGraphTrendMetric> TrendMetrics { get; init; } = [];
+
+    public DesignV2LayoutGraphTrendMetric? ActiveThreat { get; init; }
+
+    public int? ThreatCarIdx { get; init; }
+
     public IReadOnlyList<DesignV2LayoutRow> MetricRows { get; init; } = [];
+
+    public double? MetricDeadbandSeconds { get; init; }
 
     public string? Scale { get; init; }
 
@@ -8292,6 +8327,18 @@ internal sealed record DesignV2LayoutGraph(
 
     public string? ComparisonLabel { get; init; }
 }
+
+internal sealed record DesignV2LayoutGraphTrendMetric(
+    string Label,
+    double? FocusGapChangeSeconds,
+    DesignV2BehindGainMetric? Chaser,
+    string State,
+    string? StateLabel,
+    string ValueText,
+    string ChaserText,
+    string? PrimaryText,
+    string? ThreatText,
+    string? ComparisonText);
 
 internal sealed record DesignV2LayoutGraphSeries(
     int Index,

@@ -40,6 +40,13 @@ const opacityExcludedOverlayIds = new Set([
   'garage-cover',
   'track-map'
 ]);
+const collapsibleBrowserSourceChromeIds = new Set([
+  'standings',
+  'relative',
+  'gap-to-leader',
+  'session-weather',
+  'pit-service'
+]);
 let reloadTimer = null;
 
 const server = createServer((request, response) => {
@@ -1042,7 +1049,7 @@ function reviewEffectiveSettings(model, overlayId, previewMode = 'off', searchPa
   const normalizedPreviewMode = normalizePreviewMode(previewMode);
   const session = sessionKeyFromPreview(previewMode);
   const overlayState = reviewAppState.overlays[overlayId] || {};
-  const effectiveOverlayState = effectiveSettingsOverlayState(overlayId, overlayState, searchParams);
+  const effectiveOverlayState = effectiveSettingsOverlayState(overlayId, overlayState, previewMode, searchParams);
   const fixture = fixtureVariant(searchParams) || null;
   return {
     overlayId,
@@ -1087,12 +1094,13 @@ function effectiveRenderedRowCount(model) {
   return (model?.rows || []).length;
 }
 
-function effectiveSettingsOverlayState(overlayId, overlayState, searchParams = new URLSearchParams()) {
+function effectiveSettingsOverlayState(overlayId, overlayState, previewMode = 'off', searchParams = new URLSearchParams()) {
+  let effectiveState = overlayState;
   if (overlayId === 'relative' && fixtureVariant(searchParams) === 'rightmost-evidence') {
-    return {
-      ...overlayState,
+    effectiveState = {
+      ...effectiveState,
       content: {
-        ...(overlayState.content || {}),
+        ...(effectiveState.content || {}),
         'Pit status': true,
         'Pit status.race': true,
         'relative.content.relative.pit.enabled': true,
@@ -1101,7 +1109,24 @@ function effectiveSettingsOverlayState(overlayId, overlayState, searchParams = n
     };
   }
 
-  return overlayState;
+  if (fixtureVariant(searchParams) === 'chrome-off' && collapsibleBrowserSourceChromeIds.has(overlayId)) {
+    const session = sessionKeyFromPreview(previewMode);
+    effectiveState = {
+      ...effectiveState,
+      chrome: {
+        ...(effectiveState.chrome || {}),
+        header: {
+          ...(effectiveState.chrome?.header || {}),
+          'Time remaining': {
+            ...(effectiveState.chrome?.header?.['Time remaining'] || {}),
+            [session]: false
+          }
+        }
+      }
+    };
+  }
+
+  return effectiveState;
 }
 
 function reviewEffectiveSettingList(overlayId, overlayState, session, searchParams = new URLSearchParams()) {

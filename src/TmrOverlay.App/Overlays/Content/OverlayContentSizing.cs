@@ -250,8 +250,7 @@ internal static class OverlayContentSizing
             || string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.Ordinal)
             || string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.Ordinal)
             || string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.Ordinal)
-            || string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.Ordinal)
-            || string.Equals(overlayId, InputStateOverlayDefinition.Definition.Id, StringComparison.Ordinal);
+            || string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.Ordinal);
     }
 
     private static bool HasSelectedHeaderChrome(

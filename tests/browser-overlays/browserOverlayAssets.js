@@ -567,7 +567,6 @@ function usesCollapsibleHeaderHeight(id) {
     'relative',
     'gap-to-leader',
     'fuel-calculator',
-    'input-state',
     'session-weather',
     'pit-service'
   ].includes(id);

@@ -13,6 +13,7 @@ using TmrOverlay.App.History;
 using TmrOverlay.App.Localhost;
 using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.CarRadar;
+using TmrOverlay.App.Overlays.Content;
 using TmrOverlay.App.Overlays.DesignV2;
 using TmrOverlay.App.Overlays.Flags;
 using TmrOverlay.App.Overlays.FuelCalculator;
@@ -490,10 +491,7 @@ internal static class Program
             () =>
             {
                 var overlay = new NativeOverlaySpec(DesignV2LiveOverlayKind.Standings, StandingsOverlayDefinition.Definition);
-                var settings = OverlaySettingsFor(
-                    StandingsOverlayDefinition.Definition,
-                    width: StandingsOverlayDefinition.Definition.DefaultWidth,
-                    height: 2160);
+                var settings = OverlaySettingsFor(StandingsOverlayDefinition.Definition);
                 var form = CreateDesignV2LiveOverlayForm(overlay, OverlaySessionKind.Race, settings);
                 form.ClientSize = OverlayManager.TargetOverlayClientSizeForApply(
                     StandingsOverlayDefinition.Definition,
@@ -506,9 +504,9 @@ internal static class Program
             relativeDirectory: "native-overlays",
             metadata: NativeOverlayMetadata("standings", "race") with
             {
-                Fixture = "browser-review/static-overlay-model + windows-native-sizing-persisted-expanded-height",
+                Fixture = "browser-review/static-overlay-model + windows-native-preview-sizing",
                 FixtureParity = "model-data-aligned-with-browser-review-and-localhost",
-                ComparisonLimit = "This screenshot intentionally keeps a persisted expanded Windows height to validate preview sizing clamp/race behavior; compare row/cell model data to browser/localhost, not overall window height."
+                ComparisonLimit = "This screenshot validates that race preview sizing uses the current recommended Standings size instead of carrying stale expanded preview height."
             },
             beforeCapture: form => ApplyReviewAlignedNativeModelIfAvailable(form, "standings", OverlaySessionKind.Race)));
 
@@ -1049,7 +1047,8 @@ internal static class Program
         return model with
         {
             HeaderText = string.Empty,
-            ShowFooter = false
+            ShowFooter = false,
+            ShowHeader = false
         };
     }
 
@@ -4962,6 +4961,16 @@ internal static class Program
 
     private static OverlaySettings? NativeVariantSettings(OverlayDefinition definition, string slug)
     {
+        if (string.Equals(slug, "chrome-off", StringComparison.OrdinalIgnoreCase))
+        {
+            var settings = OverlaySettingsFor(definition);
+            SetSharedChromeOptions(settings, enabled: false);
+            var size = OverlayContentSizing.BaseSizeFor(definition, settings, OverlaySessionKind.Race);
+            settings.Width = size.Width;
+            settings.Height = size.Height;
+            return settings;
+        }
+
         if (!string.Equals(definition.Id, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))
         {
@@ -4975,6 +4984,22 @@ internal static class Program
             height: Math.Max(80, (int)Math.Round(definition.DefaultHeight * scale)));
         settings.Scale = scale;
         return settings;
+    }
+
+    private static void SetSharedChromeOptions(OverlaySettings settings, bool enabled)
+    {
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusTest, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusPractice, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusQualifying, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingTest, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingRace, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceTest, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourcePractice, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceQualifying, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, enabled);
     }
 
     private static void Noop()

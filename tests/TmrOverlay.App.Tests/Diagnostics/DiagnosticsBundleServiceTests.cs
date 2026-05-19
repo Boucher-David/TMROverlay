@@ -125,7 +125,13 @@ public sealed class DiagnosticsBundleServiceTests
             File.WriteAllText(Path.Combine(edgeCaseDirectory, "session-20260426-edge-cases.json"), """{"clipCount":1}""");
             File.WriteAllText(Path.Combine(modelParityDirectory, "session-20260426-live-model-parity.json"), """{"frameCount":1}""");
             File.WriteAllText(Path.Combine(overlayDiagnosticsDirectory, "session-20260426-live-overlay-diagnostics.json"), """{"frameCount":1}""");
-            File.WriteAllText(Path.Combine(storage.EventsRoot, "events-20260426.jsonl"), "{}");
+            File.WriteAllText(
+                Path.Combine(storage.EventsRoot, "events-20260426.jsonl"),
+                """
+                {"timestampUtc":"2026-04-26T12:00:00Z","name":"update_check_started","properties":{"source":"startup","repositoryUrl":"https://example.invalid/releases"}}
+                {"timestampUtc":"2026-04-26T12:00:01Z","name":"update_check_failed","properties":{"source":"startup","error":"HttpRequestException"}}
+                {"timestampUtc":"2026-04-26T12:00:30Z","name":"update_check_succeeded","properties":{"source":"manual","result":"up_to_date"}}
+                """);
             File.WriteAllText(
                 Path.Combine(storage.SettingsRoot, "settings.json"),
                 $$"""
@@ -190,8 +196,28 @@ public sealed class DiagnosticsBundleServiceTests
                    CarPath: bmwm4gt3
                    CarScreenName: BMW M4 GT3 EVO
                    CarScreenNameShort: BMW M4 GT3 EVO
+                CarSetup:
+                 Chassis:
+                  FrontArb: 4
+                  RearArb: 5
+                  WingAngle: 6
                 """);
-            File.WriteAllText(Path.Combine(captureDirectory, "capture-synthesis.json"), "{}");
+            File.WriteAllText(
+                Path.Combine(captureDirectory, "capture-synthesis.json"),
+                """
+                {
+                  "frameScan": {
+                    "totalFrameRecords": 454144,
+                    "sampledFrameCount": 1024
+                  },
+                  "session": {
+                    "metrics": {
+                      "validDistanceLaps": 0.0,
+                      "completedValidLaps": 0
+                    }
+                  }
+                }
+                """);
             File.WriteAllText(Path.Combine(captureDirectory, "live-model-parity.json"), "{}");
             File.WriteAllText(
                 Path.Combine(captureDirectory, "live-overlay-diagnostics.json"),
@@ -239,9 +265,27 @@ public sealed class DiagnosticsBundleServiceTests
                     "framesWithHighlightedSectors": 8
                   },
                   "fuel": {
+                    "framesWithFuelLevel": 324,
+                    "teamContextWithoutFuelLevelFrames": 453820,
+                    "pitServiceNonPlayerFocusFrames": 451552,
+                    "fuelLocalStrategyUnavailableFrames": 453983,
+                    "fuelLocalStrategyUnavailableReasonCounts": {
+                      "focus_on_another_car": 453983
+                    },
                     "pitWindowCount": 2,
                     "pitWindowsWithFuelIncrease": 1,
                     "pitWindowsWithBlackFlag": 0
+                  },
+                  "lapDelta": {
+                    "observedFrames": 454144,
+                    "framesWithAnyValue": 454144,
+                    "framesWithAnyUsableValue": 0,
+                    "maxAbsDeltaSeconds": 0,
+                    "valueFrameCounts": {
+                      "toBestLap": 454144,
+                      "toSessionBestLap": 454144
+                    },
+                    "usableFrameCounts": {}
                   }
                 }
                 """);
@@ -347,6 +391,12 @@ public sealed class DiagnosticsBundleServiceTests
                     TrackWetness: 0,
                     WeatherDeclaredWet: false,
                     PlayerTireCompound: 0,
+                    LapDeltaToBestLapSeconds: 0d,
+                    LapDeltaToBestLapRate: 0d,
+                    LapDeltaToBestLapOk: null,
+                    LapDeltaToSessionBestLapSeconds: 0d,
+                    LapDeltaToSessionBestLapRate: 0d,
+                    LapDeltaToSessionBestLapOk: null,
                     IsGarageVisible: true,
                     SessionState: 3,
                     SessionFlags: 0x00000008 | 0x00000020,
@@ -901,8 +951,19 @@ public sealed class DiagnosticsBundleServiceTests
                 var warnings = Assert.IsType<JsonArray>(evidenceQualityJson?["warnings"]);
                 Assert.Contains(warnings, warning =>
                     string.Equals((string?)warning, "live_overlay_screenshot_capture_disabled", StringComparison.Ordinal));
+                Assert.Contains(warnings, warning =>
+                    string.Equals((string?)warning, "recent_update_check_failures", StringComparison.Ordinal));
                 Assert.True(((bool?)evidenceQualityJson?["liveTelemetry"]?["currentConnected"]) == true);
                 Assert.True(((bool?)evidenceQualityJson?["latestCapture"]?["captureSynthesisExists"]) == true);
+                Assert.False(((bool?)evidenceQualityJson?["liveOverlayWindows"]?["visualProof"]?["canProveVisibleOverlayPixels"]) ?? true);
+                Assert.Equal(
+                    "stream-chat",
+                    (string?)evidenceQualityJson?["liveOverlayWindows"]?["visualProof"]?["visibleOverlayIdsWithoutPixelEvidence"]?[0]);
+                Assert.True(((bool?)evidenceQualityJson?["updateFlow"]?["hasRecentUpdateCheckFailures"]) == true);
+                Assert.Equal("startup", (string?)evidenceQualityJson?["updateFlow"]?["latestFailureSource"]);
+                Assert.Equal("HttpRequestException", (string?)evidenceQualityJson?["updateFlow"]?["latestFailureError"]);
+                Assert.Equal(1, ((int?)evidenceQualityJson?["updateEvents"]?["updateCheckFailedCount"]) ?? -1);
+                Assert.Equal(1, ((int?)evidenceQualityJson?["updateEvents"]?["updateCheckFailureErrorCounts"]?["HttpRequestException"]) ?? -1);
             }
 
             var latestCaptureEvidenceEntry = archive.GetEntry("metadata/latest-capture-evidence.json");
@@ -913,6 +974,14 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.True(((bool?)latestCaptureEvidenceJson?["exists"]) == true);
                 Assert.Equal("Race", (string?)latestCaptureEvidenceJson?["latestSession"]?["sessionType"]);
                 Assert.True(((bool?)latestCaptureEvidenceJson?["latestSession"]?["isRaceSession"]) == true);
+                Assert.Equal(3, ((int?)latestCaptureEvidenceJson?["latestSession"]?["setupSignalCount"]) ?? -1);
+                Assert.Equal(3, ((int?)latestCaptureEvidenceJson?["setupAdjustmentEvidence"]?["staticWingOrArbSignalCount"]) ?? -1);
+                Assert.False(((bool?)latestCaptureEvidenceJson?["setupAdjustmentEvidence"]?["liveAdjustmentChangeEvidenceAvailable"]) ?? true);
+                Assert.Equal("missing_local_player_fuel_evidence", (string?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["classification"]);
+                Assert.Equal(453983, ((int?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["fuelLocalStrategyUnavailableFrames"]) ?? -1);
+                Assert.Equal(453983, ((int?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["fuelLocalStrategyUnavailableReasonCounts"]?["focus_on_another_car"]) ?? -1);
+                Assert.Equal("values_present_without_usable_quality_all_zero", (string?)latestCaptureEvidenceJson?["lapDeltaQuality"]?["classification"]);
+                Assert.True(((bool?)latestCaptureEvidenceJson?["lapDeltaQuality"]?["valuesPresentWithoutUsableQuality"]) == true);
                 Assert.True(((bool?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["exists"]) == true);
                 Assert.Equal(120, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["frameCount"]) ?? -1);
                 Assert.Equal(80, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["flagsFramesWithDisplayFlags"]) ?? -1);
@@ -934,6 +1003,11 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(90, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["trackMapFramesWithSectors"]) ?? -1);
                 Assert.Equal(110, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["trackMapFramesWithLiveTiming"]) ?? -1);
                 Assert.Equal(8, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["trackMapHighlightedSectorFrames"]) ?? -1);
+                Assert.Equal(324, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["fuelFramesWithFuelLevel"]) ?? -1);
+                Assert.Equal(453820, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["fuelTeamContextWithoutFuelLevelFrames"]) ?? -1);
+                Assert.Equal(451552, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["fuelPitServiceNonPlayerFocusFrames"]) ?? -1);
+                Assert.Equal(454144, ((int?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["lapDeltaObservedFrames"]) ?? -1);
+                Assert.Equal("values_present_without_usable_quality_all_zero", (string?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["lapDeltaClassification"]);
             }
 
             var windowZOrderEntry = archive.GetEntry("metadata/window-z-order.json");
@@ -1060,6 +1134,13 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(42, ((int?)liveTelemetrySynthesisJson?["focus"]?["rawCamCarIdx"]) ?? -1);
                 Assert.Equal(42, ((int?)liveTelemetrySynthesisJson?["focus"]?["focusCarIdx"]) ?? -1);
                 Assert.True(((bool?)liveTelemetrySynthesisJson?["focus"]?["focusDiffersFromPlayer"]) == true);
+                Assert.True(((bool?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["strategyAndReferenceContextsDiffer"]) == true);
+                Assert.Equal("local-player/team", (string?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["strategyContext"]);
+                Assert.Equal("focus/reference", (string?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["referenceContext"]);
+                Assert.Equal(10, ((int?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["strategyContextCarIdx"]) ?? -1);
+                Assert.Equal(42, ((int?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["referenceContextCarIdx"]) ?? -1);
+                Assert.Equal("values_present_without_usable_quality_all_zero", (string?)liveTelemetrySynthesisJson?["lapDeltaQuality"]?["classification"]);
+                Assert.True(((bool?)liveTelemetrySynthesisJson?["lapDeltaQuality"]?["valuesPresentWithoutUsableQuality"]) == true);
                 Assert.Equal("parade-laps", (string?)liveTelemetrySynthesisJson?["sessionPhase"]?["label"]);
                 Assert.Equal("0x00000028", (string?)liveTelemetrySynthesisJson?["flagsModel"]?["rawFlagsHex"]);
                 Assert.Equal(2, ((int?)liveTelemetrySynthesisJson?["flagsModel"]?["enabledDisplayFlagCount"]) ?? -1);

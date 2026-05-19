@@ -188,7 +188,7 @@ public sealed class OverlayContentColumnSettingsTests
     }
 
     [Fact]
-    public void TargetOverlayClientSizeForApply_PreservesExpandedStandingsPreviewHeightAndSettings()
+    public void TargetOverlayClientSizeForApply_DoesNotPreserveExpandedStandingsHeightDuringPreview()
     {
         var standings = new ApplicationSettings().GetOrAddOverlay(
             "standings",
@@ -202,9 +202,9 @@ public sealed class OverlayContentColumnSettingsTests
             currentSize: new Size(StandingsOverlayDefinition.Definition.DefaultWidth, 2160),
             sessionPreviewActive: true);
 
-        Assert.Equal(new Size(665, 2160), size);
+        Assert.Equal(new Size(665, 313), size);
         Assert.Equal(665, standings.Width);
-        Assert.Equal(2160, standings.Height);
+        Assert.Equal(313, standings.Height);
     }
 
     [Fact]
@@ -397,15 +397,15 @@ public sealed class OverlayContentColumnSettingsTests
             StandingsOverlayDefinition.Definition,
             new Size(665, 720),
             new Size(665, 313)));
-        Assert.True(OverlayManager.ShouldPreserveExpandedOverlayHeight(
-            StandingsOverlayDefinition.Definition,
-            new Size(665, 720),
-            new Size(665, 313),
-            sessionPreviewActive: true));
         Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             StandingsOverlayDefinition.Definition,
             new Size(500, 720),
             new Size(665, 313)));
+        Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
+            StandingsOverlayDefinition.Definition,
+            new Size(665, 720),
+            new Size(665, 313),
+            sessionPreviewActive: true));
         Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             RelativeOverlayDefinition.Definition,
             new Size(360, 520),

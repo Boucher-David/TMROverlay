@@ -43,6 +43,7 @@ internal sealed class DiagnosticsBundleService
     private const int MaxRecentModelParityFiles = 10;
     private const int MaxRecentOverlayDiagnosticsFiles = 10;
     private const int MaxRecentTrackMapReports = 10;
+    private const int MaxRecentEventFilesForDiagnostics = 10;
     private const int MaxBundleNameSegmentLength = 48;
     private const int MaxLiveTelemetryCarExamples = 20;
 
@@ -827,6 +828,7 @@ internal sealed class DiagnosticsBundleService
         var lastActiveSnapshot = _liveTelemetrySource.LastActiveSnapshot();
         var localhost = _localhostOverlayState.Snapshot();
         var liveOverlays = _liveOverlayWindowCaptureStore.Snapshot();
+        var updateEvents = UpdateEventDiagnostics();
         var latestCapture = LatestCaptureDirectory();
         var warnings = new List<string>();
 
@@ -849,6 +851,24 @@ internal sealed class DiagnosticsBundleService
         {
             warnings.Add("latest_capture_missing");
         }
+
+        if (updateEvents.UpdateCheckFailedCount > 0)
+        {
+            warnings.Add("recent_update_check_failures");
+        }
+
+        var visibleWithoutPixelEvidence = liveOverlays.Overlays
+            .Where(overlay => overlay.ActualVisible && string.IsNullOrWhiteSpace(overlay.ScreenshotPath))
+            .Select(overlay => overlay.OverlayId)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var visibleWithoutCurrentScreenshots = liveOverlays.Overlays
+            .Where(overlay => overlay.ActualVisible && !overlay.ScreenshotRepresentsCurrentState)
+            .Select(overlay => overlay.OverlayId)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var canProveVisibleOverlayPixels = liveOverlays.ScreenshotCoverage.VisibleOverlayCount > 0
+            && liveOverlays.ScreenshotCoverage.VisibleOverlayCount == liveOverlays.ScreenshotCoverage.CurrentScreenshotOverlayCount;
 
         return new
         {
@@ -882,7 +902,32 @@ internal sealed class DiagnosticsBundleService
             {
                 liveOverlays.CaptureScreenshotsEnabled,
                 liveOverlays.ScreenshotCoverage,
-                liveOverlays.EvidenceWarnings
+                liveOverlays.EvidenceWarnings,
+                VisualProof = new
+                {
+                    CanProveVisibleOverlayPixels = canProveVisibleOverlayPixels,
+                    VisibleOverlayIdsWithoutPixelEvidence = visibleWithoutPixelEvidence,
+                    VisibleOverlayIdsWithoutCurrentScreenshots = visibleWithoutCurrentScreenshots,
+                    Limitation = canProveVisibleOverlayPixels
+                        ? "All currently visible live overlay windows have current screenshot/pixel evidence in this bundle."
+                        : "The bundle cannot prove the current pixels for every visible live overlay window. Use live-overlays/manifest.json and live-overlays/*.png when present; otherwise reproduce with screenshot capture enabled."
+                }
+            },
+            UpdateEvents = updateEvents,
+            UpdateFlow = new
+            {
+                HasRecentUpdateCheckFailures = updateEvents.UpdateCheckFailedCount > 0,
+                LatestFailureAtUtc = updateEvents.LatestUpdateCheckFailureAtUtc,
+                LatestFailureSource = updateEvents.LatestUpdateCheckFailureSource,
+                LatestFailureError = updateEvents.LatestUpdateCheckFailureError,
+                LatestSuccessAtUtc = updateEvents.LatestUpdateCheckSuccessAtUtc,
+                LatestSuccessSource = updateEvents.LatestUpdateCheckSuccessSource,
+                LatestSuccessResult = updateEvents.LatestUpdateCheckSuccessResult,
+                Interpretation = updateEvents.UpdateCheckFailedCount > 0 && updateEvents.UpdateCheckSucceededCount > 0
+                    ? "Transient update-check failures were observed even though a later check succeeded; inspect events/*.jsonl before relying only on metadata/release-updates.json."
+                    : updateEvents.UpdateCheckFailedCount > 0
+                        ? "Recent update-check failures were observed in events/*.jsonl."
+                        : "No recent update-check failures were found in bundled event logs."
             },
             LatestCapture = new
             {
@@ -932,6 +977,8 @@ internal sealed class DiagnosticsBundleService
         var synthesis = TryReadJsonObject(synthesisPath);
         var liveOverlayDiagnosticsPath = Path.Combine(captureDirectory, _liveOverlayDiagnosticsOptions.OutputFileName);
         var liveOverlayDiagnostics = TryReadJsonObject(liveOverlayDiagnosticsPath);
+        var lapDeltaQuality = LapDeltaQualityFromDiagnostics(liveOverlayDiagnostics?["lapDelta"] as JsonObject);
+        var postRaceFuelEvidence = PostRaceFuelEvidence(synthesis, liveOverlayDiagnostics);
 
         return new
         {
@@ -968,6 +1015,7 @@ internal sealed class DiagnosticsBundleService
                 SetupSignalCount = setupSignals.Count,
                 SetupSignals = setupSignals
             },
+            SetupAdjustmentEvidence = SetupAdjustmentEvidence(setupSignals),
             Synthesis = new
             {
                 Path = synthesisPath,
@@ -977,6 +1025,8 @@ internal sealed class DiagnosticsBundleService
                 ValidDistanceLaps = (double?)synthesis?["session"]?["metrics"]?["validDistanceLaps"],
                 CompletedValidLaps = (int?)synthesis?["session"]?["metrics"]?["completedValidLaps"]
             },
+            PostRaceFuelEvidence = postRaceFuelEvidence,
+            LapDeltaQuality = lapDeltaQuality,
             LiveOverlayDiagnostics = new
             {
                 Path = liveOverlayDiagnosticsPath,
@@ -1000,9 +1050,21 @@ internal sealed class DiagnosticsBundleService
                 TrackMapFramesWithSectors = (int?)liveOverlayDiagnostics?["trackMap"]?["framesWithSectors"],
                 TrackMapFramesWithLiveTiming = (int?)liveOverlayDiagnostics?["trackMap"]?["framesWithLiveTiming"],
                 TrackMapHighlightedSectorFrames = (int?)liveOverlayDiagnostics?["trackMap"]?["framesWithHighlightedSectors"],
+                FuelFramesWithFuelLevel = (int?)liveOverlayDiagnostics?["fuel"]?["framesWithFuelLevel"],
+                FuelTeamContextWithoutFuelLevelFrames = (int?)liveOverlayDiagnostics?["fuel"]?["teamContextWithoutFuelLevelFrames"],
+                FuelPitServiceNonPlayerFocusFrames = (int?)liveOverlayDiagnostics?["fuel"]?["pitServiceNonPlayerFocusFrames"],
+                FuelLocalStrategyUnavailableFrames = (int?)liveOverlayDiagnostics?["fuel"]?["fuelLocalStrategyUnavailableFrames"],
+                FuelLocalStrategyUnavailableReasonCounts = liveOverlayDiagnostics?["fuel"]?["fuelLocalStrategyUnavailableReasonCounts"],
                 PitWindowCount = (int?)liveOverlayDiagnostics?["fuel"]?["pitWindowCount"],
                 PitWindowsWithFuelIncrease = (int?)liveOverlayDiagnostics?["fuel"]?["pitWindowsWithFuelIncrease"],
                 PitWindowsWithBlackFlag = (int?)liveOverlayDiagnostics?["fuel"]?["pitWindowsWithBlackFlag"],
+                LapDeltaObservedFrames = lapDeltaQuality.ObservedFrames,
+                LapDeltaFramesWithAnyValue = lapDeltaQuality.FramesWithAnyValue,
+                LapDeltaFramesWithAnyUsableValue = lapDeltaQuality.FramesWithAnyUsableValue,
+                LapDeltaMaxAbsDeltaSeconds = lapDeltaQuality.MaxAbsDeltaSeconds,
+                LapDeltaClassification = lapDeltaQuality.Classification,
+                LapDeltaValueFrameCounts = lapDeltaQuality.ValueFrameCounts,
+                LapDeltaUsableFrameCounts = lapDeltaQuality.UsableFrameCounts,
                 NonRaceRaceLapSignalFrames = (int?)liveOverlayDiagnostics?["raceProjection"]?["nonRaceRaceLapSignalFrames"],
                 NonRaceRaceProjectionFrames = (int?)liveOverlayDiagnostics?["raceProjection"]?["nonRaceRaceProjectionFrames"]
             }
@@ -1042,6 +1104,428 @@ internal sealed class DiagnosticsBundleService
         {
             return null;
         }
+    }
+
+    private UpdateEventDiagnosticsSnapshot UpdateEventDiagnostics()
+    {
+        if (!Directory.Exists(_storageOptions.EventsRoot))
+        {
+            return new UpdateEventDiagnosticsSnapshot(
+                EventsRoot: _storageOptions.EventsRoot,
+                Exists: false,
+                RecentEventFilesScanned: 0,
+                MalformedEventLineCount: 0,
+                UpdateCheckStartedCount: 0,
+                UpdateCheckSucceededCount: 0,
+                UpdateCheckFailedCount: 0,
+                LatestUpdateCheckFailureAtUtc: null,
+                LatestUpdateCheckFailureSource: null,
+                LatestUpdateCheckFailureError: null,
+                LatestUpdateCheckSuccessAtUtc: null,
+                LatestUpdateCheckSuccessSource: null,
+                LatestUpdateCheckSuccessResult: null,
+                UpdateCheckFailureSourceCounts: EmptyStringIntDictionary(),
+                UpdateCheckFailureErrorCounts: EmptyStringIntDictionary(),
+                Files: []);
+        }
+
+        var files = Directory
+            .EnumerateFiles(_storageOptions.EventsRoot, "*.jsonl")
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .Take(MaxRecentEventFilesForDiagnostics)
+            .ToArray();
+        var started = new List<UpdateCheckEvent>();
+        var succeeded = new List<UpdateCheckEvent>();
+        var failed = new List<UpdateCheckEvent>();
+        var fileDiagnostics = new List<UpdateEventFileDiagnostics>();
+        var malformed = 0;
+
+        foreach (var file in files)
+        {
+            var fileStarted = 0;
+            var fileSucceeded = 0;
+            var fileFailed = 0;
+            var fileMalformed = 0;
+            try
+            {
+                foreach (var line in File.ReadLines(file.FullName))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    if (!TryReadAppEvent(line, out var timestampUtc, out var name, out var properties))
+                    {
+                        malformed++;
+                        fileMalformed++;
+                        continue;
+                    }
+
+                    if (string.Equals(name, "update_check_started", StringComparison.OrdinalIgnoreCase))
+                    {
+                        started.Add(UpdateCheckEvent.From(file.Name, timestampUtc, properties));
+                        fileStarted++;
+                    }
+                    else if (string.Equals(name, "update_check_succeeded", StringComparison.OrdinalIgnoreCase))
+                    {
+                        succeeded.Add(UpdateCheckEvent.From(file.Name, timestampUtc, properties));
+                        fileSucceeded++;
+                    }
+                    else if (string.Equals(name, "update_check_failed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        failed.Add(UpdateCheckEvent.From(file.Name, timestampUtc, properties));
+                        fileFailed++;
+                    }
+                }
+            }
+            catch
+            {
+                malformed++;
+                fileMalformed++;
+            }
+
+            fileDiagnostics.Add(new UpdateEventFileDiagnostics(
+                FileName: file.Name,
+                UpdateCheckStartedCount: fileStarted,
+                UpdateCheckSucceededCount: fileSucceeded,
+                UpdateCheckFailedCount: fileFailed,
+                MalformedEventLineCount: fileMalformed));
+        }
+
+        var latestFailure = LatestEvent(failed);
+        var latestSuccess = LatestEvent(succeeded);
+        return new UpdateEventDiagnosticsSnapshot(
+            EventsRoot: _storageOptions.EventsRoot,
+            Exists: true,
+            RecentEventFilesScanned: files.Length,
+            MalformedEventLineCount: malformed,
+            UpdateCheckStartedCount: started.Count,
+            UpdateCheckSucceededCount: succeeded.Count,
+            UpdateCheckFailedCount: failed.Count,
+            LatestUpdateCheckFailureAtUtc: latestFailure?.TimestampUtc,
+            LatestUpdateCheckFailureSource: latestFailure?.Source,
+            LatestUpdateCheckFailureError: latestFailure?.Error,
+            LatestUpdateCheckSuccessAtUtc: latestSuccess?.TimestampUtc,
+            LatestUpdateCheckSuccessSource: latestSuccess?.Source,
+            LatestUpdateCheckSuccessResult: latestSuccess?.Result,
+            UpdateCheckFailureSourceCounts: CountBy(failed.Select(item => item.Source), "unknown"),
+            UpdateCheckFailureErrorCounts: CountBy(failed.Select(item => item.Error), "unknown"),
+            Files: fileDiagnostics
+                .OrderBy(file => file.FileName, StringComparer.OrdinalIgnoreCase)
+                .ToArray());
+    }
+
+    private static bool TryReadAppEvent(
+        string line,
+        out DateTimeOffset? timestampUtc,
+        out string? name,
+        out JsonObject? properties)
+    {
+        timestampUtc = null;
+        name = null;
+        properties = null;
+
+        try
+        {
+            var node = JsonNode.Parse(line) as JsonObject;
+            if (node is null)
+            {
+                return false;
+            }
+
+            if (DateTimeOffset.TryParse(
+                    (string?)node["timestampUtc"],
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out var parsedTimestamp))
+            {
+                timestampUtc = parsedTimestamp;
+            }
+
+            name = (string?)node["name"];
+            properties = node["properties"] as JsonObject;
+            return !string.IsNullOrWhiteSpace(name);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static UpdateCheckEvent? LatestEvent(IReadOnlyList<UpdateCheckEvent> events)
+    {
+        return events
+            .OrderByDescending(item => item.TimestampUtc ?? DateTimeOffset.MinValue)
+            .FirstOrDefault();
+    }
+
+    private static IReadOnlyDictionary<string, int> CountBy(IEnumerable<string?> values, string fallback)
+    {
+        return values
+            .Select(value => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim())
+            .GroupBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, int> EmptyStringIntDictionary()
+    {
+        return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static object SetupAdjustmentEvidence(IReadOnlyList<SessionInfoSetupSignal> setupSignals)
+    {
+        var wingOrArbSignals = setupSignals
+            .Where(signal =>
+                signal.Key.Contains("Arb", StringComparison.OrdinalIgnoreCase)
+                || signal.Key.Contains("AntiRoll", StringComparison.OrdinalIgnoreCase)
+                || signal.Key.Contains("Wing", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        return new
+        {
+            StaticSessionInfoSignalCount = setupSignals.Count,
+            StaticWingOrArbSignalCount = wingOrArbSignals.Length,
+            HasStaticWingOrArbSignals = wingOrArbSignals.Length > 0,
+            LiveAdjustmentChangeEvidenceAvailable = false,
+            EvidenceSource = "latest-session.yaml setup snapshot",
+            Limitation = "Session-info setup values prove the static setup snapshot only. They do not prove an in-session wing/ARB adjustment unless a later capture adds session-info diffs, raw telemetry variable changes, or another live adjustment signal."
+        };
+    }
+
+    private static object PostRaceFuelEvidence(JsonObject? synthesis, JsonObject? liveOverlayDiagnostics)
+    {
+        var validDistanceLaps = (double?)synthesis?["session"]?["metrics"]?["validDistanceLaps"];
+        var completedValidLaps = (int?)synthesis?["session"]?["metrics"]?["completedValidLaps"];
+        var fuel = liveOverlayDiagnostics?["fuel"] as JsonObject;
+        var framesWithFuelLevel = (int?)fuel?["framesWithFuelLevel"];
+        var teamContextWithoutFuelLevelFrames = (int?)fuel?["teamContextWithoutFuelLevelFrames"];
+        var pitServiceNonPlayerFocusFrames = (int?)fuel?["pitServiceNonPlayerFocusFrames"];
+        var fuelLocalStrategyUnavailableFrames = (int?)fuel?["fuelLocalStrategyUnavailableFrames"];
+        var reasonCounts = JsonObjectToIntDictionary(fuel?["fuelLocalStrategyUnavailableReasonCounts"]);
+        var hasMissingLocalFuelEvidence =
+            (completedValidLaps.GetValueOrDefault() <= 0 || validDistanceLaps.GetValueOrDefault() <= 0d)
+            && (teamContextWithoutFuelLevelFrames.GetValueOrDefault() > 0
+                || fuelLocalStrategyUnavailableFrames.GetValueOrDefault() > 0
+                || pitServiceNonPlayerFocusFrames.GetValueOrDefault() > 0);
+
+        return new
+        {
+            ValidDistanceLaps = validDistanceLaps,
+            CompletedValidLaps = completedValidLaps,
+            FramesWithFuelLevel = framesWithFuelLevel,
+            TeamContextWithoutFuelLevelFrames = teamContextWithoutFuelLevelFrames,
+            PitServiceNonPlayerFocusFrames = pitServiceNonPlayerFocusFrames,
+            FuelLocalStrategyUnavailableFrames = fuelLocalStrategyUnavailableFrames,
+            FuelLocalStrategyUnavailableReasonCounts = reasonCounts,
+            Classification = hasMissingLocalFuelEvidence
+                ? "missing_local_player_fuel_evidence"
+                : "not_classified_missing_local_fuel",
+            Interpretation = hasMissingLocalFuelEvidence
+                ? "The capture contains post-race/fuel failure evidence tied to local-player or team fuel availability, not just generic zero valid laps."
+                : "The bundled metadata does not prove a local-player fuel evidence gap."
+        };
+    }
+
+    private static LapDeltaQualityDiagnostics LapDeltaQualityFromDiagnostics(JsonObject? lapDelta)
+    {
+        if (lapDelta is null)
+        {
+            return new LapDeltaQualityDiagnostics(
+                EvidenceAvailable: false,
+                ObservedFrames: null,
+                FramesWithAnyValue: null,
+                FramesWithAnyUsableValue: null,
+                MaxAbsDeltaSeconds: null,
+                ValueFrameCounts: EmptyStringIntDictionary(),
+                UsableFrameCounts: EmptyStringIntDictionary(),
+                Classification: "not_recorded",
+                ValuesPresentWithoutUsableQuality: false,
+                AllObservedValuesZero: false,
+                Interpretation: "No lap-delta diagnostics block was found in the latest capture overlay diagnostics.");
+        }
+
+        var observedFrames = (int?)lapDelta["observedFrames"];
+        var framesWithAnyValue = (int?)lapDelta["framesWithAnyValue"];
+        var framesWithAnyUsableValue = (int?)lapDelta["framesWithAnyUsableValue"];
+        var maxAbsDeltaSeconds = (double?)lapDelta["maxAbsDeltaSeconds"];
+        var valueFrameCounts = JsonObjectToIntDictionary(lapDelta["valueFrameCounts"]);
+        var usableFrameCounts = JsonObjectToIntDictionary(lapDelta["usableFrameCounts"]);
+        return BuildLapDeltaQuality(
+            evidenceAvailable: true,
+            observedFrames,
+            framesWithAnyValue,
+            framesWithAnyUsableValue,
+            maxAbsDeltaSeconds,
+            valueFrameCounts,
+            usableFrameCounts);
+    }
+
+    private static LapDeltaQualityDiagnostics LapDeltaQualityFromSample(HistoricalTelemetrySample? sample)
+    {
+        if (sample is null)
+        {
+            return new LapDeltaQualityDiagnostics(
+                EvidenceAvailable: false,
+                ObservedFrames: null,
+                FramesWithAnyValue: null,
+                FramesWithAnyUsableValue: null,
+                MaxAbsDeltaSeconds: null,
+                ValueFrameCounts: EmptyStringIntDictionary(),
+                UsableFrameCounts: EmptyStringIntDictionary(),
+                Classification: "not_recorded",
+                ValuesPresentWithoutUsableQuality: false,
+                AllObservedValuesZero: false,
+                Interpretation: "No latest telemetry sample is available for lap-delta quality diagnostics.");
+        }
+
+        var valueCounts = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var usableCounts = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        double? maxAbsDeltaSeconds = null;
+        var anyValue = false;
+        var anyUsable = false;
+        foreach (var signal in LapDeltaSignals(sample))
+        {
+            if (IsFinite(signal.Seconds))
+            {
+                anyValue = true;
+                valueCounts[signal.Key] = 1;
+                maxAbsDeltaSeconds = Max(maxAbsDeltaSeconds, Math.Abs(signal.Seconds!.Value));
+            }
+
+            if (signal.IsUsable)
+            {
+                anyUsable = true;
+                usableCounts[signal.Key] = 1;
+            }
+        }
+
+        return BuildLapDeltaQuality(
+            evidenceAvailable: true,
+            observedFrames: 1,
+            framesWithAnyValue: anyValue ? 1 : 0,
+            framesWithAnyUsableValue: anyUsable ? 1 : 0,
+            maxAbsDeltaSeconds,
+            valueCounts,
+            usableCounts);
+    }
+
+    private static LapDeltaQualityDiagnostics BuildLapDeltaQuality(
+        bool evidenceAvailable,
+        int? observedFrames,
+        int? framesWithAnyValue,
+        int? framesWithAnyUsableValue,
+        double? maxAbsDeltaSeconds,
+        IReadOnlyDictionary<string, int> valueFrameCounts,
+        IReadOnlyDictionary<string, int> usableFrameCounts)
+    {
+        var valuesPresentWithoutUsableQuality = framesWithAnyValue.GetValueOrDefault() > 0
+            && framesWithAnyUsableValue.GetValueOrDefault() <= 0;
+        var allObservedValuesZero = valuesPresentWithoutUsableQuality
+            && (maxAbsDeltaSeconds is null || Math.Abs(maxAbsDeltaSeconds.Value) <= double.Epsilon);
+        var classification = ClassifyLapDeltaQuality(
+            evidenceAvailable,
+            observedFrames,
+            framesWithAnyValue,
+            framesWithAnyUsableValue,
+            maxAbsDeltaSeconds);
+
+        return new LapDeltaQualityDiagnostics(
+            EvidenceAvailable: evidenceAvailable,
+            ObservedFrames: observedFrames,
+            FramesWithAnyValue: framesWithAnyValue,
+            FramesWithAnyUsableValue: framesWithAnyUsableValue,
+            MaxAbsDeltaSeconds: maxAbsDeltaSeconds,
+            ValueFrameCounts: valueFrameCounts,
+            UsableFrameCounts: usableFrameCounts,
+            Classification: classification,
+            ValuesPresentWithoutUsableQuality: valuesPresentWithoutUsableQuality,
+            AllObservedValuesZero: allObservedValuesZero,
+            Interpretation: valuesPresentWithoutUsableQuality
+                ? "Lap-delta values are present but no quality/OK signal marks them usable; overlays and analysis should treat them as unavailable instead of displaying zero deltas."
+                : "Lap-delta quality is either usable or no lap-delta values were observed.");
+    }
+
+    private static string ClassifyLapDeltaQuality(
+        bool evidenceAvailable,
+        int? observedFrames,
+        int? framesWithAnyValue,
+        int? framesWithAnyUsableValue,
+        double? maxAbsDeltaSeconds)
+    {
+        if (!evidenceAvailable)
+        {
+            return "not_recorded";
+        }
+
+        if (observedFrames.GetValueOrDefault() <= 0)
+        {
+            return "no_observed_frames";
+        }
+
+        if (framesWithAnyValue.GetValueOrDefault() <= 0)
+        {
+            return "no_values";
+        }
+
+        if (framesWithAnyUsableValue.GetValueOrDefault() > 0)
+        {
+            return "usable";
+        }
+
+        return maxAbsDeltaSeconds is null || Math.Abs(maxAbsDeltaSeconds.Value) <= double.Epsilon
+            ? "values_present_without_usable_quality_all_zero"
+            : "values_present_without_usable_quality";
+    }
+
+    private static IReadOnlyDictionary<string, int> JsonObjectToIntDictionary(JsonNode? node)
+    {
+        if (node is not JsonObject jsonObject)
+        {
+            return EmptyStringIntDictionary();
+        }
+
+        var values = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in jsonObject)
+        {
+            if ((int?)item.Value is { } count)
+            {
+                values[item.Key] = count;
+            }
+        }
+
+        return values;
+    }
+
+    private static IEnumerable<LapDeltaSignalDiagnostic> LapDeltaSignals(HistoricalTelemetrySample sample)
+    {
+        yield return new LapDeltaSignalDiagnostic(
+            "toBestLap",
+            sample.LapDeltaToBestLapSeconds,
+            sample.LapDeltaToBestLapRate,
+            sample.LapDeltaToBestLapOk);
+        yield return new LapDeltaSignalDiagnostic(
+            "toOptimalLap",
+            sample.LapDeltaToOptimalLapSeconds,
+            sample.LapDeltaToOptimalLapRate,
+            sample.LapDeltaToOptimalLapOk);
+        yield return new LapDeltaSignalDiagnostic(
+            "toSessionBestLap",
+            sample.LapDeltaToSessionBestLapSeconds,
+            sample.LapDeltaToSessionBestLapRate,
+            sample.LapDeltaToSessionBestLapOk);
+        yield return new LapDeltaSignalDiagnostic(
+            "toSessionOptimalLap",
+            sample.LapDeltaToSessionOptimalLapSeconds,
+            sample.LapDeltaToSessionOptimalLapRate,
+            sample.LapDeltaToSessionOptimalLapOk);
+        yield return new LapDeltaSignalDiagnostic(
+            "toSessionLastLap",
+            sample.LapDeltaToSessionLastLapSeconds,
+            sample.LapDeltaToSessionLastLapRate,
+            sample.LapDeltaToSessionLastLapOk);
     }
 
     private static IReadOnlyList<SessionInfoSetupSignal> ExtractSetupSignals(string yaml)
@@ -1390,6 +1874,11 @@ internal sealed class DiagnosticsBundleService
                 SessionStateLabel = SessionStateLabel(sample?.SessionState),
                 Availability = availability
             };
+            var focusVsLocalContext = FocusVsLocalStrategyContext(
+                snapshot,
+                resolvedPlayerCarIdx,
+                resolvedFocusCarIdx);
+            var lapDeltaQuality = LapDeltaQualityFromSample(sample);
 
             var carFieldCoverage = BuildCarFieldCoverage(allCars);
             var overlays = ManagedOverlayDefinitions()
@@ -1435,6 +1924,8 @@ internal sealed class DiagnosticsBundleService
                     CurrentDisconnectedWithLastActive = !snapshot.IsConnected && lastActiveSnapshot is not null
                 },
                 LastActive = LastActiveLiveTelemetrySummary(lastActiveSnapshot, snapshot, settingsSnapshot, now),
+                FocusVsLocalContext = focusVsLocalContext,
+                LapDeltaQuality = lapDeltaQuality,
                 Snapshot = new
                 {
                     snapshot.IsConnected,
@@ -1601,6 +2092,15 @@ internal sealed class DiagnosticsBundleService
             FlagsModel = FlagsModelSummary(lastActiveSnapshot, settings, now),
             CarFieldCoverage = BuildCarFieldCoverage(sample?.AllCars ?? []),
             RaceProgressModel = RaceProgressModelSummary(lastActiveSnapshot.Models.RaceProgress),
+            FocusVsLocalContext = FocusVsLocalStrategyContext(
+                lastActiveSnapshot,
+                lastActiveSnapshot.Models.Reference.PlayerCarIdx
+                    ?? lastActiveSnapshot.Models.DriverDirectory.PlayerCarIdx
+                    ?? sample?.PlayerCarIdx,
+                lastActiveSnapshot.Models.Reference.FocusCarIdx
+                    ?? lastActiveSnapshot.Models.DriverDirectory.FocusCarIdx
+                    ?? sample?.FocusCarIdx),
+            LapDeltaQuality = LapDeltaQualityFromSample(sample),
             RaceProjectionModel = RaceProjectionModelSummary(lastActiveSnapshot.Models.RaceProjection),
             IRatingProjectionModel = IRatingProjectionModelSummary(lastActiveSnapshot.Models.IRatingProjection),
             IncidentPressureModel = IncidentPressureModelSummary(lastActiveSnapshot.Models.IncidentPressure),
@@ -1713,6 +2213,46 @@ internal sealed class DiagnosticsBundleService
             progress.RaceLapsRemainingSource,
             MissingSignalCount = progress.MissingSignals.Count,
             progress.MissingSignals
+        };
+    }
+
+    private static object FocusVsLocalStrategyContext(
+        LiveTelemetrySnapshot snapshot,
+        int? playerCarIdx,
+        int? focusCarIdx)
+    {
+        var progress = snapshot.Models.RaceProgress;
+        var reference = snapshot.Models.Reference;
+        var focusDiffersFromPlayer = reference.HasData
+            ? reference.HasExplicitNonPlayerFocus
+            : playerCarIdx is { } player && focusCarIdx is { } focus && player != focus;
+        var strategyLooksUnavailableWhileReferenceHasProgress =
+            focusDiffersFromPlayer
+            && progress.ReferenceCarProgressLaps is > 0d
+            && progress.StrategyCarProgressLaps.GetValueOrDefault() <= 0d;
+
+        return new
+        {
+            PlayerCarIdx = playerCarIdx,
+            FocusCarIdx = focusCarIdx,
+            FocusDiffersFromPlayer = focusDiffersFromPlayer,
+            StrategyContext = "local-player/team",
+            StrategyContextCarIdx = playerCarIdx,
+            ReferenceContext = "focus/reference",
+            ReferenceContextCarIdx = focusCarIdx,
+            StrategyAndReferenceContextsDiffer = focusDiffersFromPlayer,
+            StrategyFieldsAreLocalPlayerOrTeam = true,
+            ReferenceFieldsAreFocusOrReferenceCar = true,
+            progress.StrategyCarProgressLaps,
+            progress.ReferenceCarProgressLaps,
+            progress.StrategyOverallPosition,
+            progress.ReferenceOverallPosition,
+            progress.StrategyClassPosition,
+            progress.ReferenceClassPosition,
+            StrategyLooksUnavailableWhileReferenceHasProgress = strategyLooksUnavailableWhileReferenceHasProgress,
+            Interpretation = strategyLooksUnavailableWhileReferenceHasProgress
+                ? "Strategy progress/position appears unavailable for the local-player/team context while reference progress is available for the focused car. Labels should not imply strategy fields describe the focused competitor."
+                : "Strategy fields describe the local-player/team context; reference fields describe the focused/reference car context."
         };
     }
 
@@ -2428,6 +2968,18 @@ internal sealed class DiagnosticsBundleService
         return !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
+    private static bool IsFinite(double? value)
+    {
+        return value is { } finite && IsFinite(finite);
+    }
+
+    private static double? Max(double? current, double candidate)
+    {
+        return current is null || candidate > current.Value
+            ? candidate
+            : current;
+    }
+
     private static string SessionStateLabel(int? sessionState)
     {
         return sessionState switch
@@ -2676,6 +3228,74 @@ internal sealed record SessionInfoSetupSignal(
     string Path,
     string Key,
     string Value);
+
+internal sealed record UpdateEventDiagnosticsSnapshot(
+    string EventsRoot,
+    bool Exists,
+    int RecentEventFilesScanned,
+    int MalformedEventLineCount,
+    int UpdateCheckStartedCount,
+    int UpdateCheckSucceededCount,
+    int UpdateCheckFailedCount,
+    DateTimeOffset? LatestUpdateCheckFailureAtUtc,
+    string? LatestUpdateCheckFailureSource,
+    string? LatestUpdateCheckFailureError,
+    DateTimeOffset? LatestUpdateCheckSuccessAtUtc,
+    string? LatestUpdateCheckSuccessSource,
+    string? LatestUpdateCheckSuccessResult,
+    IReadOnlyDictionary<string, int> UpdateCheckFailureSourceCounts,
+    IReadOnlyDictionary<string, int> UpdateCheckFailureErrorCounts,
+    IReadOnlyList<UpdateEventFileDiagnostics> Files);
+
+internal sealed record UpdateEventFileDiagnostics(
+    string FileName,
+    int UpdateCheckStartedCount,
+    int UpdateCheckSucceededCount,
+    int UpdateCheckFailedCount,
+    int MalformedEventLineCount);
+
+internal sealed record UpdateCheckEvent(
+    string FileName,
+    DateTimeOffset? TimestampUtc,
+    string? Source,
+    string? Result,
+    string? Error)
+{
+    public static UpdateCheckEvent From(
+        string fileName,
+        DateTimeOffset? timestampUtc,
+        JsonObject? properties)
+    {
+        return new UpdateCheckEvent(
+            FileName: fileName,
+            TimestampUtc: timestampUtc,
+            Source: (string?)properties?["source"],
+            Result: (string?)properties?["result"],
+            Error: (string?)properties?["error"]);
+    }
+}
+
+internal sealed record LapDeltaSignalDiagnostic(
+    string Key,
+    double? Seconds,
+    double? Rate,
+    bool? Ok)
+{
+    public bool IsUsable => Ok == true && Seconds is { } value && !double.IsNaN(value) && !double.IsInfinity(value);
+}
+
+internal sealed record LapDeltaQualityDiagnostics(
+    bool EvidenceAvailable,
+    int? ObservedFrames,
+    int? FramesWithAnyValue,
+    int? FramesWithAnyUsableValue,
+    double? MaxAbsDeltaSeconds,
+    IReadOnlyDictionary<string, int> ValueFrameCounts,
+    IReadOnlyDictionary<string, int> UsableFrameCounts,
+    string Classification,
+    bool ValuesPresentWithoutUsableQuality,
+    bool AllObservedValuesZero,
+    string Interpretation);
 
 internal sealed record IbtAnalysisDiagnosticsSnapshot(
     bool Enabled,

@@ -900,6 +900,7 @@ internal sealed class OverlayManager : IDisposable
         bool sessionPreviewActive = false)
     {
         return string.Equals(definition.Id, StandingsOverlayDefinition.Definition.Id, StringComparison.Ordinal)
+            && !sessionPreviewActive
             && currentSize.Width == targetSize.Width
             && currentSize.Height > targetSize.Height;
     }

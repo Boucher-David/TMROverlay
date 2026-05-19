@@ -84,6 +84,10 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private const float MetricGridRowGap = 4f;
     private const float MetricGridCellInset = 4f;
     private const float MetricGridCellHeight = 21f;
+    private const float InputGraphMinimumWidth = 160f;
+    private const float InputGraphRailGap = 10f;
+    private const float InputRailMinimumWidth = 96f;
+    private const float InputRailMaximumWidth = 204f;
     private const float FlagOuterPadding = 8f;
     private const float FlagCellGap = 8f;
     private const float TrackSectorBoundaryTickLength = 17f;
@@ -3674,16 +3678,12 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private static DesignV2LayoutBody BuildInputsLayout(RectangleF content, DesignV2InputsBody body)
     {
-        var railWidth = body.HasRail
-            ? body.HasGraph
-                ? Math.Min(204f, Math.Max(136f, content.Width * 0.40f))
-                : Math.Min(240f, content.Width)
-            : 0f;
+        var railWidth = InputRailWidth(content, body.HasGraph, body.HasRail);
         RectangleF? graph = body.HasGraph
             ? new RectangleF(
                 content.Left,
                 content.Top,
-                Math.Max(160, content.Width - railWidth - (body.HasRail ? 18 : 0)),
+                InputGraphWidth(content, railWidth, body.HasRail),
                 Math.Max(40, content.Height))
             : null;
         RectangleF? rail = null;
@@ -3691,7 +3691,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         if (body.HasRail)
         {
             var railLeft = graph is { } railGraph
-                ? railGraph.Right + 18
+                ? railGraph.Right + InputGraphRailGap
                 : content.Left + (content.Width - railWidth) / 2f;
             rail = new RectangleF(railLeft, content.Top, railWidth, content.Height);
             var railContent = RectangleF.Inflate(rail.Value, -8, -8);
@@ -6000,16 +6000,12 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             return;
         }
 
-        var railWidth = body.HasRail
-            ? body.HasGraph
-                ? Math.Min(204f, Math.Max(136f, content.Width * 0.40f))
-                : Math.Min(240f, content.Width)
-            : 0f;
+        var railWidth = InputRailWidth(content, body.HasGraph, body.HasRail);
         RectangleF? graph = body.HasGraph
             ? new RectangleF(
                 content.Left,
                 content.Top,
-                Math.Max(160, content.Width - railWidth - (body.HasRail ? 18 : 0)),
+                InputGraphWidth(content, railWidth, body.HasRail),
                 Math.Max(40, content.Height))
             : null;
         if (graph is { } graphRect)
@@ -6040,7 +6036,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         if (body.HasRail)
         {
             var railLeft = graph is { } railGraph
-                ? railGraph.Right + 18
+                ? railGraph.Right + InputGraphRailGap
                 : content.Left + (content.Width - railWidth) / 2f;
             var rail = new RectangleF(railLeft, content.Top, railWidth, content.Height);
             FillRounded(graphics, rail, 5, SurfaceRaised, BorderMuted);
@@ -6193,10 +6189,10 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     {
         var items = new List<DesignV2InputRailItem>();
         var compact = rect.Height < 190f;
-        var barHeight = compact ? 24f : 27f;
-        var barGap = compact ? 7f : 11f;
-        var readoutHeight = 20f;
-        var readoutGap = compact ? 4f : 8f;
+        var barHeight = compact ? 16f : 27f;
+        var barGap = compact ? 2f : 11f;
+        var readoutHeight = compact ? 16f : 20f;
+        var readoutGap = compact ? 2f : 8f;
         var readoutKinds = new List<DesignV2InputRailItemKind>();
         if (showGear)
         {
@@ -6218,12 +6214,13 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
         if (showSteering)
         {
-            var readoutGapReserve = readoutReserve > 0f ? 8f : 0f;
+            var readoutGapReserve = readoutReserve > 0f ? compact ? 2f : 8f : 0f;
             var wheelBottom = rect.Bottom - readoutReserve - readoutGapReserve;
             var wheelAvailable = wheelBottom - y;
-            if (wheelAvailable >= 24f)
+            var minimumWheelHeight = compact ? 8f : 24f;
+            if (wheelAvailable >= minimumWheelHeight)
             {
-                var wheelHeight = Math.Min(compact ? 58f : 78f, Math.Max(28f, wheelAvailable));
+                var wheelHeight = Math.Min(compact ? 24f : 78f, Math.Max(minimumWheelHeight, wheelAvailable));
                 items.Add(new DesignV2InputRailItem(
                     DesignV2InputRailItemKind.SteeringWheel,
                     new RectangleF(rect.Left, y, rect.Width, wheelHeight)));
@@ -7845,6 +7842,34 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             rect.Top + 12,
             Math.Max(1, rect.Width - 32),
             Math.Max(1, rect.Height - 26));
+    }
+
+    private static float InputRailWidth(RectangleF content, bool hasGraph, bool hasRail)
+    {
+        if (!hasRail)
+        {
+            return 0f;
+        }
+
+        if (!hasGraph)
+        {
+            return Math.Min(240f, Math.Max(1f, content.Width));
+        }
+
+        var preferred = Math.Min(InputRailMaximumWidth, Math.Max(136f, content.Width * 0.40f));
+        var maxWidthThatFits = Math.Max(0f, content.Width - InputGraphMinimumWidth - InputGraphRailGap);
+        if (maxWidthThatFits >= InputRailMinimumWidth)
+        {
+            return Math.Min(preferred, maxWidthThatFits);
+        }
+
+        return Math.Max(1f, maxWidthThatFits);
+    }
+
+    private static float InputGraphWidth(RectangleF content, float railWidth, bool hasRail)
+    {
+        var availableWidth = content.Width - railWidth - (hasRail ? InputGraphRailGap : 0f);
+        return Math.Max(1f, availableWidth);
     }
 
     private static float TableCellHorizontalPadding(float width)

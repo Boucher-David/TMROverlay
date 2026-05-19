@@ -134,7 +134,8 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             settings,
             saveSettings,
             SettingsOverlayDefinition.Definition.DefaultWidth,
-            SettingsOverlayDefinition.Definition.DefaultHeight)
+            SettingsOverlayDefinition.Definition.DefaultHeight,
+            enableWholeFormDrag: false)
     {
         _applicationSettings = applicationSettings;
         _managedOverlays = managedOverlays;
@@ -308,7 +309,6 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         Controls.Add(_v2Surface);
         _v2Surface.BringToFront();
 
-        RegisterDragSurfaces(_titleBar, _brandLogo, _titleLabel, _subtitleLabel);
         _releaseUpdates.StateChanged += ReleaseUpdatesStateChanged;
         _sessionPreviewState.Changed += SessionPreviewStateChanged;
 

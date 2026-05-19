@@ -9,7 +9,7 @@ internal sealed record StandingsOverlayViewModel(
     IReadOnlyList<StandingsOverlayRowViewModel> Rows)
 {
     public const int DefaultMaximumRows = 14;
-    public const int MaximumRenderedRows = 64;
+    public const int MaximumRenderedRows = 24;
 
     public static StandingsOverlayViewModel From(
         LiveTelemetrySnapshot snapshot,
@@ -44,6 +44,7 @@ internal sealed record StandingsOverlayViewModel(
             return Waiting("waiting for focus car");
         }
 
+        var isRaceSession = IsRaceSession(snapshot);
         var requiresValidLap = RequiresValidLapBeforeRendering(snapshot);
         var requestedMaximumRows = Math.Clamp(maximumRows, 1, MaximumRenderedRows);
         var requestedOtherClassRows = Math.Clamp(otherClassRowsPerClass, 0, 6);
@@ -52,6 +53,7 @@ internal sealed record StandingsOverlayViewModel(
             var showPendingGridRows = scoring.Source == LiveScoringSource.StartingGrid
                 && IsRacePreGreen(snapshot);
             var allowLeaderProgress = scoring.Source == LiveScoringSource.SessionResults
+                && isRaceSession
                 && !IsRacePreGreen(snapshot);
             var highlightClassFastestLaps = ShouldHighlightClassFastestLaps(snapshot);
             var scoringRows = ScoringRows(
@@ -62,6 +64,7 @@ internal sealed record StandingsOverlayViewModel(
                 showClassSeparators,
                 requiresValidLap,
                 showPendingGridRows,
+                isRaceSession,
                 allowLeaderProgress,
                 highlightClassFastestLaps);
             if (scoringRows.Length == 0)
@@ -106,6 +109,7 @@ internal sealed record StandingsOverlayViewModel(
             .Select(row => ToRow(
                 row,
                 referenceCarIdx,
+                isRaceSession,
                 allowTimingLeaderProgress,
                 ClassFastestLapFor(row, timingClassFastestLapByClass),
                 highlightTimingClassFastestLaps))
@@ -132,6 +136,7 @@ internal sealed record StandingsOverlayViewModel(
         bool showClassSeparators,
         bool requiresValidLap,
         bool showPendingGridRows,
+        bool showRaceGaps,
         bool allowLeaderProgress,
         bool highlightClassFastestLaps)
     {
@@ -212,6 +217,7 @@ internal sealed record StandingsOverlayViewModel(
                 ReferenceEquals(group, primaryGroup),
                 includeHeaders,
                 showPendingGridRows,
+                showRaceGaps,
                 allowLeaderProgress,
                 classFastestLapByGroup.TryGetValue(group, out var classFastestLapSeconds) ? classFastestLapSeconds : null,
                 highlightClassFastestLaps);
@@ -325,6 +331,7 @@ internal sealed record StandingsOverlayViewModel(
         bool useReferenceWindow,
         bool includeHeader,
         bool showPendingGridRows,
+        bool showRaceGaps,
         bool allowLeaderProgress,
         double? classFastestLapSeconds,
         bool highlightClassFastestLaps)
@@ -359,6 +366,7 @@ internal sealed record StandingsOverlayViewModel(
                 timingRow,
                 referenceCarIdx,
                 showPendingGridRows,
+                showRaceGaps,
                 allowLeaderProgress,
                 classFastestLapSeconds: classFastestLapSeconds,
                 highlightClassFastestLaps: highlightClassFastestLaps));
@@ -392,6 +400,11 @@ internal sealed record StandingsOverlayViewModel(
 
     private static string ClassEstimatedLaps(LiveScoringClassGroup group, LiveTelemetrySnapshot snapshot)
     {
+        if (!IsRaceSession(snapshot))
+        {
+            return string.Empty;
+        }
+
         var projection = snapshot.Models.RaceProjection.ClassProjections
             .FirstOrDefault(candidate => candidate.CarClass == group.CarClass);
         if (projection?.EstimatedLapsRemaining is { } projectedLaps
@@ -445,8 +458,13 @@ internal sealed record StandingsOverlayViewModel(
 
     private static bool IsRacePreGreen(LiveTelemetrySnapshot snapshot)
     {
-        return OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot) == OverlaySessionKind.Race
+        return IsRaceSession(snapshot)
             && snapshot.Models.Session.SessionState is > 0 and < 4;
+    }
+
+    private static bool IsRaceSession(LiveTelemetrySnapshot snapshot)
+    {
+        return OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot) == OverlaySessionKind.Race;
     }
 
     private static bool HasValidLap(LiveScoringRow row)
@@ -566,6 +584,7 @@ internal sealed record StandingsOverlayViewModel(
     private static StandingsOverlayRowViewModel ToRow(
         LiveTimingRow row,
         int? referenceCarIdx,
+        bool showRaceGaps,
         bool allowLeaderProgress,
         double? classFastestLapSeconds = null,
         bool highlightClassFastestLaps = false)
@@ -573,15 +592,17 @@ internal sealed record StandingsOverlayViewModel(
         var isReference = referenceCarIdx is not null && row.CarIdx == referenceCarIdx;
         var fastestLapSeconds = BestLapTimeSeconds(row);
         var lastLapSeconds = LastLapTimeSeconds(row);
-        var isClassFastestLap = IsMatchingLapTime(fastestLapSeconds, classFastestLapSeconds);
-        var isClassFastestLastLap = IsMatchingLapTime(lastLapSeconds, classFastestLapSeconds);
-        var isRecentCarBestLap = IsRecentCarBestLap(fastestLapSeconds, lastLapSeconds, isClassFastestLap);
+        var lapToneFlags = LapToneFlags(
+            fastestLapSeconds,
+            lastLapSeconds,
+            classFastestLapSeconds,
+            highlightClassFastestLaps);
         return new StandingsOverlayRowViewModel(
             ClassPosition: row.ClassPosition is { } classPosition ? $"{classPosition}" : "--",
             CarNumber: FormatCarNumber(row),
             Driver: DriverName(row.DriverName, row.TeamName, row.CarIdx),
-            Gap: FormatGap(row, allowLeaderProgress),
-            Interval: FormatInterval(row, isReference),
+            Gap: FormatGap(row, showRaceGaps, allowLeaderProgress),
+            Interval: FormatInterval(row, showRaceGaps),
             Pit: row.OnPitRoad == true ? "IN" : string.Empty,
             IsReference: isReference,
             IsLeader: row.IsClassLeader,
@@ -590,10 +611,10 @@ internal sealed record StandingsOverlayViewModel(
             CarClassColorHex: row.CarClassColorHex,
             FastestLap: FormatLapTime(fastestLapSeconds),
             LastLap: FormatLapTime(lastLapSeconds),
-            IsClassFastestLap: highlightClassFastestLaps && isClassFastestLap,
-            IsClassFastestLastLap: highlightClassFastestLaps && isClassFastestLastLap,
-            IsRecentCarBestLap: isRecentCarBestLap,
-            IsRecentCarBestLastLap: isRecentCarBestLap && !isClassFastestLastLap);
+            IsClassFastestLap: lapToneFlags.IsClassFastestLap,
+            IsClassFastestLastLap: lapToneFlags.IsClassFastestLastLap,
+            IsRecentCarBestLap: lapToneFlags.IsRecentCarBestLap,
+            IsRecentCarBestLastLap: lapToneFlags.IsRecentCarBestLastLap);
     }
 
     private static StandingsOverlayRowViewModel ToRow(
@@ -601,6 +622,7 @@ internal sealed record StandingsOverlayViewModel(
         LiveTimingRow? timingRow,
         int? referenceCarIdx,
         bool showPendingGridRows,
+        bool showRaceGaps,
         bool allowLeaderProgress,
         int? classPositionOverride = null,
         string? intervalOverride = null,
@@ -611,17 +633,19 @@ internal sealed record StandingsOverlayViewModel(
         var hasTakenGrid = scoringRow.HasTakenGrid || timingRow?.HasTakenGrid == true;
         var fastestLapSeconds = BestLapTimeSeconds(scoringRow, timingRow);
         var lastLapSeconds = LastLapTimeSeconds(scoringRow, timingRow);
-        var isClassFastestLap = IsMatchingLapTime(fastestLapSeconds, classFastestLapSeconds);
-        var isClassFastestLastLap = IsMatchingLapTime(lastLapSeconds, classFastestLapSeconds);
-        var isRecentCarBestLap = IsRecentCarBestLap(fastestLapSeconds, lastLapSeconds, isClassFastestLap);
+        var lapToneFlags = LapToneFlags(
+            fastestLapSeconds,
+            lastLapSeconds,
+            classFastestLapSeconds,
+            highlightClassFastestLaps);
         return new StandingsOverlayRowViewModel(
             ClassPosition: classPositionOverride is { } liveClassPosition
                 ? $"{liveClassPosition}"
                 : scoringRow.ClassPosition is { } classPosition ? $"{classPosition}" : "--",
             CarNumber: FormatCarNumber(scoringRow),
             Driver: DriverName(scoringRow.DriverName, scoringRow.TeamName, scoringRow.CarIdx),
-            Gap: FormatGap(scoringRow, timingRow, allowLeaderProgress),
-            Interval: intervalOverride ?? (timingRow is not null ? FormatInterval(timingRow, isReference) : "--"),
+            Gap: FormatGap(scoringRow, timingRow, showRaceGaps, allowLeaderProgress),
+            Interval: intervalOverride ?? (timingRow is not null ? FormatInterval(timingRow, showRaceGaps) : "--"),
             Pit: timingRow?.OnPitRoad == true ? "IN" : string.Empty,
             IsReference: isReference,
             IsLeader: (classPositionOverride ?? scoringRow.ClassPosition) == 1,
@@ -631,10 +655,10 @@ internal sealed record StandingsOverlayViewModel(
             IsPendingGrid: showPendingGridRows && !hasTakenGrid,
             FastestLap: FormatLapTime(fastestLapSeconds),
             LastLap: FormatLapTime(lastLapSeconds),
-            IsClassFastestLap: highlightClassFastestLaps && isClassFastestLap,
-            IsClassFastestLastLap: highlightClassFastestLaps && isClassFastestLastLap,
-            IsRecentCarBestLap: isRecentCarBestLap,
-            IsRecentCarBestLastLap: isRecentCarBestLap && !isClassFastestLastLap);
+            IsClassFastestLap: lapToneFlags.IsClassFastestLap,
+            IsClassFastestLastLap: lapToneFlags.IsClassFastestLastLap,
+            IsRecentCarBestLap: lapToneFlags.IsRecentCarBestLap,
+            IsRecentCarBestLastLap: lapToneFlags.IsRecentCarBestLastLap);
     }
 
     private static string SourceText(LiveCoverageModel coverage)
@@ -691,8 +715,13 @@ internal sealed record StandingsOverlayViewModel(
         return name.Trim();
     }
 
-    private static string FormatGap(LiveTimingRow row, bool allowLeaderProgress)
+    private static string FormatGap(LiveTimingRow row, bool showRaceGaps, bool allowLeaderProgress)
     {
+        if (!showRaceGaps)
+        {
+            return row.ClassPosition == 1 || row.IsClassLeader ? "Best" : "--";
+        }
+
         if (row.IsClassLeader)
         {
             return allowLeaderProgress
@@ -716,8 +745,14 @@ internal sealed record StandingsOverlayViewModel(
     private static string FormatGap(
         LiveScoringRow scoringRow,
         LiveTimingRow? timingRow,
+        bool showRaceGaps,
         bool allowLeaderProgress)
     {
+        if (!showRaceGaps)
+        {
+            return scoringRow.ClassPosition == 1 ? "Best" : "--";
+        }
+
         if (scoringRow.ClassPosition == 1)
         {
             return allowLeaderProgress
@@ -725,7 +760,7 @@ internal sealed record StandingsOverlayViewModel(
                 : "Leader";
         }
 
-        return timingRow is not null ? FormatGap(timingRow, allowLeaderProgress) : "--";
+        return timingRow is not null ? FormatGap(timingRow, showRaceGaps, allowLeaderProgress) : "--";
     }
 
     private static string? FormatLeaderProgress(LiveScoringRow scoringRow, LiveTimingRow? timingRow)
@@ -758,8 +793,13 @@ internal sealed record StandingsOverlayViewModel(
             : null;
     }
 
-    private static string FormatInterval(LiveTimingRow row, bool isReference)
+    private static string FormatInterval(LiveTimingRow row, bool showRaceGaps)
     {
+        if (!showRaceGaps)
+        {
+            return "--";
+        }
+
         if (row.ClassPosition == 1 || row.IsClassLeader)
         {
             return "0.0";
@@ -872,6 +912,29 @@ internal sealed record StandingsOverlayViewModel(
     {
         return !isClassFastestLap
             && IsMatchingLapTime(lastLapSeconds, fastestLapSeconds);
+    }
+
+    private static (
+        bool IsClassFastestLap,
+        bool IsClassFastestLastLap,
+        bool IsRecentCarBestLap,
+        bool IsRecentCarBestLastLap) LapToneFlags(
+            double? fastestLapSeconds,
+            double? lastLapSeconds,
+            double? classFastestLapSeconds,
+            bool highlightClassFastestLaps)
+    {
+        var matchesClassFastestLap = IsMatchingLapTime(fastestLapSeconds, classFastestLapSeconds);
+        var matchesClassFastestLastLap = IsMatchingLapTime(lastLapSeconds, classFastestLapSeconds);
+        var isRecentCarBestLap = IsRecentCarBestLap(
+            fastestLapSeconds,
+            lastLapSeconds,
+            matchesClassFastestLap);
+        return (
+            highlightClassFastestLaps && matchesClassFastestLap,
+            highlightClassFastestLaps && matchesClassFastestLastLap,
+            isRecentCarBestLap,
+            isRecentCarBestLap && !matchesClassFastestLastLap);
     }
 
     private static string FormatLapTime(double? seconds)

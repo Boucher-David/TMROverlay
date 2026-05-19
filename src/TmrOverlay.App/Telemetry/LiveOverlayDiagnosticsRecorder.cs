@@ -19,6 +19,24 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private const double MaximumContinuousSectorProgressDelta = 0.12d;
     private const int MaxPitWindowSamples = 20;
     private const int BlackFlagMask = 0x00010000 | 0x00020000 | 0x00080000 | 0x00200000 | 0x00400000;
+    private const int YellowFamilyFlagMask = 0x00000008
+        | 0x00000040
+        | 0x00000100
+        | 0x00000200
+        | 0x00002000
+        | 0x00004000
+        | 0x00008000;
+
+    private static readonly FlagBitDefinition[] YellowFamilyFlagBits =
+    [
+        new("Yellow", 0x00000008),
+        new("Debris", 0x00000040),
+        new("WavingYellow", 0x00000100),
+        new("OneToGreen", 0x00000200),
+        new("RandomWaving", 0x00002000),
+        new("Caution", 0x00004000),
+        new("WavingCaution", 0x00008000)
+    ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -34,8 +52,18 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private readonly object _sync = new();
     private readonly Dictionary<string, int> _sessionFrameCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _flagsRawFlagCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsYellowFamilyBitCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsYellowFamilyStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsCarIdxYellowFamilyBitCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsCarIdxYellowFamilyStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsRawToDisplayCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsRawToDisplayLabelCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsDisplayStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsDisplayLabelStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsDisplayTransitionCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _flagsDisplayKindCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _flagsDisplayCategoryCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _flagsDisplayLabelCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _flagsToneCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _focusUnavailableReasonCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _focusUnavailableSessionKindCounts = new(StringComparer.OrdinalIgnoreCase);
@@ -45,6 +73,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private readonly Dictionary<string, int> _gapClassEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _gapOverallEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _radarSideStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _radarSideTransitionCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _radarFocusFrameCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _radarPlacementEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _fuelLevelEvidenceCounts = new(StringComparer.OrdinalIgnoreCase);
@@ -55,6 +84,8 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private readonly Dictionary<string, int> _pitServiceLocalStrategyUnavailableReasonCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _lapDeltaValueCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _lapDeltaUsableCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _lapProfileSourceFrameCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _lapProfileSourceRowCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _relativeLapRelationshipCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _relativeLapRelationshipPitCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _relativeLapPendingCounts = new(StringComparer.OrdinalIgnoreCase);
@@ -83,11 +114,22 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private int _flagsFramesWithSessionState;
     private int _flagsFramesWithRawFlags;
     private int _flagsFramesWithActiveRawFlags;
+    private int _flagsFramesWithYellowFamilyRawFlags;
+    private int _flagsFramesWithCarIdxYellowFamilyFlags;
     private int _flagsFramesWithDisplayFlags;
     private int _flagsWaitingFrames;
     private int _flagsRawActiveWithoutDisplayFrames;
     private int _flagsStateOnlyDisplayFrames;
     private int _maxFlagsDisplayFlags;
+    private int _flagsDisplayTransitionFrames;
+    private int _flagsDisplayClearedTransitionFrames;
+    private int _longestFlagsDisplayDurationFrames;
+    private double? _longestFlagsDisplayDurationSeconds;
+    private string? _longestFlagsDisplayState;
+    private string? _currentFlagsDisplayState;
+    private string? _currentFlagsDisplayStatus;
+    private DateTimeOffset? _currentFlagsDisplayStartedAtUtc;
+    private int _currentFlagsDisplayFrameCount;
     private int _gapFramesWithData;
     private int _gapNonRaceFramesWithData;
     private int _gapClassLargeFrames;
@@ -127,9 +169,16 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private int _radarTimingOnlyRowFrames;
     private int _radarSpatialRowFrames;
     private int _radarMulticlassApproachFrames;
+    private int _radarSideTransitionFrames;
+    private int _radarOppositeSideFlipFrames;
+    private int _radarSideTransitionWithoutPlacementFrames;
     private int _maxRadarNearbyCars;
     private int _maxRadarTimingRows;
     private int _maxRadarSpatialCars;
+    private int? _previousRadarRawSide;
+    private string? _previousRadarSideStatus;
+    private string? _previousRadarSideGroup;
+    private DateTimeOffset? _previousRadarSideAtUtc;
     private int _fuelFramesWithLevel;
     private int _fuelFramesWithInstantaneousBurn;
     private int _fuelInstantaneousBurnWithoutLevelFrames;
@@ -154,6 +203,23 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private int _lapDeltaFramesWithAnyValue;
     private int _lapDeltaFramesWithAnyUsableValue;
     private double? _maxAbsLapDeltaSeconds;
+    private int _lapProfileObservedFrames;
+    private int _lapProfileFramesWithTimingRows;
+    private int _lapProfileFramesWithScoringRows;
+    private int _lapProfileFramesWithAnyRows;
+    private int _lapProfileFramesWithAnyBestLap;
+    private int _lapProfileFramesWithAnyLastLap;
+    private int _lapProfileFramesWithBestAndLastLap;
+    private int _lapProfileFramesWithRecentPersonalBest;
+    private int _lapProfileFramesWithClassFastestBestLap;
+    private int _lapProfileFramesWithClassFastestLastLap;
+    private int _maxLapProfileTimingRows;
+    private int _maxLapProfileScoringRows;
+    private int _maxLapProfileRows;
+    private int _maxLapProfileRowsWithBestAndLastLap;
+    private int _maxLapProfileRowsWithRecentPersonalBest;
+    private int _maxLapProfileRowsWithClassFastestBestLap;
+    private int _maxLapProfileRowsWithClassFastestLastLap;
     private int _relativeLapObservedFrames;
     private int _relativeLapReferenceProgressFrames;
     private int _relativeLapNearbyFrames;
@@ -235,11 +301,22 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _flagsFramesWithSessionState = 0;
             _flagsFramesWithRawFlags = 0;
             _flagsFramesWithActiveRawFlags = 0;
+            _flagsFramesWithYellowFamilyRawFlags = 0;
+            _flagsFramesWithCarIdxYellowFamilyFlags = 0;
             _flagsFramesWithDisplayFlags = 0;
             _flagsWaitingFrames = 0;
             _flagsRawActiveWithoutDisplayFrames = 0;
             _flagsStateOnlyDisplayFrames = 0;
             _maxFlagsDisplayFlags = 0;
+            _flagsDisplayTransitionFrames = 0;
+            _flagsDisplayClearedTransitionFrames = 0;
+            _longestFlagsDisplayDurationFrames = 0;
+            _longestFlagsDisplayDurationSeconds = null;
+            _longestFlagsDisplayState = null;
+            _currentFlagsDisplayState = null;
+            _currentFlagsDisplayStatus = null;
+            _currentFlagsDisplayStartedAtUtc = null;
+            _currentFlagsDisplayFrameCount = 0;
             _gapFramesWithData = 0;
             _gapNonRaceFramesWithData = 0;
             _gapClassLargeFrames = 0;
@@ -279,9 +356,16 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _radarTimingOnlyRowFrames = 0;
             _radarSpatialRowFrames = 0;
             _radarMulticlassApproachFrames = 0;
+            _radarSideTransitionFrames = 0;
+            _radarOppositeSideFlipFrames = 0;
+            _radarSideTransitionWithoutPlacementFrames = 0;
             _maxRadarNearbyCars = 0;
             _maxRadarTimingRows = 0;
             _maxRadarSpatialCars = 0;
+            _previousRadarRawSide = null;
+            _previousRadarSideStatus = null;
+            _previousRadarSideGroup = null;
+            _previousRadarSideAtUtc = null;
             _fuelFramesWithLevel = 0;
             _fuelFramesWithInstantaneousBurn = 0;
             _fuelInstantaneousBurnWithoutLevelFrames = 0;
@@ -306,6 +390,23 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _lapDeltaFramesWithAnyValue = 0;
             _lapDeltaFramesWithAnyUsableValue = 0;
             _maxAbsLapDeltaSeconds = null;
+            _lapProfileObservedFrames = 0;
+            _lapProfileFramesWithTimingRows = 0;
+            _lapProfileFramesWithScoringRows = 0;
+            _lapProfileFramesWithAnyRows = 0;
+            _lapProfileFramesWithAnyBestLap = 0;
+            _lapProfileFramesWithAnyLastLap = 0;
+            _lapProfileFramesWithBestAndLastLap = 0;
+            _lapProfileFramesWithRecentPersonalBest = 0;
+            _lapProfileFramesWithClassFastestBestLap = 0;
+            _lapProfileFramesWithClassFastestLastLap = 0;
+            _maxLapProfileTimingRows = 0;
+            _maxLapProfileScoringRows = 0;
+            _maxLapProfileRows = 0;
+            _maxLapProfileRowsWithBestAndLastLap = 0;
+            _maxLapProfileRowsWithRecentPersonalBest = 0;
+            _maxLapProfileRowsWithClassFastestBestLap = 0;
+            _maxLapProfileRowsWithClassFastestLastLap = 0;
             _relativeLapObservedFrames = 0;
             _relativeLapReferenceProgressFrames = 0;
             _relativeLapNearbyFrames = 0;
@@ -347,8 +448,18 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _trackMapFullLapHighlightFrames = 0;
             _sessionFrameCounts.Clear();
             _flagsRawFlagCounts.Clear();
+            _flagsYellowFamilyBitCounts.Clear();
+            _flagsYellowFamilyStateCounts.Clear();
+            _flagsCarIdxYellowFamilyBitCounts.Clear();
+            _flagsCarIdxYellowFamilyStateCounts.Clear();
+            _flagsRawToDisplayCounts.Clear();
+            _flagsRawToDisplayLabelCounts.Clear();
+            _flagsDisplayStateCounts.Clear();
+            _flagsDisplayLabelStateCounts.Clear();
+            _flagsDisplayTransitionCounts.Clear();
             _flagsDisplayKindCounts.Clear();
             _flagsDisplayCategoryCounts.Clear();
+            _flagsDisplayLabelCounts.Clear();
             _flagsToneCounts.Clear();
             _focusUnavailableReasonCounts.Clear();
             _focusUnavailableSessionKindCounts.Clear();
@@ -358,6 +469,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _gapClassEvidenceCounts.Clear();
             _gapOverallEvidenceCounts.Clear();
             _radarSideStateCounts.Clear();
+            _radarSideTransitionCounts.Clear();
             _radarFocusFrameCounts.Clear();
             _radarPlacementEvidenceCounts.Clear();
             _fuelLevelEvidenceCounts.Clear();
@@ -368,6 +480,8 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _pitServiceLocalStrategyUnavailableReasonCounts.Clear();
             _lapDeltaValueCounts.Clear();
             _lapDeltaUsableCounts.Clear();
+            _lapProfileSourceFrameCounts.Clear();
+            _lapProfileSourceRowCounts.Clear();
             _relativeLapRelationshipCounts.Clear();
             _relativeLapRelationshipPitCounts.Clear();
             _relativeLapPendingCounts.Clear();
@@ -418,6 +532,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             RecordRawTelemetry(rawWatch ?? RawTelemetryWatchSnapshot.Empty, snapshot, capturedAtUtc);
             RecordPositionCadence(snapshot, capturedAtUtc);
             RecordLapDelta(snapshot);
+            RecordLapProfile(snapshot);
             RecordRelativeLapRelationship(snapshot, capturedAtUtc);
             RecordSectorTiming(snapshot, capturedAtUtc);
             RecordTrackMap(snapshot);
@@ -442,6 +557,17 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             try
             {
                 FinalizeActivePitWindow(finishedAtUtc);
+                FinalizeFlagDisplayState(finishedAtUtc);
+                var lapDeltaClassification = ClassifyLapDeltaQuality(
+                    _lapDeltaObservedFrames,
+                    _lapDeltaFramesWithAnyValue,
+                    _lapDeltaFramesWithAnyUsableValue,
+                    _maxAbsLapDeltaSeconds);
+                var lapDeltaValuesPresentWithoutUsableQuality = _lapDeltaFramesWithAnyValue > 0
+                    && _lapDeltaFramesWithAnyUsableValue <= 0;
+                var lapDeltaAllObservedValuesZero = lapDeltaValuesPresentWithoutUsableQuality
+                    && (_maxAbsLapDeltaSeconds is null || Math.Abs(_maxAbsLapDeltaSeconds.Value) <= double.Epsilon);
+
                 var artifact = new LiveOverlayDiagnosticsArtifact(
                     FormatVersion: 1,
                     SourceId: _sourceId,
@@ -476,14 +602,31 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                         FramesWithSessionState: _flagsFramesWithSessionState,
                         FramesWithRawFlags: _flagsFramesWithRawFlags,
                         FramesWithActiveRawFlags: _flagsFramesWithActiveRawFlags,
+                        FramesWithYellowFamilyRawFlags: _flagsFramesWithYellowFamilyRawFlags,
+                        FramesWithCarIdxYellowFamilyFlags: _flagsFramesWithCarIdxYellowFamilyFlags,
                         FramesWithDisplayFlags: _flagsFramesWithDisplayFlags,
                         WaitingFrames: _flagsWaitingFrames,
                         RawActiveWithoutDisplayFrames: _flagsRawActiveWithoutDisplayFrames,
                         StateOnlyDisplayFrames: _flagsStateOnlyDisplayFrames,
                         MaxDisplayFlags: _maxFlagsDisplayFlags,
+                        DisplayTransitionFrames: _flagsDisplayTransitionFrames,
+                        DisplayClearedTransitionFrames: _flagsDisplayClearedTransitionFrames,
+                        LongestDisplayDurationFrames: _longestFlagsDisplayDurationFrames,
+                        LongestDisplayDurationSeconds: Round(_longestFlagsDisplayDurationSeconds),
+                        LongestDisplayState: _longestFlagsDisplayState,
                         RawFlagCounts: Sorted(_flagsRawFlagCounts),
+                        YellowFamilyBitCounts: Sorted(_flagsYellowFamilyBitCounts),
+                        YellowFamilyStateCounts: Sorted(_flagsYellowFamilyStateCounts),
+                        CarIdxYellowFamilyBitCounts: Sorted(_flagsCarIdxYellowFamilyBitCounts),
+                        CarIdxYellowFamilyStateCounts: Sorted(_flagsCarIdxYellowFamilyStateCounts),
+                        RawToDisplayCounts: Sorted(_flagsRawToDisplayCounts),
+                        RawToDisplayLabelCounts: Sorted(_flagsRawToDisplayLabelCounts),
+                        DisplayStateCounts: Sorted(_flagsDisplayStateCounts),
+                        DisplayLabelStateCounts: Sorted(_flagsDisplayLabelStateCounts),
+                        DisplayTransitionCounts: Sorted(_flagsDisplayTransitionCounts),
                         DisplayKindCounts: Sorted(_flagsDisplayKindCounts),
                         DisplayCategoryCounts: Sorted(_flagsDisplayCategoryCounts),
+                        DisplayLabelCounts: Sorted(_flagsDisplayLabelCounts),
                         ToneCounts: Sorted(_flagsToneCounts)),
                     Scoring: new ScoringOverlayDiagnosticsSummary(
                         FramesWithData: _scoringFramesWithData,
@@ -522,10 +665,14 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                         TimingOnlyRowFrames: _radarTimingOnlyRowFrames,
                         SpatialRowFrames: _radarSpatialRowFrames,
                         MulticlassApproachFrames: _radarMulticlassApproachFrames,
+                        SideTransitionFrames: _radarSideTransitionFrames,
+                        OppositeSideFlipFrames: _radarOppositeSideFlipFrames,
+                        SideTransitionWithoutPlacementFrames: _radarSideTransitionWithoutPlacementFrames,
                         MaxNearbyCars: _maxRadarNearbyCars,
                         MaxTimingRows: _maxRadarTimingRows,
                         MaxSpatialCars: _maxRadarSpatialCars,
                         SideStateCounts: Sorted(_radarSideStateCounts),
+                        SideTransitionCounts: Sorted(_radarSideTransitionCounts),
                         FocusFrameCounts: Sorted(_radarFocusFrameCounts),
                         PlacementEvidenceCounts: Sorted(_radarPlacementEvidenceCounts)),
                     Fuel: new FuelOverlayDiagnosticsSummary(
@@ -565,8 +712,34 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                         FramesWithAnyValue: _lapDeltaFramesWithAnyValue,
                         FramesWithAnyUsableValue: _lapDeltaFramesWithAnyUsableValue,
                         MaxAbsDeltaSeconds: Round(_maxAbsLapDeltaSeconds),
+                        Classification: lapDeltaClassification,
+                        ValuesPresentWithoutUsableQuality: lapDeltaValuesPresentWithoutUsableQuality,
+                        AllObservedValuesZero: lapDeltaAllObservedValuesZero,
+                        Interpretation: lapDeltaValuesPresentWithoutUsableQuality
+                            ? "Lap-delta values are present but no OK/quality flag marks them usable; treat all-zero placeholders as unavailable."
+                            : "Lap-delta quality is either usable or no lap-delta values were observed.",
                         ValueFrameCounts: Sorted(_lapDeltaValueCounts),
                         UsableFrameCounts: Sorted(_lapDeltaUsableCounts)),
+                    LapProfile: new LapProfileDiagnosticsSummary(
+                        ObservedFrames: _lapProfileObservedFrames,
+                        FramesWithTimingRows: _lapProfileFramesWithTimingRows,
+                        FramesWithScoringRows: _lapProfileFramesWithScoringRows,
+                        FramesWithAnyRows: _lapProfileFramesWithAnyRows,
+                        FramesWithAnyBestLap: _lapProfileFramesWithAnyBestLap,
+                        FramesWithAnyLastLap: _lapProfileFramesWithAnyLastLap,
+                        FramesWithBestAndLastLap: _lapProfileFramesWithBestAndLastLap,
+                        FramesWithRecentPersonalBest: _lapProfileFramesWithRecentPersonalBest,
+                        FramesWithClassFastestBestLap: _lapProfileFramesWithClassFastestBestLap,
+                        FramesWithClassFastestLastLap: _lapProfileFramesWithClassFastestLastLap,
+                        MaxTimingRows: _maxLapProfileTimingRows,
+                        MaxScoringRows: _maxLapProfileScoringRows,
+                        MaxRows: _maxLapProfileRows,
+                        MaxRowsWithBestAndLastLap: _maxLapProfileRowsWithBestAndLastLap,
+                        MaxRowsWithRecentPersonalBest: _maxLapProfileRowsWithRecentPersonalBest,
+                        MaxRowsWithClassFastestBestLap: _maxLapProfileRowsWithClassFastestBestLap,
+                        MaxRowsWithClassFastestLastLap: _maxLapProfileRowsWithClassFastestLastLap,
+                        SourceFrameCounts: Sorted(_lapProfileSourceFrameCounts),
+                        SourceRowCounts: Sorted(_lapProfileSourceRowCounts)),
                     RelativeLapRelationship: new RelativeLapRelationshipDiagnosticsSummary(
                         ObservedFrames: _relativeLapObservedFrames,
                         FramesWithReferenceProgress: _relativeLapReferenceProgressFrames,
@@ -666,13 +839,17 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         {
             _flagsFramesWithRawFlags++;
             Increment(_flagsRawFlagCounts, FormatRawFlagsHex(rawValue));
+            RecordYellowFamilyFlags(rawValue, _flagsYellowFamilyBitCounts, _flagsYellowFamilyStateCounts, ref _flagsFramesWithYellowFamilyRawFlags);
             if (rawValue != 0)
             {
                 _flagsFramesWithActiveRawFlags++;
             }
         }
 
+        RecordCarIdxYellowFamilyFlags(snapshot.LatestSample);
+
         var viewModel = FlagsOverlayViewModel.ForDisplay(snapshot, capturedAtUtc);
+        RecordFlagDisplayState(snapshot, capturedAtUtc, rawFlags, viewModel);
         if (viewModel.IsWaiting)
         {
             _flagsWaitingFrames++;
@@ -707,6 +884,178 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                 snapshot,
                 capturedAtUtc);
         }
+    }
+
+    private void RecordFlagDisplayState(
+        LiveTelemetrySnapshot snapshot,
+        DateTimeOffset capturedAtUtc,
+        int? rawFlags,
+        FlagOverlayDisplayViewModel viewModel)
+    {
+        var state = FlagDisplayStateKey(viewModel);
+        var labelState = FlagDisplayLabelStateKey(viewModel);
+        Increment(_flagsDisplayStateCounts, state);
+        Increment(_flagsDisplayLabelStateCounts, labelState);
+        if (rawFlags is not null)
+        {
+            Increment(_flagsRawToDisplayCounts, $"{FormatRawFlagsHex(rawFlags)} -> {state}");
+            Increment(_flagsRawToDisplayLabelCounts, $"{FormatRawFlagsHex(rawFlags)} -> {labelState}");
+        }
+
+        foreach (var flag in viewModel.Flags)
+        {
+            Increment(_flagsDisplayLabelCounts, FlagDisplayLabelKey(flag));
+        }
+
+        if (_currentFlagsDisplayState is null)
+        {
+            _currentFlagsDisplayState = state;
+            _currentFlagsDisplayStatus = viewModel.Status;
+            _currentFlagsDisplayStartedAtUtc = capturedAtUtc;
+            _currentFlagsDisplayFrameCount = 1;
+            return;
+        }
+
+        if (string.Equals(_currentFlagsDisplayState, state, StringComparison.OrdinalIgnoreCase))
+        {
+            _currentFlagsDisplayFrameCount++;
+            return;
+        }
+
+        var previousState = _currentFlagsDisplayState;
+        var previousStatus = _currentFlagsDisplayStatus;
+        FinalizeFlagDisplayState(capturedAtUtc);
+        _flagsDisplayTransitionFrames++;
+        Increment(_flagsDisplayTransitionCounts, $"{previousState} -> {state}");
+        if (IsActiveFlagDisplayState(previousState) && !IsActiveFlagDisplayState(state))
+        {
+            _flagsDisplayClearedTransitionFrames++;
+        }
+
+        AddEvent(
+            "flags.display-transition",
+            $"display {previousState} -> {state}; status {previousStatus ?? "--"} -> {viewModel.Status}",
+            snapshot,
+            capturedAtUtc);
+
+        _currentFlagsDisplayState = state;
+        _currentFlagsDisplayStatus = viewModel.Status;
+        _currentFlagsDisplayStartedAtUtc = capturedAtUtc;
+        _currentFlagsDisplayFrameCount = 1;
+    }
+
+    private void RecordCarIdxYellowFamilyFlags(HistoricalTelemetrySample? sample)
+    {
+        if (sample is null)
+        {
+            return;
+        }
+
+        var carFlagsByIndex = new Dictionary<int, int>();
+        AddCarFlags(sample.AllCars);
+        AddCarFlags(sample.FocusClassCars);
+        AddCarFlags(sample.ClassCars);
+        AddCarFlags(sample.NearbyCars);
+
+        var frameHasCarIdxYellowFamilyFlags = false;
+        foreach (var flags in carFlagsByIndex.Values)
+        {
+            if (RecordYellowFamilyFlags(flags, _flagsCarIdxYellowFamilyBitCounts, _flagsCarIdxYellowFamilyStateCounts))
+            {
+                frameHasCarIdxYellowFamilyFlags = true;
+            }
+        }
+
+        if (frameHasCarIdxYellowFamilyFlags)
+        {
+            _flagsFramesWithCarIdxYellowFamilyFlags++;
+        }
+
+        void AddCarFlags(IReadOnlyList<HistoricalCarProximity>? cars)
+        {
+            if (cars is null)
+            {
+                return;
+            }
+
+            foreach (var car in cars)
+            {
+                if (car.SessionFlags is { } flags)
+                {
+                    carFlagsByIndex.TryAdd(car.CarIdx, flags);
+                }
+            }
+        }
+    }
+
+    private static bool RecordYellowFamilyFlags(
+        int flags,
+        Dictionary<string, int> bitCounts,
+        Dictionary<string, int> stateCounts)
+    {
+        if ((flags & YellowFamilyFlagMask) == 0)
+        {
+            return false;
+        }
+
+        Increment(stateCounts, YellowFamilyStateKey(flags));
+        foreach (var bit in YellowFamilyFlagBits)
+        {
+            if ((flags & bit.Mask) != 0)
+            {
+                Increment(bitCounts, bit.Name);
+            }
+        }
+
+        return true;
+    }
+
+    private static void RecordYellowFamilyFlags(
+        int flags,
+        Dictionary<string, int> bitCounts,
+        Dictionary<string, int> stateCounts,
+        ref int frameCount)
+    {
+        if (RecordYellowFamilyFlags(flags, bitCounts, stateCounts))
+        {
+            frameCount++;
+        }
+    }
+
+    private static string YellowFamilyStateKey(int flags)
+    {
+        return string.Join(
+            "+",
+            YellowFamilyFlagBits
+                .Where(bit => (flags & bit.Mask) != 0)
+                .Select(bit => bit.Name));
+    }
+
+    private void FinalizeFlagDisplayState(DateTimeOffset endedAtUtc)
+    {
+        if (_currentFlagsDisplayState is null)
+        {
+            return;
+        }
+
+        if (IsActiveFlagDisplayState(_currentFlagsDisplayState))
+        {
+            var durationSeconds = _currentFlagsDisplayStartedAtUtc is { } startedAtUtc
+                ? Math.Max(0d, (endedAtUtc - startedAtUtc).TotalSeconds)
+                : (double?)null;
+            if (_currentFlagsDisplayFrameCount > _longestFlagsDisplayDurationFrames
+                || (_currentFlagsDisplayFrameCount == _longestFlagsDisplayDurationFrames
+                    && durationSeconds is { } duration
+                    && duration > (_longestFlagsDisplayDurationSeconds ?? -1d)))
+            {
+                _longestFlagsDisplayDurationFrames = _currentFlagsDisplayFrameCount;
+                _longestFlagsDisplayDurationSeconds = durationSeconds;
+                _longestFlagsDisplayState = _currentFlagsDisplayState;
+            }
+        }
+
+        _currentFlagsDisplayStartedAtUtc = endedAtUtc;
+        _currentFlagsDisplayFrameCount = 0;
     }
 
     private void RecordFocus(LiveTelemetrySnapshot snapshot, DateTimeOffset capturedAtUtc)
@@ -957,6 +1306,8 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _radarSideSignalFrames++;
         }
 
+        RecordRadarSideTransition(snapshot, capturedAtUtc);
+
         var timingRows = snapshot.Models.Timing.OverallRows;
         var timingOnlyRows = timingRows.Count(row => row.HasTiming && !row.CanUseForRadarPlacement);
         var spatialRows = timingRows.Count(row => row.CanUseForRadarPlacement);
@@ -993,6 +1344,58 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                 snapshot,
                 capturedAtUtc);
         }
+    }
+
+    private void RecordRadarSideTransition(LiveTelemetrySnapshot snapshot, DateTimeOffset capturedAtUtc)
+    {
+        var currentStatus = snapshot.Proximity.SideStatus;
+        var currentGroup = RadarSideGroup(currentStatus);
+        var currentRawSide = snapshot.Proximity.CarLeftRight;
+        if (_previousRadarSideStatus is null)
+        {
+            _previousRadarSideStatus = currentStatus;
+            _previousRadarSideGroup = currentGroup;
+            _previousRadarRawSide = currentRawSide;
+            _previousRadarSideAtUtc = capturedAtUtc;
+            return;
+        }
+
+        if (string.Equals(_previousRadarSideStatus, currentStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _radarSideTransitionFrames++;
+        Increment(_radarSideTransitionCounts, $"{_previousRadarSideStatus} -> {currentStatus}");
+        var hasPlacementCandidate = HasSidePlacementCandidate(snapshot);
+        if (!hasPlacementCandidate)
+        {
+            _radarSideTransitionWithoutPlacementFrames++;
+        }
+
+        var elapsedSeconds = _previousRadarSideAtUtc is { } previousAtUtc
+            ? Math.Max(0d, (capturedAtUtc - previousAtUtc).TotalSeconds)
+            : (double?)null;
+        AddEvent(
+            "radar.side-transition",
+            $"side {_previousRadarSideStatus} -> {currentStatus}; raw {_previousRadarRawSide?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "--"} -> {currentRawSide?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "--"}; placement {hasPlacementCandidate}; elapsed {FormatSeconds(elapsedSeconds)}",
+            snapshot,
+            capturedAtUtc);
+
+        if (IsOppositeRadarSideFlip(_previousRadarSideGroup, currentGroup))
+        {
+            _radarOppositeSideFlipFrames++;
+            AddEvent(
+                "radar.opposite-side-flip",
+                $"opposite side {_previousRadarSideStatus} -> {currentStatus}; placement {hasPlacementCandidate}; nearby {snapshot.Proximity.NearbyCars.Count}; spatial {snapshot.Models.Spatial.Cars.Count}; timing {snapshot.Models.Timing.OverallRows.Count}",
+                snapshot,
+                capturedAtUtc);
+        }
+
+        _previousRadarSideStatus = currentStatus;
+        _previousRadarSideGroup = currentGroup;
+        _previousRadarRawSide = currentRawSide;
+        _previousRadarSideAtUtc = capturedAtUtc;
     }
 
     private void RecordFuel(LiveTelemetrySnapshot snapshot, DateTimeOffset capturedAtUtc)
@@ -1420,6 +1823,300 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         }
     }
 
+    private void RecordLapProfile(LiveTelemetrySnapshot snapshot)
+    {
+        _lapProfileObservedFrames++;
+
+        var timingRows = LapProfileTimingRows(snapshot.Models.Timing).ToArray();
+        var scoringRows = LapProfileScoringRows(snapshot.Models.Scoring).ToArray();
+        var mergedRows = MergeLapProfileRows(timingRows, scoringRows).ToArray();
+
+        RecordLapProfileSource("timing", timingRows);
+        RecordLapProfileSource("scoring", scoringRows);
+        RecordLapProfileSource("merged", mergedRows);
+
+        if (timingRows.Length > 0)
+        {
+            _lapProfileFramesWithTimingRows++;
+        }
+
+        if (scoringRows.Length > 0)
+        {
+            _lapProfileFramesWithScoringRows++;
+        }
+
+        _maxLapProfileTimingRows = Math.Max(_maxLapProfileTimingRows, timingRows.Length);
+        _maxLapProfileScoringRows = Math.Max(_maxLapProfileScoringRows, scoringRows.Length);
+        _maxLapProfileRows = Math.Max(_maxLapProfileRows, mergedRows.Length);
+
+        var readiness = LapProfileReadiness(mergedRows);
+        if (mergedRows.Length > 0)
+        {
+            _lapProfileFramesWithAnyRows++;
+        }
+
+        if (readiness.RowsWithBestLap > 0)
+        {
+            _lapProfileFramesWithAnyBestLap++;
+        }
+
+        if (readiness.RowsWithLastLap > 0)
+        {
+            _lapProfileFramesWithAnyLastLap++;
+        }
+
+        if (readiness.RowsWithBestAndLastLap > 0)
+        {
+            _lapProfileFramesWithBestAndLastLap++;
+        }
+
+        if (readiness.RowsWithRecentPersonalBest > 0)
+        {
+            _lapProfileFramesWithRecentPersonalBest++;
+        }
+
+        if (readiness.RowsWithClassFastestBestLap > 0)
+        {
+            _lapProfileFramesWithClassFastestBestLap++;
+        }
+
+        if (readiness.RowsWithClassFastestLastLap > 0)
+        {
+            _lapProfileFramesWithClassFastestLastLap++;
+        }
+
+        _maxLapProfileRowsWithBestAndLastLap = Math.Max(
+            _maxLapProfileRowsWithBestAndLastLap,
+            readiness.RowsWithBestAndLastLap);
+        _maxLapProfileRowsWithRecentPersonalBest = Math.Max(
+            _maxLapProfileRowsWithRecentPersonalBest,
+            readiness.RowsWithRecentPersonalBest);
+        _maxLapProfileRowsWithClassFastestBestLap = Math.Max(
+            _maxLapProfileRowsWithClassFastestBestLap,
+            readiness.RowsWithClassFastestBestLap);
+        _maxLapProfileRowsWithClassFastestLastLap = Math.Max(
+            _maxLapProfileRowsWithClassFastestLastLap,
+            readiness.RowsWithClassFastestLastLap);
+    }
+
+    private void RecordLapProfileSource(string source, IReadOnlyList<LapProfileRow> rows)
+    {
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        Increment(_lapProfileSourceFrameCounts, $"{source}:rows");
+        Increment(_lapProfileSourceRowCounts, $"{source}:rows", rows.Count);
+
+        var readiness = LapProfileReadiness(rows);
+        RecordLapProfileSourceReadiness(source, "best-lap", readiness.RowsWithBestLap);
+        RecordLapProfileSourceReadiness(source, "last-lap", readiness.RowsWithLastLap);
+        RecordLapProfileSourceReadiness(source, "best-and-last-lap", readiness.RowsWithBestAndLastLap);
+        RecordLapProfileSourceReadiness(source, "recent-personal-best", readiness.RowsWithRecentPersonalBest);
+        RecordLapProfileSourceReadiness(source, "class-fastest-best-lap", readiness.RowsWithClassFastestBestLap);
+        RecordLapProfileSourceReadiness(source, "class-fastest-last-lap", readiness.RowsWithClassFastestLastLap);
+    }
+
+    private void RecordLapProfileSourceReadiness(string source, string key, int rowCount)
+    {
+        if (rowCount <= 0)
+        {
+            return;
+        }
+
+        Increment(_lapProfileSourceFrameCounts, $"{source}:{key}");
+        Increment(_lapProfileSourceRowCounts, $"{source}:{key}", rowCount);
+    }
+
+    private static IEnumerable<LapProfileRow> LapProfileTimingRows(LiveTimingModel timing)
+    {
+        return timing.OverallRows
+            .Concat(timing.ClassRows)
+            .GroupBy(row => row.CarIdx)
+            .Select(group => ToLapProfileRow(SelectLapProfileTimingRow(group)))
+            .OrderBy(row => row.CarIdx);
+    }
+
+    private static IEnumerable<LapProfileRow> LapProfileScoringRows(LiveScoringModel scoring)
+    {
+        IEnumerable<LiveScoringRow> rows = scoring.Rows.Count > 0
+            ? scoring.Rows
+            : scoring.ClassGroups.SelectMany(group => group.Rows);
+
+        return rows
+            .GroupBy(row => row.CarIdx)
+            .Select(group => ToLapProfileRow(SelectLapProfileScoringRow(group)))
+            .OrderBy(row => row.CarIdx);
+    }
+
+    private static IEnumerable<LapProfileRow> MergeLapProfileRows(
+        IReadOnlyList<LapProfileRow> timingRows,
+        IReadOnlyList<LapProfileRow> scoringRows)
+    {
+        var timingByCarIdx = timingRows
+            .GroupBy(row => row.CarIdx)
+            .ToDictionary(group => group.Key, group => group.First());
+        var scoringByCarIdx = scoringRows
+            .GroupBy(row => row.CarIdx)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var carIdx in timingByCarIdx.Keys.Concat(scoringByCarIdx.Keys).Distinct().OrderBy(value => value))
+        {
+            timingByCarIdx.TryGetValue(carIdx, out var timing);
+            scoringByCarIdx.TryGetValue(carIdx, out var scoring);
+            yield return new LapProfileRow(
+                CarIdx: carIdx,
+                CarClass: scoring?.CarClass ?? timing?.CarClass,
+                CarClassName: FirstNonEmpty(scoring?.CarClassName, timing?.CarClassName),
+                CarClassColorHex: FirstNonEmpty(scoring?.CarClassColorHex, timing?.CarClassColorHex),
+                BestLapTimeSeconds: ValidLapTimeSeconds(scoring?.BestLapTimeSeconds)
+                    ?? ValidLapTimeSeconds(timing?.BestLapTimeSeconds),
+                LastLapTimeSeconds: ValidLapTimeSeconds(scoring?.LastLapTimeSeconds)
+                    ?? ValidLapTimeSeconds(timing?.LastLapTimeSeconds));
+        }
+    }
+
+    private static LiveTimingRow SelectLapProfileTimingRow(IEnumerable<LiveTimingRow> rows)
+    {
+        return rows
+            .OrderByDescending(row => ValidLapTimeSeconds(row.BestLapTimeSeconds) is not null
+                && ValidLapTimeSeconds(row.LastLapTimeSeconds) is not null)
+            .ThenByDescending(row => ValidLapTimeSeconds(row.BestLapTimeSeconds) is not null)
+            .ThenByDescending(row => ValidLapTimeSeconds(row.LastLapTimeSeconds) is not null)
+            .ThenByDescending(row => row.HasTiming)
+            .ThenByDescending(row => row.Quality)
+            .First();
+    }
+
+    private static LiveScoringRow SelectLapProfileScoringRow(IEnumerable<LiveScoringRow> rows)
+    {
+        return rows
+            .OrderByDescending(row => ValidLapTimeSeconds(row.BestLapTimeSeconds) is not null
+                && ValidLapTimeSeconds(row.LastLapTimeSeconds) is not null)
+            .ThenByDescending(row => ValidLapTimeSeconds(row.BestLapTimeSeconds) is not null)
+            .ThenByDescending(row => ValidLapTimeSeconds(row.LastLapTimeSeconds) is not null)
+            .ThenBy(row => row.ClassPosition ?? int.MaxValue)
+            .ThenBy(row => row.OverallPosition ?? int.MaxValue)
+            .First();
+    }
+
+    private static LapProfileRow ToLapProfileRow(LiveTimingRow row)
+    {
+        return new LapProfileRow(
+            CarIdx: row.CarIdx,
+            CarClass: row.CarClass,
+            CarClassName: row.CarClassName,
+            CarClassColorHex: row.CarClassColorHex,
+            BestLapTimeSeconds: ValidLapTimeSeconds(row.BestLapTimeSeconds),
+            LastLapTimeSeconds: ValidLapTimeSeconds(row.LastLapTimeSeconds));
+    }
+
+    private static LapProfileRow ToLapProfileRow(LiveScoringRow row)
+    {
+        return new LapProfileRow(
+            CarIdx: row.CarIdx,
+            CarClass: row.CarClass,
+            CarClassName: row.CarClassName,
+            CarClassColorHex: row.CarClassColorHex,
+            BestLapTimeSeconds: ValidLapTimeSeconds(row.BestLapTimeSeconds),
+            LastLapTimeSeconds: ValidLapTimeSeconds(row.LastLapTimeSeconds));
+    }
+
+    private static LapProfileFrameReadiness LapProfileReadiness(IReadOnlyList<LapProfileRow> rows)
+    {
+        var classFastestLapByClass = rows
+            .Where(row => ValidLapTimeSeconds(row.BestLapTimeSeconds) is not null)
+            .GroupBy(row => ClassKey(row.CarClass, row.CarClassName, row.CarClassColorHex), StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Select(row => ValidLapTimeSeconds(row.BestLapTimeSeconds))
+                    .Where(value => value is not null)
+                    .Select(value => value!.Value)
+                    .Min(),
+                StringComparer.Ordinal);
+
+        var bestLapRows = 0;
+        var lastLapRows = 0;
+        var bestAndLastRows = 0;
+        var recentPersonalBestRows = 0;
+        var classFastestBestLapRows = 0;
+        var classFastestLastLapRows = 0;
+
+        foreach (var row in rows)
+        {
+            var bestLap = ValidLapTimeSeconds(row.BestLapTimeSeconds);
+            var lastLap = ValidLapTimeSeconds(row.LastLapTimeSeconds);
+            var classKey = ClassKey(row.CarClass, row.CarClassName, row.CarClassColorHex);
+            var classFastestLap = classFastestLapByClass.TryGetValue(classKey, out var fastestLap)
+                ? fastestLap
+                : (double?)null;
+            var isClassFastestBestLap = IsMatchingLapTime(bestLap, classFastestLap);
+            var isClassFastestLastLap = IsMatchingLapTime(lastLap, classFastestLap);
+
+            if (bestLap is not null)
+            {
+                bestLapRows++;
+            }
+
+            if (lastLap is not null)
+            {
+                lastLapRows++;
+            }
+
+            if (bestLap is not null && lastLap is not null)
+            {
+                bestAndLastRows++;
+            }
+
+            if (isClassFastestBestLap)
+            {
+                classFastestBestLapRows++;
+            }
+
+            if (isClassFastestLastLap)
+            {
+                classFastestLastLapRows++;
+            }
+
+            if (!isClassFastestBestLap && IsMatchingLapTime(lastLap, bestLap))
+            {
+                recentPersonalBestRows++;
+            }
+        }
+
+        return new LapProfileFrameReadiness(
+            bestLapRows,
+            lastLapRows,
+            bestAndLastRows,
+            recentPersonalBestRows,
+            classFastestBestLapRows,
+            classFastestLastLapRows);
+    }
+
+    private static double? ValidLapTimeSeconds(double? seconds)
+    {
+        return LiveRaceProgressProjector.ValidLapTime(seconds);
+    }
+
+    private static bool IsMatchingLapTime(double? lapTimeSeconds, double? referenceLapTimeSeconds)
+    {
+        return lapTimeSeconds is { } lapTime
+            && referenceLapTimeSeconds is { } referenceLapTime
+            && Math.Abs(lapTime - referenceLapTime) <= 0.0005d;
+    }
+
+    private static string ClassKey(int? carClass, string? className, string? classColorHex)
+    {
+        if (carClass is { } value)
+        {
+            return FormattableString.Invariant($"id:{value}");
+        }
+
+        return FirstNonEmpty(className, classColorHex)?.Trim().ToUpperInvariant() ?? "unknown";
+    }
+
     private void RecordRelativeLapRelationship(LiveTelemetrySnapshot snapshot, DateTimeOffset capturedAtUtc)
     {
         var sample = snapshot.LatestSample;
@@ -1723,6 +2420,32 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             sample.LapDeltaToSessionLastLapSeconds,
             sample.LapDeltaToSessionLastLapRate,
             sample.LapDeltaToSessionLastLapOk);
+    }
+
+    private static string ClassifyLapDeltaQuality(
+        int observedFrames,
+        int framesWithAnyValue,
+        int framesWithAnyUsableValue,
+        double? maxAbsDeltaSeconds)
+    {
+        if (observedFrames <= 0)
+        {
+            return "no_observed_frames";
+        }
+
+        if (framesWithAnyValue <= 0)
+        {
+            return "no_values";
+        }
+
+        if (framesWithAnyUsableValue > 0)
+        {
+            return "usable";
+        }
+
+        return maxAbsDeltaSeconds is null || Math.Abs(maxAbsDeltaSeconds.Value) <= double.Epsilon
+            ? "values_present_without_usable_quality_all_zero"
+            : "values_present_without_usable_quality";
     }
 
     private IReadOnlyList<HistoricalTrackSector> SectorDefinitions(LiveTelemetrySnapshot snapshot)
@@ -2272,6 +2995,85 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         return carLeftRight is 2 or 3 or 4 or 5 or 6;
     }
 
+    private static string FlagDisplayStateKey(FlagOverlayDisplayViewModel viewModel)
+    {
+        if (viewModel.IsWaiting)
+        {
+            return "waiting";
+        }
+
+        if (viewModel.Flags.Count == 0)
+        {
+            return "none";
+        }
+
+        return string.Join(
+            "+",
+            viewModel.Flags.Select(flag => $"{flag.Category}:{flag.Kind}"));
+    }
+
+    private static string FlagDisplayLabelStateKey(FlagOverlayDisplayViewModel viewModel)
+    {
+        if (viewModel.IsWaiting)
+        {
+            return "waiting";
+        }
+
+        if (viewModel.Flags.Count == 0)
+        {
+            return "none";
+        }
+
+        return string.Join("+", viewModel.Flags.Select(FlagDisplayLabelKey));
+    }
+
+    private static string FlagDisplayLabelKey(FlagOverlayDisplayItem flag)
+    {
+        var label = string.IsNullOrWhiteSpace(flag.Label)
+            ? "--"
+            : flag.Label.Trim();
+        var detail = string.IsNullOrWhiteSpace(flag.Detail)
+            ? null
+            : flag.Detail.Trim();
+        return detail is null
+            ? $"{flag.Category}:{flag.Kind}:{label}"
+            : $"{flag.Category}:{flag.Kind}:{label} ({detail})";
+    }
+
+    private static bool IsActiveFlagDisplayState(string? state)
+    {
+        return !string.IsNullOrWhiteSpace(state)
+            && !string.Equals(state, "none", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(state, "waiting", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string RadarSideGroup(string? sideStatus)
+    {
+        return sideStatus?.ToLowerInvariant() switch
+        {
+            "left" or "two left" => "left",
+            "right" or "two right" => "right",
+            "both sides" => "both",
+            "clear" or "off" => "clear",
+            _ => "waiting"
+        };
+    }
+
+    private static bool IsOppositeRadarSideFlip(string? previousGroup, string? currentGroup)
+    {
+        return (string.Equals(previousGroup, "left", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(currentGroup, "right", StringComparison.OrdinalIgnoreCase))
+            || (string.Equals(previousGroup, "right", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(currentGroup, "left", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string FormatSeconds(double? seconds)
+    {
+        return seconds is { } value && IsFinite(value)
+            ? value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
+            : "--";
+    }
+
     private static PositionObservation FromCar(HistoricalCarProximity car)
     {
         return new PositionObservation(
@@ -2535,6 +3337,18 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         var normalizedKey = string.IsNullOrWhiteSpace(key) ? "unknown" : key.Trim();
         values.TryGetValue(normalizedKey, out var count);
         values[normalizedKey] = count + 1;
+    }
+
+    private static void Increment(Dictionary<string, int> values, string? key, int amount)
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        var normalizedKey = string.IsNullOrWhiteSpace(key) ? "unknown" : key.Trim();
+        values.TryGetValue(normalizedKey, out var count);
+        values[normalizedKey] = count + amount;
     }
 
     private static double? Round(double? value)
@@ -2849,6 +3663,22 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         double SessionTimeSeconds,
         bool? OnPitRoad);
 
+    private sealed record LapProfileRow(
+        int CarIdx,
+        int? CarClass,
+        string? CarClassName,
+        string? CarClassColorHex,
+        double? BestLapTimeSeconds,
+        double? LastLapTimeSeconds);
+
+    private sealed record LapProfileFrameReadiness(
+        int RowsWithBestLap,
+        int RowsWithLastLap,
+        int RowsWithBestAndLastLap,
+        int RowsWithRecentPersonalBest,
+        int RowsWithClassFastestBestLap,
+        int RowsWithClassFastestLastLap);
+
     private sealed record SectorTimingState(
         int CarIdx,
         int LapCompleted,
@@ -2877,6 +3707,7 @@ internal sealed record LiveOverlayDiagnosticsArtifact(
     FuelOverlayDiagnosticsSummary Fuel,
     PositionCadenceDiagnosticsSummary PositionCadence,
     LapDeltaDiagnosticsSummary LapDelta,
+    LapProfileDiagnosticsSummary LapProfile,
     RelativeLapRelationshipDiagnosticsSummary RelativeLapRelationship,
     RaceProjectionDiagnosticsSummary RaceProjection,
     SectorTimingDiagnosticsSummary SectorTiming,
@@ -2917,15 +3748,34 @@ internal sealed record FlagsOverlayDiagnosticsSummary(
     int FramesWithSessionState,
     int FramesWithRawFlags,
     int FramesWithActiveRawFlags,
+    int FramesWithYellowFamilyRawFlags,
+    int FramesWithCarIdxYellowFamilyFlags,
     int FramesWithDisplayFlags,
     int WaitingFrames,
     int RawActiveWithoutDisplayFrames,
     int StateOnlyDisplayFrames,
     int MaxDisplayFlags,
+    int DisplayTransitionFrames,
+    int DisplayClearedTransitionFrames,
+    int LongestDisplayDurationFrames,
+    double? LongestDisplayDurationSeconds,
+    string? LongestDisplayState,
     IReadOnlyDictionary<string, int> RawFlagCounts,
+    IReadOnlyDictionary<string, int> YellowFamilyBitCounts,
+    IReadOnlyDictionary<string, int> YellowFamilyStateCounts,
+    IReadOnlyDictionary<string, int> CarIdxYellowFamilyBitCounts,
+    IReadOnlyDictionary<string, int> CarIdxYellowFamilyStateCounts,
+    IReadOnlyDictionary<string, int> RawToDisplayCounts,
+    IReadOnlyDictionary<string, int> RawToDisplayLabelCounts,
+    IReadOnlyDictionary<string, int> DisplayStateCounts,
+    IReadOnlyDictionary<string, int> DisplayLabelStateCounts,
+    IReadOnlyDictionary<string, int> DisplayTransitionCounts,
     IReadOnlyDictionary<string, int> DisplayKindCounts,
     IReadOnlyDictionary<string, int> DisplayCategoryCounts,
+    IReadOnlyDictionary<string, int> DisplayLabelCounts,
     IReadOnlyDictionary<string, int> ToneCounts);
+
+internal sealed record FlagBitDefinition(string Name, int Mask);
 
 internal sealed record ScoringOverlayDiagnosticsSummary(
     int FramesWithData,
@@ -2966,10 +3816,14 @@ internal sealed record RadarOverlayDiagnosticsSummary(
     int TimingOnlyRowFrames,
     int SpatialRowFrames,
     int MulticlassApproachFrames,
+    int SideTransitionFrames,
+    int OppositeSideFlipFrames,
+    int SideTransitionWithoutPlacementFrames,
     int MaxNearbyCars,
     int MaxTimingRows,
     int MaxSpatialCars,
     IReadOnlyDictionary<string, int> SideStateCounts,
+    IReadOnlyDictionary<string, int> SideTransitionCounts,
     IReadOnlyDictionary<string, int> FocusFrameCounts,
     IReadOnlyDictionary<string, int> PlacementEvidenceCounts);
 
@@ -3036,8 +3890,33 @@ internal sealed record LapDeltaDiagnosticsSummary(
     int FramesWithAnyValue,
     int FramesWithAnyUsableValue,
     double? MaxAbsDeltaSeconds,
+    string Classification,
+    bool ValuesPresentWithoutUsableQuality,
+    bool AllObservedValuesZero,
+    string Interpretation,
     IReadOnlyDictionary<string, int> ValueFrameCounts,
     IReadOnlyDictionary<string, int> UsableFrameCounts);
+
+internal sealed record LapProfileDiagnosticsSummary(
+    int ObservedFrames,
+    int FramesWithTimingRows,
+    int FramesWithScoringRows,
+    int FramesWithAnyRows,
+    int FramesWithAnyBestLap,
+    int FramesWithAnyLastLap,
+    int FramesWithBestAndLastLap,
+    int FramesWithRecentPersonalBest,
+    int FramesWithClassFastestBestLap,
+    int FramesWithClassFastestLastLap,
+    int MaxTimingRows,
+    int MaxScoringRows,
+    int MaxRows,
+    int MaxRowsWithBestAndLastLap,
+    int MaxRowsWithRecentPersonalBest,
+    int MaxRowsWithClassFastestBestLap,
+    int MaxRowsWithClassFastestLastLap,
+    IReadOnlyDictionary<string, int> SourceFrameCounts,
+    IReadOnlyDictionary<string, int> SourceRowCounts);
 
 internal sealed record RelativeLapRelationshipDiagnosticsSummary(
     int ObservedFrames,

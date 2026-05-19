@@ -35,6 +35,8 @@ internal sealed class LiveOverlayWindowCaptureStore
 
     public string CaptureRoot => Path.Combine(_storageOptions.LogsRoot, "live-overlay-windows");
 
+    public LiveOverlayWindowCaptureOptions Options => _options;
+
     public void RecordOverlayWindow(
         OverlayDefinition definition,
         OverlaySettings settings,
@@ -64,14 +66,16 @@ internal sealed class LiveOverlayWindowCaptureStore
         var bounds = form?.Bounds ?? new Rectangle(settings.X, settings.Y, settings.Width, settings.Height);
         var opacity = Math.Round(form?.Opacity ?? settings.Opacity, 3);
         var effectiveSettingsOverlayActive = settingsOverlayActive && settingsWindowVisible;
+        var inputInterceptRiskReasons = InputInterceptRiskReasons(
+            actualVisible,
+            inputTransparent,
+            settingsWindowInputProtected,
+            settingsWindowIntersects,
+            opacity);
         var inputInterceptRisk = actualVisible
             && !inputTransparent
-            && (effectiveSettingsOverlayActive
-                || settingsWindowInputProtected
-                || settingsWindowIntersects
-                || (settingsWindowVisible && topMost && noActivate)
-                || opacity <= 0.01d);
-        var browserRecommendedSize = BrowserOverlayRecommendedSize.For(definition, settings);
+            && inputInterceptRiskReasons.Count > 0;
+        var browserRecommendedSize = BrowserOverlayRecommendedSize.ScaledFor(definition, settings);
         var hasBrowserPage = BrowserOverlayCatalog.TryGetPageByOverlayId(definition.Id, out var browserPage);
         LiveOverlayWindowState? previous;
         lock (_sync)
@@ -143,6 +147,7 @@ internal sealed class LiveOverlayWindowCaptureStore
                 NoActivate: noActivate,
                 TopMost: topMost,
                 InputInterceptRisk: inputInterceptRisk,
+                InputInterceptRiskReasons: inputInterceptRiskReasons,
                 AlwaysOnTopSetting: settings.AlwaysOnTop,
                 DefaultWidth: definition.DefaultWidth,
                 DefaultHeight: definition.DefaultHeight,
@@ -160,6 +165,37 @@ internal sealed class LiveOverlayWindowCaptureStore
                 ScreenshotRepresentsCurrentState: screenshotRepresentsCurrentState,
                 ScreenshotSignature: screenshotSignature);
         }
+    }
+
+    private static IReadOnlyList<string> InputInterceptRiskReasons(
+        bool actualVisible,
+        bool inputTransparent,
+        bool settingsWindowInputProtected,
+        bool settingsWindowIntersects,
+        double opacity)
+    {
+        if (!actualVisible || inputTransparent)
+        {
+            return [];
+        }
+
+        var reasons = new List<string>();
+        if (settingsWindowInputProtected && settingsWindowIntersects)
+        {
+            reasons.Add("settings-window-input-protected");
+        }
+
+        if (settingsWindowIntersects)
+        {
+            reasons.Add("settings-window-intersects");
+        }
+
+        if (opacity <= 0.01d)
+        {
+            reasons.Add("effectively-invisible");
+        }
+
+        return reasons;
     }
 
     public LiveOverlayWindowCaptureManifest Snapshot()
@@ -479,6 +515,7 @@ internal sealed record LiveOverlayWindowState(
     bool NoActivate,
     bool TopMost,
     bool InputInterceptRisk,
+    IReadOnlyList<string> InputInterceptRiskReasons,
     bool AlwaysOnTopSetting,
     int DefaultWidth,
     int DefaultHeight,

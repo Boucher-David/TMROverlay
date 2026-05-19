@@ -77,8 +77,8 @@ public sealed class LiveOverlayWindowCaptureStoreTests
             Assert.Equal("/overlays/standings", overlay.BrowserRoute);
             Assert.True(overlay.BrowserRequiresTelemetry);
             Assert.Equal(250, overlay.BrowserRefreshIntervalMilliseconds);
-            Assert.True(overlay.BrowserRecommendedWidth > 0);
-            Assert.True(overlay.BrowserRecommendedHeight > 0);
+            Assert.Equal(846, overlay.BrowserRecommendedWidth);
+            Assert.Equal(391, overlay.BrowserRecommendedHeight);
             Assert.Equal(definition.DefaultWidth, overlay.DefaultWidth);
             Assert.Equal(definition.DefaultHeight, overlay.DefaultHeight);
             Assert.False(overlay.ScreenshotRepresentsCurrentState);
@@ -91,6 +91,7 @@ public sealed class LiveOverlayWindowCaptureStoreTests
             Assert.False(overlay.SettingsWindowInputProtected);
             Assert.False(overlay.TopMost);
             Assert.False(overlay.InputInterceptRisk);
+            Assert.Empty(overlay.InputInterceptRiskReasons);
 
             var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions
             {
@@ -223,6 +224,191 @@ public sealed class LiveOverlayWindowCaptureStoreTests
             Assert.False(overlay.SettingsOverlayActive);
             Assert.False(overlay.SettingsWindowVisible);
             Assert.False(overlay.InputInterceptRisk);
+            Assert.Empty(overlay.InputInterceptRiskReasons);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Snapshot_DoesNotFlagTopMostNoActivateOverlayBesideSettingsAsInputRisk()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-window-capture-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var store = new LiveOverlayWindowCaptureStore(storage);
+            var definition = StandingsOverlayDefinition.Definition;
+            var settings = new OverlaySettings
+            {
+                Id = definition.Id,
+                Enabled = true,
+                X = 822,
+                Y = 18,
+                Width = 438,
+                Height = 360,
+                Scale = 1d,
+                Opacity = 0.88d
+            };
+
+            store.RecordOverlayWindow(
+                definition,
+                settings,
+                form: null,
+                enabled: true,
+                sessionAllowed: true,
+                settingsPreview: false,
+                desiredVisible: true,
+                actualVisible: true,
+                topMost: true,
+                liveTelemetryAvailable: true,
+                contextRequirement: definition.ContextRequirement.ToString(),
+                contextAvailable: true,
+                contextReason: "not_required",
+                settingsOverlayActive: true,
+                settingsWindowVisible: true,
+                settingsWindowIntersects: false,
+                settingsWindowInputProtected: false,
+                inputTransparent: false,
+                noActivate: true,
+                implementation: "native-v2",
+                nativeFormType: "StandingsForm",
+                nativeRenderer: "winforms",
+                nativeBodyKind: "table");
+
+            var overlay = Assert.Single(store.Snapshot().Overlays);
+
+            Assert.True(overlay.SettingsOverlayActive);
+            Assert.True(overlay.SettingsWindowVisible);
+            Assert.False(overlay.SettingsWindowIntersects);
+            Assert.False(overlay.SettingsWindowInputProtected);
+            Assert.False(overlay.InputInterceptRisk);
+            Assert.Empty(overlay.InputInterceptRiskReasons);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Snapshot_RecordsInputInterceptRiskReasonsOnlyForConcreteInterceptionEvidence()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-window-capture-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var store = new LiveOverlayWindowCaptureStore(storage);
+            var definition = StandingsOverlayDefinition.Definition;
+            var settings = new OverlaySettings
+            {
+                Id = definition.Id,
+                Enabled = true,
+                X = 44,
+                Y = 55,
+                Width = 580,
+                Height = 340,
+                Scale = 1d,
+                Opacity = 0.5d
+            };
+
+            store.RecordOverlayWindow(
+                definition,
+                settings,
+                form: null,
+                enabled: true,
+                sessionAllowed: true,
+                settingsPreview: false,
+                desiredVisible: true,
+                actualVisible: true,
+                topMost: true,
+                liveTelemetryAvailable: true,
+                contextRequirement: definition.ContextRequirement.ToString(),
+                contextAvailable: true,
+                contextReason: "not_required",
+                settingsOverlayActive: false,
+                settingsWindowVisible: true,
+                settingsWindowIntersects: true,
+                settingsWindowInputProtected: true,
+                inputTransparent: false,
+                noActivate: true,
+                implementation: "native-v2",
+                nativeFormType: "StandingsForm",
+                nativeRenderer: "winforms",
+                nativeBodyKind: "table");
+
+            var overlay = Assert.Single(store.Snapshot().Overlays);
+
+            Assert.True(overlay.InputInterceptRisk);
+            Assert.Equal(["settings-window-input-protected", "settings-window-intersects"], overlay.InputInterceptRiskReasons);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Snapshot_DoesNotRecordInputInterceptRiskForSettingsProtectionWithoutOverlap()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-window-capture-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var store = new LiveOverlayWindowCaptureStore(storage);
+            var definition = StandingsOverlayDefinition.Definition;
+            var settings = new OverlaySettings
+            {
+                Id = definition.Id,
+                Enabled = true,
+                X = 44,
+                Y = 55,
+                Width = 580,
+                Height = 340,
+                Scale = 1d,
+                Opacity = 0.5d
+            };
+
+            store.RecordOverlayWindow(
+                definition,
+                settings,
+                form: null,
+                enabled: true,
+                sessionAllowed: true,
+                settingsPreview: false,
+                desiredVisible: true,
+                actualVisible: true,
+                topMost: true,
+                liveTelemetryAvailable: true,
+                contextRequirement: definition.ContextRequirement.ToString(),
+                contextAvailable: true,
+                contextReason: "not_required",
+                settingsOverlayActive: false,
+                settingsWindowVisible: true,
+                settingsWindowIntersects: false,
+                settingsWindowInputProtected: true,
+                inputTransparent: false,
+                noActivate: true,
+                implementation: "native-v2",
+                nativeFormType: "StandingsForm",
+                nativeRenderer: "winforms",
+                nativeBodyKind: "table");
+
+            var overlay = Assert.Single(store.Snapshot().Overlays);
+
+            Assert.False(overlay.InputInterceptRisk);
+            Assert.Empty(overlay.InputInterceptRiskReasons);
         }
         finally
         {

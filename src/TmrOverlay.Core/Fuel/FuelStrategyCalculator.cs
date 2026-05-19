@@ -256,6 +256,14 @@ internal static class FuelStrategyCalculator
 
     private static RaceLapEstimate SelectRaceLapEstimate(FuelStrategyInputs inputs, MetricSelection racePace)
     {
+        if (inputs.RaceProgress.RaceLapsRemaining is { } authoritativeRemaining
+            && LiveRaceProjectionMapper.IsAuthoritativeLapRemainingSource(inputs.RaceProgress.RaceLapsRemainingSource))
+        {
+            return new RaceLapEstimate(
+                authoritativeRemaining,
+                inputs.RaceProgress.RaceLapsRemainingSource);
+        }
+
         if (inputs.RaceProjection.EstimatedTeamLapsRemaining is { } projectedRemaining)
         {
             return new RaceLapEstimate(

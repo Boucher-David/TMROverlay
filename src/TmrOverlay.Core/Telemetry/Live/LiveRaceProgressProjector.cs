@@ -27,12 +27,12 @@ internal static class LiveRaceProgressProjector
             return new LiveRaceLapEstimate(0d, "session ended");
         }
 
-        var timedOrUnlimited = IsTimedOrUnlimitedSession(context, session);
-        if (!timedOrUnlimited && ValidLapCount(session.SessionLapsRemain) is { } liveLapsRemaining)
+        if (ValidLapCount(session.SessionLapsRemain) is { } liveLapsRemaining)
         {
             return new LiveRaceLapEstimate(liveLapsRemaining, "session laps remain");
         }
 
+        var timedOrUnlimited = IsTimedOrUnlimitedSession(context, session);
         if (!timedOrUnlimited && ValidLapCount(session.SessionLapsTotal) is { } liveLapTotal)
         {
             return new LiveRaceLapEstimate(

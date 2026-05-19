@@ -16,6 +16,8 @@ from validate_overlay_screenshots import (
     BROWSER_REVIEW_OVERLAY_IDS,
     BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS,
     LOCALHOST_OVERLAY_ALIASES,
+    WEB_NATIVE_PREVIEW_SIZE_PARITY_EXEMPT_OVERLAYS,
+    WEB_NATIVE_VARIANT_SIZE_PARITY_EXEMPTIONS,
     WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS,
     WINDOWS_INSTALLER_REQUIRED_PNGS,
     WINDOWS_NATIVE_OVERLAY_SIZES,
@@ -33,6 +35,20 @@ DEFAULT_GEOMETRY_TOLERANCE = 4.0
 TABLE_GEOMETRY_TOLERANCE = 2.0
 COLOR_CHANNEL_TOLERANCE = 3
 COLOR_ALPHA_TOLERANCE = 10
+WEB_NATIVE_GEOMETRY_TOLERANCE_BY_OVERLAY = {
+    # Browser/localhost Standings has a wider OBS source contract than the
+    # native window; compare its content and near geometry without requiring
+    # exact column coordinates.
+    "standings": 12.5,
+    # Input State uses CSS grid in browser sources and WinForms layout natively.
+    # Per-surface screenshot checks prove bounds/fit; manifest parity should
+    # prove the same graph/rail semantics without requiring identical pixels.
+    "input-state": 18.5,
+    # Native/browser graph and dense metric text layout can differ by a few
+    # pixels after chrome collapse and font measurement.
+    "gap-to-leader": 5.5,
+    "session-weather": 5.0,
+}
 
 
 def main() -> int:
@@ -218,6 +234,7 @@ def compare_browser_and_windows(
         for mode in preview_modes_for_overlay(overlay_id):
             browser_path = f"browser-overlays/{overlay_id}-{mode}.png"
             windows_path = f"native-overlays/{overlay_id}-{mode}.png"
+            pair_tolerance = web_native_geometry_tolerance(overlay_id, geometry_tolerance)
             compare_pair(
                 "browser vs Windows native",
                 browser_path,
@@ -227,8 +244,9 @@ def compare_browser_and_windows(
                 failures,
                 stats,
                 strict_geometry=False,
-                geometry_tolerance=geometry_tolerance,
+                geometry_tolerance=pair_tolerance,
                 semantic_checks=True,
+                compare_size=overlay_id not in WEB_NATIVE_PREVIEW_SIZE_PARITY_EXEMPT_OVERLAYS,
             )
 
     browser_variant_paths = {
@@ -238,6 +256,8 @@ def compare_browser_and_windows(
     }
     for windows_path, key in sorted(windows_native_variant_manifest_path_map().items()):
         browser_path = browser_variant_paths.get(key)
+        overlay_id = key[0]
+        pair_tolerance = web_native_geometry_tolerance(overlay_id, geometry_tolerance)
         compare_pair(
             "browser vs Windows native fixture variant",
             str(browser_path or ""),
@@ -247,11 +267,16 @@ def compare_browser_and_windows(
             failures,
             stats,
             strict_geometry=False,
-            geometry_tolerance=geometry_tolerance,
+            geometry_tolerance=pair_tolerance,
             semantic_checks=True,
-            compare_size=key not in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS,
+            compare_size=key not in WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS
+            and key not in WEB_NATIVE_VARIANT_SIZE_PARITY_EXEMPTIONS,
             model_checks=True,
         )
+
+
+def web_native_geometry_tolerance(overlay_id: str, default_tolerance: float) -> float:
+    return max(default_tolerance, WEB_NATIVE_GEOMETRY_TOLERANCE_BY_OVERLAY.get(overlay_id, default_tolerance))
 
 
 def compare_pair(
@@ -282,6 +307,8 @@ def compare_pair(
     if compare_size:
         compare_image_size(context, left, right, failures, stats)
     compare_common_overlay_fields(context, body_kind, left, right, failures, stats)
+    if is_web_overlay_path(left_path) and is_web_overlay_path(right_path):
+        compare_runtime_asset_evidence(context, left.get("runtimeAssets"), right.get("runtimeAssets"), failures, stats)
 
     left_model = left.get("modelEvidence")
     right_model = right.get("modelEvidence")
@@ -359,6 +386,41 @@ def compare_common_overlay_fields(
     for field in ("source", "shouldRender"):
         if left.get(field) is not None and right.get(field) is not None:
             compare_field(context, field, left.get(field), right.get(field), failures, stats)
+
+
+def is_web_overlay_path(path: str) -> bool:
+    return path.startswith(("browser-overlays/", "localhost-overlays/"))
+
+
+def compare_runtime_asset_evidence(
+    context: str,
+    left: Any,
+    right: Any,
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    if not isinstance(left, dict) or not isinstance(right, dict):
+        failures.append(f"{context}: browser/localhost runtime asset evidence missing")
+        return
+    for field in (
+        "expected.bodyClass",
+        "expected.overlayStyleHash",
+        "expected.overlayScriptHash",
+        "actual.bodyClass",
+        "actual.overlayStyleHash",
+        "actual.overlayScriptHash",
+        "matchesExpected",
+    ):
+        compare_field(context, f"runtimeAssets.{field}", nested_dotted(left, field), nested_dotted(right, field), failures, stats)
+
+
+def nested_dotted(values: dict[str, Any], path: str) -> Any:
+    current: Any = values
+    for key in path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
 
 
 def compare_model_evidence(

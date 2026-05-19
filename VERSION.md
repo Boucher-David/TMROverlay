@@ -13,58 +13,57 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.0.1 - Overlay Parity, Diagnostics, And Media Hardening
+### v1.0.2 - Feedback Hardening, Overlay Semantics, And Evidence Gates
 
 Current branch name:
 
 ```text
-v1.0.1-fixes
+v1.0.2-feedback
 ```
 
 Release/tag decision:
 
-- Treat this as the V1.0.1 hardening branch on top of the tagged `v1.0.0` private-team release.
-- Do not create the `v1.0.1` release tag until the branch is merged or explicitly designated as the release point.
-- `Directory.Build.props` is aligned to `1.0.1` so branch-built MSI and screenshot artifacts are distinguishable from the tagged `v1.0.0` baseline.
+- Treat this as the V1.0.2 feedback-hardening branch after the private-team V1.0.1 diagnostic run.
+- Do not create the `v1.0.2` release tag until the branch is merged or explicitly designated as the release point.
+- `Directory.Build.props` is aligned to `1.0.2` so branch-built MSI and screenshot artifacts are distinguishable from the V1.0.1 feedback baseline.
 - No durable user-data schema change is intended for this branch. If the final release pass discovers one, add the matching compatibility tests, docs, versioned snapshots, and migration/reader updates before tagging.
 
 Planned scope:
 
-- Harden screenshot and manifest validation so browser review, localhost, and Windows/native parity failures are treated as product evidence until proven otherwise.
-- Add stricter evidence for row collapse, settings text fit, graph geometry, track-map geometry, overlay dimensions, manifest semantics, colors, source labels, degraded states, and native/browser/localhost fixture parity.
-- Fix proven fixture/rendering gaps exposed by the stricter checks, including settings screenshot viewport clamping, Input graph overlap evidence, Gap To Leader graph coverage, Track Map generated-path realism, Stream Chat fixture coverage, and native manifest representation mismatches.
-- Enable IBT analysis by default and improve Track Map generation/diagnostics so realistic generated maps can be produced without a user having to find hidden settings first.
-- Add live overlay diagnostics for pit windows, pit-service evidence gaps, ARB/fuel service observations, capture/diagnostics state, foreground/window capture evidence, iRating projection evidence, and incident-pressure evidence.
-- Add compact live race projection support for estimated iRating gain/loss and incident-pressure signals without adding new standings UI columns in this patch release.
-- Add a shareable media packet under `docs/media-packet/v1-overlay-showcase/` with every app/settings tab and curated overlay screenshots using feature-rich deterministic fixtures, including an IBT-derived Nurburgring track-map scenario.
+- Close teammate-reported overlay feedback that can be fixed locally: non-race Standings/Relative/Fuel/Session/Pit semantics, shared no-content sizing, settings-faithful previews, redundant overlay header titles, bounded Standings/Relative sizing, Stream Chat opacity, and minimum-scale Input layout.
+- Harden Gap To Leader semantics across native, browser review, and localhost: time-based 5L/10L readiness, focused scale, nearest eligible comparison car, same-lap position-labeled threat, red reserved for threat, metric text fit, and localhost concurrency safety.
+- Align localhost/OBS product-hidden behavior with native product visibility so hidden, unavailable, disabled-session, no-content, and zero-car routes return empty hidden models instead of waiting shells.
+- Add diagnostics and validation evidence for visible-overlay pixel proof, update-check recovery, runtime clean/dirty state, non-competitor filtering, class-zero projection, focus/reference versus local-strategy context, lap-delta quality, flags, radar side transitions, track-map provenance, window/input risk, and performance-budget classification.
+- Wire and expand validation gates for settings effects, screenshot/manifest semantics, native/browser/localhost expectations, branch screenshot fixtures, mutation checks, and local static C# compile-shape hazards.
+- Move capture-only or real-validation-only follow-ups into `docs/v1.0.3.md` so V1.0.2 can close on implemented behavior plus CI/Windows artifact review rather than unresolved live-session questions.
 - Keep the deprecated tracked macOS harness out of the V1 parity gate; Windows/native, browser review, and localhost remain the active product validation surfaces.
 
 Branch-complete checklist:
 
 1. Re-read the final branch diff before writing the squash title/body; do not reuse stale V1.0 release-candidate text for this patch branch.
-2. Confirm `Directory.Build.props` stays aligned to `1.0.1` before tagging.
-3. Keep `AGENTS.md`, `README.md`, `telemetry.md`, `docs/ibt-analysis.md`, `docs/live-overlay-diagnostics.md`, `docs/media-packet/`, `docs/track-map-overlay-logic.md`, and repo skills aligned with the branch behavior.
-4. Run browser review screenshots, localhost screenshots, media packet generation, screenshot expectation checks, app/static screenshot checks, Windows expectation checks, unit tests, C# compile-shape checks, and Windows .NET/Windows screenshot CI gates before tagging.
+2. Confirm `Directory.Build.props` stays aligned to `1.0.2` before tagging.
+3. Keep `AGENTS.md`, `README.md`, `telemetry.md`, `docs/live-overlay-diagnostics.md`, `docs/media-packet/`, `docs/v1.0.2-feedback.md`, `docs/v1.0.3.md`, and repo skills aligned with the branch behavior.
+4. Run browser review screenshots, localhost screenshots, media packet generation, screenshot expectation checks, app/static screenshot checks, Windows expectation checks, settings-effect tests, unit tests, C# compile-shape checks, and Windows .NET/Windows screenshot CI gates before tagging.
 5. Inspect the uploaded CI artifacts for browser review, localhost, and Windows screenshots; a passing validator is not enough if the artifact shows product-regression evidence.
+6. Keep the untracked CI log archive out of the release commit unless it is deliberately promoted as a tracked fixture; the evidence summary belongs in `docs/v1.0.2-feedback.md`.
 
 Suggested squash title:
 
 ```text
-[v1.0.1] Harden screenshot parity, diagnostics, and media packet
+[v1.0.2] Harden overlay feedback fixes and validation evidence
 ```
 
 Suggested squash body:
 
-- Rebuilt screenshot validation around evidence-first native/browser/localhost parity, with stricter manifest semantics, pixel/geometry checks, degraded-state coverage, settings text-fit detection, graph/path evidence, and mutation checks for assertion drift.
-- Fixed proven overlay and fixture gaps exposed by the stricter checks, including settings screenshot viewport clamping, native manifest text/label representation, Input graph overlap, Gap To Leader graph coverage, Stream Chat review states, and generated Track Map realism.
-- Removed rendered header status and footer source chrome from overlays while keeping status/source as model, manifest, and diagnostic evidence; updated settings, browser review, localhost, Windows screenshot generators, and parity assertions for the new chrome shape.
-- Added an IBT-derived Nurburgring 24h Track Map screenshot fixture plus browser review and Windows generator support so the normal race showcase renders a realistic generated track instead of the old low-fidelity fallback shape.
-- Expanded live overlay diagnostics for pit-window service evidence, missing ARB/fuel observations, IBT analysis state, capture health, foreground/window capture state, iRating projection evidence, and incident-pressure evidence.
-- Enabled IBT analysis by default and refreshed Track Map storage/docs/tests so realistic generated maps are easier to produce from normal captures.
-- Added compact live race projection support for estimated whole-field iRating gain/loss and incident-pressure telemetry evidence without adding new standings UI columns in this patch release.
-- Added a teammate-facing media packet under `docs/media-packet/v1-overlay-showcase/` with every app/settings tab and curated overlay screenshots backed by feature-rich deterministic data.
-- Updated browser review, localhost, Windows screenshot generation, screenshot validators, compare-manifest tooling, docs, repo skills, and CI expectations so future UI changes carry the same forensic validation standard.
-- Aligned shared build metadata to `1.0.1` for V1.0.1 branch artifacts without introducing a durable user-data schema change.
+- Fixed teammate-reported overlay semantics and sizing issues across native, browser review, and localhost, including non-race Standings/Relative/Fuel/Session/Pit behavior, no-content and header-title height collapse, settings-faithful previews, Stream Chat opacity, rightmost table capacity, and Input minimum-scale layout.
+- Hardened Gap To Leader with shared presentation rules for 5L/10L time readiness, focused scale, nearest-ahead comparison metrics, same-lap position-labeled threats, red-line exclusivity, metric text fit, and safer localhost graph state under OBS polling.
+- Made localhost/OBS product-hidden routes return hidden empty models for disabled overlays, disabled sessions, unavailable contexts, telemetry fade states, no-content states, and zero-car Gap windows instead of misleading waiting shells.
+- Added diagnostics for visible-overlay pixel proof gaps, update-check recovery, live runtime identity, track-map provenance, menu close/update breadcrumbs, flag raw-to-display transitions, radar side flips, focus/reference versus local-strategy context, local-player fuel gaps, lap-delta quality, and performance budget classification.
+- Expanded screenshot and manifest validation for settings-effect evidence, hidden-product emptiness, header tones, rightmost/text-fit evidence, rounded backing, no-content leaks, Gap trends/threats, source summaries, and native/browser/localhost expectation drift.
+- Added or updated focused .NET, browser, localhost, settings-effect, screenshot, mutation, and static validation tests for the V1.0.2 contracts while keeping Windows/.NET build and native screenshot proof as CI gates.
+- Documented the uploaded V1.0.2 capture, diagnostic, teammate, and CI evidence in `docs/v1.0.2-feedback.md`, then moved capture-only and real-validation follow-ups into `docs/v1.0.3.md`.
+- Refreshed teammate-facing media packet screenshots and branch documentation to match the hardened V1.0.2 overlay/settings shape.
+- Aligned shared build metadata to `1.0.2` for V1.0.2 branch artifacts without introducing a durable user-data schema change.
 
 ## Merged Mainline Milestones
 

@@ -20,6 +20,11 @@ internal static class PostRaceAnalysisBuilder
             $"Fuel model: {FormatFuelPerLap(summary.Metrics.FuelPerLapLiters)} average, {FormatFuel(summary.Car.DriverCarFuelMaxLiters)} tank, {FormatLapsPerTank(summary)}."
         };
 
+        if (BuildFuelEvidenceNote(summary) is { } fuelEvidenceNote)
+        {
+            lines.Add(fuelEvidenceNote);
+        }
+
         if (summary.Metrics.StintCount > 0)
         {
             lines.Add($"Stints: {summary.Metrics.StintCount} recorded, avg {FormatNumber(summary.Metrics.AverageStintLaps)} laps / {FormatDuration(summary.Metrics.AverageStintSeconds)}.");
@@ -120,6 +125,27 @@ internal static class PostRaceAnalysisBuilder
         }
 
         return "Fuel data was not strong enough for a stint-rhythm recommendation yet.";
+    }
+
+    private static string? BuildFuelEvidenceNote(HistoricalSessionSummary summary)
+    {
+        if (summary.Metrics.FuelPerLapLiters is not null)
+        {
+            return null;
+        }
+
+        var reasons = summary.Quality.Reasons;
+        var noReliableFuel = reasons.Contains("no_reliable_fuel_per_lap", StringComparer.OrdinalIgnoreCase);
+        if (!noReliableFuel)
+        {
+            return null;
+        }
+
+        var noCompletedLocalDistance = summary.Metrics.CompletedValidLaps <= 0
+            || summary.Metrics.ValidDistanceLaps <= 0d;
+        return noCompletedLocalDistance
+            ? "Fuel evidence: missing local-player/team completed-lap fuel evidence; this is not enough to infer stint usage from zero valid laps."
+            : "Fuel evidence: local-player/team fuel-per-lap evidence was unavailable even though some valid lap distance was recorded.";
     }
 
     private static string FirstNonEmpty(params string?[] values)

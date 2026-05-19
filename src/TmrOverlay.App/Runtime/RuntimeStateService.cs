@@ -46,10 +46,13 @@ internal sealed class RuntimeStateService : IHostedService, IDisposable
             });
         }
 
+        var startedAtUtc = DateTimeOffset.UtcNow;
         _currentState = new RuntimeState
         {
-            StartedAtUtc = DateTimeOffset.UtcNow,
-            LastHeartbeatAtUtc = DateTimeOffset.UtcNow,
+            StartedAtUtc = startedAtUtc,
+            ProcessId = Environment.ProcessId,
+            ProcessIdentity = RuntimeProcessIdentity.Capture(startedAtUtc),
+            LastHeartbeatAtUtc = startedAtUtc,
             StoppedCleanly = false,
             AppVersion = AppVersionInfo.Current
         };

@@ -15,11 +15,22 @@ TmrBrowserOverlay.register({
 });
 
 function renderGarageCover(model) {
+  if (model?.shouldRender === false) {
+    modelRootOpacity = rootOpacityFromModel(model);
+    applyOverlayOpacity(0);
+    lastGarageCoverRenderKey = '';
+    contentEl.innerHTML = '';
+    renderHeaderItems(model, '');
+    clearFooterSource();
+    return;
+  }
+
   const garageCover = model?.garageCover;
   const settings = garageCover?.browserSettings || garageCoverSettings;
   const detection = garageCover?.detection || { displayText: 'localhost offline', isFresh: false };
   const shouldCover = garageCover?.shouldCover ?? true;
-  overlayEl.style.opacity = shouldCover ? '1' : '0';
+  modelRootOpacity = rootOpacityFromModel(model);
+  applyOverlayOpacity(shouldCover ? 1 : 0);
 
   const renderKey = `${settings.hasImage}:${settings.imageVersion ?? ''}:${settings.fallbackReason ?? ''}`;
   if (renderKey !== lastGarageCoverRenderKey) {

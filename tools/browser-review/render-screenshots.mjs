@@ -12,7 +12,10 @@ import {
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { browserOverlayPages } from '../../tests/browser-overlays/browserOverlayAssets.js';
+import {
+  browserOverlayPages,
+  renderOverlayHtml
+} from '../../tests/browser-overlays/browserOverlayAssets.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const overlayPages = browserOverlayPages();
@@ -42,6 +45,7 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'fuel-calculator', slug: 'waiting', query: 'fixture=fuel-waiting' },
   { overlayId: 'standings', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'relative', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'relative', slug: 'rightmost-evidence', query: 'fixture=rightmost-evidence' },
   { overlayId: 'fuel-calculator', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'gap-to-leader', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'session-weather', slug: 'chrome-off', query: 'fixture=chrome-off' },
@@ -50,6 +54,7 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'pit-service', slug: 'idle', query: 'fixture=pit-service-idle' },
   { overlayId: 'input-state', slug: 'waiting', query: 'fixture=input-waiting' },
   { overlayId: 'input-state', slug: 'no-content', query: 'fixture=input-no-content' },
+  { overlayId: 'input-state', slug: 'min-scale', query: 'fixture=input-min-scale', viewport: { width: 328, height: 172 }, minScale: 0.6 },
   { overlayId: 'car-radar', slug: 'left', query: 'fixture=car-radar-left' },
   { overlayId: 'car-radar', slug: 'right', query: 'fixture=car-radar-right' },
   { overlayId: 'car-radar', slug: 'both-sides', query: 'fixture=car-radar-both-sides' },
@@ -159,7 +164,7 @@ function screenshotRoutes(surface) {
         routes.push(overlayRoute(
           `browser-overlays/${overlayId}-${variant.slug}.png`,
           `${withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
-          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant) }));
+          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null }));
       }
     }
     if (surface === 'localhost' || surface === 'all') {
@@ -177,7 +182,7 @@ function screenshotRoutes(surface) {
         routes.push(overlayRoute(
           `localhost-overlays/${overlayId}-${variant.slug}.png`,
           `${withPreview(`/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
-          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant) }));
+          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null }));
       }
       for (const alias of localhostAliasesForOverlay(overlayId)) {
         routes.push(overlayRoute(
@@ -309,12 +314,13 @@ function settingsComponentRoute(relativePath, urlPath, clip, metadata = {}) {
 }
 
 function overlayRoute(relativePath, urlPath, metadata = {}) {
+  const { viewport, ...metadataWithoutViewport } = metadata;
   const configuredCanvasSize = metadata.overlayId ? configuredCanvasOverlaySizes.get(metadata.overlayId) : null;
   return {
     relativePath,
     urlPath,
     selector: '.overlay',
-    viewport: configuredCanvasSize || { width: 1440, height: 900 },
+    viewport: viewport || configuredCanvasSize || { width: 1440, height: 900 },
     minBytes: 1_000,
     renderer: 'browser-overlay-assets',
     moduleAsset: metadata.overlayId ? `src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/${metadata.overlayId}.js` : null,
@@ -325,7 +331,8 @@ function overlayRoute(relativePath, urlPath, metadata = {}) {
     comparisonLimit: null,
     compositingMode: configuredCanvasSize ? 'solid-review-backdrop' : null,
     captureBackdrop: configuredCanvasSize ? configuredCanvasCaptureBackdrop : null,
-    ...metadata
+    minScale: metadata.minScale || null,
+    ...metadataWithoutViewport
   };
 }
 
@@ -354,6 +361,7 @@ async function captureRoute(page, route, manifest) {
   await page.waitForTimeout(settleMilliseconds);
   const model = await readOverlayModel(route);
   const dom = await readDomDiagnostics(element);
+  const runtimeAssets = await readRuntimeAssetEvidence(page, route);
 
   const screenshotPath = join(outputRoot, route.relativePath);
   mkdirSync(dirname(screenshotPath), { recursive: true });
@@ -394,6 +402,7 @@ async function captureRoute(page, route, manifest) {
     captureMode: route.captureMode || null,
     cropBounds: route.clip || null,
     configuredOverlaySize: route.configuredOverlaySize || null,
+    minScale: route.minScale || null,
     comparisonMode: route.comparisonMode || null,
     comparisonLimit: route.comparisonLimit || null,
     compositingMode: route.compositingMode || null,
@@ -411,6 +420,8 @@ async function captureRoute(page, route, manifest) {
     source: stringOrNull(model?.source),
     bodyKind: stringOrNull(model?.bodyKind),
     shouldRender: booleanOrNull(model?.shouldRender),
+    headerItems: modelHeaderItems(model),
+    effectiveSettings: model?.effectiveSettings || null,
     rowCount: modelRowCount(model, dom.layout),
     metricCount: arrayLength(model?.metrics) + arrayLength(model?.metricSections) + arrayLength(model?.gridSections),
     flagCount: arrayLength(model?.flags?.flags),
@@ -421,6 +432,7 @@ async function captureRoute(page, route, manifest) {
     layout: dom.layout,
     uiEvidence: uiEvidence(route, dom),
     modelEvidence: modelLayoutEvidence(model, dom.layout),
+    runtimeAssets,
     scenarioEvidence: scenarioEvidence(route, model, dom.layout),
     width: artifact.width,
     height: artifact.height,
@@ -507,6 +519,80 @@ async function readOverlayModel(route) {
   return payload?.model || null;
 }
 
+async function readRuntimeAssetEvidence(page, route) {
+  if (!route.overlayId || !route.surface?.endsWith('-overlay')) {
+    return null;
+  }
+
+  const expected = expectedRuntimeAssetEvidence(route.overlayId);
+  const actualText = await page.evaluate(() => {
+    const styleText = document.querySelector('style')?.textContent || '';
+    const overlayScripts = Array.from(document.querySelectorAll('script'))
+      .map((node) => node.textContent || '')
+      .filter((text) => !text.includes("/review/events") && !text.includes("EventSource('/review/events')"));
+    const scriptText = overlayScripts
+      .sort((left, right) => right.length - left.length)[0] || '';
+    return {
+      bodyClass: document.body?.className || '',
+      styleText,
+      scriptText,
+      styleCount: document.querySelectorAll('style').length,
+      scriptCount: document.querySelectorAll('script').length
+    };
+  });
+  const actual = {
+    bodyClass: actualText.bodyClass,
+    styleCount: actualText.styleCount,
+    scriptCount: actualText.scriptCount,
+    overlayStyleBytes: actualText.styleText.length,
+    overlayStyleHash: sha256Text(actualText.styleText),
+    overlayScriptBytes: actualText.scriptText.length,
+    overlayScriptHash: sha256Text(actualText.scriptText)
+  };
+
+  return {
+    contract: 'browser-overlay-runtime-assets/v1',
+    overlayId: route.overlayId,
+    expected,
+    actual,
+    matchesExpected:
+      actual.bodyClass === expected.bodyClass
+      && actual.overlayStyleHash === expected.overlayStyleHash
+      && actual.overlayScriptHash === expected.overlayScriptHash
+  };
+}
+
+function expectedRuntimeAssetEvidence(overlayId) {
+  const html = renderOverlayHtml(overlayId);
+  const styleText = extractTagText(html, 'style').join('\n');
+  const scriptText = extractTagText(html, 'script')
+    .filter((text) => !text.includes('/review/events'))
+    .sort((left, right) => right.length - left.length)[0] || '';
+  const bodyClass = /<body\s+class="([^"]*)"/i.exec(html)?.[1] || '';
+  return {
+    source: 'tests/browser-overlays/renderOverlayHtml',
+    bodyClass,
+    overlayStyleBytes: styleText.length,
+    overlayStyleHash: sha256Text(styleText),
+    overlayScriptBytes: scriptText.length,
+    overlayScriptHash: sha256Text(scriptText)
+  };
+}
+
+function extractTagText(html, tagName) {
+  const blocks = [];
+  const expression = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'gi');
+  let match;
+  while ((match = expression.exec(html)) !== null) {
+    blocks.push(match[1] || '');
+  }
+  return blocks;
+}
+
+function sha256Text(value) {
+  return createHash('sha256').update(String(value || '')).digest('hex');
+}
+
 async function readDomDiagnostics(element) {
   return element.evaluate((node) => {
     const round = (value) => Math.round(Number(value || 0) * 1000) / 1000;
@@ -566,7 +652,12 @@ async function readDomDiagnostics(element) {
           : null,
         gridTemplateRows: style.gridTemplateRows && style.gridTemplateRows !== 'none'
           ? style.gridTemplateRows
-          : null
+          : null,
+        borderRadius: style.borderRadius || null,
+        borderTopLeftRadius: style.borderTopLeftRadius || null,
+        borderTopRightRadius: style.borderTopRightRadius || null,
+        borderBottomRightRadius: style.borderBottomRightRadius || null,
+        borderBottomLeftRadius: style.borderBottomLeftRadius || null
       };
     };
     const controlKindFor = (tag, element) => {
@@ -589,6 +680,8 @@ async function readDomDiagnostics(element) {
         href: element.getAttribute('href') || null,
         evidenceKey: element.getAttribute('data-evidence-key') || null,
         evidenceRole: element.getAttribute('data-evidence-role') || null,
+        dataKey: element.getAttribute('data-key') || null,
+        dataTone: element.getAttribute('data-tone') || null,
         value: value || null,
         checked: 'checked' in element ? Boolean(element.checked) : null,
         selected: 'selected' in element ? Boolean(element.selected) : null,
@@ -659,6 +752,7 @@ async function readDomDiagnostics(element) {
       ['graph-canvas', '.model-graph, canvas'],
       ['flags', '.flags-v2'],
       ['flag-cell', '.flag-cell'],
+      ['flag-label', '.flag-label, .flag-cell text'],
       ['car-radar', '.radar-v2, .car-radar-v2'],
       ['radar-shape', '.radar-v2 rect, .radar-v2 circle, .radar-v2 path, .radar-v2 text, .car-radar-v2 rect, .car-radar-v2 circle, .car-radar-v2 path, .car-radar-v2 text'],
       ['track-map', '.track-map-v2, .track'],
@@ -698,6 +792,14 @@ async function readDomDiagnostics(element) {
     const activeRegion = String(node.querySelector('.region-segment.active')?.textContent || '')
       .replace(/\s+/g, ' ')
       .trim();
+    const matchingElements = (selector) => {
+      const matches = [];
+      if (node.matches?.(selector)) {
+        matches.push(node);
+      }
+      matches.push(...Array.from(node.querySelectorAll(selector)));
+      return matches;
+    };
     const selectors = [
       '#settings-app',
       '.titlebar',
@@ -729,7 +831,7 @@ async function readDomDiagnostics(element) {
     const rootRect = node.getBoundingClientRect();
     const elements = [];
     for (const [role, selector] of roleSelectors) {
-      Array.from(node.querySelectorAll(selector)).forEach((element, index) => {
+      matchingElements(selector).forEach((element, index) => {
         const bounds = rectFor(element, rootRect);
         if (!bounds) return;
         elements.push({
@@ -747,7 +849,7 @@ async function readDomDiagnostics(element) {
       });
     }
     const rects = selectors
-      .flatMap((selector) => Array.from(node.querySelectorAll(selector)))
+      .flatMap((selector) => matchingElements(selector))
       .map((element) => element.getBoundingClientRect())
       .filter((rect) => rect.width > 0 && rect.height > 0);
     if (!rects.length) {
@@ -1011,6 +1113,7 @@ function modelLayoutEvidence(model, layout) {
     flags: model.flags ? {
       count: arrayLength(model.flags?.flags),
       kinds: (Array.isArray(model.flags?.flags) ? model.flags.flags : []).map((flag) => stringOrNull(flag?.kind)),
+      visualKinds: (Array.isArray(model.flags?.flags) ? model.flags.flags : []).map((flag) => flagVisualKind(flag)),
       gridColumns: flagGrid(arrayLength(model.flags?.flags)).columns,
       gridRows: flagGrid(arrayLength(model.flags?.flags)).rows,
       grid: {
@@ -1073,7 +1176,8 @@ function renderedCellEvidence(cell, index, column) {
     value: cell?.text || null,
     foreground: cell?.styles?.color || null,
     background: cell?.styles?.backgroundColor || null,
-    bounds: cell?.bounds || null
+    bounds: cell?.bounds || null,
+    textMetrics: cell?.textMetrics || null
   };
 }
 
@@ -1258,18 +1362,24 @@ function flagCellEvidence(flags, layout) {
   const grid = flagGrid(renderedFlags.length);
   const svgBounds = findElementBounds(layout, 'flags', 'flags-v2') || findElementBounds(layout, 'content');
   const cells = svgBounds ? computedFlagCells(svgBounds, grid, renderedFlags.length) : elementsForRole(layout, 'flag-cell').map((element) => element.bounds);
+  const labelElements = elementsForRole(layout, 'flag-label');
   return renderedFlags.map((flag, index) => {
     const cellBounds = cells[index] || null;
+    const labelElement = labelElements.find((element) =>
+      rectIntersects(element.bounds, cellBounds)
+      && (!flag?.label || String(element.text || '').includes(String(flag.label))));
     return {
       index,
       row: Math.floor(index / Math.max(1, grid.columns)),
       column: index % Math.max(1, grid.columns),
       kind: stringOrNull(flag?.kind),
+      visualKind: flagVisualKind(flag),
       label: stringOrNull(flag?.label),
       detail: stringOrNull(flag?.detail),
-      fill: flagColor(flag?.kind),
+      fill: flagColor(flagVisualKind(flag)),
       bounds: cellBounds,
-      clothBounds: cellBounds ? flagClothBounds(cellBounds) : null
+      clothBounds: cellBounds ? flagClothBounds(cellBounds) : null,
+      labelBounds: labelElement?.bounds || null
     };
   });
 }
@@ -1306,11 +1416,14 @@ function computedFlagCells(svgBounds, grid, count) {
 }
 
 function flagClothBounds(cell) {
+  const compact = cell.height < 92 || cell.width < 132;
+  const labelHeight = compact ? 16 : 18;
+  const flagAreaHeight = Math.max(32, cell.height - labelHeight);
   const poleX = cell.x + Math.max(12, cell.width * 0.16);
   const clothLeft = poleX + 1;
   const clothWidth = Math.max(48, cell.x + cell.width - clothLeft - 8);
-  const clothHeight = Math.max(24, Math.min(cell.height * 0.7, clothWidth * 0.58));
-  const clothTop = cell.y + Math.max(4, (cell.height - clothHeight) * 0.32);
+  const clothHeight = Math.max(24, Math.min(flagAreaHeight * 0.7, clothWidth * 0.58));
+  const clothTop = cell.y + Math.max(4, (flagAreaHeight - clothHeight) * 0.32);
   return rectEvidence({
     x: clothLeft,
     y: clothTop,
@@ -1319,10 +1432,18 @@ function flagClothBounds(cell) {
   });
 }
 
+function flagVisualKind(flag) {
+  const kind = String(flag?.kind || '').trim().toLowerCase();
+  const label = String(flag?.label || '').trim().toLowerCase();
+  if (kind === 'debris' || label === 'debris') return 'debris';
+  return kind || null;
+}
+
 function flagColor(kind) {
   const token = String(kind || '').toLowerCase();
   if (token === 'green') return 'rgb(48, 214, 109)';
   if (token === 'blue') return 'rgb(55, 162, 255)';
+  if (token === 'debris') return 'orange-yellow-striped';
   if (token === 'yellow' || token === 'caution') return 'rgb(255, 207, 74)';
   if (token === 'red') return 'rgb(236, 76, 86)';
   if (token === 'white') return 'rgb(246, 248, 250)';
@@ -1810,6 +1931,8 @@ function graphEvidence(graph, layout) {
       endpointLabel: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.endpointLabel || null,
       latestPoint: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.latestPoint || null
     })),
+    threatCarIdx: numberOrNull(graph?.threatCarIdx),
+    activeThreat: graph?.activeThreat ? graphThreatEvidence(graph.activeThreat) : null,
     trendMetricCount: arrayLength(graph?.trendMetrics),
     trendMetrics: (Array.isArray(graph?.trendMetrics) ? graph.trendMetrics : []).map((metric, index) => ({
       index,
@@ -1910,7 +2033,7 @@ function browserFallbackGraphGeometry(graph, canvasBounds, local) {
 }
 
 function graphSeriesGeometry(graph, scale, plot, maxGapSeconds, canvasBounds, series, sourceIndex, drawIndex) {
-  const baseColor = graphSeriesColor(series, drawIndex, graph?.threatCarIdx);
+  const baseColor = graphSeriesColor(series, sourceIndex, graph?.threatCarIdx);
   const alpha = clamp01(numberOr(series?.alpha, 1));
   const effectiveAlpha = alpha * graphSeriesAlphaMultiplier(series, graph?.threatCarIdx);
   const points = (Array.isArray(series?.points) ? series.points : [])
@@ -2018,12 +2141,59 @@ function graphMetricRows(metricsRect, graph, canvasBounds) {
       state: stringOrNull(metric?.state),
       bounds: offsetRect(canvasBounds, row),
       cells: [
-        { column: 'Metric', text: stringOrNull(metric?.label), bounds: offsetRect(canvasBounds, { x: metricsRect.x + 8, y, width: 44, height: row.height }) },
-        { column: stringOrNull(graph?.comparisonLabel) || '--', text: graphMetricValueText(metric), bounds: offsetRect(canvasBounds, { x: metricsRect.x + 56, y, width: 46, height: row.height }) },
-        { column: 'Threat', text: graphMetricChaserText(metric), bounds: offsetRect(canvasBounds, { x: metricsRect.x + 108, y, width: metricsRect.width - 114, height: row.height }) }
+        graphMetricCell('Metric', stringOrNull(metric?.label), { x: metricsRect.x + 8, y, width: 44, height: row.height }, canvasBounds),
+        graphMetricCell(stringOrNull(graph?.comparisonLabel) || '--', graphMetricValueText(metric), { x: metricsRect.x + 56, y, width: 72, height: row.height }, canvasBounds),
+        graphMetricCell('Threat', graphMetricChaserText(metric), { x: metricsRect.x + 136, y, width: metricsRect.width - 142, height: row.height }, canvasBounds)
       ]
     };
   });
+}
+
+function graphMetricCell(column, text, bounds, canvasBounds) {
+  return {
+    column,
+    text,
+    bounds: offsetRect(canvasBounds, bounds),
+    textMetrics: estimatedCanvasTextMetrics(text, bounds.width, bounds.height, {
+      fontSize: 8,
+      averageGlyphWidth: 4.9
+    })
+  };
+}
+
+function estimatedCanvasTextMetrics(text, availableWidth, availableHeight, options = {}) {
+  const value = String(text || '');
+  if (!value.trim()) return null;
+  const averageGlyphWidth = Number.isFinite(options.averageGlyphWidth) ? options.averageGlyphWidth : 5;
+  const fontSize = Number.isFinite(options.fontSize) ? options.fontSize : 8;
+  const measuredWidth = value.length * averageGlyphWidth;
+  const measuredHeight = fontSize + 2;
+  const tolerance = 1.5;
+  return {
+    textLength: value.length,
+    availableWidth: round(availableWidth),
+    availableHeight: round(availableHeight),
+    measuredWidth: round(measuredWidth),
+    measuredHeight: round(measuredHeight),
+    fitsWidth: measuredWidth <= availableWidth + tolerance,
+    fitsHeight: measuredHeight <= availableHeight + tolerance,
+    evidence: 'estimated-canvas-text'
+  };
+}
+
+function graphThreatEvidence(metric) {
+  const chaser = metric?.chaser || null;
+  return {
+    label: stringOrNull(metric?.label),
+    state: stringOrNull(metric?.state),
+    stateLabel: stringOrNull(metric?.stateLabel),
+    focusGapChangeSeconds: numberOrNull(metric?.focusGapChangeSeconds),
+    chaser: chaser ? {
+      carIdx: numberOrNull(chaser?.carIdx),
+      label: stringOrNull(chaser?.label),
+      gainSeconds: numberOrNull(chaser?.gainSeconds)
+    } : null
+  };
 }
 
 function inputEvidence(inputs, layout) {
@@ -2233,9 +2403,9 @@ function browserGapGraphLayout(width, height) {
 }
 
 function gapMetricsTableWidth(width) {
-  const metricsWidth = 184;
+  const metricsWidth = 220;
   const availableAfterTable = width - 58 - 38 - 10 - metricsWidth;
-  return availableAfterTable >= 300 ? metricsWidth : 0;
+  return availableAfterTable >= 260 ? metricsWidth : 0;
 }
 
 function graphGridLines(graph, scale, plot, maxGapSeconds, canvasBounds) {
@@ -2250,13 +2420,13 @@ function graphGridLines(graph, scale, plot, maxGapSeconds, canvasBounds) {
     const aheadStep = niceGridStep(numberOr(scale?.aheadSeconds, 1) / 2);
     for (let value = aheadStep; value < numberOr(scale?.aheadSeconds, 0); value += aheadStep) {
       const y = gapDeltaToY(-value, scale, plot);
-      lines.push(graphLine('gap-grid-ahead', plot.x, y, plot.x + plot.width, y, 'rgba(140, 174, 212, 0.18)', 1, canvasBounds));
+      lines.push(graphLine('focus-ahead-grid', plot.x, y, plot.x + plot.width, y, 'rgba(140, 174, 212, 0.18)', 1, canvasBounds));
     }
 
     const behindStep = niceGridStep(numberOr(scale?.behindSeconds, 1) / 2);
     for (let value = behindStep; value < numberOr(scale?.behindSeconds, 0); value += behindStep) {
       const y = gapDeltaToY(value, scale, plot);
-      lines.push(graphLine('gap-grid-behind', plot.x, y, plot.x + plot.width, y, 'rgba(140, 174, 212, 0.18)', 1, canvasBounds));
+      lines.push(graphLine('focus-behind-grid', plot.x, y, plot.x + plot.width, y, 'rgba(140, 174, 212, 0.18)', 1, canvasBounds));
     }
 
     return lines;
@@ -2514,6 +2684,18 @@ function numberOrNull(value) {
 
 function arrayLength(value) {
   return Array.isArray(value) ? value.length : 0;
+}
+
+function modelHeaderItems(model) {
+  if (!model || !Array.isArray(model.headerItems)) {
+    return [];
+  }
+
+  return model.headerItems.map((item) => ({
+    key: stringOrNull(item?.key),
+    value: stringOrNull(item?.value),
+    tone: stringOrNull(item?.tone)
+  }));
 }
 
 function modelRowCount(model, layout = null) {

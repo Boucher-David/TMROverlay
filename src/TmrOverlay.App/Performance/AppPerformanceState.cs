@@ -314,13 +314,15 @@ internal sealed class AppPerformanceState
             var prefix = $"overlay.{normalizedOverlayId}.window";
             var clampedOpacity = Math.Clamp(opacity, 0d, 1d);
             var effectiveSettingsOverlayActive = settingsOverlayActive && settingsWindowVisible;
+            var inputInterceptRiskReasons = OverlayWindowInputInterceptRiskReasons(
+                actualVisible,
+                inputTransparent,
+                settingsWindowInputProtected,
+                intersectsSettingsWindow,
+                clampedOpacity);
             var inputInterceptRisk = actualVisible
                 && !inputTransparent
-                && (effectiveSettingsOverlayActive
-                    || settingsWindowInputProtected
-                    || intersectsSettingsWindow
-                    || (settingsWindowVisible && topMost && noActivate)
-                    || clampedOpacity <= 0.01d);
+                && inputInterceptRiskReasons.Count > 0;
             RecordOverlayUpdateValue($"{prefix}.visible", actualVisible ? 1d : 0d, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.top_most", topMost ? 1d : 0d, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.always_on_top_setting", alwaysOnTopSetting ? 1d : 0d, timestampUtc);
@@ -331,6 +333,11 @@ internal sealed class AppPerformanceState
             RecordOverlayUpdateValue($"{prefix}.settings_window_intersects", intersectsSettingsWindow ? 1d : 0d, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.settings_window_input_protected", settingsWindowInputProtected ? 1d : 0d, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.input_intercept_risk", inputInterceptRisk ? 1d : 0d, timestampUtc);
+            RecordOverlayUpdateValue($"{prefix}.input_intercept_risk_reason_count", inputInterceptRiskReasons.Count, timestampUtc);
+            RecordOverlayUpdateValue(
+                $"{prefix}.topmost_noactivate_settings_visible_without_overlap",
+                settingsWindowVisible && topMost && noActivate && !intersectsSettingsWindow && !settingsWindowInputProtected ? 1d : 0d,
+                timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.opacity", clampedOpacity, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.x", x, timestampUtc);
             RecordOverlayUpdateValue($"{prefix}.y", y, timestampUtc);
@@ -350,6 +357,7 @@ internal sealed class AppPerformanceState
                 SettingsWindowIntersects: intersectsSettingsWindow,
                 SettingsWindowInputProtected: settingsWindowInputProtected,
                 InputInterceptRisk: inputInterceptRisk,
+                InputInterceptRiskReasons: inputInterceptRiskReasons,
                 X: x,
                 Y: y,
                 Width: Math.Max(0, width),
@@ -525,6 +533,37 @@ internal sealed class AppPerformanceState
             : Math.Round((_telemetryFrameCount - 1) / elapsedSeconds, 2);
     }
 
+    private static IReadOnlyList<string> OverlayWindowInputInterceptRiskReasons(
+        bool actualVisible,
+        bool inputTransparent,
+        bool settingsWindowInputProtected,
+        bool intersectsSettingsWindow,
+        double clampedOpacity)
+    {
+        if (!actualVisible || inputTransparent)
+        {
+            return [];
+        }
+
+        var reasons = new List<string>();
+        if (settingsWindowInputProtected && intersectsSettingsWindow)
+        {
+            reasons.Add("settings-window-input-protected");
+        }
+
+        if (intersectsSettingsWindow)
+        {
+            reasons.Add("settings-window-intersects");
+        }
+
+        if (clampedOpacity <= 0.01d)
+        {
+            reasons.Add("effectively-invisible");
+        }
+
+        return reasons;
+    }
+
     private void RecordIRacingSystemValue(string id, double? value, DateTimeOffset timestampUtc)
     {
         if (value is null || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
@@ -658,6 +697,7 @@ internal sealed class AppPerformanceState
                 ? 0d
                 : recent[Math.Clamp((int)Math.Ceiling(recent.Length * 0.95d) - 1, 0, recent.Length - 1)];
 
+            var roundedP95 = Math.Round(p95, 3);
             return new PerformanceMetricSnapshot(
                 Id: _id,
                 Count: _count,
@@ -665,8 +705,9 @@ internal sealed class AppPerformanceState
                 AverageMilliseconds: _count == 0 ? 0d : Math.Round(_totalMilliseconds / _count, 3),
                 LastMilliseconds: Math.Round(_lastMilliseconds, 3),
                 MaxMilliseconds: Math.Round(_maxMilliseconds, 3),
-                P95Milliseconds: Math.Round(p95, 3),
-                LastRecordedAtUtc: _lastRecordedAtUtc);
+                P95Milliseconds: roundedP95,
+                LastRecordedAtUtc: _lastRecordedAtUtc,
+                Budget: PerformanceBudgetClassifier.ClassifyOperation(_id, roundedP95, _count));
         }
     }
 
@@ -709,6 +750,7 @@ internal sealed class AppPerformanceState
             Array.Copy(_recentValues, recent, _recentSampleCount);
             Array.Sort(recent);
 
+            var p95 = Percentile(recent, 0.95d);
             return new PerformanceValueSnapshot(
                 Id: _id,
                 Count: _count,
@@ -718,8 +760,9 @@ internal sealed class AppPerformanceState
                 Maximum: _count == 0 ? null : Round(_maximum),
                 P05: Percentile(recent, 0.05d),
                 P50: Percentile(recent, 0.50d),
-                P95: Percentile(recent, 0.95d),
-                LastRecordedAtUtc: _lastRecordedAtUtc);
+                P95: p95,
+                LastRecordedAtUtc: _lastRecordedAtUtc,
+                Budget: PerformanceBudgetClassifier.ClassifyValue(_id, p95, _count));
         }
 
         private static double? Percentile(double[] sortedValues, double percentile)
@@ -898,6 +941,137 @@ internal static class AppPerformanceValueIds
     public const string IRacingIsOnTrack = "iracing.is_on_track";
 }
 
+internal static class PerformanceBudgetClassifier
+{
+    private const double OverlayPaintBudgetMilliseconds = 16.667d;
+    private const double OverlayWorkBudgetMilliseconds = 50d;
+    private const double SettingsUxBudgetMilliseconds = 100d;
+    private const double CaptureWriteBudgetMilliseconds = 100d;
+    private const double LocalhostRequestBudgetMilliseconds = 250d;
+    private const double BackgroundBundleBudgetMilliseconds = 1000d;
+
+    public static PerformanceBudgetClassification ClassifyOperation(string id, double p95Milliseconds, long count)
+    {
+        var budget = OperationBudgetFor(id);
+        return Classify(budget.Category, budget.Milliseconds, "p95_ms", p95Milliseconds, count);
+    }
+
+    public static PerformanceBudgetClassification ClassifyValue(string id, double? p95, long count)
+    {
+        var budget = ValueBudgetFor(id);
+        return Classify(budget.Category, budget.Milliseconds, "p95", p95, count);
+    }
+
+    private static PerformanceBudgetClassification Classify(
+        string category,
+        double? budgetMilliseconds,
+        string basis,
+        double? observedMilliseconds,
+        long count)
+    {
+        if (budgetMilliseconds is null)
+        {
+            return new PerformanceBudgetClassification(
+                Category: category,
+                BudgetMilliseconds: null,
+                ObservedMilliseconds: null,
+                Ratio: null,
+                Status: "unclassified",
+                Basis: "none");
+        }
+
+        if (count <= 0 || observedMilliseconds is null)
+        {
+            return new PerformanceBudgetClassification(
+                Category: category,
+                BudgetMilliseconds: budgetMilliseconds,
+                ObservedMilliseconds: observedMilliseconds,
+                Ratio: null,
+                Status: "no_samples",
+                Basis: basis);
+        }
+
+        var ratio = Math.Round(observedMilliseconds.Value / budgetMilliseconds.Value, 3);
+        var status = ratio <= 1d
+            ? "within_budget"
+            : ratio <= 1.5d
+                ? "near_budget"
+                : "over_budget";
+        return new PerformanceBudgetClassification(
+            Category: category,
+            BudgetMilliseconds: budgetMilliseconds,
+            ObservedMilliseconds: Math.Round(observedMilliseconds.Value, 3),
+            Ratio: ratio,
+            Status: status,
+            Basis: basis);
+    }
+
+    private static (string Category, double? Milliseconds) OperationBudgetFor(string id)
+    {
+        if (string.Equals(id, AppPerformanceMetricIds.LocalhostRequest, StringComparison.OrdinalIgnoreCase))
+        {
+            return ("localhost-request", LocalhostRequestBudgetMilliseconds);
+        }
+
+        if (id.StartsWith("overlay.settings.", StringComparison.OrdinalIgnoreCase)
+            || id.StartsWith("overlay.manager.", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("settings-ux", SettingsUxBudgetMilliseconds);
+        }
+
+        if (id.StartsWith("overlay.", StringComparison.OrdinalIgnoreCase)
+            && id.EndsWith(".paint", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("overlay-paint", OverlayPaintBudgetMilliseconds);
+        }
+
+        if (id.StartsWith("overlay.", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("overlay-work", OverlayWorkBudgetMilliseconds);
+        }
+
+        if (id.StartsWith("diagnostics.bundle.", StringComparison.OrdinalIgnoreCase)
+            || id.StartsWith("telemetry.finalize.", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("background-bundle", BackgroundBundleBudgetMilliseconds);
+        }
+
+        if (id.StartsWith("capture.", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("capture-write", CaptureWriteBudgetMilliseconds);
+        }
+
+        if (id.StartsWith("telemetry.", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("telemetry-ingestion", OverlayWorkBudgetMilliseconds);
+        }
+
+        return ("unclassified", null);
+    }
+
+    private static (string Category, double? Milliseconds) ValueBudgetFor(string id)
+    {
+        if (id.StartsWith("localhost.request.route.", StringComparison.OrdinalIgnoreCase)
+            && id.EndsWith(".duration_ms", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("localhost-request", LocalhostRequestBudgetMilliseconds);
+        }
+
+        if (string.Equals(id, "overlay.settings.apply.queued_ms", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("settings-ux", SettingsUxBudgetMilliseconds);
+        }
+
+        if (id.StartsWith("overlay.", StringComparison.OrdinalIgnoreCase)
+            && id.EndsWith(".timer.late_ms", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("overlay-timer-late", LocalhostRequestBudgetMilliseconds);
+        }
+
+        return ("unclassified", null);
+    }
+}
+
 internal sealed record AppPerformanceSnapshot(
     DateTimeOffset TimestampUtc,
     DateTimeOffset StartedAtUtc,
@@ -923,6 +1097,7 @@ internal sealed record OverlayWindowDiagnosticSnapshot(
     bool SettingsWindowIntersects,
     bool SettingsWindowInputProtected,
     bool InputInterceptRisk,
+    IReadOnlyList<string> InputInterceptRiskReasons,
     int X,
     int Y,
     int Width,
@@ -937,7 +1112,8 @@ internal sealed record PerformanceMetricSnapshot(
     double LastMilliseconds,
     double MaxMilliseconds,
     double P95Milliseconds,
-    DateTimeOffset? LastRecordedAtUtc);
+    DateTimeOffset? LastRecordedAtUtc,
+    PerformanceBudgetClassification Budget);
 
 internal sealed record PerformanceValueSnapshot(
     string Id,
@@ -949,7 +1125,16 @@ internal sealed record PerformanceValueSnapshot(
     double? P05,
     double? P50,
     double? P95,
-    DateTimeOffset? LastRecordedAtUtc);
+    DateTimeOffset? LastRecordedAtUtc,
+    PerformanceBudgetClassification Budget);
+
+internal sealed record PerformanceBudgetClassification(
+    string Category,
+    double? BudgetMilliseconds,
+    double? ObservedMilliseconds,
+    double? Ratio,
+    string Status,
+    string Basis);
 
 internal sealed record CapturePerformanceSnapshot(
     long WriteStatusCount,

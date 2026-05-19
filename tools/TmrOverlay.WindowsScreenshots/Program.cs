@@ -13,6 +13,7 @@ using TmrOverlay.App.History;
 using TmrOverlay.App.Localhost;
 using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.CarRadar;
+using TmrOverlay.App.Overlays.Content;
 using TmrOverlay.App.Overlays.DesignV2;
 using TmrOverlay.App.Overlays.Flags;
 using TmrOverlay.App.Overlays.FuelCalculator;
@@ -464,7 +465,10 @@ internal static class Program
                 outputRoot,
                 $"{variant.OverlayId}-{variant.Slug}",
                 $"Native {overlay.Definition.DisplayName} - {variant.Label}",
-                () => CreateDesignV2LiveOverlayForm(overlay, OverlaySessionKind.Race),
+                () => CreateDesignV2LiveOverlayForm(
+                    overlay,
+                    OverlaySessionKind.Race,
+                    NativeVariantSettings(overlay.Definition, variant.Slug)),
                 postProcess: overlay.UsesTransparentBackdrop
                     ? bitmap => ReplaceColorWithReviewBackdrop(bitmap, Color.FromArgb(1, 2, 3))
                     : null,
@@ -487,10 +491,7 @@ internal static class Program
             () =>
             {
                 var overlay = new NativeOverlaySpec(DesignV2LiveOverlayKind.Standings, StandingsOverlayDefinition.Definition);
-                var settings = OverlaySettingsFor(
-                    StandingsOverlayDefinition.Definition,
-                    width: StandingsOverlayDefinition.Definition.DefaultWidth,
-                    height: 2160);
+                var settings = OverlaySettingsFor(StandingsOverlayDefinition.Definition);
                 var form = CreateDesignV2LiveOverlayForm(overlay, OverlaySessionKind.Race, settings);
                 form.ClientSize = OverlayManager.TargetOverlayClientSizeForApply(
                     StandingsOverlayDefinition.Definition,
@@ -503,9 +504,9 @@ internal static class Program
             relativeDirectory: "native-overlays",
             metadata: NativeOverlayMetadata("standings", "race") with
             {
-                Fixture = "browser-review/static-overlay-model + windows-native-sizing-persisted-expanded-height",
+                Fixture = "browser-review/static-overlay-model + windows-native-preview-sizing",
                 FixtureParity = "model-data-aligned-with-browser-review-and-localhost",
-                ComparisonLimit = "This screenshot intentionally keeps a persisted expanded Windows height to validate preview sizing clamp/race behavior; compare row/cell model data to browser/localhost, not overall window height."
+                ComparisonLimit = "This screenshot validates that race preview sizing uses the current recommended Standings size instead of carrying stale expanded preview height."
             },
             beforeCapture: form => ApplyReviewAlignedNativeModelIfAvailable(form, "standings", OverlaySessionKind.Race)));
 
@@ -729,6 +730,13 @@ internal static class Program
             "Metric",
             Noop);
 
+        form.ClientSize = OverlayManager.TargetOverlayClientSizeForApply(
+            overlay.Definition,
+            settings,
+            form.ClientSize,
+            sessionPreviewActive: true,
+            sessionKind: previewMode);
+
         if (overlay.Kind == DesignV2LiveOverlayKind.CarRadar)
         {
             form.SetSettingsPreviewVisible(true);
@@ -846,6 +854,7 @@ internal static class Program
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "waiting", "Waiting"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
+            new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "rightmost-evidence", "Rightmost Evidence"),
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
@@ -854,6 +863,7 @@ internal static class Program
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "idle", "Idle"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "waiting", "Waiting"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "no-content", "No Content"),
+            new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "left", "Left"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "right", "Right"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "both-sides", "Both Sides"),
@@ -911,7 +921,7 @@ internal static class Program
 
         if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
-            return ReviewRelativeModel(previewMode);
+            return ReviewRelativeModel(previewMode, includePitColumn: false);
         }
 
         if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
@@ -960,6 +970,12 @@ internal static class Program
             return WithoutSharedChrome(chromeModel);
         }
 
+        if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "rightmost-evidence", StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewRelativeModel(OverlaySessionKind.Race, includePitColumn: true);
+        }
+
         if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             && string.Equals(slug, "waiting", StringComparison.OrdinalIgnoreCase))
         {
@@ -984,6 +1000,7 @@ internal static class Program
             {
                 var value when string.Equals(value, "waiting", StringComparison.OrdinalIgnoreCase) => ReviewInputWaitingModel(),
                 var value when string.Equals(value, "no-content", StringComparison.OrdinalIgnoreCase) => ReviewInputNoContentModel(),
+                var value when string.Equals(value, "min-scale", StringComparison.OrdinalIgnoreCase) => ReviewInputModel(OverlaySessionKind.Race),
                 _ => throw new InvalidOperationException($"Unknown input-state native overlay fixture variant {slug}.")
             };
         }
@@ -1037,7 +1054,8 @@ internal static class Program
         return model with
         {
             HeaderText = string.Empty,
-            ShowFooter = false
+            ShowFooter = false,
+            ShowHeader = false
         };
     }
 
@@ -1083,32 +1101,39 @@ internal static class Program
                     new DesignV2Column("INT", 60, ContentAlignment.MiddleRight),
                     new DesignV2Column("FAST", 70, ContentAlignment.MiddleRight),
                     new DesignV2Column("LAST", 70, ContentAlignment.MiddleRight),
-                    new DesignV2Column("PIT", 30, ContentAlignment.MiddleRight)
+                    new DesignV2Column("PIT", 48, ContentAlignment.MiddleRight)
                 ],
                 rows),
             HeaderText: "06:37:08",
             ShowFooter: false);
     }
 
-    private static DesignV2OverlayModel ReviewRelativeModel(OverlaySessionKind previewMode)
+    private static DesignV2OverlayModel ReviewRelativeModel(OverlaySessionKind previewMode, bool includePitColumn)
     {
         var status = $"5 - 2/4 cars | {ReviewPreviewLabel(previewMode)}";
         var showLapRelationship = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) == OverlaySessionKind.Race;
-        var rows = Enumerable.Repeat(ReviewBlankTableRow(3), 11).ToArray();
-        rows[4] = ReviewTableRow(["3", "#34 Near Ahead", "-2.350"], "#33CEFF", relativeLapDelta: showLapRelationship ? (int?)1 : null);
-        rows[5] = ReviewTableRow(["5", "#55 Focus Driver", "0.000"], "#FFDA59", isReference: true, relativeLapDelta: showLapRelationship ? (int?)0 : null);
-        rows[6] = ReviewTableRow(["6", "#61 Near Behind", "+1.200"], "#FF4FD8", relativeLapDelta: showLapRelationship ? (int?)-2 : null);
+        var rows = Enumerable.Repeat(ReviewBlankTableRow(includePitColumn ? 4 : 3), 11).ToArray();
+        rows[4] = ReviewTableRow(includePitColumn ? ["3", "#34 Near Ahead", "-2.350", ""] : ["3", "#34 Near Ahead", "-2.350"], "#33CEFF", relativeLapDelta: showLapRelationship ? (int?)1 : null);
+        rows[5] = ReviewTableRow(includePitColumn ? ["5", "#55 Focus Driver", "0.000", ""] : ["5", "#55 Focus Driver", "0.000"], "#FFDA59", isReference: true, relativeLapDelta: showLapRelationship ? (int?)0 : null);
+        rows[6] = ReviewTableRow(includePitColumn ? ["6", "#61 Near Behind", "+1.200", "IN"] : ["6", "#61 Near Behind", "+1.200"], "#FF4FD8", relativeLapDelta: showLapRelationship ? (int?)-2 : null);
+        var columns = new List<DesignV2Column>
+        {
+            new("Pos", 38, ContentAlignment.MiddleRight),
+            new("Driver", 250, ContentAlignment.MiddleLeft),
+            new("Delta", 70, ContentAlignment.MiddleRight)
+        };
+        if (includePitColumn)
+        {
+            columns.Add(new DesignV2Column("Pit", 48, ContentAlignment.MiddleRight));
+        }
+
         return new DesignV2OverlayModel(
             "Relative",
             status,
             "source: review fixture",
             DesignV2Evidence.Live,
             new DesignV2TableBody(
-                [
-                    new DesignV2Column("Pos", 38, ContentAlignment.MiddleRight),
-                    new DesignV2Column("Driver", 250, ContentAlignment.MiddleLeft),
-                    new DesignV2Column("Delta", 70, ContentAlignment.MiddleRight)
-                ],
+                columns,
                 rows),
             HeaderText: "06:37:08",
             ShowFooter: false);
@@ -1177,13 +1202,31 @@ internal static class Program
                     ReviewSegment("Laps", "3 laps", DesignV2Evidence.Measured)
                 ])
             };
-            sections.Add(new DesignV2MetricSection("Fuel Usage", usageRows));
+            var nonRaceSections = new[]
+            {
+                new DesignV2MetricSection("Fuel Range",
+                [
+                    ReviewMetric("Fuel", "74.0 L | range 23.9 laps | tank 34.2 laps", DesignV2Evidence.Live,
+                    [
+                        ReviewSegment("Level", "74.0 L", DesignV2Evidence.Measured),
+                        ReviewSegment("Usage", "3.1 L/lap", DesignV2Evidence.Measured),
+                        ReviewSegment("Range", "23.9 laps", DesignV2Evidence.Measured),
+                        ReviewSegment("Tank", "34.2 laps", DesignV2Evidence.Measured)
+                    ])
+                ]),
+                new DesignV2MetricSection("Fuel Usage", usageRows)
+            };
+            return new DesignV2OverlayModel(
+                "Fuel Calculator",
+                "fuel range",
+                "usage 3.1 L/lap (measured green lap) | range 23.9 laps | 34.2 laps/tank | history user | measured min/avg/max 3.0/3.1/3.2 L/lap",
+                DesignV2Evidence.Live,
+                new DesignV2MetricRowsBody(nonRaceSections.SelectMany(section => section.Rows).ToArray(), nonRaceSections, []),
+                HeaderText: "06:37:08",
+                ShowFooter: false);
         }
 
-        var visibleStintRows = usageLabel is not null
-            ? stintRows.Take(1).ToArray()
-            : stintRows;
-        sections.Add(new DesignV2MetricSection("Stint Targets", visibleStintRows));
+        sections.Add(new DesignV2MetricSection("Stint Targets", stintRows));
         return new DesignV2OverlayModel(
             "Fuel Calculator",
             "3 stints / 2 stops",
@@ -1628,22 +1671,24 @@ internal static class Program
 
     private static DesignV2OverlayModel ReviewInputNoContentModel()
     {
+        var trace = ReviewInputTrace();
+        var current = trace[^1];
         return new DesignV2OverlayModel(
             "Inputs",
             "no input content enabled",
             string.Empty,
             DesignV2Evidence.Unavailable,
             new DesignV2InputsBody(
-                Throttle: 0.78d,
-                Brake: 0.16d,
-                Clutch: 0d,
+                Throttle: current.Throttle,
+                Brake: current.Brake,
+                Clutch: current.Clutch,
                 SteeringWheelAngle: -0.18d,
                 SpeedMetersPerSecond: 77.889366d,
                 Gear: 6,
                 SpeedText: "280 km/h",
                 GearText: "6",
                 SteeringText: "-10 deg",
-                BrakeAbsActive: true,
+                BrakeAbsActive: current.BrakeAbsActive,
                 ShowThrottleTrace: false,
                 ShowBrakeTrace: false,
                 ShowClutchTrace: false,
@@ -1657,7 +1702,7 @@ internal static class Program
                 HasGraph: false,
                 HasRail: false,
                 HasContent: false,
-                Trace: ReviewInputTrace()),
+                Trace: trace),
             HeaderText: string.Empty,
             ShowFooter: false);
     }
@@ -1668,18 +1713,18 @@ internal static class Program
         var timestampStart = new DateTimeOffset(2026, 5, 17, 12, 0, 0, TimeSpan.Zero);
         var trend = new[]
         {
-            (Offset: 0d, P1: 0d, AltP1: 5.4d, Focus: 249.8d),
-            (Offset: 60d, P1: 0.4d, AltP1: 4.8d, Focus: 247.2d),
-            (Offset: 120d, P1: 0.1d, AltP1: 4.3d, Focus: 245.4d),
-            (Offset: 180d, P1: 0.6d, AltP1: 3.7d, Focus: 243.6d),
-            (Offset: 240d, P1: 0.3d, AltP1: 3.2d, Focus: 241.9d),
-            (Offset: 300d, P1: 0.2d, AltP1: 2.6d, Focus: 240.5d),
-            (Offset: 360d, P1: 0.5d, AltP1: 2.1d, Focus: 239.7d),
-            (Offset: 420d, P1: 0d, AltP1: 1.8d, Focus: 238.9d)
+            (Offset: 0d, P1: 0d, Ahead: 234.0d, Focus: 240.8d, Threat: 251.0d),
+            (Offset: 60d, P1: 0.4d, Ahead: 234.2d, Focus: 240.1d, Threat: 249.4d),
+            (Offset: 120d, P1: 0.1d, Ahead: 234.4d, Focus: 239.5d, Threat: 247.8d),
+            (Offset: 180d, P1: 0.6d, Ahead: 234.6d, Focus: 238.8d, Threat: 246.2d),
+            (Offset: 240d, P1: 0.3d, Ahead: 234.8d, Focus: 238.2d, Threat: 244.6d),
+            (Offset: 300d, P1: 0.2d, Ahead: 235.0d, Focus: 237.6d, Threat: 243.2d),
+            (Offset: 360d, P1: 0.5d, Ahead: 235.2d, Focus: 237.1d, Threat: 241.8d),
+            (Offset: 420d, P1: 0d, Ahead: 235.4d, Focus: 236.5d, Threat: 240.4d)
         };
         var endSeconds = startSeconds + trend[^1].Offset;
         DesignV2GapTrendPoint Point(
-            (double Offset, double P1, double AltP1, double Focus) sample,
+            (double Offset, double P1, double Ahead, double Focus, double Threat) sample,
             int carIdx,
             double gapSeconds,
             bool isReference,
@@ -1695,9 +1740,18 @@ internal static class Program
                 isReference,
                 isClassLeader,
                 classPosition,
+                CompletedLap: 120 + index * 2,
                 StartsSegment: index == 0);
         }
 
+        var referencePoints = trend.Select((sample, index) => Point(sample, 42, sample.Focus, true, false, 24, index)).ToArray();
+        var activeThreat = new DesignV2BehindGainMetric(43, "P25", 5.3d);
+        var focusPit = new DesignV2PitMetricValue(82d, 12, true);
+        var comparisonPit = new DesignV2PitMetricValue(88d, 12, false);
+        var threatPit = new DesignV2PitMetricValue(91d, 13, false);
+        var focusTire = new DesignV2TireMetricValue("Dry", "D", false);
+        var comparisonTire = new DesignV2TireMetricValue("Dry", "D", false);
+        var threatTire = new DesignV2TireMetricValue("Wet", "W", true);
         var series = new[]
         {
             new DesignV2GapSeries(
@@ -1705,28 +1759,37 @@ internal static class Program
                 IsReference: false,
                 IsClassLeader: true,
                 ClassPosition: 1,
-                Alpha: 0.35d,
+                Alpha: 1d,
                 IsStickyExit: false,
                 IsStale: false,
                 trend.Select((sample, index) => Point(sample, 8, sample.P1, false, true, 1, index)).ToArray()),
             new DesignV2GapSeries(
-                17,
+                41,
                 IsReference: false,
-                IsClassLeader: true,
-                ClassPosition: 1,
-                Alpha: 0.35d,
+                IsClassLeader: false,
+                ClassPosition: 23,
+                Alpha: 1d,
                 IsStickyExit: false,
                 IsStale: false,
-                trend.Select((sample, index) => Point(sample, 17, sample.AltP1, false, true, 1, index)).ToArray()),
+                trend.Select((sample, index) => Point(sample, 41, sample.Ahead, false, false, 23, index)).ToArray()),
             new DesignV2GapSeries(
                 42,
                 IsReference: true,
                 IsClassLeader: false,
                 ClassPosition: 24,
-                Alpha: 0.35d,
+                Alpha: 1d,
                 IsStickyExit: false,
                 IsStale: false,
-                trend.Select((sample, index) => Point(sample, 42, sample.Focus, true, false, 24, index)).ToArray())
+                referencePoints),
+            new DesignV2GapSeries(
+                43,
+                IsReference: false,
+                IsClassLeader: false,
+                ClassPosition: 25,
+                Alpha: 1d,
+                IsStickyExit: false,
+                IsStale: false,
+                trend.Select((sample, index) => Point(sample, 43, sample.Threat, false, false, 25, index)).ToArray())
         };
         var graph = new DesignV2GraphBody(
             Points: trend.Select(sample => sample.Focus).ToArray(),
@@ -1736,25 +1799,25 @@ internal static class Program
             DriverChanges: [],
             StartSeconds: startSeconds,
             EndSeconds: endSeconds,
-            MaxGapSeconds: 500d,
+            MaxGapSeconds: 250d,
             LapReferenceSeconds: 525.8d,
             SelectedSeriesCount: series.Length,
             TrendMetrics:
             [
-                new DesignV2GapTrendMetric("5L", null, null, "warming", "0.0L"),
-                new DesignV2GapTrendMetric("10L", null, null, "warming", "0.0L"),
-                new DesignV2GapTrendMetric("Pit", null, null, "pit", null),
-                new DesignV2GapTrendMetric("PLap", null, null, "pitLap", null),
-                new DesignV2GapTrendMetric("Stint", null, null, "stint", null),
-                new DesignV2GapTrendMetric("Tire", null, null, "tire", null),
-                new DesignV2GapTrendMetric("Last", null, null, "last", null, ComparisonText: "8:13.000"),
-                new DesignV2GapTrendMetric("Status", null, null, "status", null, ComparisonText: "Track")
+                new DesignV2GapTrendMetric("5L", -1.8d, activeThreat, "ready", null),
+                new DesignV2GapTrendMetric("10L", -3.4d, activeThreat, "ready", null),
+                new DesignV2GapTrendMetric("Pit", null, null, "pit", null, focusPit, threatPit, comparisonPit),
+                new DesignV2GapTrendMetric("PLap", null, null, "pitLap", null, focusPit, threatPit, comparisonPit),
+                new DesignV2GapTrendMetric("Stint", null, null, "stint", null, ThreatText: "17L", ComparisonText: "18L"),
+                new DesignV2GapTrendMetric("Tire", null, null, "tire", null, PrimaryTire: focusTire, ThreatTire: threatTire, ComparisonTire: comparisonTire),
+                new DesignV2GapTrendMetric("Last", null, null, "last", null, ThreatText: "8:12.120", ComparisonText: "8:13.000"),
+                new DesignV2GapTrendMetric("Status", null, null, "status", null, ThreatText: "Track", ComparisonText: "Track")
             ],
-            ActiveThreat: null,
-            ThreatCarIdx: null,
+            ActiveThreat: new DesignV2GapTrendMetric("5L", null, activeThreat, "ready", null),
+            ThreatCarIdx: 43,
             MetricDeadbandSeconds: 0.25d,
-            ComparisonLabel: "P1",
-            Scale: DesignV2GapScale.Leader(500d));
+            ComparisonLabel: "P23",
+            Scale: DesignV2GapScale.FocusRelative(250d, 8d, 8d, referencePoints, 236.5d));
 
         return new DesignV2OverlayModel(
             "Gap To Leader",
@@ -1837,6 +1900,7 @@ internal static class Program
             new FlagOverlayDisplayItem(FlagDisplayKind.Green, FlagDisplayCategory.Green, "Green", null, SimpleTelemetryTone.Success),
             new FlagOverlayDisplayItem(FlagDisplayKind.Blue, FlagDisplayCategory.Blue, "Blue", null, SimpleTelemetryTone.Info),
             new FlagOverlayDisplayItem(FlagDisplayKind.Yellow, FlagDisplayCategory.Yellow, "Yellow", null, SimpleTelemetryTone.Warning),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Debris, FlagDisplayCategory.Yellow, "Debris", null, SimpleTelemetryTone.Warning),
             new FlagOverlayDisplayItem(FlagDisplayKind.Caution, FlagDisplayCategory.Yellow, "Caution", "waving", SimpleTelemetryTone.Warning),
             new FlagOverlayDisplayItem(FlagDisplayKind.Red, FlagDisplayCategory.Critical, "Red", null, SimpleTelemetryTone.Error),
             new FlagOverlayDisplayItem(FlagDisplayKind.Black, FlagDisplayCategory.Critical, "Black", null, SimpleTelemetryTone.Error),
@@ -1846,7 +1910,7 @@ internal static class Program
         };
         return new DesignV2OverlayModel(
             "Flags",
-            "green + blue + yellow + caution + red + black + repair + white + checkered",
+            "green + blue + yellow + debris + caution + red + black + repair + white + checkered",
             "source: session flags telemetry",
             DesignV2Evidence.Live,
             new DesignV2FlagsBody(flags, IsWaiting: false, ManagedEnabled: true, SettingsOverlayActive: false),
@@ -1958,22 +2022,29 @@ internal static class Program
     {
         var session = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) ?? previewMode;
         var trace = ReviewInputTrace();
+        var current = trace[^1];
+        var status = session == OverlaySessionKind.Race ? "6 | 7900 rpm" : "4 | 7120 rpm";
+        if (current.BrakeAbsActive)
+        {
+            status += " | ABS";
+        }
+
         return new DesignV2OverlayModel(
             "Inputs",
-            session == OverlaySessionKind.Race ? "6 | 7900 rpm | ABS" : "4 | 7120 rpm | ABS",
+            status,
             string.Empty,
             DesignV2Evidence.Live,
             new DesignV2InputsBody(
-                Throttle: 0.78d,
-                Brake: 0.16d,
-                Clutch: 0d,
+                Throttle: current.Throttle,
+                Brake: current.Brake,
+                Clutch: current.Clutch,
                 SteeringWheelAngle: -0.18d,
                 SpeedMetersPerSecond: session == OverlaySessionKind.Race ? 77.889366d : 63.4d,
                 Gear: session == OverlaySessionKind.Race ? 6 : 4,
                 SpeedText: session == OverlaySessionKind.Race ? "280 km/h" : "228 km/h",
                 GearText: session == OverlaySessionKind.Race ? "6" : "4",
                 SteeringText: "-10 deg",
-                BrakeAbsActive: true,
+                BrakeAbsActive: current.BrakeAbsActive,
                 ShowThrottleTrace: true,
                 ShowBrakeTrace: true,
                 ShowClutchTrace: true,
@@ -1997,18 +2068,50 @@ internal static class Program
         return Enumerable.Range(0, InputStateRenderModelBuilder.MaximumTracePoints)
             .Select(index =>
             {
-                var t = index / 10d;
-                var throttle = Math.Clamp(0.58d + Math.Sin(t) * 0.32d, 0d, 1d);
-                var brake = index is >= 52 and <= 138
-                    ? Math.Clamp(throttle + Math.Sin(index / 4d) * 0.018d, 0d, 1d)
-                    : Math.Clamp(0.56d + Math.Sin(t * 0.96d + 0.6d) * 0.32d, 0d, 1d);
+                var t = index / 18d;
+                var braking = Math.Max(
+                    InputPulse(index, 38d, 7d) * 0.94d,
+                    Math.Max(
+                        InputPulse(index, 86d, 8d) * 0.86d,
+                        InputPulse(index, 136d, 7d) * 0.98d));
+                var brake = Math.Clamp(braking, 0d, 1d);
+                var throttle = Math.Clamp(0.82d + Math.Sin(t * 1.15d) * 0.18d, 0d, 1d);
+                throttle = Math.Clamp(throttle * (1d - Math.Min(1d, brake * 1.08d)), 0d, 1d);
+                var clutch = Math.Clamp(1d - Math.Max(
+                    InputPulse(index, 24d, 2.5d) * 0.72d,
+                    Math.Max(
+                        InputPulse(index, 64d, 2.4d) * 0.58d,
+                        Math.Max(
+                            InputPulse(index, 113d, 2.4d) * 0.62d,
+                            InputPulse(index, 154d, 2.6d) * 0.7d))),
+                    0d,
+                    1d);
+                if (index < 16)
+                {
+                    throttle = 1d;
+                    brake = 0d;
+                    clutch = 1d;
+                }
+                else if (index >= 166)
+                {
+                    throttle = 0d;
+                    brake = 1d;
+                    clutch = 1d;
+                }
+
                 return new InputStateTracePoint(
                     Throttle: throttle,
                     Brake: brake,
-                    Clutch: Math.Clamp(0.08d + Math.Sin(t * 0.35d) * 0.06d, 0d, 1d),
-                    BrakeAbsActive: index is > 112 and < 132);
+                    Clutch: clutch,
+                    BrakeAbsActive: index is > 112 and < 132 || index >= 166);
             })
             .ToArray();
+    }
+
+    private static double InputPulse(int index, double center, double width)
+    {
+        var distance = (index - center) / width;
+        return Math.Exp(-(distance * distance));
     }
 
     private static DesignV2OverlayModel ReviewStreamChatModel()
@@ -3996,6 +4099,7 @@ internal static class Program
                 {
                     count = body.FlagCells.Count,
                     kinds = body.FlagCells.Select(flag => flag.Kind).ToArray(),
+                    visualKinds = body.FlagCells.Select(FlagVisualKind).ToArray(),
                     gridColumns = body.GridColumns,
                     gridRows = body.GridRows,
                     grid = new
@@ -4217,8 +4321,12 @@ internal static class Program
             maxGapSeconds = graph.MaxGapSeconds,
             lapReferenceSeconds = graph.LapReferenceSeconds,
             selectedSeriesCount = graph.SeriesCount,
-            metricDeadbandSeconds = (double?)null,
+            metricDeadbandSeconds = graph.MetricDeadbandSeconds,
             comparisonLabel = graph.ComparisonLabel,
+            activeThreat = graph.ActiveThreat is { } activeThreat
+                ? GraphTrendMetricEvidence(activeThreat)
+                : null,
+            threatCarIdx = graph.ThreatCarIdx,
             canvasBounds = RectEvidence(graph.Frame),
             series = graph.Series.Select((series, index) => new
             {
@@ -4241,7 +4349,7 @@ internal static class Program
                 points = series.Points.Select(GraphPointEvidence).ToArray()
             }).ToArray(),
             trendMetricCount = graph.TrendMetricCount,
-            trendMetrics = graph.MetricRows.Select(GraphMetricRowEvidence).ToArray(),
+            trendMetrics = graph.TrendMetrics.Select(GraphTrendMetricEvidence).ToArray(),
             weatherCount = graph.WeatherBands.Count,
             markerCount = graph.Markers.Count,
             gridLineCount = graph.GridLines.Count,
@@ -4263,6 +4371,30 @@ internal static class Program
                 metricRows = graph.MetricRows.Select(GraphMetricRowEvidence).ToArray(),
                 series = graph.Series.Select(GraphSeriesEvidence).ToArray()
             }
+        };
+    }
+
+    private static object GraphTrendMetricEvidence(DesignV2LayoutGraphTrendMetric metric)
+    {
+        return new
+        {
+            label = metric.Label,
+            focusGapChangeSeconds = metric.FocusGapChangeSeconds,
+            state = metric.State,
+            stateLabel = metric.StateLabel,
+            valueText = metric.ValueText,
+            chaserText = metric.ChaserText,
+            primaryText = metric.PrimaryText,
+            threatText = metric.ThreatText,
+            comparisonText = metric.ComparisonText,
+            chaser = metric.Chaser is { } chaser
+                ? new
+                {
+                    carIdx = chaser.CarIdx,
+                    label = chaser.Label,
+                    gainSeconds = chaser.GainSeconds
+                }
+                : null
         };
     }
 
@@ -4432,9 +4564,13 @@ internal static class Program
             row = cell.Row,
             column = cell.Column,
             kind = cell.Kind,
+            visualKind = FlagVisualKind(cell),
+            label = cell.Label,
+            detail = cell.Detail,
             fill = FlagFillColor(cell.Kind),
             bounds = RectEvidence(cell.Bounds),
-            clothBounds = RectEvidence(cell.ClothBounds)
+            clothBounds = RectEvidence(cell.ClothBounds),
+            labelBounds = RectEvidence(cell.LabelBounds)
         };
     }
 
@@ -4509,12 +4645,24 @@ internal static class Program
             "green" => "rgb(48, 214, 109)",
             "blue" => "rgb(55, 162, 255)",
             "yellow" or "caution" => "rgb(255, 207, 74)",
+            "debris" => "orange-yellow-striped",
             "red" => "rgb(236, 76, 86)",
             "white" => "rgb(246, 248, 250)",
             "checkered" => "checkered",
             "black" or "meatball" => "rgb(8, 10, 12)",
             _ => null
         };
+    }
+
+    private static string FlagVisualKind(DesignV2LayoutFlagCell cell)
+    {
+        if (string.Equals(cell.Kind, "Debris", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(cell.Label, "Debris", StringComparison.OrdinalIgnoreCase))
+        {
+            return "debris";
+        }
+
+        return cell.Kind.Trim().ToLowerInvariant();
     }
 
     private static object CarRadarEvidence(DesignV2LayoutVector vector)
@@ -4921,6 +5069,49 @@ internal static class Program
         settings.SetBooleanOption(OverlayOptionKeys.FlagsShowCritical, true);
         settings.SetBooleanOption(OverlayOptionKeys.FlagsShowFinish, true);
         return settings;
+    }
+
+    private static OverlaySettings? NativeVariantSettings(OverlayDefinition definition, string slug)
+    {
+        if (string.Equals(slug, "chrome-off", StringComparison.OrdinalIgnoreCase))
+        {
+            var chromeOffSettings = OverlaySettingsFor(definition);
+            SetSharedChromeOptions(chromeOffSettings, enabled: false);
+            var size = OverlayContentSizing.BaseSizeFor(definition, chromeOffSettings, OverlaySessionKind.Race);
+            chromeOffSettings.Width = size.Width;
+            chromeOffSettings.Height = size.Height;
+            return chromeOffSettings;
+        }
+
+        if (!string.Equals(definition.Id, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var scale = 0.6d;
+        var settings = OverlaySettingsFor(
+            definition,
+            width: Math.Max(80, (int)Math.Round(definition.DefaultWidth * scale)),
+            height: Math.Max(80, (int)Math.Round(definition.DefaultHeight * scale)));
+        settings.Scale = scale;
+        return settings;
+    }
+
+    private static void SetSharedChromeOptions(OverlaySettings settings, bool enabled)
+    {
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusTest, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusPractice, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusQualifying, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingTest, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingRace, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceTest, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourcePractice, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceQualifying, enabled);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, enabled);
     }
 
     private static void Noop()

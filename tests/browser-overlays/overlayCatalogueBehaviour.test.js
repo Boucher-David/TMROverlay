@@ -636,8 +636,8 @@ function browserScenarios() {
             lapReferenceSeconds: 80,
             selectedSeriesCount: 2,
             trendMetrics: [
-              { label: '5L', focusGapChangeSeconds: -1.4, chaser: { carIdx: 14, label: '#14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null },
-              { label: '10L', focusGapChangeSeconds: null, chaser: null, state: 'warming', stateLabel: '0.7L' },
+              { label: '5L', focusGapChangeSeconds: -1.4, chaser: { carIdx: 14, label: 'P14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null },
+              { label: '10L', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null },
               { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null },
               { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null },
               { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, primaryText: '5L', threatText: '6L', comparisonText: '5L' },
@@ -645,7 +645,7 @@ function browserScenarios() {
               { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, primaryText: '1:31.842', threatText: '1:30.913', comparisonText: '1:32.104' },
               { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, primaryText: 'Track', threatText: 'Track', comparisonText: 'Pit' }
             ],
-            activeThreat: { label: 'Threat', focusGapChangeSeconds: null, chaser: { carIdx: 14, label: '#14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null },
+            activeThreat: { label: 'Threat', focusGapChangeSeconds: null, chaser: { carIdx: 14, label: 'P14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null },
             threatCarIdx: 14,
             metricDeadbandSeconds: 0.25,
             scale: {
@@ -888,7 +888,7 @@ function browserScenarios() {
           flags: {
             isWaiting: false,
             flags: [
-              { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: 'waving', tone: 'warning' },
+              { kind: 'debris', category: 'yellow', label: 'Debris', detail: null, tone: 'warning' },
               { kind: 'meatball', category: 'critical', label: 'Repair', detail: null, tone: 'error' },
               { kind: 'checkered', category: 'finish', label: 'Checkered', detail: null, tone: 'info' }
             ]
@@ -901,7 +901,8 @@ function browserScenarios() {
         expect(document.body.classList.contains('flags-page')).toBe(true);
         expect(document.querySelector('.flags-v2')).not.toBeNull();
         expect(document.querySelectorAll('.flag-cell')).toHaveLength(3);
-        expect(document.querySelector('.flag-yellow title')?.textContent).toContain('Yellow | waving');
+        expect(document.querySelector('.flag-debris title')?.textContent).toContain('Debris');
+        expect(document.getElementById('content').textContent).toContain('Debris');
         expect(document.querySelector('.flag-meatball circle')?.getAttribute('fill')).toBe('rgb(245,124,38)');
         expect(document.getElementById('content').textContent).toContain('Repair');
         expect(document.getElementById('status')).toBeNull();
@@ -939,7 +940,9 @@ function browserScenarios() {
         expect(document.body.classList.contains('stream-chat-page')).toBe(true);
         expect(document.querySelector('.chat-line')).not.toBeNull();
         expect(document.querySelector('.chat-name').textContent).toBe('TMR');
-        expect(document.querySelector('.title').textContent).toBe('Stream Chat');
+        expect(document.querySelector('.title')).toBeNull();
+        expect(document.querySelector('.header').textContent).not.toContain('Stream Chat');
+        expect(document.title).toBe('TMR Stream Chat');
         expect(document.getElementById('status')).toBeNull();
       }
     }
@@ -984,7 +987,7 @@ function standingsColumns() {
     column('standings.interval', 'INT', 'interval', 60, 'right'),
     column('standings.fastest-lap', 'FAST', 'fastest-lap', 70, 'right'),
     column('standings.last-lap', 'LAST', 'last-lap', 70, 'right'),
-    column('standings.pit', 'PIT', 'pit', 30, 'right')
+    column('standings.pit', 'PIT', 'pit', 48, 'right')
   ];
 }
 
@@ -993,7 +996,7 @@ function relativeColumns() {
     column('relative.position', 'Pos', 'relative-position', 38, 'right'),
     column('relative.driver', 'Driver', 'driver', 250, 'left'),
     column('relative.gap', 'Delta', 'gap', 70, 'right'),
-    column('relative.pit', 'Pit', 'pit', 30, 'right')
+    column('relative.pit', 'Pit', 'pit', 48, 'right')
   ];
 }
 

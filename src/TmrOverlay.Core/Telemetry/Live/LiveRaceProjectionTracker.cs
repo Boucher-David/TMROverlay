@@ -220,6 +220,21 @@ internal sealed class LiveRaceProjectionTracker
             return new RaceLapEstimate(0d, "session ended");
         }
 
+        if (ValidLapCount(session.SessionLapsRemain) is { } lapsRemaining)
+        {
+            return new RaceLapEstimate(lapsRemaining, "session laps remain");
+        }
+
+        if (!IsTimedOrUnlimitedSession(context, session)
+            && ValidLapCount(session.SessionLapsTotal) is { } lapTotal)
+        {
+            return new RaceLapEstimate(
+                classLeaderProgress is { } progress
+                    ? Math.Max(0d, lapTotal - progress)
+                    : lapTotal,
+                "session lap total");
+        }
+
         if (!IsRacePreGreen(context, session)
             && session.SessionTimeRemainSeconds is { } remaining
             && remaining > 0d
@@ -316,6 +331,18 @@ internal sealed class LiveRaceProjectionTracker
             || ContainsRace(session.SessionType)
             || ContainsRace(session.SessionName)
             || ContainsRace(session.EventType);
+    }
+
+    private static bool IsTimedOrUnlimitedSession(HistoricalSessionContext context, LiveSessionModel session)
+    {
+        return ContainsUnlimited(context.Session.SessionLaps)
+            || session.SessionLapsTotal is >= 32000
+            || session.SessionLapsRemain is >= 32000;
+    }
+
+    private static bool ContainsUnlimited(string? value)
+    {
+        return value?.IndexOf("unlimited", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static bool ContainsRace(string? value)

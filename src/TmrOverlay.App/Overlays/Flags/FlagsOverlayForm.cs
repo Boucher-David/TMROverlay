@@ -290,11 +290,12 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
         int index)
     {
         var compact = cell.Height < 92f || cell.Width < 132f;
+        var labelHeight = compact ? 16f : 18f;
         var flagArea = new RectangleF(
             cell.Left,
             cell.Top,
             cell.Width,
-            Math.Max(32f, cell.Height));
+            Math.Max(32f, cell.Height - labelHeight));
         var poleX = flagArea.Left + Math.Max(12f, flagArea.Width * 0.16f);
         var poleTop = flagArea.Top + 4f;
         var poleBottom = flagArea.Bottom - 2f;
@@ -319,6 +320,7 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
         var clothBounds = new RectangleF(clothLeft, clothTop, clothWidth, clothHeight);
         using var path = CreateFlagPath(clothBounds, compact ? 3.5f : 5.5f, index);
         DrawFlagCloth(graphics, path, flag, clothBounds);
+        DrawFlagLabel(graphics, cell, flag, compact);
     }
 
     private void DrawFlagCloth(
@@ -350,9 +352,11 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
             using var discBrush = new SolidBrush(Color.FromArgb(245, 124, 38));
             graphics.FillEllipse(discBrush, disc);
         }
-        else if (flag.Kind == FlagDisplayKind.Caution)
+        else if (flag.Kind == FlagDisplayKind.Caution || flag.Kind == FlagDisplayKind.Debris)
         {
-            using var stripeBrush = new SolidBrush(Color.FromArgb(72, 0, 0, 0));
+            using var stripeBrush = new SolidBrush(flag.Kind == FlagDisplayKind.Debris
+                ? Color.FromArgb(208, 245, 124, 38)
+                : Color.FromArgb(72, 0, 0, 0));
             var stripeWidth = Math.Max(8f, clothBounds.Width * 0.12f);
             var oldClip = graphics.Clip;
             try
@@ -378,6 +382,28 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
         }
 
         DrawFlagOutline(graphics, path, flag.Kind);
+    }
+
+    private static void DrawFlagLabel(
+        Graphics graphics,
+        RectangleF cell,
+        FlagOverlayDisplayItem flag,
+        bool compact)
+    {
+        var label = string.IsNullOrWhiteSpace(flag.Detail)
+            ? flag.Label
+            : $"{flag.Label} {flag.Detail}";
+        using var font = new Font("Segoe UI", compact ? 7.5f : 8.5f, FontStyle.Bold, GraphicsUnit.Point);
+        using var brush = new SolidBrush(Color.FromArgb(235, 247, 251, 255));
+        using var format = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Far,
+            Trimming = StringTrimming.EllipsisCharacter,
+            FormatFlags = StringFormatFlags.NoWrap
+        };
+        var labelRect = new RectangleF(cell.Left + 2f, cell.Top, Math.Max(1f, cell.Width - 4f), Math.Max(1f, cell.Height - 1f));
+        graphics.DrawString(label, font, brush, labelRect, format);
     }
 
     private void DrawCheckeredFlag(
@@ -466,6 +492,7 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
             FlagDisplayKind.Green => Color.FromArgb(48, 214, 109),
             FlagDisplayKind.Blue => Color.FromArgb(55, 162, 255),
             FlagDisplayKind.Yellow or FlagDisplayKind.Caution => Color.FromArgb(255, 207, 74),
+            FlagDisplayKind.Debris => Color.FromArgb(255, 207, 74),
             FlagDisplayKind.Red => Color.FromArgb(236, 76, 86),
             FlagDisplayKind.Black or FlagDisplayKind.Meatball => Color.FromArgb(8, 10, 12),
             FlagDisplayKind.White => Color.FromArgb(246, 248, 250),

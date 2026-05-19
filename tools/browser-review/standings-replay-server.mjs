@@ -2945,12 +2945,26 @@ function captureGapGraph(index, searchParams = null) {
 }
 
 function demoGapTrendMetrics(series, lapReferenceSeconds) {
+  const reference = series.find((item) => item?.isReference);
+  const referenceGapSeconds = latestSeriesGapSeconds(reference);
+  const lapReference = chartLapReferenceSeconds(lapReferenceSeconds);
   const candidates = [...series]
-    .filter((item) => !item?.isClassLeader)
-    .sort((a, b) => (a.classPosition ?? Number.MAX_SAFE_INTEGER) - (b.classPosition ?? Number.MAX_SAFE_INTEGER) || a.carIdx - b.carIdx);
-  const threat = candidates[1] || candidates[0] || series.find((item) => !item?.isClassLeader) || null;
-  const chaser = threat
-    ? { carIdx: threat.carIdx, label: Number.isFinite(threat.classPosition) ? `P${threat.classPosition}` : `#${threat.carIdx}`, gainSeconds: 1.4 }
+    .map((item) => ({ item, gapSeconds: latestSeriesGapSeconds(item) }))
+    .filter(({ item, gapSeconds }) =>
+      item
+      && !item.isClassLeader
+      && !item.isReference
+      && Number.isFinite(item.classPosition)
+      && Number.isFinite(referenceGapSeconds)
+      && Number.isFinite(gapSeconds)
+      && gapSeconds > referenceGapSeconds + 0.001
+      && Math.abs(gapSeconds - referenceGapSeconds) < lapReference * 0.95)
+    .sort((a, b) => (a.gapSeconds - referenceGapSeconds) - (b.gapSeconds - referenceGapSeconds)
+      || a.item.classPosition - b.item.classPosition
+      || a.item.carIdx - b.item.carIdx);
+  const threat = candidates[0]?.item || null;
+  const chaser = threat && Number.isFinite(threat.classPosition)
+    ? { carIdx: threat.carIdx, label: `P${threat.classPosition}`, gainSeconds: 1.4 }
     : null;
   const lap = Math.max(1, Math.round(chartLapReferenceSeconds(lapReferenceSeconds) / 10));
   return [
@@ -3031,6 +3045,17 @@ function demoGapTrendMetrics(series, lapReferenceSeconds) {
   ];
 }
 
+function latestSeriesGapSeconds(series) {
+  const points = Array.isArray(series?.points) ? series.points : [];
+  for (let index = points.length - 1; index >= 0; index -= 1) {
+    if (Number.isFinite(points[index]?.gapSeconds)) {
+      return points[index].gapSeconds;
+    }
+  }
+
+  return null;
+}
+
 function gapComparisonLabel(context) {
   if (!Number.isFinite(context?.focusGapSeconds)) {
     return inferredGapComparisonLabel(context);
@@ -3050,7 +3075,9 @@ function gapComparisonLabel(context) {
       item.row
       && Number.isFinite(item.row.carIdx)
       && item.row.carIdx !== context.focusCarIdx
-      && Number.isFinite(item.gapSeconds));
+      && Number.isFinite(item.gapSeconds)
+      && Math.abs(item.gapSeconds - context.focusGapSeconds)
+        < chartLapReferenceSeconds(context.lapReferenceSeconds) * 0.95);
 
   const ahead = candidates
     .filter((item) => item.gapSeconds < context.focusGapSeconds - 0.001)
@@ -4685,7 +4712,8 @@ function flagItemsFromSession(sessionFlags, sessionState) {
   if ((value & 0x00100000) !== 0) items.push(flagItem('meatball', 'critical', 'Repair', null, 'error'));
   if ((value & 0x00010000) !== 0) items.push(flagItem('black', 'critical', 'Black', null, 'error'));
   if ((value & 0x00008000) !== 0 || (value & 0x00004000) !== 0) items.push(flagItem('caution', 'yellow', 'Caution', (value & 0x00008000) !== 0 ? 'waving' : null, 'warning'));
-  else if ((value & 0x00000008) !== 0 || (value & 0x00000100) !== 0 || (value & 0x00000200) !== 0 || (value & 0x00000040) !== 0 || (value & 0x00002000) !== 0) items.push(flagItem('yellow', 'yellow', (value & 0x00000200) !== 0 ? 'One to green' : (value & 0x00000040) !== 0 ? 'Debris' : 'Yellow', (value & 0x00000100) !== 0 || (value & 0x00002000) !== 0 ? 'waving' : null, 'warning'));
+  else if ((value & 0x00000040) !== 0) items.push(flagItem('debris', 'yellow', 'Debris', null, 'warning'));
+  else if ((value & 0x00000008) !== 0 || (value & 0x00000100) !== 0 || (value & 0x00000200) !== 0 || (value & 0x00002000) !== 0) items.push(flagItem('yellow', 'yellow', (value & 0x00000200) !== 0 ? 'One to green' : 'Yellow', (value & 0x00000100) !== 0 || (value & 0x00002000) !== 0 ? 'waving' : null, 'warning'));
   if ((value & 0x00000020) !== 0) items.push(flagItem('blue', 'blue', 'Blue', null, 'info'));
   if ((value & 0x00000001) !== 0 || sessionState === 5) items.push(flagItem('checkered', 'finish', 'Checkered', sessionState === 5 && (value & 0x00000001) === 0 ? 'session complete' : null, 'info'));
   if ((value & 0x00000002) !== 0 || (value & 0x00001000) !== 0 || (value & 0x00000800) !== 0 || (value & 0x00000080) !== 0) items.push(flagItem('white', 'finish', (value & 0x00000002) !== 0 ? 'White' : (value & 0x00001000) !== 0 ? 'Five to go' : (value & 0x00000800) !== 0 ? 'Ten to go' : 'Crossed', null, 'info'));
@@ -5712,7 +5740,7 @@ function relativeColumns() {
     { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
     { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
     ...(relativeShowPitColumn
-      ? [{ id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 30, alignment: 'right' }]
+      ? [{ id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 48, alignment: 'right' }]
       : [])
   ];
 }

@@ -20,9 +20,16 @@ internal static class OverlayChromeSettings
 
     public static bool ShowHeaderTimeRemaining(OverlaySettings settings, LiveTelemetrySnapshot snapshot)
     {
+        return ShowHeaderTimeRemainingForSession(
+            settings,
+            OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
+    }
+
+    public static bool ShowHeaderTimeRemainingForSession(OverlaySettings settings, OverlaySessionKind? sessionKind)
+    {
         return IsEnabledForSession(
             settings,
-            OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot),
+            sessionKind,
             OverlayOptionKeys.ChromeHeaderTimeRemainingTest,
             OverlayOptionKeys.ChromeHeaderTimeRemainingPractice,
             OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying,
@@ -31,7 +38,25 @@ internal static class OverlayChromeSettings
 
     public static bool ShowFooterSource(OverlaySettings settings, LiveTelemetrySnapshot snapshot)
     {
-        return false;
+        return ShowFooterSourceForSession(
+            settings,
+            OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
+    }
+
+    public static bool ShowFooterSourceForSession(OverlaySettings settings, OverlaySessionKind? sessionKind)
+    {
+        if (!SupportsFooterSource(settings))
+        {
+            return false;
+        }
+
+        return IsEnabledForSession(
+            settings,
+            sessionKind,
+            OverlayOptionKeys.ChromeFooterSourceTest,
+            OverlayOptionKeys.ChromeFooterSourcePractice,
+            OverlayOptionKeys.ChromeFooterSourceQualifying,
+            OverlayOptionKeys.ChromeFooterSourceRace);
     }
 
     public static bool SupportsFooterSource(OverlaySettings settings)

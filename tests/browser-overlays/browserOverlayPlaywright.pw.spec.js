@@ -9,6 +9,7 @@ import {
   renderInstallerReviewHtml,
   renderSettingsGeneralReviewHtml
 } from './browserOverlayAssets.js';
+import { startReviewServer } from './reviewServerTestHost.js';
 
 test.describe('browser overlay Playwright integration', () => {
   test('renders standings in a real browser layout without horizontal overflow', async ({ page }) => {
@@ -75,7 +76,9 @@ test.describe('browser overlay Playwright integration', () => {
     await expect(page.locator('.chat-name')).toHaveText('TMR');
     await expect(page.locator('.chat-text')).toHaveText('Choose Streamlabs or Twitch in the Stream Chat settings tab.');
     await expect(page.locator('.header')).toBeVisible();
-    await expect(page.locator('.title')).toHaveText('Stream Chat');
+    await expect(page.locator('.title')).toHaveCount(0);
+    await expect(page.locator('.header')).not.toContainText('Stream Chat');
+    await expect(page).toHaveTitle('TMR Stream Chat');
     await expect(page.locator('.overlay')).toHaveCSS('opacity', '1');
     const overlayBox = await page.locator('.overlay').boundingBox();
     expect(overlayBox?.width).toBe(380);
@@ -313,6 +316,135 @@ test.describe('browser overlay Playwright integration', () => {
     const overlayWidth = await boundingBoxWidth(page.locator('.overlay'));
     expect(overlayWidth).toBeGreaterThanOrEqual(374);
     expect(overlayWidth).toBeLessThanOrEqual(386);
+  });
+
+  test('keeps input steering wheel compact inside the browser rail', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'input-state', {
+      live: inputStateLiveSnapshot(0, 0.72)
+    });
+
+    await page.setViewportSize({ width: 520, height: 260 });
+    await page.goto('http://localhost:8765/overlays/input-state');
+
+    await expect(page.locator('.input-wheel svg')).toBeVisible();
+    const wheel = await page.locator('.input-wheel svg').boundingBox();
+    const rail = await page.locator('.input-rail').boundingBox();
+
+    expect(wheel).not.toBeNull();
+    expect(rail).not.toBeNull();
+    expect(wheel?.width).toBeGreaterThan(20);
+    expect(wheel?.height).toBeGreaterThan(20);
+    expect(wheel?.width).toBeLessThanOrEqual(40);
+    expect(wheel?.height).toBeLessThanOrEqual(40);
+    expect(wheel.x).toBeGreaterThanOrEqual(rail.x);
+    expect(wheel.x + wheel.width).toBeLessThanOrEqual(rail.x + rail.width);
+  });
+
+  test('renders fuel practice as compact range and usage sections', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'fuel-calculator', {
+      live: freshLiveSnapshot({}),
+      model: fuelPracticeDisplayModel()
+    });
+
+    await page.setViewportSize({ width: 520, height: 260 });
+    await page.goto('http://localhost:8765/overlays/fuel-calculator?preview=practice');
+
+    await expect(page.locator('.overlay')).toHaveClass(/fuel-non-race/);
+    await expect(page.locator('.metric-section-title')).toHaveText(['Fuel Range', 'Fuel Usage']);
+    await expect(page.locator('#content')).toContainText('Practice Usage');
+    await expect(page.locator('#content')).not.toContainText('Race Information');
+    await expect(page.locator('#content')).not.toContainText('Stint Targets');
+
+    const overlay = await page.locator('.overlay').boundingBox();
+    expect(overlay?.width).toBe(503);
+    expect(overlay?.height).toBe(184);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('updates table chrome and columns while localhost overlay stays mounted', async ({ page }) => {
+    const initial = standingsDisplayModel({
+      headerItems: [{ key: 'timeRemaining', value: '06:37:08', tone: 'success' }]
+    });
+    const compact = standingsWithoutPitColumn({
+      headerItems: [{ key: 'timeRemaining', value: '00:42', tone: 'warning' }]
+    });
+    await installBrowserOverlayRoutes(page, 'standings', {
+      live: freshLiveSnapshot({}),
+      model: [initial, compact]
+    });
+
+    await page.setViewportSize({ width: 692, height: 520 });
+    await page.goto('http://localhost:8765/overlays/standings');
+
+    await expect(page.locator('thead th')).toHaveText(['CLS', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST', 'PIT']);
+    await expect(page.locator('.header-item')).toHaveAttribute('data-tone', 'success');
+    await expect(page.locator('tbody tr').last()).toContainText('IN');
+
+    await expect.poll(async () => page.locator('.header-item').getAttribute('data-tone'), {
+      timeout: 3500
+    }).toBe('warning');
+    await expect(page.locator('.header-item')).toHaveAttribute('data-key', 'timeRemaining');
+    await expect(page.locator('.header-item')).toHaveText('00:42');
+    await expect(page.locator('thead th')).toHaveText(['CLS', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST']);
+    await expect(page.locator('tbody tr').last()).not.toContainText('IN');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('clears stale rendered DOM when localhost model becomes product-hidden', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'standings', {
+      live: freshLiveSnapshot({}),
+      model: [
+        standingsDisplayModel(),
+        hiddenDisplayModel('standings', 'disabled by settings')
+      ]
+    });
+
+    await page.setViewportSize({ width: 692, height: 520 });
+    await page.goto('http://localhost:8765/overlays/standings');
+
+    await expect(page.locator('tbody tr')).toHaveCount(6);
+    await expect(page.locator('.header-item')).toHaveCount(1);
+
+    await expect.poll(async () => page.locator('.overlay').evaluate((element) =>
+      window.getComputedStyle(element).opacity
+    ), { timeout: 3500 }).toBe('0');
+    await expect(page.locator('tbody tr')).toHaveCount(0);
+    await expect(page.locator('thead th')).toHaveCount(0);
+    await expect(page.locator('.header-item')).toHaveCount(0);
+    await expect(page.locator('#content')).toBeEmpty();
+  });
+
+  test('clears stale input graph and rail when all input content becomes disabled', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'input-state', {
+      live: inputStateLiveSnapshot(0, 0.72),
+      settings: [
+        {},
+        {
+          showThrottleTrace: false,
+          showBrakeTrace: false,
+          showClutchTrace: false,
+          showThrottle: false,
+          showBrake: false,
+          showClutch: false,
+          showSteering: false,
+          showGear: false,
+          showSpeed: false
+        }
+      ]
+    });
+
+    await page.setViewportSize({ width: 520, height: 260 });
+    await page.goto('http://localhost:8765/overlays/input-state');
+
+    await expect(page.locator('.input-graph')).toBeVisible();
+    await expect(page.locator('.input-rail')).toBeVisible();
+
+    await expect.poll(async () => page.locator('.overlay').evaluate((element) =>
+      element.classList.contains('input-empty')
+    ), { timeout: 3500 }).toBe(true);
+    await expect(page.locator('.input-graph')).toHaveCount(0);
+    await expect(page.locator('.input-rail')).toHaveCount(0);
+    await expect(page.locator('.empty')).toHaveText('no input content enabled');
   });
 
   test('renders General settings preview controls without forcing hidden overlays', async ({ page }) => {
@@ -647,6 +779,8 @@ test.describe('browser overlay Playwright integration', () => {
       session: 'Practice',
       enabled: false
     });
+    await page.getByRole('tab', { name: 'General' }).click();
+    await expect(page.getByText('OBS size 530 x 684')).toBeVisible();
   });
 
   test('application scale and opacity sliders update UI state and localhost model settings', async ({ page }) => {
@@ -701,6 +835,24 @@ test.describe('browser overlay Playwright integration', () => {
         return;
       }
 
+      if (url.hostname === 'localhost' && url.pathname === '/api/overlay-model/stream-chat') {
+        const opacityPercent = reviewState.overlays['stream-chat']?.opacityPercent ?? 100;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json; charset=utf-8',
+          body: JSON.stringify({
+            model: {
+              overlayId: 'stream-chat',
+              title: 'Stream Chat',
+              bodyKind: 'stream-chat',
+              rootOpacity: opacityPercent / 100,
+              streamChat: { status: 'configured_twitch', rows: [] }
+            }
+          })
+        });
+        return;
+      }
+
       await route.fulfill({
         status: 404,
         contentType: 'text/plain; charset=utf-8',
@@ -739,6 +891,82 @@ test.describe('browser overlay Playwright integration', () => {
       return response.json();
     });
     expect(modelResponse.model.rootOpacity).toBe(0.9);
+
+    await page.getByRole('link', { name: 'Stream Chat' }).click();
+    await expect(page.getByRole('slider', { name: 'Opacity' })).toBeVisible();
+    const streamChatOpacitySlider = page.getByRole('slider', { name: 'Opacity' });
+    await streamChatOpacitySlider.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByText('90%')).toBeVisible();
+    expect(patches).toContainEqual({
+      kind: 'number',
+      overlayId: 'stream-chat',
+      key: 'opacityPercent',
+      value: 90
+    });
+
+    const streamChatModelResponse = await page.evaluate(async () => {
+      const response = await fetch('/api/overlay-model/stream-chat');
+      return response.json();
+    });
+    expect(streamChatModelResponse.model.rootOpacity).toBe(0.9);
+  });
+
+  test('application settings patches update real review-server model evidence', async ({ page }) => {
+    const reviewServer = await startReviewServer();
+    try {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.goto(`${reviewServer.baseUrl}/review/app?preview=race&tab=relative&region=content`);
+
+      await (await sessionToggleForMatrixItem(page, 'Pit status', 'Race')).click();
+      await expect.poll(async () => {
+        const model = await fetchOverlayModelFromPage(page, 'relative', 'race');
+        return (model.columns || []).some((column) => column.dataKey === 'pit');
+      }, { timeout: 3500 }).toBe(true);
+
+      const modelWithPit = await fetchOverlayModelFromPage(page, 'relative', 'race');
+      expect(modelWithPit.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+        key: 'relative.content.relative.pit.enabled',
+        session: 'race',
+        value: true
+      }));
+
+      await (await sessionToggleForMatrixItem(page, 'Pit status', 'Race')).click();
+      await expect.poll(async () => {
+        const model = await fetchOverlayModelFromPage(page, 'relative', 'race');
+        return (model.columns || []).some((column) => column.dataKey === 'pit');
+      }, { timeout: 3500 }).toBe(false);
+
+      const modelWithoutPit = await fetchOverlayModelFromPage(page, 'relative', 'race');
+      expect(modelWithoutPit.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+        key: 'relative.content.relative.pit.enabled',
+        session: 'race',
+        value: false
+      }));
+      expect(modelWithoutPit.effectiveSettings.rendered.rowCount).toBe(11);
+
+      await page.getByRole('tab', { name: 'Header' }).click();
+      await page.locator('.chrome-check button').nth(2).click();
+      await page.getByRole('tab', { name: 'General' }).click();
+
+      await expect(page.getByText('OBS size 360 x 314')).toBeVisible();
+      const modelWithoutHeader = await fetchOverlayModelFromPage(page, 'relative', 'race');
+      expect(modelWithoutHeader.headerItems || []).toEqual([]);
+      expect(modelWithoutHeader.effectiveSettings.rendered.headerItems).toEqual([]);
+      expect(modelWithoutHeader.effectiveSettings.rendered.browserSource).toMatchObject({
+        baseWidth: 360,
+        baseHeight: 314,
+        width: 360,
+        height: 314,
+        scalePercent: 100
+      });
+      expect(modelWithoutHeader.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+        key: 'chrome.header.time-remaining.race',
+        value: false
+      }));
+    } finally {
+      await reviewServer.stop();
+    }
   });
 
   test('application browser source copy button writes the localhost overlay URL', async ({ page }) => {
@@ -904,9 +1132,12 @@ async function installBrowserOverlayRoutes(page, overlayId, fixture) {
     }
 
     const advancesLiveFrame = url.pathname === `/api/overlay-model/${overlayId}`;
+    const frameKey = advancesLiveFrame ? 'frame' : url.pathname;
     const payload = browserOverlayApiResponse(overlayId, url.pathname, {
       ...fixture,
-      live: resolveLiveFixture(fixture.live, advancesLiveFrame ? 'frame' : url.pathname, liveFrameIndex)
+      live: resolveFrameFixture(fixture.live, frameKey, liveFrameIndex),
+      settings: resolveFrameFixture(fixture.settings, frameKey, liveFrameIndex),
+      model: resolveFrameFixture(fixture.model, frameKey, liveFrameIndex)
     });
     if (advancesLiveFrame) {
       liveFrameIndex += 1;
@@ -945,16 +1176,37 @@ async function boundingBoxWidth(locator) {
   return width;
 }
 
-function resolveLiveFixture(live, path, frameIndex) {
+function resolveFrameFixture(value, path, frameIndex) {
   if (path !== 'frame') {
-    return Array.isArray(live) ? live[0] : typeof live === 'function' ? live(0) : live;
+    return Array.isArray(value) ? value[0] : typeof value === 'function' ? value(0) : value;
   }
 
-  if (Array.isArray(live)) {
-    return live[Math.min(frameIndex, live.length - 1)];
+  if (Array.isArray(value)) {
+    return value[Math.min(frameIndex, value.length - 1)];
   }
 
-  return typeof live === 'function' ? live(frameIndex) : live;
+  return typeof value === 'function' ? value(frameIndex) : value;
+}
+
+async function sessionToggleForMatrixItem(page, label, session) {
+  const sessionIndex = { Practice: 0, Qualifying: 1, Race: 2 }[session];
+  expect(sessionIndex).toBeDefined();
+  const labels = (await page.locator('.matrix-item').allTextContents())
+    .map((text) => text.trim());
+  const rowIndex = labels.findIndex((candidate) => candidate === label);
+  expect(rowIndex).toBeGreaterThanOrEqual(0);
+  return page.locator('.matrix-session button').nth(rowIndex * 3 + sessionIndex);
+}
+
+async function fetchOverlayModelFromPage(page, overlayId, preview = 'race') {
+  return page.evaluate(async ({ overlayId, preview }) => {
+    const response = await fetch(`/api/overlay-model/${overlayId}?preview=${preview}`);
+    if (!response.ok) {
+      throw new Error(`overlay model fetch failed ${response.status}`);
+    }
+    const payload = await response.json();
+    return payload.model;
+  }, { overlayId, preview });
 }
 
 function inputStateLiveSnapshot(index, throttle) {
@@ -1000,7 +1252,7 @@ function inputStateLiveSnapshot(index, throttle) {
   };
 }
 
-function standingsDisplayModel() {
+function standingsDisplayModel(overrides = {}) {
   return {
     overlayId: 'standings',
     title: 'Standings',
@@ -1015,7 +1267,7 @@ function standingsDisplayModel() {
       { id: 'standings.interval', label: 'INT', dataKey: 'interval', width: 60, alignment: 'right' },
       { id: 'standings.fastest-lap', label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
       { id: 'standings.last-lap', label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
-      { id: 'standings.pit', label: 'PIT', dataKey: 'pit', width: 30, alignment: 'right' }
+      { id: 'standings.pit', label: 'PIT', dataKey: 'pit', width: 48, alignment: 'right' }
     ],
     rows: [
       headerRow('LMP2', '2 cars | ~10 laps', '#33CEFF'),
@@ -1026,7 +1278,82 @@ function standingsDisplayModel() {
       carRow(['3', '#91', 'Chaser', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
     ],
     metrics: [],
-    headerItems: [{ key: 'timeRemaining', value: '06:37:08' }]
+    headerItems: [{ key: 'timeRemaining', value: '06:37:08' }],
+    ...overrides
+  };
+}
+
+function standingsWithoutPitColumn(overrides = {}) {
+  const model = standingsDisplayModel(overrides);
+  return {
+    ...model,
+    columns: model.columns.filter((column) => column.dataKey !== 'pit'),
+    rows: model.rows.map((row) => row.cells.length > 0
+      ? {
+          ...row,
+          cells: row.cells.slice(0, -1),
+          isPit: false
+        }
+      : row)
+  };
+}
+
+function fuelPracticeDisplayModel(overrides = {}) {
+  return {
+    overlayId: 'fuel-calculator',
+    title: 'Fuel Calculator',
+    status: 'fuel range',
+    source: 'usage 3.1 L/lap (measured green lap) | range 23.9 laps | 34.2 laps/tank',
+    bodyKind: 'metrics',
+    metrics: [],
+    metricSections: [
+      {
+        title: 'Fuel Range',
+        rows: [{
+          label: 'Fuel',
+          value: '74.0 L | range 23.9 laps | tank 34.2 laps',
+          tone: 'info',
+          segments: [
+            { label: 'Level', value: '74.0 L', tone: 'info' },
+            { label: 'Usage', value: '3.1 L/lap', tone: 'info' },
+            { label: 'Range', value: '23.9 laps', tone: 'info' },
+            { label: 'Tank', value: '34.2 laps', tone: 'info' }
+          ]
+        }]
+      },
+      {
+        title: 'Fuel Usage',
+        rows: [{
+          label: 'Practice Usage',
+          value: 'min 3.0 L/lap | avg 3.1 L/lap | max 3.2 L/lap',
+          tone: 'info',
+          segments: [
+            { label: 'Min', value: '3.0 L/lap', tone: 'info' },
+            { label: 'Avg', value: '3.1 L/lap', tone: 'info' },
+            { label: 'Max', value: '3.2 L/lap', tone: 'info' },
+            { label: 'Laps', value: '3 laps', tone: 'info' }
+          ]
+        }]
+      }
+    ],
+    headerItems: [{ key: 'timeRemaining', value: '06:37:08', tone: 'success' }],
+    ...overrides
+  };
+}
+
+function hiddenDisplayModel(overlayId, status) {
+  return {
+    overlayId,
+    title: overlayId,
+    status,
+    source: '',
+    bodyKind: 'table',
+    columns: [],
+    rows: [],
+    metrics: [],
+    points: [],
+    headerItems: [],
+    shouldRender: false
   };
 }
 

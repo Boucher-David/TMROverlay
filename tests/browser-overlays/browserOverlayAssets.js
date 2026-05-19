@@ -89,7 +89,6 @@ export const pages = {
 };
 
 const opacityExcludedOverlayIds = new Set([
-  'stream-chat',
   'car-radar',
   'flags',
   'garage-cover',
@@ -400,8 +399,9 @@ export function browserOverlayApiResponse(name, path, { live, settings = {}, mod
 }
 
 function settingsAppConfig({ previewMode = 'off', selectedTab = 'general', selectedRegion = 'general', reviewState = null } = {}) {
+  const normalizedPreviewMode = normalizePreviewMode(previewMode);
   return {
-    previewMode: normalizePreviewMode(previewMode),
+    previewMode: normalizedPreviewMode,
     selectedTab,
     selectedRegion,
     unitSystem: normalizeUnitSystem(reviewState?.unitSystem || 'Metric'),
@@ -417,11 +417,11 @@ function settingsAppConfig({ previewMode = 'off', selectedTab = 'general', selec
       updatePendingRestart: reviewState?.support?.updatePendingRestart ?? false
     },
     sessionLabels: ['Practice', 'Qualifying', 'Race'],
-    overlays: settingsAppOverlays(reviewState)
+    overlays: settingsAppOverlays(reviewState, normalizedPreviewMode)
   };
 }
 
-function settingsAppOverlays(reviewState = null) {
+function settingsAppOverlays(reviewState = null, previewMode = 'off') {
   const order = [
     'standings',
     'relative',
@@ -436,21 +436,21 @@ function settingsAppOverlays(reviewState = null) {
     'session-weather',
     'pit-service'
   ];
-  return order.map((id) => settingsOverlayDefinition(id, reviewState));
+  return order.map((id) => settingsOverlayDefinition(id, reviewState, previewMode));
 }
 
-function settingsOverlayDefinition(id, reviewState = null) {
+function settingsOverlayDefinition(id, reviewState = null, previewMode = 'off') {
   const page = pages[id];
   const overlayState = reviewState?.overlays?.[id] || {};
   const sharedChrome = ['standings', 'relative', 'fuel-calculator', 'gap-to-leader', 'session-weather', 'pit-service'].includes(id);
   const noSessionFilters = ['stream-chat', 'gap-to-leader', 'flags'].includes(id);
-  const noOpacity = ['stream-chat', 'car-radar', 'flags', 'garage-cover'].includes(id);
+  const noOpacity = ['car-radar', 'flags', 'garage-cover'].includes(id);
   return {
     id,
     title: page?.title || titleCase(id.replaceAll('-', ' ')),
     subtitle: settingsOverlaySubtitle(id),
     route: page?.route || null,
-    browserSize: settingsBrowserSize(id, overlayState),
+    browserSize: settingsBrowserSize(id, overlayState, previewMode),
     enabled: overlayState.enabled ?? false,
     scalePercent: overlayState.scalePercent ?? 100,
     opacityPercent: overlayState.opacityPercent ?? (id === 'track-map' ? 0 : 100),
@@ -507,9 +507,9 @@ function settingsOverlaySubtitle(id) {
   }[id] || 'Overlay settings and browser-source controls.';
 }
 
-function settingsBrowserSize(id, overlayState = {}) {
+export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = 'off') {
   const base = {
-    standings: [659, 313],
+    standings: [677, 313],
     relative: [360, 352],
     'gap-to-leader': [654, 336],
     'track-map': [360, 360],
@@ -523,22 +523,148 @@ function settingsBrowserSize(id, overlayState = {}) {
     'pit-service': [530, 722]
   }[id] || [400, 300];
   if (id === 'input-state') {
-    base[0] = inputStateBaseWidth(overlayState, base[0]);
+    base[0] = inputStateBaseWidth(overlayState, base[0], previewMode);
+  } else if (id === 'fuel-calculator') {
+    base[1] = fuelCalculatorBaseHeight(previewMode, base[1]);
+  } else if (id === 'standings' || id === 'relative') {
+    base[0] = tableBaseWidth(id, overlayState, base[0], previewMode);
+    if (id === 'relative') {
+      base[1] = relativeBaseHeight(overlayState, base[1]);
+    }
+  } else if (id === 'session-weather' || id === 'pit-service') {
+    const simpleSize = simpleTelemetryBaseSize(id, overlayState, base[0], base[1], previewMode);
+    base[0] = simpleSize[0];
+    base[1] = simpleSize[1];
   }
+  base[1] = settingsChromeAdjustedBaseHeight(id, overlayState, base[1], previewMode);
   const scale = Math.max(0.6, Math.min(2, Number(overlayState.scalePercent || 100) / 100));
-  return `${Math.round(base[0] * scale)} x ${Math.round(base[1] * scale)}`;
+  return {
+    baseWidth: Math.round(base[0]),
+    baseHeight: Math.round(base[1]),
+    width: Math.round(base[0] * scale),
+    height: Math.round(base[1] * scale),
+    scale: Number(scale.toFixed(3)),
+    scalePercent: Math.round(scale * 100)
+  };
 }
 
-function inputStateBaseWidth(overlayState, fullWidth) {
-  const hasGraph = contentStateValue(overlayState, 'input-state.trace.throttle', 'Throttle trace', true)
-    || contentStateValue(overlayState, 'input-state.trace.brake', 'Brake trace', true)
-    || contentStateValue(overlayState, 'input-state.trace.clutch', 'Clutch trace', true);
-  const hasRail = contentStateValue(overlayState, 'input-state.current.throttle', 'Throttle %', true)
-    || contentStateValue(overlayState, 'input-state.current.brake', 'Brake %', true)
-    || contentStateValue(overlayState, 'input-state.current.clutch', 'Clutch %', true)
-    || contentStateValue(overlayState, 'input-state.current.steering', 'Steering wheel', true)
-    || contentStateValue(overlayState, 'input-state.current.gear', 'Gear', true)
-    || contentStateValue(overlayState, 'input-state.current.speed', 'Speed', true);
+function settingsBrowserSize(id, overlayState = {}, previewMode = 'off') {
+  const size = settingsBrowserSourceSize(id, overlayState, previewMode);
+  return `${size.width} x ${size.height}`;
+}
+
+function fuelCalculatorBaseHeight(previewMode, fullHeight) {
+  const session = sizingSession('fuel-calculator', previewMode);
+  return session === 'practice' || session === 'qualifying' ? 184 : fullHeight;
+}
+
+function settingsChromeAdjustedBaseHeight(id, overlayState, fullHeight, previewMode = 'off') {
+  const titleHeaderHeight = 38;
+  const minimumHeaderlessHeight = 80;
+  if (!usesCollapsibleHeaderHeight(id) || headerChromeEnabledForSizing(id, overlayState, previewMode)) {
+    return fullHeight;
+  }
+
+  return Math.max(minimumHeaderlessHeight, fullHeight - titleHeaderHeight);
+}
+
+function usesCollapsibleHeaderHeight(id) {
+  return [
+    'standings',
+    'relative',
+    'gap-to-leader',
+    'fuel-calculator',
+    'session-weather',
+    'pit-service'
+  ].includes(id);
+}
+
+function headerChromeEnabledForSizing(id, overlayState, previewMode = 'off') {
+  if (!['standings', 'relative', 'fuel-calculator', 'gap-to-leader', 'session-weather', 'pit-service'].includes(id)) {
+    return false;
+  }
+
+  const session = sizingSession(id, previewMode);
+  return overlayState?.chrome?.header?.['Time remaining']?.[sessionKey(session)] !== false;
+}
+
+function sizingSession(id, previewMode = 'off') {
+  const normalized = normalizePreviewMode(previewMode);
+  if (normalized !== 'off') {
+    return normalized;
+  }
+
+  return id === 'gap-to-leader' ? 'race' : 'practice';
+}
+
+function tableBaseWidth(id, overlayState, fullWidth, previewMode = 'off') {
+  const session = sizingSession(id, previewMode);
+  const widths = {
+    standings: {
+      'Class position': 35,
+      'Car number': 50,
+      Driver: 250,
+      'Class gap': 60,
+      'Previous interval': 60,
+      'Fastest lap': 70,
+      'Last lap': 70,
+      'Pit status': 48
+    },
+    relative: {
+      'Relative position': 38,
+      Driver: 250,
+      'Relative delta': 70,
+      'Pit status': 48
+    }
+  }[id] || {};
+  const rows = settingsContentRows(id, overlayState);
+  const defaultWidth = rows
+    .filter((item) => item.defaultEnabled !== false)
+    .reduce((total, item) => total + (widths[item.label] || 0), 0);
+  let visibleWidth = rows
+    .filter((item) => contentStateValueForSession(overlayState, item.key, item.label, item.defaultEnabled !== false, session))
+    .reduce((total, item) => total + (widths[item.label] || 0), 0);
+  if (visibleWidth <= 0 && widths.Driver) {
+    visibleWidth = widths.Driver;
+  }
+  if (visibleWidth <= 0 || defaultWidth <= 0) return fullWidth;
+  if (visibleWidth <= defaultWidth) {
+    return Math.max(360, Math.round(fullWidth * visibleWidth / defaultWidth));
+  }
+  return Math.max(fullWidth, visibleWidth + 34);
+}
+
+function relativeBaseHeight(overlayState, fullHeight) {
+  const carsEachSide = Math.max(0, Math.min(8, Number(overlayState.carsEachSide ?? 5)));
+  const rows = carsEachSide * 2 + 1;
+  return Math.max(160, fullHeight - Math.max(0, 11 - rows) * 26);
+}
+
+function simpleTelemetryBaseSize(id, overlayState, fullWidth, fullHeight, previewMode = 'off') {
+  const session = sizingSession(id, previewMode);
+  const rows = settingsContentRows(id, overlayState);
+  const defaultCount = rows.filter((item) => item.defaultEnabled !== false).length;
+  const enabledCount = rows.filter((item) => contentStateValueForSession(overlayState, item.key, item.label, item.defaultEnabled !== false, session)).length;
+  if (enabledCount <= 0 || enabledCount >= defaultCount || defaultCount <= 1) {
+    return [fullWidth, fullHeight];
+  }
+
+  const progress = (enabledCount - 1) / Math.max(1, defaultCount - 1);
+  const compactHeight = 184 + Math.round((fullHeight - 184) * progress);
+  return [Math.min(fullWidth, 464), Math.max(184, Math.min(fullHeight, compactHeight))];
+}
+
+function inputStateBaseWidth(overlayState, fullWidth, previewMode = 'off') {
+  const session = sizingSession('input-state', previewMode);
+  const hasGraph = contentStateValueForSession(overlayState, 'input-state.trace.throttle', 'Throttle trace', true, session)
+    || contentStateValueForSession(overlayState, 'input-state.trace.brake', 'Brake trace', true, session)
+    || contentStateValueForSession(overlayState, 'input-state.trace.clutch', 'Clutch trace', true, session);
+  const hasRail = contentStateValueForSession(overlayState, 'input-state.current.throttle', 'Throttle %', true, session)
+    || contentStateValueForSession(overlayState, 'input-state.current.brake', 'Brake %', true, session)
+    || contentStateValueForSession(overlayState, 'input-state.current.clutch', 'Clutch %', true, session)
+    || contentStateValueForSession(overlayState, 'input-state.current.steering', 'Steering wheel', true, session)
+    || contentStateValueForSession(overlayState, 'input-state.current.gear', 'Gear', true, session)
+    || contentStateValueForSession(overlayState, 'input-state.current.speed', 'Speed', true, session);
   if (hasGraph && hasRail) return fullWidth;
   if (hasGraph) return 380;
   return 276;
@@ -570,7 +696,7 @@ function settingsContentRows(id, overlayState = {}) {
         enabled('Car number'),
         enabled('Driver'),
         enabled('Class gap'),
-        enabled('Focus interval'),
+        enabled('Previous interval'),
         enabled('Fastest lap'),
         enabled('Last lap'),
         enabled('Pit status')
@@ -690,6 +816,18 @@ function contentStateValue(overlayState, key, label, defaultValue) {
   return defaultValue;
 }
 
+function contentStateValueForSession(overlayState, key, label, defaultValue, session) {
+  const content = overlayState.content || {};
+  const suffix = String(session || '').trim().toLowerCase();
+  if (suffix) {
+    for (const candidate of [`${key}.${suffix}`, `${label}.${suffix}`]) {
+      if (Object.hasOwn(content, candidate)) return content[candidate] !== false;
+    }
+  }
+
+  return contentStateValue(overlayState, key, label, defaultValue);
+}
+
 function settingsContentOptionKey(id, label) {
   const maps = {
     standings: {
@@ -697,7 +835,7 @@ function settingsContentOptionKey(id, label) {
       'Car number': 'standings.content.standings.car-number.enabled',
       Driver: 'standings.content.standings.driver.enabled',
       'Class gap': 'standings.content.standings.gap.enabled',
-      'Focus interval': 'standings.content.standings.interval.enabled',
+      'Previous interval': 'standings.content.standings.interval.enabled',
       'Fastest lap': 'standings.content.standings.fastest-lap.enabled',
       'Last lap': 'standings.content.standings.last-lap.enabled',
       'Pit status': 'standings.content.standings.pit.enabled',
@@ -928,7 +1066,8 @@ function flagItemsFromSession(sessionFlags, sessionState) {
   if ((value & 0x00100000) !== 0) items.push(flagItem('meatball', 'critical', 'Repair', null, 'error'));
   if ((value & 0x00010000) !== 0) items.push(flagItem('black', 'critical', 'Black', null, 'error'));
   if ((value & 0x00008000) !== 0 || (value & 0x00004000) !== 0) items.push(flagItem('caution', 'yellow', 'Caution', (value & 0x00008000) !== 0 ? 'waving' : null, 'warning'));
-  else if ((value & 0x00000008) !== 0 || (value & 0x00000100) !== 0 || (value & 0x00000200) !== 0 || (value & 0x00000040) !== 0 || (value & 0x00002000) !== 0) items.push(flagItem('yellow', 'yellow', (value & 0x00000200) !== 0 ? 'One to green' : (value & 0x00000040) !== 0 ? 'Debris' : 'Yellow', (value & 0x00000100) !== 0 || (value & 0x00002000) !== 0 ? 'waving' : null, 'warning'));
+  else if ((value & 0x00000040) !== 0) items.push(flagItem('debris', 'yellow', 'Debris', null, 'warning'));
+  else if ((value & 0x00000008) !== 0 || (value & 0x00000100) !== 0 || (value & 0x00000200) !== 0 || (value & 0x00002000) !== 0) items.push(flagItem('yellow', 'yellow', (value & 0x00000200) !== 0 ? 'One to green' : 'Yellow', (value & 0x00000100) !== 0 || (value & 0x00002000) !== 0 ? 'waving' : null, 'warning'));
   if ((value & 0x00000020) !== 0) items.push(flagItem('blue', 'blue', 'Blue', null, 'info'));
   if ((value & 0x00000001) !== 0 || sessionState === 5) items.push(flagItem('checkered', 'finish', 'Checkered', sessionState === 5 && (value & 0x00000001) === 0 ? 'session complete' : null, 'info'));
   if ((value & 0x00000002) !== 0 || (value & 0x00001000) !== 0 || (value & 0x00000800) !== 0 || (value & 0x00000080) !== 0) items.push(flagItem('white', 'finish', (value & 0x00000002) !== 0 ? 'White' : (value & 0x00001000) !== 0 ? 'Five to go' : (value & 0x00000800) !== 0 ? 'Ten to go' : 'Crossed', null, 'info'));
@@ -1081,17 +1220,36 @@ function fuelStrategy(live, unitSystem) {
     { title: 'Race Information', rows: [planRow, fuelRow] }
   ];
   if (usageLabel != null) {
-    metricSections.push({ title: 'Fuel Usage', rows: [fuelUsageRow(usageLabel, fuel, unitSystem)] });
+    const nonRaceSections = [
+      {
+        title: 'Fuel Range',
+        rows: [fuelMetricRow('Fuel', fuelNonRaceFuelText(currentFuel, fuelPerLap, fullTankLaps, unitSystem), currentFuel == null ? 'waiting' : 'info', [
+          fuelMetricSegment('Level', formatFuelVolume(currentFuel, unitSystem), currentFuel == null ? 'waiting' : 'info'),
+          fuelMetricSegment('Usage', formatFuelPerLap(fuelPerLap, unitSystem), fuelPerLap == null ? 'waiting' : 'info'),
+          fuelMetricSegment('Range', formatFuelLaps(currentFuel != null && fuelPerLap != null ? currentFuel / fuelPerLap : null), currentFuel != null && fuelPerLap != null ? 'info' : 'waiting'),
+          fuelMetricSegment('Tank', formatFuelLaps(fullTankLaps), fullTankLaps == null ? 'waiting' : 'info')
+        ])]
+      },
+      { title: 'Fuel Usage', rows: [fuelUsageRow(usageLabel, fuel, unitSystem)] }
+    ];
+    const source = fuelPerLap != null
+      ? `usage ${formatFuelPerLap(fuelPerLap, unitSystem)} (measured green lap) | range ${formatFuelLaps(currentFuel != null ? currentFuel / fuelPerLap : null)} | ${formatFuelLaps(fullTankLaps, ' laps/tank')} | history none`
+      : 'source: waiting';
+    return { status: currentFuel == null ? 'waiting for fuel' : fuelPerLap == null ? 'fuel level' : 'fuel range', metricSections: nonRaceSections, source };
   }
-  const visibleStintRows = usageLabel != null ? stintRows.slice(0, 1) : stintRows;
-  if (visibleStintRows.length > 0) {
-    metricSections.push({ title: 'Stint Targets', rows: visibleStintRows });
+  if (stintRows.length > 0) {
+    metricSections.push({ title: 'Stint Targets', rows: stintRows });
   }
 
   const source = fuelPerLap != null
     ? `burn ${formatFuelPerLap(fuelPerLap, unitSystem)} (measured green lap) | ${formatFuelLaps(fullTankLaps, ' laps/tank')} | history none`
     : 'source: waiting';
   return { status, metricSections, source };
+}
+
+function fuelNonRaceFuelText(currentFuel, fuelPerLap, fullTankLaps, unitSystem) {
+  const range = currentFuel != null && fuelPerLap != null ? currentFuel / fuelPerLap : null;
+  return `${formatFuelVolume(currentFuel, unitSystem)} | range ${formatFuelLaps(range)} | tank ${formatFuelLaps(fullTankLaps)}`;
 }
 
 function fuelUsageLabel(session) {
@@ -1417,11 +1575,18 @@ function fuelHeaderItems(status, live, settings) {
   if (settings?.showHeaderTimeRemaining !== false) {
     const timeRemaining = formatFuelHeaderTimeRemaining(live?.models?.session);
     if (timeRemaining) {
-      items.push({ key: 'timeRemaining', value: timeRemaining });
+      items.push({ key: 'timeRemaining', value: timeRemaining, tone: fuelHeaderTone(status) });
     }
   }
 
   return items;
+}
+
+function fuelHeaderTone(status) {
+  const text = String(status || '').toLowerCase();
+  return text.includes('waiting') || text.includes('disconnected')
+    ? 'waiting'
+    : 'success';
 }
 
 function formatFuelHeaderTimeRemaining(session) {
@@ -2714,6 +2879,12 @@ function normalizeRoute(route) {
 function normalizePreviewMode(mode) {
   const normalized = String(mode || '').trim().toLowerCase();
   return ['practice', 'qualifying', 'race'].includes(normalized) ? normalized : 'off';
+}
+
+function sessionKey(label) {
+  const normalized = String(label || '').trim().toLowerCase();
+  if (normalized === 'test') return 'practice';
+  return normalized === 'qual' ? 'qualifying' : normalized;
 }
 
 function themeCssVariables() {

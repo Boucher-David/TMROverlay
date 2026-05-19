@@ -143,7 +143,7 @@ internal static class SessionWeatherOverlayViewModel
         };
         AddIfAvailable(sessionRows, eventRow);
         sessionRows.Add(trackRow);
-        sessionRows.Add(lapsRow);
+        AddIfAvailable(sessionRows, lapsRow);
         var weatherRows = new List<SimpleTelemetryRowViewModel>
         {
             surfaceRow,
@@ -242,9 +242,14 @@ internal static class SessionWeatherOverlayViewModel
     private static bool IsRacePreGreen(LiveSessionModel session)
     {
         return session.SessionState is >= 1 and <= 3
-            && (ContainsRace(session.SessionType)
-                || ContainsRace(session.SessionName)
-                || ContainsRace(session.EventType));
+            && IsRaceSession(session);
+    }
+
+    private static bool IsRaceSession(LiveSessionModel session)
+    {
+        return ContainsRace(session.SessionType)
+            || ContainsRace(session.SessionName)
+            || ContainsRace(session.EventType);
     }
 
     private static bool ContainsRace(string? value)
@@ -266,13 +271,18 @@ internal static class SessionWeatherOverlayViewModel
         LiveRaceProgressModel raceProgress,
         LiveRaceProjectionModel raceProjection)
     {
-        var remain = FormatLapCount(session.SessionLapsRemain)
-            ?? FormatEstimatedLapCount(raceProjection.EstimatedTeamLapsRemaining)
-            ?? FormatEstimatedLapCount(raceProgress.RaceLapsRemaining);
-        var total = FormatLapCount(session.SessionLapsTotal)
-            ?? FormatEstimatedTotalLaps(raceProjection)
-            ?? FormatEstimatedTotalLaps(raceProgress)
-            ?? FormatLapCount(session.RaceLaps);
+        var isRaceSession = IsRaceSession(session);
+        var remain = FormatLapCount(session.SessionLapsRemain);
+        var total = FormatLapCount(session.SessionLapsTotal);
+        if (isRaceSession)
+        {
+            remain ??= FormatEstimatedLapCount(raceProjection.EstimatedTeamLapsRemaining)
+                ?? FormatEstimatedLapCount(raceProgress.RaceLapsRemaining);
+            total ??= FormatEstimatedTotalLaps(raceProjection)
+                ?? FormatEstimatedTotalLaps(raceProgress)
+                ?? FormatLapCount(session.RaceLaps);
+        }
+
         return (remain, total);
     }
 

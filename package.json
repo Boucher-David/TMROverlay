@@ -9,6 +9,7 @@
     "test:browser:playwright": "playwright test --grep \"application|settings\"",
     "test:localhost": "npm run test:localhost:unit && npm run test:localhost:playwright",
     "test:localhost:unit": "vitest run tests/browser-overlays/browserOverlayShell.test.js tests/browser-overlays/overlayCatalogueBehaviour.test.js tests/browser-overlays/standingsRendering.test.js tests/browser-overlays/relativeRendering.test.js",
+    "test:settings-effects": "vitest run --bail=0 tests/browser-overlays/reviewServerContracts.test.js tests/browser-overlays/settingsEffectMatrix.test.js",
     "test:localhost:playwright": "playwright test --grep-invert \"application|settings\"",
     "test:browser:install": "playwright install chromium",
     "review:browser": "node tools/browser-review/server.mjs",

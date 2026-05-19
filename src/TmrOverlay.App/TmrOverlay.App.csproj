@@ -42,6 +42,7 @@
     </Content>
     <Content Include="Overlays\BrowserSources\Assets\**\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
     <Content Include="..\..\shared\tmr-overlay-contract.json" Link="shared\tmr-overlay-contract.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

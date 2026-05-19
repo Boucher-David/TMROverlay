@@ -8,14 +8,27 @@ TmrBrowserOverlay.register({
     carRadarDisplayModel = await fetchOverlayModel('car-radar');
   },
   render() {
+    if (carRadarDisplayModel?.shouldRender === false) {
+      modelRootOpacity = rootOpacityFromModel(carRadarDisplayModel);
+      applyOverlayOpacity(0);
+      clearRadarSurface();
+      renderHeaderItems(carRadarDisplayModel, '');
+      clearFooterSource();
+      return;
+    }
+
     const renderModel = carRadarDisplayModel?.carRadar?.renderModel || null;
     if (!isRenderableModel(renderModel)) {
+      modelRootOpacity = rootOpacityFromModel(carRadarDisplayModel);
+      applyOverlayOpacity(1);
       clearRadarSurface();
       renderHeaderItems(carRadarDisplayModel, carRadarDisplayModel?.status || 'waiting');
       renderFooterSource(carRadarDisplayModel);
       return;
     }
 
+    modelRootOpacity = rootOpacityFromModel(carRadarDisplayModel);
+    applyOverlayOpacity(1);
     if (renderModel.shouldRender) {
       displayedRenderModel = renderModel;
       clearFadeTimer();

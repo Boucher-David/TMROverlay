@@ -1557,7 +1557,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 AirTempC: ReadDouble(sdk, "AirTemp"),
                 TrackTempCrewC: ReadDouble(sdk, "TrackTempCrew"),
                 TrackWetness: ReadInt32(sdk, "TrackWetness"),
-                WeatherDeclaredWet: ReadBoolean(sdk, "WeatherDeclaredWet"),
+                WeatherDeclaredWet: ReadNullableBoolean(sdk, "WeatherDeclaredWet"),
                 PlayerTireCompound: ReadInt32(sdk, "PlayerTireCompound"),
                 Skies: ReadNullableInt32(sdk, "Skies"),
                 PrecipitationPercent: ReadNullableDouble(sdk, "Precipitation"),

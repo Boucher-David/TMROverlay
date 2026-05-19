@@ -537,7 +537,7 @@ internal static class SettingsOverlayTabSections
 
     private static string BrowserSizeText(OverlayDefinition definition, OverlaySettings settings)
     {
-        var recommendedSize = BrowserOverlayRecommendedSize.For(definition, settings);
+        var recommendedSize = BrowserOverlayRecommendedSize.ScaledFor(definition, settings);
         return $"{recommendedSize.Width}x{recommendedSize.Height}";
     }
 

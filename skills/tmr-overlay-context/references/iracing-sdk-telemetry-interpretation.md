@@ -69,8 +69,8 @@ selected session.
 | Flag | Meaning |
 | --- | --- |
 | `Checkered`, `White`, `Green`, `Yellow`, `Red`, `Blue` | Race-control flags. |
-| `YellowWaving`, `Caution`, `CautionWaving` | Caution/waving variants. |
-| `OneLapToGreen`, `GreenHeld` | Pre-green/start-control context. |
+| `YellowWaving`, `Debris`, `Caution`, `CautionWaving` | Yellow-family variants. Keep debris visually distinct from plain yellow; caution variants usually indicate a specific safety-car/caution-period state rather than generic yellow. |
+| `OneLapToGreen`, `GreenHeld` | Pre-green/start-control context. `OneLapToGreen` is a caution-period restart state, not just a generic yellow. |
 | `TenToGo`, `FiveToGo` | Race-distance countdown flags. |
 | `Black`, `Disqualify`, `Furled`, `Repair` | Driver flag/service states. |
 | `StartHidden`, `StartReady`, `StartSet`, `StartGo` | Start-light states. |

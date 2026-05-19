@@ -12,7 +12,8 @@ import {
   renderOverlayIndexHtml,
   renderAppValidatorReviewHtml,
   renderInstallerReviewHtml,
-  renderSettingsGeneralReviewHtml
+  renderSettingsGeneralReviewHtml,
+  settingsBrowserSourceSize
 } from '../../tests/browser-overlays/browserOverlayAssets.js';
 
 const port = Number.parseInt(process.env.TMR_BROWSER_REVIEW_PORT || '5177', 10);
@@ -34,11 +35,17 @@ const assetBackedReviewOverlayModelIds = new Set([
   'stream-chat'
 ]);
 const opacityExcludedOverlayIds = new Set([
-  'stream-chat',
   'car-radar',
   'flags',
   'garage-cover',
   'track-map'
+]);
+const collapsibleBrowserSourceChromeIds = new Set([
+  'standings',
+  'relative',
+  'gap-to-leader',
+  'session-weather',
+  'pit-service'
 ]);
 let reloadTimer = null;
 
@@ -475,6 +482,13 @@ function overlayIdFromPath(path) {
 function reviewLiveSnapshot(previewMode = 'off', searchParams = new URLSearchParams()) {
   const sessionKind = previewMode === 'off' ? 'practice' : previewMode;
   const sessionType = sessionKind === 'qualifying' ? 'Qualify' : titleCase(sessionKind);
+  const inputTrace = reviewInputTrace();
+  const currentInputs = inputTrace[inputTrace.length - 1] || {
+    throttle: 0,
+    brake: 0,
+    clutch: 0,
+    brakeAbsActive: false
+  };
   const live = freshLiveSnapshot({
     session: {
       hasData: true,
@@ -491,15 +505,15 @@ function reviewLiveSnapshot(previewMode = 'off', searchParams = new URLSearchPar
     },
     inputs: {
       hasData: true,
-      throttle: 0.78,
-      brake: 0.16,
-      clutch: 0,
+      throttle: currentInputs.throttle,
+      brake: currentInputs.brake,
+      clutch: currentInputs.clutch,
       steeringWheelAngle: -0.18,
       gear: sessionKind === 'race' ? 6 : 4,
       rpm: sessionKind === 'race' ? 7900 : 7120,
       speedMetersPerSecond: sessionKind === 'race' ? 77.889366 : 63.4,
-      brakeAbsActive: true,
-      trace: reviewInputTrace()
+      brakeAbsActive: currentInputs.brakeAbsActive,
+      trace: inputTrace
     },
     raceEvents: {
       hasData: true,
@@ -709,7 +723,7 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
       hasImage: overlayState.garageHasImage === true,
       imageVersion: overlayState.garageHasImage === true ? 'review' : null,
       fallbackReason: overlayState.garageHasImage === true ? null : 'not_configured',
-      previewVisible: overlayState.garagePreviewVisible === true || previewMode !== 'off'
+      previewVisible: overlayState.garagePreviewVisible === true
     };
   }
 
@@ -817,6 +831,7 @@ function reviewAllFlags() {
     { kind: 'green', category: 'green', label: 'Green', detail: null, tone: 'success' },
     { kind: 'blue', category: 'blue', label: 'Blue', detail: null, tone: 'info' },
     { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: null, tone: 'warning' },
+    { kind: 'debris', category: 'yellow', label: 'Debris', detail: null, tone: 'warning' },
     { kind: 'caution', category: 'yellow', label: 'Caution', detail: 'waving', tone: 'warning' },
     { kind: 'red', category: 'critical', label: 'Red', detail: null, tone: 'error' },
     { kind: 'black', category: 'critical', label: 'Black', detail: null, tone: 'error' },
@@ -926,31 +941,422 @@ function reviewTimingRow(carIdx, overallPosition, classPosition, lapDistPct, car
 
 function reviewInputTrace() {
   return Array.from({ length: 180 }, (_, index) => {
-    const t = index / 10;
-    const overlapWindow = index >= 52 && index <= 138;
-    const throttle = Math.max(0, Math.min(1, 0.58 + Math.sin(t) * 0.32));
-    const brake = overlapWindow
-      ? Math.max(0, Math.min(1, throttle + Math.sin(index / 4) * 0.018))
-      : Math.max(0, Math.min(1, 0.56 + Math.sin(t * 0.96 + 0.6) * 0.32));
+    const t = index / 18;
+    const braking = Math.max(
+      inputPulse(index, 38, 7) * 0.94,
+      inputPulse(index, 86, 8) * 0.86,
+      inputPulse(index, 136, 7) * 0.98);
+    let brake = Math.max(0, Math.min(1, braking));
+    let throttle = Math.max(0, Math.min(1, 0.82 + Math.sin(t * 1.15) * 0.18));
+    throttle = Math.max(0, Math.min(1, throttle * (1 - Math.min(1, brake * 1.08))));
+    let clutch = Math.max(0, Math.min(1, 1 - Math.max(
+      inputPulse(index, 24, 2.5) * 0.72,
+      inputPulse(index, 64, 2.4) * 0.58,
+      inputPulse(index, 113, 2.4) * 0.62,
+      inputPulse(index, 154, 2.6) * 0.7)));
+    if (index < 16) {
+      throttle = 1;
+      brake = 0;
+      clutch = 1;
+    } else if (index >= 166) {
+      throttle = 0;
+      brake = 1;
+      clutch = 1;
+    }
     return {
       throttle,
       brake,
-      clutch: Math.max(0, Math.min(1, 0.08 + Math.sin(t * 0.35) * 0.06)),
-      brakeAbsActive: index > 112 && index < 132
+      clutch,
+      brakeAbsActive: index > 112 && index < 132 || index >= 166
     };
   });
 }
 
+function inputPulse(index, center, width) {
+  const distance = (index - center) / width;
+  return Math.exp(-(distance * distance));
+}
+
 function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
+  const hiddenModel = hiddenProductDisplayModel(overlayId, previewMode);
+  if (hiddenModel) {
+    return withEffectiveSettingsEvidence({ ...hiddenModel, rootOpacity: 1 }, overlayId, previewMode, searchParams);
+  }
+
   const model = reviewDisplayModel(overlayId, previewMode, searchParams);
-  if (!model || opacityExcludedOverlayIds.has(overlayId)) {
-    return model ? { ...model, rootOpacity: 1 } : model;
+  if (!model) {
+    return model;
+  }
+
+  if (opacityExcludedOverlayIds.has(overlayId)) {
+    return withEffectiveSettingsEvidence({ ...model, rootOpacity: 1 }, overlayId, previewMode, searchParams);
   }
 
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const percent = Number(overlayState.opacityPercent ?? 100);
   const opacity = Number.isFinite(percent) ? Math.max(0.2, Math.min(1, percent / 100)) : 1;
-  return { ...model, rootOpacity: opacity };
+  return withEffectiveSettingsEvidence({ ...model, rootOpacity: opacity }, overlayId, previewMode, searchParams);
+}
+
+function hiddenProductDisplayModel(overlayId, previewMode = 'off') {
+  const overlayState = reviewAppState.overlays[overlayId] || {};
+  const session = sessionKeyFromPreview(previewMode);
+  const overlayDisabled = Object.hasOwn(overlayState, 'enabled') && overlayState.enabled === false;
+  const sessionDisabled = Object.hasOwn(overlayState?.sessions || {}, session) && overlayState.sessions[session] === false;
+  const noRenderableContent = !reviewHasRenderableContent(overlayId, overlayState, session);
+  if (!overlayDisabled && !sessionDisabled && !noRenderableContent) {
+    return null;
+  }
+
+  const page = browserOverlayPage(overlayId);
+  return {
+    overlayId,
+    title: page.title,
+    status: overlayDisabled
+      ? 'disabled | product hidden'
+      : sessionDisabled
+        ? 'hidden | session disabled'
+        : 'hidden | no enabled content',
+    source: '',
+    bodyKind: hiddenBodyKind(overlayId),
+    columns: [],
+    rows: [],
+    metrics: [],
+    points: [],
+    headerItems: [],
+    shouldRender: false
+  };
+}
+
+function reviewHasRenderableContent(overlayId, overlayState, session) {
+  if (overlayId === 'gap-to-leader') {
+    return Number(overlayState?.carsAhead ?? 5) > 0 || Number(overlayState?.carsBehind ?? 5) > 0;
+  }
+
+  const renderableContentOverlays = new Set([
+    'standings',
+    'relative',
+    'session-weather',
+    'pit-service',
+    'input-state',
+    'flags'
+  ]);
+  if (!renderableContentOverlays.has(overlayId)) {
+    return true;
+  }
+
+  return reviewEffectiveContentRows(overlayId)
+    .some((row) => contentLabelsEnabled(overlayState, [row.key, row.label].filter(Boolean), row.defaultEnabled, session));
+}
+
+function hiddenBodyKind(overlayId) {
+  return {
+    standings: 'table',
+    relative: 'table',
+    'fuel-calculator': 'metrics',
+    'session-weather': 'metrics',
+    'pit-service': 'metrics',
+    'input-state': 'inputs',
+    'car-radar': 'car-radar',
+    'gap-to-leader': 'graph',
+    'track-map': 'track-map',
+    flags: 'flags',
+    'garage-cover': 'garage-cover',
+    'stream-chat': 'stream-chat'
+  }[overlayId] || 'table';
+}
+
+function withEffectiveSettingsEvidence(model, overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
+  return {
+    ...model,
+    effectiveSettings: reviewEffectiveSettings(model, overlayId, previewMode, searchParams)
+  };
+}
+
+function reviewEffectiveSettings(model, overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
+  const normalizedPreviewMode = normalizePreviewMode(previewMode);
+  const session = sessionKeyFromPreview(previewMode);
+  const overlayState = reviewAppState.overlays[overlayId] || {};
+  const effectiveOverlayState = effectiveSettingsOverlayState(overlayId, overlayState, previewMode, searchParams);
+  const fixture = fixtureVariant(searchParams) || null;
+  return {
+    overlayId,
+    previewMode: normalizedPreviewMode,
+    sources: {
+      browserReview: { applied: true, fixtureVariant: fixture },
+      localhostObs: { applied: true, fixtureVariant: fixture },
+      windowsNative: { applied: true, fixtureVariant: fixture }
+    },
+    rendered: {
+      bodyKind: model?.bodyKind || null,
+      shouldRender: model?.shouldRender !== false,
+      rowCount: effectiveRenderedRowCount(model),
+      headerItems: (model?.headerItems || []).map((item) => ({
+        key: item?.key || null,
+        value: item?.value || '',
+        tone: normalizeHeaderTone(item?.tone)
+      })),
+      browserSource: reviewEffectiveBrowserSource(overlayId, effectiveOverlayState, normalizedPreviewMode)
+    },
+    settings: reviewEffectiveSettingList(overlayId, effectiveOverlayState, session, searchParams)
+  };
+}
+
+function reviewEffectiveBrowserSource(overlayId, overlayState, previewMode) {
+  const sourceSize = settingsBrowserSourceSize(overlayId, overlayState, previewMode);
+  const opacityPercent = opacityExcludedOverlayIds.has(overlayId)
+    ? 100
+    : clampInteger(overlayState?.opacityPercent, 100, overlayId === 'track-map' ? 0 : 20, 100);
+  return {
+    ...sourceSize,
+    opacity: Number((opacityPercent / 100).toFixed(3)),
+    opacityPercent
+  };
+}
+
+function effectiveRenderedRowCount(model) {
+  if (model?.bodyKind === 'stream-chat' && Array.isArray(model?.streamChat?.rows)) {
+    return model.streamChat.rows.length;
+  }
+
+  return (model?.rows || []).length;
+}
+
+function effectiveSettingsOverlayState(overlayId, overlayState, previewMode = 'off', searchParams = new URLSearchParams()) {
+  let effectiveState = overlayState;
+  if (overlayId === 'relative' && fixtureVariant(searchParams) === 'rightmost-evidence') {
+    effectiveState = {
+      ...effectiveState,
+      content: {
+        ...(effectiveState.content || {}),
+        'Pit status': true,
+        'Pit status.race': true,
+        'relative.content.relative.pit.enabled': true,
+        'relative.content.relative.pit.enabled.race': true
+      }
+    };
+  }
+
+  if (fixtureVariant(searchParams) === 'chrome-off' && collapsibleBrowserSourceChromeIds.has(overlayId)) {
+    const session = sessionKeyFromPreview(previewMode);
+    effectiveState = {
+      ...effectiveState,
+      chrome: {
+        ...(effectiveState.chrome || {}),
+        header: {
+          ...(effectiveState.chrome?.header || {}),
+          'Time remaining': {
+            ...(effectiveState.chrome?.header?.['Time remaining'] || {}),
+            [session]: false
+          }
+        }
+      }
+    };
+  }
+
+  return effectiveState;
+}
+
+function reviewEffectiveSettingList(overlayId, overlayState, session, searchParams = new URLSearchParams()) {
+  const settings = [
+    effectiveSetting('overlayEnabled', overlayState.enabled === true),
+    effectiveSetting(`session.${session}.enabled`, overlaySessionEnabled(overlayId, overlayState, session)),
+    effectiveSetting('general.unitSystem', reviewAppState.unitSystem),
+    effectiveSetting('scalePercent', clampInteger(overlayState?.scalePercent, 100, 60, 200)),
+    effectiveSetting(
+      'opacityPercent',
+      clampInteger(
+        overlayState?.opacityPercent,
+        overlayId === 'track-map' ? 0 : 100,
+        overlayId === 'track-map' ? 0 : 20,
+        100))
+  ];
+
+  if (overlayId === 'relative') {
+    settings.push(effectiveSetting('carsEachSide', clampInteger(overlayState?.carsEachSide, 5, 0, 8)));
+  }
+
+  if (overlayId === 'standings') {
+    settings.push(
+      effectiveContentSetting(overlayState, session, 'standings.class-separators.enabled', 'Class separators', true),
+      effectiveSetting('otherClassRows', clampInteger(overlayState?.otherClassRows, 2, 0, 6))
+    );
+  }
+
+  if (overlayId === 'gap-to-leader') {
+    const carsAhead = clampInteger(overlayState?.carsAhead, 5, 0, 12);
+    const carsBehind = clampInteger(overlayState?.carsBehind, 5, 0, 12);
+    settings.push(
+      effectiveSetting('carsAhead', carsAhead),
+      effectiveSetting('carsBehind', carsBehind),
+      effectiveSetting('gap.cars-window', { carsAhead, carsBehind })
+    );
+  }
+
+  if (overlayId === 'stream-chat') {
+    settings.push(effectiveSetting('stream-chat.provider', reviewSettings(overlayId, 'race', searchParams).provider));
+  }
+
+  if (overlayId === 'garage-cover') {
+    settings.push(
+      effectiveSetting('garage-cover.previewVisible', reviewSettings(overlayId, 'race', searchParams).previewVisible === true),
+      effectiveContentSetting(overlayState, session, 'Content', 'Content', true)
+    );
+  }
+
+  if (supportsSharedChrome(overlayId)) {
+    settings.push(effectiveSetting(
+      `chrome.header.time-remaining.${session}`,
+      chromeEnabled(overlayState, 'header', 'Time remaining', session, true),
+      session));
+  }
+
+  if (overlayId === 'input-state') {
+    settings.push(effectiveSetting(
+      'input-state.trace.*',
+      contentLabelsEnabled(overlayState, [
+        'input-state.trace.throttle',
+        'input-state.trace.brake',
+        'input-state.trace.clutch',
+        'Throttle trace',
+        'Brake trace',
+        'Clutch trace'
+      ], true, session),
+      session));
+  }
+
+  for (const row of reviewEffectiveContentRows(overlayId)) {
+    settings.push(effectiveContentSetting(overlayState, session, row.key, row.label, row.defaultEnabled));
+  }
+
+  return settings;
+}
+
+function overlaySessionEnabled(overlayId, overlayState, session) {
+  if (Object.hasOwn(overlayState?.sessions || {}, session)) {
+    return overlayState.sessions[session] === true;
+  }
+
+  return overlayId === 'gap-to-leader' ? session === 'race' : true;
+}
+
+function effectiveSetting(key, value, session = null) {
+  return session
+    ? { key, value, session }
+    : { key, value };
+}
+
+function effectiveContentSetting(overlayState, session, key, label, defaultEnabled) {
+  return effectiveSetting(
+    key,
+    contentLabelsEnabled(overlayState, [key, label].filter(Boolean), defaultEnabled, session),
+    session);
+}
+
+function reviewEffectiveContentRows(overlayId) {
+  return {
+    standings: [
+      ['standings.content.standings.class-position.enabled', 'Class position', true],
+      ['standings.content.standings.car-number.enabled', 'Car number', true],
+      ['standings.content.standings.driver.enabled', 'Driver', true],
+      ['standings.content.standings.gap.enabled', 'Class gap', true],
+      ['standings.content.standings.interval.enabled', 'Previous interval', true],
+      ['standings.content.standings.fastest-lap.enabled', 'Fastest lap', true],
+      ['standings.content.standings.last-lap.enabled', 'Last lap', true],
+      ['standings.content.standings.pit.enabled', 'Pit status', true]
+    ],
+    relative: [
+      ['relative.content.relative.position.enabled', 'Relative position', true],
+      ['relative.content.relative.driver.enabled', 'Driver', true],
+      ['relative.content.relative.gap.enabled', 'Relative delta', true],
+      ['relative.content.relative.pit.enabled', 'Pit status', false]
+    ],
+    'track-map': [
+      ['track-map.sector-boundaries.enabled', 'Sector boundaries', true]
+    ],
+    'stream-chat': [
+      ['stream-chat.twitch.author-color', 'Author color', true],
+      ['stream-chat.twitch.badges', 'Badges', true],
+      ['stream-chat.twitch.bits', 'Bits', true],
+      ['stream-chat.twitch.first-message', 'First message', true],
+      ['stream-chat.twitch.replies', 'Replies', true],
+      ['stream-chat.twitch.timestamps', 'Timestamps', true],
+      ['stream-chat.twitch.emotes', 'Emotes', true],
+      ['stream-chat.twitch.alerts', 'Alerts', true],
+      ['stream-chat.twitch.message-ids', 'Message IDs', false]
+    ],
+    'input-state': [
+      ['input-state.trace.throttle', 'Throttle trace', true],
+      ['input-state.trace.brake', 'Brake trace', true],
+      ['input-state.trace.clutch', 'Clutch trace', true],
+      ['input-state.current.throttle', 'Throttle %', true],
+      ['input-state.current.brake', 'Brake %', true],
+      ['input-state.current.clutch', 'Clutch %', true],
+      ['input-state.current.steering', 'Steering wheel', true],
+      ['input-state.current.gear', 'Gear', true],
+      ['input-state.current.speed', 'Speed', true]
+    ],
+    'car-radar': [
+      ['radar.multiclass-warning', 'Faster-class warning', true]
+    ],
+    flags: [
+      ['flags.show-green', 'Green', true],
+      ['flags.show-blue', 'Blue', true],
+      ['flags.show-yellow', 'Yellow', true],
+      ['flags.show-critical', 'Red / black', true],
+      ['flags.show-finish', 'White / checkered', true]
+    ],
+    'session-weather': [
+      ['session-weather.session.type.enabled', 'Session type', true],
+      ['session-weather.session.name.enabled', 'Session name', true],
+      ['session-weather.session.mode.enabled', 'Session mode', true],
+      ['session-weather.clock.elapsed.enabled', 'Elapsed time', true],
+      ['session-weather.clock.remaining.enabled', 'Remaining time', true],
+      ['session-weather.clock.total.enabled', 'Total time', true],
+      ['session-weather.event.type.enabled', 'Event type', true],
+      ['session-weather.event.car.enabled', 'Car', true],
+      ['session-weather.track.name.enabled', 'Track name', true],
+      ['session-weather.track.length.enabled', 'Track length', true],
+      ['session-weather.laps.remaining.enabled', 'Laps remaining', true],
+      ['session-weather.laps.total.enabled', 'Laps total', true],
+      ['session-weather.surface.wetness.enabled', 'Wetness', true],
+      ['session-weather.surface.declared.enabled', 'Declared surface', true],
+      ['session-weather.surface.rubber.enabled', 'Rubber', true],
+      ['session-weather.sky.skies.enabled', 'Skies', true],
+      ['session-weather.sky.weather.enabled', 'Weather', true],
+      ['session-weather.sky.rain.enabled', 'Rain', true],
+      ['session-weather.wind.direction.enabled', 'Wind direction', true],
+      ['session-weather.wind.speed.enabled', 'Wind speed', true],
+      ['session-weather.wind.facing.enabled', 'Facing wind', true],
+      ['session-weather.temps.air.enabled', 'Air temp', true],
+      ['session-weather.temps.track.enabled', 'Track temp', true],
+      ['session-weather.atmosphere.humidity.enabled', 'Humidity', true],
+      ['session-weather.atmosphere.fog.enabled', 'Fog', true],
+      ['session-weather.atmosphere.pressure.enabled', 'Pressure', true]
+    ],
+    'pit-service': [
+      ['pit-service.session.time.enabled', 'Session time', true],
+      ['pit-service.session.laps.enabled', 'Session laps', true],
+      ['pit-service.signal.release.enabled', 'Release', true],
+      ['pit-service.signal.status.enabled', 'Pit status', true],
+      ['pit-service.service.fuel-requested.enabled', 'Fuel requested', true],
+      ['pit-service.service.fuel-selected.enabled', 'Fuel selected', true],
+      ['pit-service.service.tearoff-requested.enabled', 'Tearoff requested', true],
+      ['pit-service.service.repair-required.enabled', 'Required repair', true],
+      ['pit-service.service.repair-optional.enabled', 'Optional repair', true],
+      ['pit-service.service.fast-repair-selected.enabled', 'Fast repair selected', true],
+      ['pit-service.service.fast-repair-available.enabled', 'Fast repairs available', true],
+      ['pit-service.tire-analysis.compound', 'Compound', true],
+      ['pit-service.tire-analysis.change', 'Change request', true],
+      ['pit-service.tire-analysis.set-limit', 'Set limit', true],
+      ['pit-service.tire-analysis.sets-available', 'Sets available', true],
+      ['pit-service.tire-analysis.sets-used', 'Sets used', true],
+      ['pit-service.tire-analysis.pressure', 'Pressure', true],
+      ['pit-service.tire-analysis.temperature', 'Temperature', true],
+      ['pit-service.tire-analysis.wear', 'Wear', true],
+      ['pit-service.tire-analysis.distance', 'Distance', true]
+    ]
+  }[overlayId]?.map(([key, label, defaultEnabled]) => ({ key, label, defaultEnabled })) || [];
 }
 
 function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
@@ -971,7 +1377,21 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
     case 'standings':
       return withChrome(filterTableModelContent(filterStandingsReviewRows(standingsDisplayModel(previewLabel), overlayState), 'standings', overlayState, session));
     case 'relative':
-      return withChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), overlayState), 'relative', overlayState, session));
+      {
+        const effectiveOverlayState = fixture === 'rightmost-evidence'
+          ? {
+              ...overlayState,
+              content: {
+                ...(overlayState.content || {}),
+                'Pit status': true,
+                'Pit status.race': true,
+                'relative.content.relative.pit.enabled': true,
+                'relative.content.relative.pit.enabled.race': true
+              }
+            }
+          : overlayState;
+        return withChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), effectiveOverlayState), 'relative', effectiveOverlayState, session));
+      }
     case 'fuel-calculator':
       {
         if (fixture === 'fuel-waiting') {
@@ -1020,29 +1440,52 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
             metricSegment('Save', 'None', 'success')
           ])
         ];
-        const metricSections = [
-          { title: 'Race Information', rows: raceRows }
-        ];
         const usageLabel = session === 'qualifying'
           ? 'Quali Usage'
           : session === 'practice'
             ? 'Practice Usage'
             : null;
+        const usageSection = usageLabel == null ? null : {
+          title: 'Fuel Usage',
+          rows: [
+            metricRow(usageLabel, `min ${formatFuelPerLap(3.0)} | avg ${formatFuelPerLap(3.1)} | max ${formatFuelPerLap(3.2)}`, 'info', [
+              metricSegment('Min', formatFuelPerLap(3.0), 'info'),
+              metricSegment('Avg', formatFuelPerLap(3.1), 'info'),
+              metricSegment('Max', formatFuelPerLap(3.2), 'info'),
+              metricSegment('Laps', '3 laps', 'info')
+            ])
+          ]
+        };
+        const metricSections = usageLabel == null
+          ? [{ title: 'Race Information', rows: raceRows }]
+          : [
+              {
+                title: 'Fuel Range',
+                rows: [
+                  metricRow('Fuel', `${formatFuelVolume(74.0)} | range 23.9 laps | tank 34.2 laps`, 'info', [
+                    metricSegment('Level', formatFuelVolume(74.0), 'info'),
+                    metricSegment('Usage', formatFuelPerLap(3.1), 'info'),
+                    metricSegment('Range', '23.9 laps', 'info'),
+                    metricSegment('Tank', '34.2 laps', 'info')
+                  ])
+                ]
+              },
+              usageSection
+            ].filter(Boolean);
         if (usageLabel != null) {
-          metricSections.push({
-            title: 'Fuel Usage',
-            rows: [
-              metricRow(usageLabel, `min ${formatFuelPerLap(3.0)} | avg ${formatFuelPerLap(3.1)} | max ${formatFuelPerLap(3.2)}`, 'info', [
-                metricSegment('Min', formatFuelPerLap(3.0), 'info'),
-                metricSegment('Avg', formatFuelPerLap(3.1), 'info'),
-                metricSegment('Max', formatFuelPerLap(3.2), 'info'),
-                metricSegment('Laps', '3 laps', 'info')
-              ])
-            ]
-          });
+          return withChrome(metricsModel(
+            'fuel-calculator',
+            'Fuel Calculator',
+            'fuel range',
+            metricSections.flatMap((section) => section.rows),
+            `usage ${formatFuelPerLap(3.1)} (measured green lap) | range 23.9 laps | 34.2 laps/tank | history user | measured min/avg/max 3.0/3.1/3.2 L/lap`,
+            [],
+            metricSections,
+            [
+              { key: 'timeRemaining', value: '06:37:08' }
+            ]));
         }
-        const visibleStintRows = usageLabel != null ? stintRows.slice(0, 1) : stintRows;
-        metricSections.push({ title: 'Stint Targets', rows: visibleStintRows });
+        metricSections.push({ title: 'Stint Targets', rows: stintRows });
         return withChrome(metricsModel(
           'fuel-calculator',
           'Fuel Calculator',
@@ -1395,7 +1838,7 @@ function reviewGapPoints(overlayState) {
     return [];
   }
 
-  return [249.8, 247.2, 245.4, 243.6, 241.9, 239.7];
+  return [240.8, 240.1, 239.5, 238.8, 238.2, 237.6, 237.1, 236.5];
 }
 
 function reviewEmptyGapGraph() {
@@ -1430,14 +1873,14 @@ function reviewGapGraph() {
   const endSeconds = startSeconds + 420;
   const timestampStart = Date.parse('2026-05-17T12:00:00.000Z');
   const trend = [
-    { offset: 0, p1: 0, altP1: 5.4, focus: 249.8 },
-    { offset: 60, p1: 0.4, altP1: 4.8, focus: 247.2 },
-    { offset: 120, p1: 0.1, altP1: 4.3, focus: 245.4 },
-    { offset: 180, p1: 0.6, altP1: 3.7, focus: 243.6 },
-    { offset: 240, p1: 0.3, altP1: 3.2, focus: 241.9 },
-    { offset: 300, p1: 0.2, altP1: 2.6, focus: 240.5 },
-    { offset: 360, p1: 0.5, altP1: 2.1, focus: 239.7 },
-    { offset: 420, p1: 0.0, altP1: 1.8, focus: 238.9 }
+    { offset: 0, leader: 0, ahead: 234.0, focus: 240.8, threat: 251.0 },
+    { offset: 60, leader: 0.4, ahead: 234.2, focus: 240.1, threat: 249.4 },
+    { offset: 120, leader: 0.1, ahead: 234.4, focus: 239.5, threat: 247.8 },
+    { offset: 180, leader: 0.6, ahead: 234.6, focus: 238.8, threat: 246.2 },
+    { offset: 240, leader: 0.3, ahead: 234.8, focus: 238.2, threat: 244.6 },
+    { offset: 300, leader: 0.2, ahead: 235.0, focus: 237.6, threat: 243.2 },
+    { offset: 360, leader: 0.5, ahead: 235.2, focus: 237.1, threat: 241.8 },
+    { offset: 420, leader: 0.0, ahead: 235.4, focus: 236.5, threat: 240.4 }
   ];
   const point = (sample, carIdx, gapSeconds, isReference, isClassLeader, classPosition, index) => ({
     timestampUtc: new Date(timestampStart + sample.offset * 1000).toISOString(),
@@ -1449,10 +1892,19 @@ function reviewGapGraph() {
     classPosition,
     startsSegment: index === 0
   });
+  const referencePoints = trend.map((sample, index) => point(sample, 42, sample.focus, true, false, 24, index));
+  const threat = { carIdx: 43, label: 'P25', gainSeconds: 5.3 };
+  const focusPit = { seconds: 82, lap: 12, isActive: true };
+  const comparisonPit = { seconds: 88, lap: 12, isActive: false };
+  const threatPit = { seconds: 91, lap: 13, isActive: false };
+  const focusTire = { label: 'Dry', shortLabel: 'D', isWet: false };
+  const comparisonTire = { label: 'Dry', shortLabel: 'D', isWet: false };
+  const threatTire = { label: 'Wet', shortLabel: 'W', isWet: true };
   const series = [
-    reviewGapSeries(8, false, true, 1, trend.map((sample, index) => point(sample, 8, sample.p1, false, true, 1, index))),
-    reviewGapSeries(17, false, true, 1, trend.map((sample, index) => point(sample, 17, sample.altP1, false, true, 1, index))),
-    reviewGapSeries(42, true, false, 24, trend.map((sample, index) => point(sample, 42, sample.focus, true, false, 24, index)))
+    reviewGapSeries(8, false, true, 1, trend.map((sample, index) => point(sample, 8, sample.leader, false, true, 1, index))),
+    reviewGapSeries(41, false, false, 23, trend.map((sample, index) => point(sample, 41, sample.ahead, false, false, 23, index))),
+    reviewGapSeries(42, true, false, 24, referencePoints),
+    reviewGapSeries(43, false, false, 25, trend.map((sample, index) => point(sample, 43, sample.threat, false, false, 25, index)))
   ];
   return {
     series,
@@ -1461,30 +1913,30 @@ function reviewGapGraph() {
     driverChanges: [],
     startSeconds,
     endSeconds,
-    maxGapSeconds: 500,
+    maxGapSeconds: 250,
     lapReferenceSeconds: 525.8,
     selectedSeriesCount: series.length,
     trendMetrics: [
-      { label: '5L', focusGapChangeSeconds: null, chaser: null, state: 'warming', stateLabel: '0.0L' },
-      { label: '10L', focusGapChangeSeconds: null, chaser: null, state: 'warming', stateLabel: '0.0L' },
-      { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'pit', stateLabel: null },
-      { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'pitLap', stateLabel: null },
-      { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null },
-      { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null },
-      { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, comparisonText: '8:13.000' },
-      { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track' }
+      { label: '5L', focusGapChangeSeconds: -1.8, chaser: threat, state: 'ready', stateLabel: null },
+      { label: '10L', focusGapChangeSeconds: -3.4, chaser: threat, state: 'ready', stateLabel: null },
+      { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'pit', stateLabel: null, primaryPit: focusPit, comparisonPit, threatPit },
+      { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'pitLap', stateLabel: null, primaryPit: focusPit, comparisonPit, threatPit },
+      { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, comparisonText: '18L', threatText: '17L' },
+      { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null, primaryTire: focusTire, comparisonTire, threatTire },
+      { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, comparisonText: '8:13.000', threatText: '8:12.120' },
+      { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track', threatText: 'Track' }
     ],
-    activeThreat: null,
-    threatCarIdx: null,
+    activeThreat: { label: '5L', chaser: threat, state: 'ready', focusGapChangeSeconds: null },
+    threatCarIdx: 43,
     metricDeadbandSeconds: 0.25,
-    comparisonLabel: 'P1',
+    comparisonLabel: 'P23',
     scale: {
-      maxGapSeconds: 500,
-      isFocusRelative: false,
-      aheadSeconds: 0,
-      behindSeconds: 0,
-      referencePoints: [],
-      latestReferenceGapSeconds: 0
+      maxGapSeconds: 20,
+      isFocusRelative: true,
+      aheadSeconds: 8,
+      behindSeconds: 8,
+      referencePoints,
+      latestReferenceGapSeconds: 236.5
     }
   };
 }
@@ -1495,7 +1947,7 @@ function reviewGapSeries(carIdx, isReference, isClassLeader, classPosition, poin
     isReference,
     isClassLeader,
     classPosition,
-    alpha: 0.35,
+    alpha: 1,
     isStickyExit: false,
     isStale: false,
     points
@@ -1510,6 +1962,7 @@ function applyReviewChrome(model, overlayId, previewMode, forceChromeOff = false
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const session = sessionKeyFromPreview(previewMode);
   const showTime = !forceChromeOff && chromeEnabled(overlayState, 'header', 'Time remaining', session, true);
+  const fallbackTone = headerToneForModel(overlayId, model);
   return {
     ...model,
     headerItems: (model.headerItems || []).filter((item) => {
@@ -1517,8 +1970,35 @@ function applyReviewChrome(model, overlayId, previewMode, forceChromeOff = false
       if (key === 'timeremaining') return showTime;
       if (key === 'status') return false;
       return true;
-    })
+    }).map((item) => ({
+      ...item,
+      tone: normalizeHeaderTone(item?.tone || fallbackTone)
+    }))
   };
+}
+
+function headerToneForModel(overlayId, model) {
+  const status = String(model?.status || '').toLowerCase();
+  if (model?.shouldRender === false) return 'waiting';
+  if (overlayId === 'standings') return status.includes('waiting') ? 'waiting' : 'info';
+  if (overlayId === 'relative') return status.includes('waiting') ? 'waiting' : 'info';
+  if (overlayId === 'fuel-calculator') return status.includes('waiting') || status.includes('disconnected') ? 'waiting' : 'success';
+  if (overlayId === 'session-weather') return status.includes('unavailable') || status.includes('unknown') ? 'waiting' : 'info';
+  if (overlayId === 'pit-service') {
+    if (status.includes('service active')) return 'error';
+    if (status.includes('ready')) return 'success';
+    return 'info';
+  }
+  if (overlayId === 'gap-to-leader') return status.includes('live') ? 'info' : 'waiting';
+  return status.includes('waiting') || status.includes('hidden') || status.includes('disabled') ? 'waiting' : 'info';
+}
+
+function normalizeHeaderTone(tone) {
+  const token = String(tone || '').trim().toLowerCase();
+  if (token === 'modeled') return 'info';
+  return ['normal', 'waiting', 'info', 'success', 'warning', 'error'].includes(token)
+    ? token
+    : 'normal';
 }
 
 function supportsSharedChrome(overlayId) {
@@ -1585,7 +2065,7 @@ function relativeDisplayModel(previewLabel = 'review fixture', session = 'practi
       { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 38, alignment: 'right' },
       { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
       { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
-      { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 30, alignment: 'right' }
+      { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 48, alignment: 'right' }
     ],
     rows: [
       relativeRow(['3', '#34 Near Ahead', '-2.350', ''], { carClassColorHex: '#33CEFF', relativeLapDelta: showLapRelationship ? 1 : null }),
@@ -1713,7 +2193,7 @@ function tableContentLabel(overlayId, column) {
       'car-number': 'Car number',
       driver: 'Driver',
       gap: 'Class gap',
-      interval: 'Focus interval',
+      interval: 'Previous interval',
       'fastest-lap': 'Fastest lap',
       'last-lap': 'Last lap',
       pit: 'Pit status'
@@ -1733,7 +2213,11 @@ function tableContentLabel(overlayId, column) {
 }
 
 function tableContentDefault(overlayId, label) {
-  return overlayId === 'relative' && label === 'Pit status' ? false : true;
+  if (overlayId === 'relative' && label === 'Pit status') {
+    return false;
+  }
+
+  return true;
 }
 
 function tableModel(overlayId, title, status, rows) {
@@ -1971,7 +2455,7 @@ function standingsDisplayModel(previewLabel = 'review fixture') {
       { label: 'INT', dataKey: 'interval', width: 60, alignment: 'right' },
       { label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
       { label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
-      { label: 'PIT', dataKey: 'pit', width: 30, alignment: 'right' }
+      { label: 'PIT', dataKey: 'pit', width: 48, alignment: 'right' }
     ],
     rows: [
       headerRow('LMP2', '2 cars | ~10 laps', '#33CEFF'),

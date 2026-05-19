@@ -26,6 +26,34 @@ public sealed class AppPerformanceStateTests
     }
 
     [Fact]
+    public void Snapshot_ClassifiesOperationPerformanceBudgets()
+    {
+        var state = new AppPerformanceState();
+
+        state.RecordOperation(AppPerformanceMetricIds.OverlayFlagsPaint, TimeSpan.FromMilliseconds(40));
+        state.RecordOperation(AppPerformanceMetricIds.LocalhostRequest, TimeSpan.FromMilliseconds(400));
+        state.RecordOperation(AppPerformanceMetricIds.OverlaySettingsApply, TimeSpan.FromMilliseconds(90));
+        state.RecordOperation("test.operation", TimeSpan.FromMilliseconds(1));
+
+        var snapshot = state.Snapshot();
+        var paint = Assert.Single(snapshot.Metrics.Where(metric => metric.Id == AppPerformanceMetricIds.OverlayFlagsPaint));
+        var localhost = Assert.Single(snapshot.Metrics.Where(metric => metric.Id == AppPerformanceMetricIds.LocalhostRequest));
+        var settings = Assert.Single(snapshot.Metrics.Where(metric => metric.Id == AppPerformanceMetricIds.OverlaySettingsApply));
+        var unclassified = Assert.Single(snapshot.Metrics.Where(metric => metric.Id == "test.operation"));
+
+        Assert.Equal("overlay-paint", paint.Budget.Category);
+        Assert.Equal(16.667d, paint.Budget.BudgetMilliseconds.GetValueOrDefault());
+        Assert.Equal("over_budget", paint.Budget.Status);
+        Assert.Equal("localhost-request", localhost.Budget.Category);
+        Assert.Equal(250d, localhost.Budget.BudgetMilliseconds.GetValueOrDefault());
+        Assert.Equal("over_budget", localhost.Budget.Status);
+        Assert.Equal("settings-ux", settings.Budget.Category);
+        Assert.Equal("within_budget", settings.Budget.Status);
+        Assert.Equal("unclassified", unclassified.Budget.Category);
+        Assert.Equal("unclassified", unclassified.Budget.Status);
+    }
+
+    [Fact]
     public void Snapshot_CalculatesTelemetryFrameRateFromFrameTimestamps()
     {
         var state = new AppPerformanceState();
@@ -178,12 +206,99 @@ public sealed class AppPerformanceStateTests
 
         Assert.Contains(snapshot.OverlayUpdates, metric =>
             metric.Id == "overlay.standings.window.input_intercept_risk" && metric.Last == 1d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.standings.window.input_intercept_risk_reason_count" && metric.Last == 1d);
         var window = Assert.Single(snapshot.OverlayWindows);
         Assert.True(window.InputInterceptRisk);
+        Assert.Equal(["effectively-invisible"], window.InputInterceptRiskReasons);
     }
 
     [Fact]
-    public void OverlayWindowState_FlagsTopMostNoActivateOverlayRiskWhileSettingsVisible()
+    public void OverlayWindowState_DoesNotFlagTopMostNoActivateOverlayBesideSettingsAsInputRisk()
+    {
+        var state = new AppPerformanceState();
+        var timestamp = DateTimeOffset.Parse("2026-05-09T12:00:00Z");
+
+        state.RecordOverlayWindowState(
+            "relative",
+            timestamp,
+            actualVisible: true,
+            topMost: true,
+            alwaysOnTopSetting: true,
+            inputTransparent: false,
+            noActivate: true,
+            settingsOverlayActive: true,
+            settingsWindowVisible: true,
+            intersectsSettingsWindow: false,
+            settingsWindowInputProtected: false,
+            x: 822,
+            y: 18,
+            width: 438,
+            height: 360,
+            opacity: 0.88d);
+
+        var snapshot = state.Snapshot();
+
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.settings_window_visible" && metric.Last == 1d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 0d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.input_intercept_risk_reason_count" && metric.Last == 0d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.topmost_noactivate_settings_visible_without_overlap" && metric.Last == 1d);
+        var window = Assert.Single(snapshot.OverlayWindows);
+        Assert.True(window.SettingsWindowVisible);
+        Assert.False(window.SettingsWindowIntersects);
+        Assert.False(window.SettingsWindowInputProtected);
+        Assert.False(window.InputInterceptRisk);
+        Assert.Empty(window.InputInterceptRiskReasons);
+    }
+
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(true, 2)]
+    public void OverlayWindowState_FlagsSettingsInputRiskWhenOverlapIsPresent(
+        bool settingsWindowInputProtected,
+        int expectedReasonCount)
+    {
+        var state = new AppPerformanceState();
+        var timestamp = DateTimeOffset.Parse("2026-05-09T12:00:00Z");
+
+        state.RecordOverlayWindowState(
+            "relative",
+            timestamp,
+            actualVisible: true,
+            topMost: true,
+            alwaysOnTopSetting: true,
+            inputTransparent: false,
+            noActivate: true,
+            settingsOverlayActive: false,
+            settingsWindowVisible: true,
+            intersectsSettingsWindow: true,
+            settingsWindowInputProtected,
+            x: 822,
+            y: 18,
+            width: 438,
+            height: 360,
+            opacity: 0.88d);
+
+        var snapshot = state.Snapshot();
+
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 1d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.input_intercept_risk_reason_count" && metric.Last == expectedReasonCount);
+        var window = Assert.Single(snapshot.OverlayWindows);
+        Assert.True(window.InputInterceptRisk);
+        Assert.Contains("settings-window-intersects", window.InputInterceptRiskReasons);
+        Assert.Equal(
+            settingsWindowInputProtected,
+            window.InputInterceptRiskReasons.Contains("settings-window-input-protected", StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void OverlayWindowState_DoesNotFlagSettingsInputProtectionWithoutOverlapAsInputRisk()
     {
         var state = new AppPerformanceState();
         var timestamp = DateTimeOffset.Parse("2026-05-09T12:00:00Z");
@@ -199,7 +314,7 @@ public sealed class AppPerformanceStateTests
             settingsOverlayActive: false,
             settingsWindowVisible: true,
             intersectsSettingsWindow: false,
-            settingsWindowInputProtected: false,
+            settingsWindowInputProtected: true,
             x: 822,
             y: 18,
             width: 438,
@@ -209,12 +324,51 @@ public sealed class AppPerformanceStateTests
         var snapshot = state.Snapshot();
 
         Assert.Contains(snapshot.OverlayUpdates, metric =>
-            metric.Id == "overlay.relative.window.settings_window_visible" && metric.Last == 1d);
+            metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 0d);
         Assert.Contains(snapshot.OverlayUpdates, metric =>
-            metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 1d);
+            metric.Id == "overlay.relative.window.input_intercept_risk_reason_count" && metric.Last == 0d);
         var window = Assert.Single(snapshot.OverlayWindows);
-        Assert.True(window.SettingsWindowVisible);
-        Assert.True(window.InputInterceptRisk);
+        Assert.False(window.InputInterceptRisk);
+        Assert.Empty(window.InputInterceptRiskReasons);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void OverlayWindowState_RecordsSettingsOverlapAndProtectionSignals(
+        bool intersectsSettingsWindow,
+        bool settingsWindowInputProtected)
+    {
+        var state = new AppPerformanceState();
+        var timestamp = DateTimeOffset.Parse("2026-05-09T12:00:00Z");
+
+        state.RecordOverlayWindowState(
+            "relative",
+            timestamp,
+            actualVisible: true,
+            topMost: true,
+            alwaysOnTopSetting: true,
+            inputTransparent: false,
+            noActivate: true,
+            settingsOverlayActive: false,
+            settingsWindowVisible: true,
+            intersectsSettingsWindow,
+            settingsWindowInputProtected,
+            x: 822,
+            y: 18,
+            width: 438,
+            height: 360,
+            opacity: 0.88d);
+
+        var snapshot = state.Snapshot();
+
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.settings_window_intersects" && metric.Last == (intersectsSettingsWindow ? 1d : 0d));
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.settings_window_input_protected" && metric.Last == (settingsWindowInputProtected ? 1d : 0d));
+        var window = Assert.Single(snapshot.OverlayWindows);
+        Assert.Equal(intersectsSettingsWindow, window.SettingsWindowIntersects);
+        Assert.Equal(settingsWindowInputProtected, window.SettingsWindowInputProtected);
     }
 
     [Fact]
@@ -247,9 +401,55 @@ public sealed class AppPerformanceStateTests
             metric.Id == "overlay.relative.window.settings_overlay_active" && metric.Last == 0d);
         Assert.Contains(snapshot.OverlayUpdates, metric =>
             metric.Id == "overlay.relative.window.input_intercept_risk" && metric.Last == 0d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.relative.window.input_intercept_risk_reason_count" && metric.Last == 0d);
         var window = Assert.Single(snapshot.OverlayWindows);
         Assert.False(window.SettingsOverlayActive);
         Assert.False(window.SettingsWindowVisible);
         Assert.False(window.InputInterceptRisk);
+        Assert.Empty(window.InputInterceptRiskReasons);
+    }
+
+    [Fact]
+    public void Snapshot_TracksSettingsApplyLocalhostFailuresAndProcessMemorySignals()
+    {
+        var state = new AppPerformanceState();
+
+        state.RecordSettingsSaveApplyQueued(coalescedRequestCount: 5, timerAlreadyPending: true);
+        state.RecordSettingsSaveApplyFlushed(
+            coalescedRequestCount: 5,
+            queuedFor: TimeSpan.FromMilliseconds(180),
+            succeeded: false);
+        state.RecordLocalhostRequest(
+            "gap-to-leader",
+            statusCode: 500,
+            elapsed: TimeSpan.FromMilliseconds(750),
+            succeeded: false);
+
+        var snapshot = state.Snapshot();
+
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.settings.apply.coalesced_request_count" && metric.Last == 5d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.settings.apply.timer_already_pending" && metric.Last == 1d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.settings.apply.flush_success" && metric.Last == 0d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "overlay.settings.apply.queued_ms" && metric.Maximum == 180d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "localhost.request.route.gap_to_leader.success" && metric.Last == 0d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "localhost.request.route.gap_to_leader.status_code" && metric.Last == 500d);
+        Assert.Contains(snapshot.OverlayUpdates, metric =>
+            metric.Id == "localhost.request.route.gap_to_leader.duration_ms" && metric.P95 == 750d);
+        var queued = Assert.Single(snapshot.OverlayUpdates.Where(metric => metric.Id == "overlay.settings.apply.queued_ms"));
+        var routeDuration = Assert.Single(snapshot.OverlayUpdates.Where(metric => metric.Id == "localhost.request.route.gap_to_leader.duration_ms"));
+        Assert.Equal("settings-ux", queued.Budget.Category);
+        Assert.Equal("over_budget", queued.Budget.Status);
+        Assert.Equal("localhost-request", routeDuration.Budget.Category);
+        Assert.Equal("over_budget", routeDuration.Budget.Status);
+        Assert.True(snapshot.Process.WorkingSetBytes > 0);
+        Assert.True(snapshot.Process.PrivateMemoryBytes > 0);
+        Assert.True(snapshot.Process.ManagedHeapBytes > 0);
     }
 }

@@ -6,6 +6,7 @@ using TmrOverlay.App.Overlays.CarRadar;
 using TmrOverlay.App.Overlays.DesignV2;
 using TmrOverlay.App.Overlays.Relative;
 using TmrOverlay.App.Overlays.StreamChat;
+using TmrOverlay.App.Telemetry;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
@@ -551,7 +552,7 @@ public sealed class OverlayInputTransparencyTests
             ThreatCarIdx: null,
             MetricDeadbandSeconds: 0.25d);
         var plot = new RectangleF(0, 10, 100, 200);
-        var leaderPoint = new DesignV2GapTrendPoint(DateTimeOffset.UtcNow, 5d, 0d, 1, false, true, 1, false);
+        var leaderPoint = new DesignV2GapTrendPoint(DateTimeOffset.UtcNow, 5d, 0d, 1, false, true, 1, 12, false);
         var trailingPoint = leaderPoint with { GapSeconds = 20d, IsClassLeader = false, ClassPosition = 10 };
 
         Assert.Equal(plot.Top, DesignV2LiveOverlayForm.GapGraphPoint(leaderPoint, graph, plot, 20d).Y);
@@ -624,6 +625,18 @@ public sealed class OverlayInputTransparencyTests
             DesignV2LiveOverlayKind.SessionWeather,
             settings,
             RaceSnapshot(timeRemainingSeconds: 600d)));
+    }
+
+    [Fact]
+    public void DesignV2StandingsPreviewTelemetryDoesNotAutoExpandUserSizedWindow()
+    {
+        var preview = SessionPreviewTelemetryFixtures.Build(
+            OverlaySessionKind.Race,
+            DateTimeOffset.UtcNow,
+            generation: 1);
+
+        Assert.False(DesignV2LiveOverlayForm.ShouldAutoExpandStandingsRows(preview));
+        Assert.True(DesignV2LiveOverlayForm.ShouldAutoExpandStandingsRows(RaceSnapshot(timeRemainingSeconds: 600d)));
     }
 
     private static LiveTelemetrySnapshot RaceSnapshot(double timeRemainingSeconds)

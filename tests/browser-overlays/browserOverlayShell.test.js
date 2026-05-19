@@ -92,6 +92,8 @@ describe('browser overlay shell', () => {
     });
 
     expect(currentOverlay.document.getElementById('status')).toBeNull();
+    expect(currentOverlay.document.querySelector('.header').hidden).toBe(true);
+    expect(currentOverlay.document.querySelector('.overlay').classList.contains('has-header-band')).toBe(false);
     expect(currentOverlay.document.querySelector('.header-items').textContent).toBe('');
     expect(currentOverlay.document.getElementById('source').textContent).toBe('');
     expect(currentOverlay.document.getElementById('source').hidden).toBe(true);
@@ -123,9 +125,41 @@ describe('browser overlay shell', () => {
     });
 
     expect(currentOverlay.document.getElementById('status')).toBeNull();
+    expect(currentOverlay.document.querySelector('.header').hidden).toBe(false);
+    expect(currentOverlay.document.querySelector('.overlay').classList.contains('has-header-items')).toBe(true);
     expect(currentOverlay.document.querySelector('.header-items').textContent).toBe('06:37:08');
     expect(currentOverlay.document.getElementById('source').textContent).toBe('');
     expect(currentOverlay.document.getElementById('source').hidden).toBe(true);
+  });
+
+  it('applies model header item tone evidence to visible chrome', async () => {
+    currentOverlay = await renderBrowserOverlay('fuel-calculator', {
+      live: freshLiveSnapshot({}),
+      model: {
+        overlayId: 'fuel-calculator',
+        title: 'Fuel Calculator',
+        status: 'need fuel',
+        source: '',
+        bodyKind: 'metrics',
+        columns: [],
+        rows: [],
+        metrics: [
+          { label: 'Plan', value: '31 laps | 3 stints | 2 stops', tone: 'modeled' }
+        ],
+        points: [],
+        headerItems: [
+          { key: 'timeRemaining', value: '06:37:08', tone: 'warning' }
+        ],
+        gridSections: [],
+        metricSections: []
+      },
+      waitForSelector: '.metric'
+    });
+
+    const timeRemaining = currentOverlay.document.getElementById('time-remaining');
+    expect(timeRemaining.textContent).toBe('06:37:08');
+    expect(timeRemaining.dataset.tone).toBe('warning');
+    expect(timeRemaining.classList.contains('warning')).toBe(true);
   });
 
   it('hides overlays when the production display model is not renderable', async () => {
@@ -153,6 +187,40 @@ describe('browser overlay shell', () => {
 
     expect(currentOverlay.document.getElementById('content').textContent).toBe('');
     expect(currentOverlay.document.getElementById('status')).toBeNull();
+    expect(currentOverlay.document.getElementById('source').hidden).toBe(true);
+  });
+
+  it.each([
+    ['input-state', 'inputs'],
+    ['car-radar', 'car-radar'],
+    ['track-map', 'track-map'],
+    ['flags', 'flags'],
+    ['garage-cover', 'garage-cover'],
+    ['stream-chat', 'stream-chat']
+  ])('clears stale asset-backed DOM when %s model is product-hidden', async (overlayId, bodyKind) => {
+    currentOverlay = await renderBrowserOverlay(overlayId, {
+      live: freshLiveSnapshot({}),
+      model: {
+        overlayId,
+        title: overlayId,
+        status: 'disabled | product hidden',
+        source: '',
+        bodyKind,
+        columns: [],
+        rows: [],
+        metrics: [],
+        points: [],
+        headerItems: [],
+        shouldRender: false
+      },
+      waitForSelector: null
+    });
+
+    await waitFor(() => currentOverlay.document.querySelector('.overlay').style.opacity === '0');
+
+    expect(currentOverlay.document.getElementById('content').textContent).toBe('');
+    expect(currentOverlay.document.querySelector('.overlay').style.opacity).toBe('0');
+    expect(currentOverlay.document.querySelector('.header-items')?.textContent ?? '').toBe('');
     expect(currentOverlay.document.getElementById('source').hidden).toBe(true);
   });
 });

@@ -33,7 +33,8 @@ internal abstract class PersistentOverlayForm : Form
         OverlaySettings settings,
         Action saveSettings,
         int defaultWidth,
-        int defaultHeight)
+        int defaultHeight,
+        bool enableWholeFormDrag = true)
     {
         _settings = settings;
         _saveSettings = saveSettings;
@@ -54,7 +55,10 @@ internal abstract class PersistentOverlayForm : Form
         StartPosition = FormStartPosition.Manual;
         TopMost = _settings.AlwaysOnTop;
 
-        RegisterDragSurface(this);
+        if (enableWholeFormDrag)
+        {
+            RegisterDragSurface(this);
+        }
 
         _fadeTimer = new System.Windows.Forms.Timer
         {

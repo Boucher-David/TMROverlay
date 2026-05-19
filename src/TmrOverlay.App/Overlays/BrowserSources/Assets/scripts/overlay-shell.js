@@ -1,5 +1,6 @@
     const page = {{PAGE_JSON}};
     const overlayEl = document.querySelector('.overlay');
+    const headerEl = document.querySelector('.header');
     const statusEl = document.getElementById('status');
     const timeRemainingEl = document.getElementById('time-remaining');
     const headerItemsEl = document.querySelector('.header-items');
@@ -366,6 +367,7 @@
     }
 
     function renderOverlayModel(model) {
+      updateOverlayRuntimeClasses(model);
       if (!model) {
         contentEl.innerHTML = '<div class="empty">Waiting for overlay model.</div>';
         renderHeaderItems(null, 'waiting for model');
@@ -417,6 +419,24 @@
       renderFooterSource(model);
     }
 
+    function updateOverlayRuntimeClasses(model) {
+      if (!overlayEl) return;
+      overlayEl.classList.toggle('fuel-non-race', isFuelNonRaceModel(model));
+    }
+
+    function isFuelNonRaceModel(model) {
+      if (model?.overlayId !== 'fuel-calculator') {
+        return false;
+      }
+
+      const titles = Array.isArray(model.metricSections)
+        ? model.metricSections.map((section) => String(section?.title || '').trim())
+        : [];
+      return titles.includes('Fuel Range')
+        && !titles.includes('Race Information')
+        && !titles.includes('Stint Targets');
+    }
+
     function renderHeaderItems(model, fallbackStatus) {
       const hasHeaderItems = Array.isArray(model?.headerItems);
       const items = hasHeaderItems ? model.headerItems : [];
@@ -424,7 +444,8 @@
         .filter((item) => String(item?.key || '').toLowerCase() !== 'status')
         .map((item) => ({
           key: String(item?.key || '').trim(),
-          value: String(item?.value || '').trim()
+          value: String(item?.value || '').trim(),
+          tone: toneClass(item?.tone)
         }))
         .filter((item) => item.value);
       if (statusEl) {
@@ -437,14 +458,16 @@
           const key = item.key.toLowerCase();
           const id = key === 'timeremaining' ? ' id="time-remaining"' : '';
           const className = key === 'timeremaining'
-            ? 'header-item time-remaining'
-            : `header-item header-item-${cssClassToken(key || 'item')}`;
-          return `<div${id} class="${className}" data-key="${escapeHtml(item.key)}">${escapeHtml(item.value)}</div>`;
+            ? `header-item time-remaining ${item.tone}`
+            : `header-item header-item-${cssClassToken(key || 'item')} ${item.tone}`;
+          return `<div${id} class="${className}" data-key="${escapeHtml(item.key)}" data-tone="${escapeAttribute(item.tone)}">${escapeHtml(item.value)}</div>`;
         }).join('');
+        setHeaderBandVisible(visibleItems.length > 0);
       } else if (timeRemainingEl) {
         const value = visibleItems.find((item) => item.key.toLowerCase() === 'timeremaining')?.value || '';
         timeRemainingEl.textContent = value;
         timeRemainingEl.hidden = !value;
+        setHeaderBandVisible(Boolean(value));
       }
     }
 
@@ -470,6 +493,19 @@
       } else if (timeRemainingEl) {
         timeRemainingEl.hidden = true;
         timeRemainingEl.textContent = '';
+      }
+      setHeaderBandVisible(false);
+    }
+
+    function setHeaderBandVisible(hasRenderedItems) {
+      const keepStaticHeader = document.body.classList.contains('stream-chat-page');
+      const visible = hasRenderedItems || keepStaticHeader;
+      if (headerEl) {
+        headerEl.hidden = !visible;
+      }
+      if (overlayEl) {
+        overlayEl.classList.toggle('has-header-items', hasRenderedItems);
+        overlayEl.classList.toggle('has-header-band', visible);
       }
     }
 
@@ -572,13 +608,15 @@
       drawGapLeaderMarkers(ctx, graph, plot);
 
       const labels = [];
-      const orderedSeries = [...series].sort((a, b) =>
-        Number(Boolean(a?.isClassLeader)) - Number(Boolean(b?.isClassLeader))
-        || Number(Boolean(a?.isReference)) - Number(Boolean(b?.isReference)));
-      orderedSeries.forEach((item, index) => {
+      const orderedSeries = series
+        .map((item, sourceIndex) => ({ item, sourceIndex }))
+        .sort((a, b) =>
+          Number(Boolean(a.item?.isClassLeader)) - Number(Boolean(b.item?.isClassLeader))
+          || Number(Boolean(a.item?.isReference)) - Number(Boolean(b.item?.isReference)));
+      orderedSeries.forEach(({ item, sourceIndex }) => {
         if (scale?.isFocusRelative === true && item?.isClassLeader) return;
 
-        const color = graphSeriesColor(item, index, graph?.threatCarIdx);
+        const color = graphSeriesColor(item, sourceIndex, graph?.threatCarIdx);
         const alpha = clamp01(numberOr(item?.alpha, 1)) * graphSeriesAlphaMultiplier(item, graph?.threatCarIdx);
         const pointsForSeries = (Array.isArray(item?.points) ? item.points : [])
           .filter((point) => Number.isFinite(point?.axisSeconds) && Number.isFinite(point?.gapSeconds))
@@ -895,9 +933,9 @@
     }
 
     function gapMetricsTableWidth(width) {
-      const metricsWidth = 184;
+      const metricsWidth = 220;
       const availableAfterTable = width - 58 - 38 - 10 - metricsWidth;
-      return availableAfterTable >= 300 ? metricsWidth : 0;
+      return availableAfterTable >= 260 ? metricsWidth : 0;
     }
 
     function drawGapThreatAnnotation(ctx, metric, plot) {
@@ -954,7 +992,7 @@
       ctx.fillStyle = themeColor('--tmr-text-muted', '#8caed4');
       ctx.fillText('Metric', rect.left + 8, rect.top + 26);
       ctx.fillText(graph?.comparisonLabel || '--', rect.left + 56, rect.top + 26);
-      ctx.fillText('Threat', rect.left + 108, rect.top + 26);
+      ctx.fillText('Threat', rect.left + 136, rect.top + 26);
 
       ctx.font = `${rowHeight < 16 ? '8px' : '9px'} "Segoe UI", Arial, sans-serif`;
       visibleMetrics.forEach((metric, index) => {
@@ -964,7 +1002,7 @@
         ctx.fillStyle = gapMetricValueColor(metric, numberOr(graph?.metricDeadbandSeconds, 0.25));
         ctx.fillText(gapMetricValueText(metric), rect.left + 56, y);
         ctx.fillStyle = gapMetricChaserColor(metric);
-        ctx.fillText(gapMetricChaserText(metric), rect.left + 108, y);
+        ctx.fillText(gapMetricChaserText(metric), rect.left + 136, y);
       });
       ctx.restore();
     }

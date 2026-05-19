@@ -8,6 +8,17 @@ TmrBrowserOverlay.register({
   },
   render() {
     const model = inputDisplayModel;
+    if (model?.shouldRender === false) {
+      inputTrace = [];
+      applyInputOverlayLayoutClasses(false, false, false);
+      modelRootOpacity = rootOpacityFromModel(model);
+      applyOverlayOpacity(0);
+      contentEl.innerHTML = '';
+      renderHeaderItems(model, '');
+      clearFooterSource();
+      return;
+    }
+
     const inputs = model?.inputs || {};
     inputTrace = Array.isArray(inputs.trace) ? inputs.trace : [];
     const hasGraph = inputGraphEnabled(inputs);
@@ -30,14 +41,7 @@ TmrBrowserOverlay.register({
       hasGraph ? '' : 'rail-only',
       railEnabled ? '' : 'no-rail'
     ].filter(Boolean).join(' ');
-    contentEl.innerHTML = `
-      <div class="${layoutClass}">
-        ${hasGraph ? `
-          <div class="input-graph-panel">
-            <canvas class="input-graph" aria-label="Input trace graph"></canvas>
-          </div>` : ''}
-        ${railEnabled ? renderInputRail(inputs, brakeAbsActive) : ''}
-      </div>`;
+    renderInputLayout(layoutClass, hasGraph, railEnabled, inputs, brakeAbsActive);
     if (hasGraph) {
       drawInputGraph(contentEl.querySelector('.input-graph'), inputs);
     }
@@ -71,8 +75,12 @@ function ensureInputStyle() {
 
     body.input-state-page .content {
       width: 100%;
-      height: calc(100% - 38px);
+      height: 100%;
       padding: 12px 16px 14px;
+    }
+
+    body.input-state-page .overlay.has-header-band .content {
+      height: calc(100% - 38px);
     }
 
     .input-layout {
@@ -212,9 +220,95 @@ function ensureInputStyle() {
       grid-row: 2;
       align-self: center;
       justify-self: center;
-      width: min(52px, 100%);
-      height: min(52px, 100%);
+      width: min(32px, 100%);
+      height: min(32px, 100%);
       max-height: 100%;
+    }
+
+    @media (max-width: 360px), (max-height: 170px) {
+      body.input-state-page {
+        padding: 8px;
+      }
+
+      body.input-state-page .overlay {
+        width: min(312px, calc(100vw - 16px));
+        height: min(156px, calc(100vh - 16px));
+      }
+
+      body.input-state-page .header {
+        min-height: 32px;
+        padding: 7px 10px 6px;
+        gap: 8px;
+      }
+
+      body.input-state-page .content {
+        padding: 6px 7px 7px;
+      }
+
+      body.input-state-page .overlay.has-header-band .content {
+        height: calc(100% - 32px);
+      }
+
+      .input-layout {
+        grid-template-columns: minmax(92px, 1fr) minmax(72px, 36%);
+        gap: 10px;
+      }
+
+      .input-layout.no-rail {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .input-rail {
+        gap: 4px;
+        padding: 4px;
+      }
+
+      .input-bars,
+      .input-readouts {
+        gap: 2px;
+      }
+
+      .input-bar,
+      .input-readout {
+        grid-template-columns: 28px minmax(0, 1fr);
+        column-gap: 4px;
+      }
+
+      .input-bar {
+        grid-template-rows: 9px 7px;
+        min-height: 15px;
+      }
+
+      .input-readout {
+        min-height: 13px;
+      }
+
+      .input-bar-label,
+      .input-readout-label,
+      .input-wheel-label,
+      .input-bar-value {
+        font-size: 7.5px;
+      }
+
+      .input-bar-value,
+      .input-readout-value,
+      .input-wheel-value {
+        font-size: 8.5px;
+      }
+
+      .input-bar-track {
+        height: 8px;
+      }
+
+      .input-wheel {
+        grid-template-columns: 1fr auto;
+        grid-template-rows: 12px;
+        column-gap: 4px;
+      }
+
+      .input-wheel svg {
+        display: none;
+      }
     }
   `;
   document.head.appendChild(style);
@@ -250,7 +344,46 @@ function inputGraphEnabled(inputs) {
     || inputs.showClutchTrace;
 }
 
-function renderInputRail(inputs, brakeAbsActive) {
+function renderInputLayout(layoutClass, hasGraph, railEnabled, inputs, brakeAbsActive) {
+  const railContents = railEnabled ? renderInputRailContents(inputs, brakeAbsActive) : '';
+  const existingLayout = contentEl.querySelector(':scope > .input-layout');
+  const existingGraphPanel = existingLayout?.querySelector(':scope > .input-graph-panel') || null;
+  const existingRail = existingLayout?.querySelector(':scope > .input-rail') || null;
+  const canPatchExistingLayout = existingLayout
+    && existingLayout.className === layoutClass
+    && Boolean(existingGraphPanel) === hasGraph
+    && Boolean(existingRail) === railEnabled;
+
+  if (!canPatchExistingLayout) {
+    contentEl.innerHTML = `
+      <div class="${layoutClass}">
+        ${hasGraph ? `
+          <div class="input-graph-panel">
+            <canvas class="input-graph" aria-label="Input trace graph"></canvas>
+          </div>` : ''}
+        ${railEnabled ? renderInputRail(railContents) : ''}
+      </div>`;
+    const rail = contentEl.querySelector('.input-rail');
+    if (rail) {
+      rail.dataset.renderedHtml = railContents;
+    }
+    return;
+  }
+
+  if (railEnabled && existingRail && existingRail.dataset.renderedHtml !== railContents) {
+    existingRail.innerHTML = railContents;
+    existingRail.dataset.renderedHtml = railContents;
+  }
+}
+
+function renderInputRail(contents) {
+  return `
+    <div class="input-rail">
+      ${contents}
+    </div>`;
+}
+
+function renderInputRailContents(inputs, brakeAbsActive) {
   const bars = [
     inputs.showThrottle ? railBar('THR', inputs.throttle, 'var(--tmr-green)') : '',
     inputs.showBrake ? railBar(brakeAbsActive ? 'ABS' : 'BRK', inputs.brake, brakeAbsActive ? 'var(--tmr-amber)' : 'var(--tmr-error)') : '',
@@ -261,11 +394,9 @@ function renderInputRail(inputs, brakeAbsActive) {
     inputs.showSpeed ? railReadout('SPD', inputs.speedText || '--') : ''
   ].filter(Boolean).join('');
   return `
-    <div class="input-rail">
       ${bars ? `<div class="input-bars">${bars}</div>` : ''}
       ${inputs.showSteering ? renderWheel(inputs.steeringWheelAngle, inputs.steeringText) : ''}
-      ${readouts ? `<div class="input-readouts">${readouts}</div>` : ''}
-    </div>`;
+      ${readouts ? `<div class="input-readouts">${readouts}</div>` : ''}`;
 }
 
 function railReadout(label, value) {

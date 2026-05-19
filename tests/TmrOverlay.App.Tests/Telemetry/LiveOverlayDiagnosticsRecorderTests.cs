@@ -176,18 +176,372 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
             Assert.Equal(2, flags.GetProperty("framesWithDisplayFlags").GetInt32());
             Assert.Equal(1, flags.GetProperty("stateOnlyDisplayFrames").GetInt32());
             Assert.Equal(2, flags.GetProperty("maxDisplayFlags").GetInt32());
+            Assert.Equal(1, flags.GetProperty("displayTransitionFrames").GetInt32());
+            Assert.Equal(0, flags.GetProperty("displayClearedTransitionFrames").GetInt32());
+            Assert.Equal(1, flags.GetProperty("longestDisplayDurationFrames").GetInt32());
+            Assert.Equal("Yellow:Yellow+Blue:Blue", flags.GetProperty("longestDisplayState").GetString());
             Assert.Equal(1, flags.GetProperty("rawFlagCounts").GetProperty("0x00000028").GetInt32());
+            Assert.Equal(1, flags.GetProperty("framesWithYellowFamilyRawFlags").GetInt32());
+            Assert.Equal(1, flags.GetProperty("yellowFamilyBitCounts").GetProperty("Yellow").GetInt32());
+            Assert.Equal(1, flags.GetProperty("yellowFamilyStateCounts").GetProperty("Yellow").GetInt32());
+            Assert.Equal(1, flags.GetProperty("rawToDisplayCounts").GetProperty("0x00000028 -> Yellow:Yellow+Blue:Blue").GetInt32());
+            Assert.Equal(1, flags.GetProperty("rawToDisplayCounts").GetProperty("0x00000000 -> Finish:Checkered").GetInt32());
+            Assert.Equal(1, flags.GetProperty("rawToDisplayLabelCounts").GetProperty("0x00000028 -> Yellow:Yellow:Yellow+Blue:Blue:Blue").GetInt32());
+            Assert.Equal(1, flags.GetProperty("rawToDisplayLabelCounts").GetProperty("0x00000000 -> Finish:Checkered:Checkered (session complete)").GetInt32());
+            Assert.Equal(1, flags.GetProperty("displayStateCounts").GetProperty("Yellow:Yellow+Blue:Blue").GetInt32());
+            Assert.Equal(1, flags.GetProperty("displayStateCounts").GetProperty("Finish:Checkered").GetInt32());
+            Assert.Equal(1, flags.GetProperty("displayLabelStateCounts").GetProperty("Yellow:Yellow:Yellow+Blue:Blue:Blue").GetInt32());
+            Assert.Equal(1, flags.GetProperty("displayLabelStateCounts").GetProperty("Finish:Checkered:Checkered (session complete)").GetInt32());
+            Assert.Equal(1, flags.GetProperty("displayTransitionCounts").GetProperty("Yellow:Yellow+Blue:Blue -> Finish:Checkered").GetInt32());
             Assert.Equal(1, flags.GetProperty("displayKindCounts").GetProperty("Yellow").GetInt32());
             Assert.Equal(1, flags.GetProperty("displayKindCounts").GetProperty("Blue").GetInt32());
             Assert.Equal(1, flags.GetProperty("displayKindCounts").GetProperty("Checkered").GetInt32());
             Assert.Equal(1, flags.GetProperty("displayCategoryCounts").GetProperty("Yellow").GetInt32());
             Assert.Equal(1, flags.GetProperty("displayCategoryCounts").GetProperty("Blue").GetInt32());
             Assert.Equal(1, flags.GetProperty("displayCategoryCounts").GetProperty("Finish").GetInt32());
+            Assert.Equal(1, flags.GetProperty("displayLabelCounts").GetProperty("Yellow:Yellow:Yellow").GetInt32());
+            Assert.Equal(1, flags.GetProperty("displayLabelCounts").GetProperty("Blue:Blue:Blue").GetInt32());
+            Assert.Equal(1, flags.GetProperty("displayLabelCounts").GetProperty("Finish:Checkered:Checkered (session complete)").GetInt32());
 
             var sample = document.RootElement.GetProperty("sampleFrames").EnumerateArray().First();
             Assert.Equal("0x00000028", sample.GetProperty("sessionFlagsHex").GetString());
             Assert.Equal("Yellow + Blue", sample.GetProperty("flagStatus").GetString());
             Assert.Equal(2, sample.GetProperty("flagDisplayCount").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CompleteCollection_DecodesYellowFamilyFlagTypes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"tmr-overlay-live-diagnostics-{Guid.NewGuid():N}");
+        try
+        {
+            var storage = CreateStorage(root);
+            var recorder = CreateRecorder(storage);
+            var captureDirectory = Path.Combine(root, "capture");
+            Directory.CreateDirectory(captureDirectory);
+            var context = CreateContext();
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", startedAtUtc);
+
+            const int sessionYellowFamilyFlags = 0x00000008
+                | 0x00000040
+                | 0x00000100
+                | 0x00000200
+                | 0x00002000
+                | 0x00004000
+                | 0x00008000;
+
+            recorder.RecordFrame(CreateSnapshot(
+                context,
+                CreateSample(
+                    startedAtUtc,
+                    sessionTime: 0d,
+                    focusCarIdx: 10,
+                    carLeftRight: 0,
+                    focusF2TimeSeconds: 0d,
+                    classPosition: 1,
+                    observedPosition: 1,
+                    observedClassPosition: 1,
+                    observedLapDistPct: 0.1d,
+                    sessionState: 4,
+                    sessionFlags: sessionYellowFamilyFlags,
+                    nearbyCars:
+                    [
+                        ProximityCar(11, sessionFlags: 0x00000040),
+                        ProximityCar(12, sessionFlags: 0x00000200),
+                        ProximityCar(13, sessionFlags: 0x00004000 | 0x00008000)
+                    ]),
+                sequence: 1));
+
+            var path = recorder.CompleteCollection(startedAtUtc.AddSeconds(1), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var flags = document.RootElement.GetProperty("flags");
+            Assert.Equal(1, flags.GetProperty("framesWithYellowFamilyRawFlags").GetInt32());
+            Assert.Equal(1, flags.GetProperty("framesWithCarIdxYellowFamilyFlags").GetInt32());
+            var bitCounts = flags.GetProperty("yellowFamilyBitCounts");
+            Assert.Equal(1, bitCounts.GetProperty("Yellow").GetInt32());
+            Assert.Equal(1, bitCounts.GetProperty("Debris").GetInt32());
+            Assert.Equal(1, bitCounts.GetProperty("WavingYellow").GetInt32());
+            Assert.Equal(1, bitCounts.GetProperty("OneToGreen").GetInt32());
+            Assert.Equal(1, bitCounts.GetProperty("RandomWaving").GetInt32());
+            Assert.Equal(1, bitCounts.GetProperty("Caution").GetInt32());
+            Assert.Equal(1, bitCounts.GetProperty("WavingCaution").GetInt32());
+            Assert.Equal(
+                1,
+                flags.GetProperty("yellowFamilyStateCounts")
+                    .GetProperty("Yellow+Debris+WavingYellow+OneToGreen+RandomWaving+Caution+WavingCaution")
+                    .GetInt32());
+
+            var carIdxBitCounts = flags.GetProperty("carIdxYellowFamilyBitCounts");
+            Assert.Equal(1, carIdxBitCounts.GetProperty("Debris").GetInt32());
+            Assert.Equal(1, carIdxBitCounts.GetProperty("OneToGreen").GetInt32());
+            Assert.Equal(1, carIdxBitCounts.GetProperty("Caution").GetInt32());
+            Assert.Equal(1, carIdxBitCounts.GetProperty("WavingCaution").GetInt32());
+            Assert.Equal(1, flags.GetProperty("carIdxYellowFamilyStateCounts").GetProperty("Debris").GetInt32());
+            Assert.Equal(1, flags.GetProperty("carIdxYellowFamilyStateCounts").GetProperty("OneToGreen").GetInt32());
+            Assert.Equal(1, flags.GetProperty("carIdxYellowFamilyStateCounts").GetProperty("Caution+WavingCaution").GetInt32());
+            Assert.Equal(
+                1,
+                flags.GetProperty("rawToDisplayLabelCounts")
+                    .GetProperty("0x0000E348 -> Yellow:Caution:Caution (waving)")
+                    .GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CompleteCollection_SummarizesRadarOppositeSideTransitions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-diagnostics");
+            Directory.CreateDirectory(captureDirectory);
+            var recorder = CreateRecorder(storage);
+            var context = CreateContext();
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", startedAtUtc);
+
+            recorder.RecordFrame(CreateSnapshot(
+                context,
+                CreateSample(
+                    startedAtUtc,
+                    sessionTime: 0d,
+                    focusCarIdx: 10,
+                    carLeftRight: 2,
+                    focusF2TimeSeconds: 500d,
+                    classPosition: 2,
+                    observedPosition: 25,
+                    observedClassPosition: 10,
+                    observedLapDistPct: 0.50d,
+                    nearbyCars: []),
+                sequence: 1));
+            recorder.RecordFrame(CreateSnapshot(
+                context,
+                CreateSample(
+                    startedAtUtc.AddSeconds(0.3d),
+                    sessionTime: 0.3d,
+                    focusCarIdx: 10,
+                    carLeftRight: 3,
+                    focusF2TimeSeconds: 500.3d,
+                    classPosition: 2,
+                    observedPosition: 25,
+                    observedClassPosition: 10,
+                    observedLapDistPct: 0.51d,
+                    nearbyCars: []),
+                sequence: 2));
+
+            var path = recorder.CompleteCollection(startedAtUtc.AddSeconds(1), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var radar = document.RootElement.GetProperty("radar");
+            Assert.Equal(1, radar.GetProperty("sideTransitionFrames").GetInt32());
+            Assert.Equal(1, radar.GetProperty("oppositeSideFlipFrames").GetInt32());
+            Assert.Equal(1, radar.GetProperty("sideTransitionWithoutPlacementFrames").GetInt32());
+            Assert.Equal(1, radar.GetProperty("sideTransitionCounts").GetProperty("left -> right").GetInt32());
+
+            var eventKinds = document.RootElement
+                .GetProperty("eventSamples")
+                .EnumerateArray()
+                .Select(item => item.GetProperty("kind").GetString())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("radar.side-transition", eventKinds);
+            Assert.Contains("radar.opposite-side-flip", eventKinds);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CompleteCollection_DoesNotTreatAllZeroLapDeltaPlaceholdersAsUsable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-diagnostics");
+            Directory.CreateDirectory(captureDirectory);
+            var recorder = CreateRecorder(storage);
+            var context = CreateContext();
+            var capturedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", capturedAtUtc);
+            var sample = CreateSample(
+                capturedAtUtc,
+                sessionTime: 0d,
+                focusCarIdx: 10,
+                carLeftRight: 1,
+                focusF2TimeSeconds: 500d,
+                classPosition: 3,
+                observedPosition: 25,
+                observedClassPosition: 10,
+                observedLapDistPct: 0.5d) with
+            {
+                LapDeltaToBestLapSeconds = 0d,
+                LapDeltaToBestLapRate = 0d,
+                LapDeltaToBestLapOk = null,
+                LapDeltaToOptimalLapSeconds = 0d,
+                LapDeltaToOptimalLapRate = 0d,
+                LapDeltaToOptimalLapOk = null,
+                LapDeltaToSessionBestLapSeconds = 0d,
+                LapDeltaToSessionBestLapRate = 0d,
+                LapDeltaToSessionBestLapOk = null,
+                LapDeltaToSessionOptimalLapSeconds = 0d,
+                LapDeltaToSessionOptimalLapRate = 0d,
+                LapDeltaToSessionOptimalLapOk = null,
+                LapDeltaToSessionLastLapSeconds = 0d,
+                LapDeltaToSessionLastLapRate = 0d,
+                LapDeltaToSessionLastLapOk = null
+            };
+
+            recorder.RecordFrame(CreateSnapshot(context, sample, sequence: 1));
+
+            var path = recorder.CompleteCollection(capturedAtUtc.AddSeconds(1), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var lapDelta = document.RootElement.GetProperty("lapDelta");
+            Assert.Equal(1, lapDelta.GetProperty("observedFrames").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("framesWithAnyValue").GetInt32());
+            Assert.Equal(0, lapDelta.GetProperty("framesWithAnyUsableValue").GetInt32());
+            Assert.Equal("values_present_without_usable_quality_all_zero", lapDelta.GetProperty("classification").GetString());
+            Assert.True(lapDelta.GetProperty("valuesPresentWithoutUsableQuality").GetBoolean());
+            Assert.True(lapDelta.GetProperty("allObservedValuesZero").GetBoolean());
+            Assert.Contains("all-zero placeholders", lapDelta.GetProperty("interpretation").GetString(), StringComparison.Ordinal);
+            Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toBestLap").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toOptimalLap").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toSessionBestLap").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toSessionOptimalLap").GetInt32());
+            Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toSessionLastLap").GetInt32());
+            Assert.False(lapDelta.GetProperty("usableFrameCounts").TryGetProperty("toBestLap", out _));
+            Assert.False(lapDelta.GetProperty("usableFrameCounts").TryGetProperty("toOptimalLap", out _));
+            Assert.False(lapDelta.GetProperty("usableFrameCounts").TryGetProperty("toSessionBestLap", out _));
+            Assert.False(lapDelta.GetProperty("usableFrameCounts").TryGetProperty("toSessionOptimalLap", out _));
+            Assert.False(lapDelta.GetProperty("usableFrameCounts").TryGetProperty("toSessionLastLap", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CompleteCollection_SummarizesLapProfileReadiness()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-diagnostics");
+            Directory.CreateDirectory(captureDirectory);
+            var recorder = CreateRecorder(storage);
+            var context = CreateContext();
+            var capturedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", capturedAtUtc);
+            var snapshot = CreateSnapshot(
+                context,
+                CreateSample(
+                    capturedAtUtc,
+                    sessionTime: 0d,
+                    focusCarIdx: 10,
+                    carLeftRight: 1,
+                    focusF2TimeSeconds: 500d,
+                    classPosition: 3,
+                    observedPosition: 25,
+                    observedClassPosition: 10,
+                    observedLapDistPct: 0.5d),
+                sequence: 1);
+            var timingRows = new[]
+            {
+                TimingRow(10, carClass: 12, className: "GT3", classPosition: 1, bestLap: 92.4d, lastLap: 92.4d),
+                TimingRow(11, carClass: 12, className: "GT3", classPosition: 2, bestLap: 93.1d, lastLap: 93.1d),
+                TimingRow(12, carClass: 12, className: "GT3", classPosition: 3, bestLap: 94.2d, lastLap: null)
+            };
+            var scoringRows = new[]
+            {
+                ScoringRow(10, carClass: 12, className: "GT3", classPosition: 1, bestLap: 92.4d, lastLap: 92.4d),
+                ScoringRow(11, carClass: 12, className: "GT3", classPosition: 2, bestLap: 93.1d, lastLap: 93.1d),
+                ScoringRow(12, carClass: 12, className: "GT3", classPosition: 3, bestLap: 94.2d, lastLap: null)
+            };
+            snapshot = snapshot with
+            {
+                Models = snapshot.Models with
+                {
+                    Timing = LiveTimingModel.Empty with
+                    {
+                        HasData = true,
+                        Quality = LiveModelQuality.Reliable,
+                        PlayerCarIdx = 10,
+                        FocusCarIdx = 10,
+                        OverallRows = timingRows,
+                        ClassRows = timingRows
+                    },
+                    Scoring = LiveScoringModel.Empty with
+                    {
+                        HasData = true,
+                        Quality = LiveModelQuality.Reliable,
+                        Source = LiveScoringSource.SessionResults,
+                        ReferenceCarIdx = 10,
+                        ReferenceCarClass = 12,
+                        Rows = scoringRows,
+                        ClassGroups =
+                        [
+                            new LiveScoringClassGroup(
+                                CarClass: 12,
+                                ClassName: "GT3",
+                                CarClassColorHex: "#ff0000",
+                                IsReferenceClass: true,
+                                RowCount: scoringRows.Length,
+                                Rows: scoringRows)
+                        ]
+                    }
+                }
+            };
+
+            recorder.RecordFrame(snapshot);
+
+            var path = recorder.CompleteCollection(capturedAtUtc.AddSeconds(1), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var lapProfile = document.RootElement.GetProperty("lapProfile");
+            Assert.Equal(1, lapProfile.GetProperty("observedFrames").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithTimingRows").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithScoringRows").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithAnyRows").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithAnyBestLap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithAnyLastLap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithBestAndLastLap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithRecentPersonalBest").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithClassFastestBestLap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("framesWithClassFastestLastLap").GetInt32());
+            Assert.Equal(3, lapProfile.GetProperty("maxRows").GetInt32());
+            Assert.Equal(2, lapProfile.GetProperty("maxRowsWithBestAndLastLap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("maxRowsWithRecentPersonalBest").GetInt32());
+            Assert.Equal(2, lapProfile.GetProperty("sourceRowCounts").GetProperty("merged:best-and-last-lap").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("sourceRowCounts").GetProperty("merged:recent-personal-best").GetInt32());
+            Assert.Equal(1, lapProfile.GetProperty("sourceRowCounts").GetProperty("merged:class-fastest-last-lap").GetInt32());
         }
         finally
         {
@@ -1235,6 +1589,101 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
             LapDeltaToBestLapSeconds: -0.2d,
             LapDeltaToBestLapRate: 0.01d,
             LapDeltaToBestLapOk: true);
+    }
+
+    private static HistoricalCarProximity ProximityCar(int carIdx, int? sessionFlags = null)
+    {
+        return new HistoricalCarProximity(
+            CarIdx: carIdx,
+            LapCompleted: 108,
+            LapDistPct: 0.5d,
+            F2TimeSeconds: 900d,
+            EstimatedTimeSeconds: 900d,
+            Position: carIdx,
+            ClassPosition: carIdx,
+            CarClass: 4098,
+            TrackSurface: 3,
+            OnPitRoad: false,
+            SessionFlags: sessionFlags);
+    }
+
+    private static LiveTimingRow TimingRow(
+        int carIdx,
+        int? carClass,
+        string? className,
+        int? classPosition,
+        double? bestLap,
+        double? lastLap)
+    {
+        var evidence = LiveSignalEvidence.Reliable("unit-test");
+        return new LiveTimingRow(
+            CarIdx: carIdx,
+            Quality: LiveModelQuality.Reliable,
+            Source: "unit-test",
+            IsPlayer: carIdx == 10,
+            IsFocus: carIdx == 10,
+            IsOverallLeader: classPosition == 1,
+            IsClassLeader: classPosition == 1,
+            HasTiming: true,
+            HasSpatialProgress: true,
+            CanUseForRadarPlacement: true,
+            TimingEvidence: evidence,
+            SpatialEvidence: evidence,
+            RadarPlacementEvidence: evidence,
+            GapEvidence: evidence,
+            DriverName: $"Driver {carIdx}",
+            TeamName: null,
+            CarNumber: carIdx.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            CarClassName: className,
+            CarClassColorHex: "#ff0000",
+            OverallPosition: classPosition,
+            ClassPosition: classPosition,
+            CarClass: carClass,
+            LapCompleted: 12,
+            LapDistPct: 0.5d,
+            ProgressLaps: 12.5d,
+            F2TimeSeconds: 100d + carIdx,
+            EstimatedTimeSeconds: 100d + carIdx,
+            LastLapTimeSeconds: lastLap,
+            BestLapTimeSeconds: bestLap,
+            GapSecondsToClassLeader: classPosition is { } position && position > 1 ? (double)position : 0d,
+            GapLapsToClassLeader: null,
+            IntervalSecondsToPreviousClassRow: null,
+            IntervalLapsToPreviousClassRow: null,
+            DeltaSecondsToFocus: null,
+            TrackSurface: 3,
+            OnPitRoad: false);
+    }
+
+    private static LiveScoringRow ScoringRow(
+        int carIdx,
+        int? carClass,
+        string? className,
+        int? classPosition,
+        double? bestLap,
+        double? lastLap)
+    {
+        return new LiveScoringRow(
+            CarIdx: carIdx,
+            OverallPositionRaw: classPosition,
+            ClassPositionRaw: classPosition,
+            OverallPosition: classPosition,
+            ClassPosition: classPosition,
+            CarClass: carClass,
+            DriverName: $"Driver {carIdx}",
+            TeamName: null,
+            CarNumber: carIdx.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            CarClassName: className,
+            CarClassColorHex: "#ff0000",
+            IsPlayer: carIdx == 10,
+            IsFocus: carIdx == 10,
+            IsReferenceClass: true,
+            Lap: 13,
+            LapsComplete: 12,
+            LastLapTimeSeconds: lastLap,
+            BestLapTimeSeconds: bestLap,
+            ReasonOut: null,
+            HasTakenGrid: true);
     }
 
     private static HistoricalSessionContext CreateContext()

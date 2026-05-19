@@ -681,7 +681,7 @@ internal sealed class OverlayManager : IDisposable
                 var overlayLiveTelemetryAvailable = liveTelemetryAvailable || settingsPreview;
                 var contextAvailability = EvaluateOverlayContext(registration.Definition, liveSnapshot);
                 var contextAllowed = settingsPreview || contextAvailability.IsAvailable;
-                var contentAllowed = HasEnabledOverlayContent(registration.Definition, settings);
+                var contentAllowed = HasEnabledOverlayContent(registration.Definition, settings, currentSession);
                 var shouldShow = settingsPreview || (settings.Enabled && sessionAllowed && contextAllowed && contentAllowed);
 
                 if (string.Equals(registration.Definition.Id, FlagsOverlayDefinition.Definition.Id, StringComparison.Ordinal))
@@ -692,7 +692,8 @@ internal sealed class OverlayManager : IDisposable
                         managedEnabled: shouldShow,
                         sessionAllowed,
                         settingsPreview,
-                        liveTelemetryAvailable: overlayLiveTelemetryAvailable);
+                        liveTelemetryAvailable: overlayLiveTelemetryAvailable,
+                        currentSession);
                     continue;
                 }
 
@@ -729,7 +730,8 @@ internal sealed class OverlayManager : IDisposable
                     registration.Definition,
                     settings,
                     form,
-                    sessionPreviewActive: _sessionPreviewState.Snapshot().Active);
+                    sessionPreviewActive: _sessionPreviewState.Snapshot().Active,
+                    currentSession);
                 ApplyOpacityIfChanged(registration.Definition, settings, form);
                 ApplySettingsWindowInputProtection(form);
                 ApplyRadarSettingsPreview(form, settingsPreview);
@@ -858,9 +860,10 @@ internal sealed class OverlayManager : IDisposable
         OverlayDefinition definition,
         OverlaySettings settings,
         Form form,
-        bool sessionPreviewActive)
+        bool sessionPreviewActive,
+        OverlaySessionKind? sessionKind)
     {
-        var size = TargetOverlayClientSizeForApply(definition, settings, form.ClientSize, sessionPreviewActive);
+        var size = TargetOverlayClientSizeForApply(definition, settings, form.ClientSize, sessionPreviewActive, sessionKind);
         if (_appliedScales.TryGetValue(definition.Id, out var appliedScale)
             && Math.Abs(appliedScale - settings.Scale) < 0.001d
             && form.ClientSize == size)
@@ -876,16 +879,18 @@ internal sealed class OverlayManager : IDisposable
         OverlayDefinition definition,
         OverlaySettings settings,
         Size currentSize,
-        bool sessionPreviewActive)
+        bool sessionPreviewActive,
+        OverlaySessionKind? sessionKind = null)
     {
         settings.Scale = Math.Clamp(settings.Scale, 0.6d, 2d);
         ApplyFlagsCompactPolicy(definition, settings);
-        var size = ScaledOverlaySize(definition, settings);
-        settings.Width = size.Width;
-        settings.Height = size.Height;
-        return ShouldPreserveExpandedOverlayHeight(definition, currentSize, size, sessionPreviewActive)
+        var size = ScaledOverlaySize(definition, settings, sessionKind);
+        var appliedSize = ShouldPreserveExpandedOverlayHeight(definition, currentSize, size, sessionPreviewActive)
             ? currentSize
             : size;
+        settings.Width = appliedSize.Width;
+        settings.Height = appliedSize.Height;
+        return appliedSize;
     }
 
     internal static bool ShouldPreserveExpandedOverlayHeight(
@@ -894,8 +899,8 @@ internal sealed class OverlayManager : IDisposable
         Size targetSize,
         bool sessionPreviewActive = false)
     {
-        return !sessionPreviewActive
-            && string.Equals(definition.Id, StandingsOverlayDefinition.Definition.Id, StringComparison.Ordinal)
+        return string.Equals(definition.Id, StandingsOverlayDefinition.Definition.Id, StringComparison.Ordinal)
+            && !sessionPreviewActive
             && currentSize.Width == targetSize.Width
             && currentSize.Height > targetSize.Height;
     }
@@ -1223,36 +1228,29 @@ internal sealed class OverlayManager : IDisposable
         return Math.Max(80, (int)Math.Round(defaultDimension * Math.Clamp(scale, 0.6d, 2d)));
     }
 
-    private static Size ScaledOverlaySize(OverlayDefinition definition, OverlaySettings settings)
+    private static Size ScaledOverlaySize(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind = null)
     {
-        var baseWidth = definition.DefaultWidth;
-        var baseHeight = definition.DefaultHeight;
-
-        if (string.Equals(definition.Id, InputStateOverlayDefinition.Definition.Id, StringComparison.Ordinal))
-        {
-            baseWidth = InputStateRenderModelBuilder.BaseWidthForEnabledContent(settings, definition.DefaultWidth);
-        }
-
-        if (OverlayContentColumnSettings.TryGetContentDefinition(definition.Id, out var contentDefinition)
-            && contentDefinition.Columns.Count > 0)
-        {
-            var contentSize = OverlayContentBaseSize(definition, settings, contentDefinition);
-            baseWidth = contentSize.Width;
-            baseHeight = Math.Max(baseHeight, contentSize.Height);
-        }
+        var baseSize = OverlayContentSizing.BaseSizeFor(definition, settings, sessionKind);
 
         return new Size(
-            ScaleDimension(baseWidth, settings.Scale),
-            ScaleDimension(baseHeight, settings.Scale));
+            ScaleDimension(baseSize.Width, settings.Scale),
+            ScaleDimension(baseSize.Height, settings.Scale));
     }
 
-    private static bool HasEnabledOverlayContent(OverlayDefinition definition, OverlaySettings settings)
+    private static bool HasEnabledOverlayContent(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind = null)
     {
-        if (string.Equals(definition.Id, InputStateOverlayDefinition.Definition.Id, StringComparison.Ordinal))
-        {
-            return InputStateRenderModelBuilder.HasEnabledContent(settings);
-        }
+        return OverlayContentSizing.HasRenderableContent(definition, settings, sessionKind)
+            && GapWindowEnabled(definition, settings);
+    }
 
+    private static bool GapWindowEnabled(OverlayDefinition definition, OverlaySettings settings)
+    {
         if (string.Equals(definition.Id, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.Ordinal))
         {
             return settings.GetIntegerOption(OverlayOptionKeys.GapCarsAhead, defaultValue: 5, minimum: 0, maximum: 12) > 0
@@ -1260,20 +1258,6 @@ internal sealed class OverlayManager : IDisposable
         }
 
         return true;
-    }
-
-    private static Size OverlayContentBaseSize(
-        OverlayDefinition overlayDefinition,
-        OverlaySettings settings,
-        OverlayContentDefinition definition)
-    {
-        var columns = OverlayContentColumnSettings.VisibleColumnsFor(settings, definition);
-        var contentWidth = columns.Sum(column => column.Width);
-        return new Size(
-            Math.Max(overlayDefinition.DefaultWidth, contentWidth + definition.BrowserWidthPadding),
-            Math.Max(
-                overlayDefinition.DefaultHeight,
-                definition.NativeMinimumTableHeight + OverlayTheme.Layout.OverlayTableWithoutFooterReservedHeight));
     }
 
     private static bool UsesScaleDerivedSize(OverlayDefinition definition)
@@ -1388,7 +1372,8 @@ internal sealed class OverlayManager : IDisposable
         bool managedEnabled,
         bool sessionAllowed,
         bool settingsPreview,
-        bool liveTelemetryAvailable)
+        bool liveTelemetryAvailable,
+        OverlaySessionKind? sessionKind)
     {
         if (!managedEnabled)
         {
@@ -1431,7 +1416,8 @@ internal sealed class OverlayManager : IDisposable
             registration.Definition,
             settings,
             form,
-            sessionPreviewActive: _sessionPreviewState.Snapshot().Active);
+            sessionPreviewActive: _sessionPreviewState.Snapshot().Active,
+            sessionKind);
         ApplyOpacityIfChanged(registration.Definition, settings, form);
         ApplySettingsWindowInputProtection(form);
         var fadeAllowsVisible = ApplyLiveTelemetryFade(

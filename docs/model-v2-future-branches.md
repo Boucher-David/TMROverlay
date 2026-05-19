@@ -2,7 +2,7 @@
 
 This file is the durable handoff record for model-v2 app theory, telemetry-source decisions, and future product branches. Read the current-state sections first. Older roadmap sections below are preserved as planning history and should not be treated as open work unless the current-state notes still call them out.
 
-## Current State As Of 2026-05-17
+## Current State As Of 2026-05-19
 
 The model-v2 layer is no longer just passive evidence. Core overlays are already normalized live-model consumers across Standings, Relative, local Radar, Flags, Session / Weather, Pit Service, Input / Car State, Fuel, Gap To Leader, and Track Map. Some overlays still use adapter or compatibility slices where that keeps behavior stable, but new reusable telemetry fields should land in Core/live models first, then map into overlay view models.
 
@@ -41,12 +41,13 @@ Current evidence/tooling shape:
 - 2026-05-14: Stream Chat first-pass parity should keep the practical V1 enhancements only: Design V2 shell, fixed-height chat history, wrapping rows, author color, visible badges, inline Twitch emotes, native/localhost parity, and browser review replay coverage. The richer Twitch IRC/EventSub and Streamlabs API/widget analysis is parked in `docs/stream-v2.md` as a dedicated V1.x Stream Chat V2 branch/tag candidate, not as required V1 branch-complete scope.
 - 2026-05-15: `fixtures/data-contracts/v0.19.0/` is now the first release snapshot for durable user-data validation. Future durable schema branches should keep the previous release snapshot loading through current code, add a new snapshot when the persisted contract changes, and update `docs/data-contracts.md` plus history/settings compatibility tests in the same pass.
 - 2026-05-15: The model-completeness branch makes completed `LiveTelemetrySnapshot.Models` the active overlay runtime contract for native, localhost, and browser surfaces. `LatestSample` remains collector/diagnostic/compatibility evidence, and `LiveTelemetrySnapshot.CompleteModels()` is the bridge for older or partial live snapshots before model builders/renderers run.
-- 2026-05-17: v0.20.1 is tagged as the Windows/native, browser review, and localhost parity baseline. The active `v1.0.0-fuel-and-release-handoff` branch is the private-team V1 candidate: keep the parity baseline stable, narrow Fuel Calculator behavior to trustworthy V1 evidence, add teammate release handoff docs, and avoid durable schema changes unless a Windows-tested compatibility issue requires them.
+- 2026-05-17: v0.20.1 is tagged as the Windows/native, browser review, and localhost parity baseline. The `v1.0.0-fuel-and-release-handoff` branch became the private-team V1 candidate: keep the parity baseline stable, narrow Fuel Calculator behavior to trustworthy V1 evidence, add teammate release handoff docs, and avoid durable schema changes unless a Windows-tested compatibility issue requires them.
 - 2026-05-17: Version hygiene should stay explicit. `VERSION.md` owns current branch target and branch-complete release text, `Directory.Build.props` version metadata moves only when a branch is deliberately promoted as the next product build, and annotated tags should be created only after the release commit is on `main` or explicitly designated as the release point.
+- 2026-05-19: The active branch is `v1.0.2-feedback`. It hardens teammate-reported overlay semantics, shared sizing/chrome, Gap To Leader, localhost hidden-product behavior, diagnostics, and validation gates. Capture-only follow-ups and real-run validation questions now live in `docs/v1.0.3.md`.
 
-## Current v1.0.0 Branch Focus
+## Current v1.0.2 Branch Focus
 
-The current branch is `v1.0.0-fuel-and-release-handoff`, the private-team V1 candidate after the tagged v0.20.1 Windows parity release. Treat v0.20.1 as the current overlay parity baseline and keep this branch focused on release readiness plus the conservative Fuel Calculator V1 behavior unless teammate testing forces another blocker fix.
+The current branch is `v1.0.2-feedback`, a teammate-feedback hardening branch after the V1.0.1 diagnostic run. Treat the branch as a patch release: fix proven overlay behavior, improve diagnostics and validation evidence, and defer capture-only or larger product decisions into `docs/v1.0.3.md`.
 
 Current branch focus:
 
@@ -56,9 +57,9 @@ Current branch focus:
 - Keep the v0.19.0 data-contract snapshot as the previous durable-release baseline unless a durable schema change is deliberately introduced. Any schema change needs the workflow in `docs/data-contracts.md`.
 - If overlay/settings/renderer/browser/localhost behavior changes, update screenshot generators and validation profiles in the same pass so native Windows, browser review, and localhost coverage are represented.
 - Keep the deprecated mac harness out of the V1 parity/release gate.
-- Keep Fuel Calculator V1 local in-car/pit only. Current fuel can update live across grid/pre-green/pit states, but strategy burn must wait for measured completed green-lap fuel deltas or exact history. Instantaneous `FuelUsePerHour`, rhythm optimization, tire-service advice, and active teammate fuel modeling stay out of the V1 user-facing overlay.
-- Keep `docs/v1-release-readiness.md` aligned with the teammate install/test/support flow before tagging.
-- Keep the V1-candidate overlay logic and product scope stable while this release branch is in flight.
+- Keep V1.0.2 local in scope: non-race overlay semantics, shared chrome/content sizing, settings-faithful previews, Stream Chat opacity, hidden localhost models, Gap To Leader correctness, and diagnostic evidence quality.
+- Do not treat capture-only questions as unresolved V1.0.2 implementation work. Flags yellow-family accuracy, Car Radar side flips, Track Map live replacement, update-close reproduction, setup-change detection, and long-run performance optimization need fresh captures or real validation and are tracked for v1.0.3.
+- Keep `docs/v1.0.2-feedback.md`, `docs/v1.0.3.md`, and `VERSION.md` aligned before tagging.
 
 Ongoing telemetry/model-v2 guardrails from v0.19.0 through v0.20.1 still apply:
 

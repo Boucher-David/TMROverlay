@@ -199,6 +199,12 @@ public sealed class TrackMapStoreTests
             Assert.True(currentTrack.IsCompleteForRuntime);
             Assert.Equal("bundled", currentTrack.BestSource);
             Assert.Equal(TrackMapConfidence.Medium.ToString(), currentTrack.Confidence);
+            Assert.Equal("unit-test", currentTrack.ProvenanceSourceKind);
+            Assert.Equal("capture-test", currentTrack.ProvenanceCaptureId);
+            Assert.Equal(2, currentTrack.CompleteLapCount);
+            Assert.Equal(800, currentTrack.SelectedPointCount);
+            Assert.Equal(0, currentTrack.MissingBinCount);
+            Assert.Empty(currentTrack.QualityReasons);
             Assert.Null(currentTrack.FallbackReason);
         }
         finally

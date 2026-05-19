@@ -181,6 +181,29 @@ public sealed class SimpleTelemetryOverlayViewModelTests
     }
 
     [Fact]
+    public void Flags_ForDisplay_RendersDebrisAsDistinctYellowFamilyKind()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = Snapshot(now, LiveRaceModels.Empty with
+        {
+            Session = LiveSessionModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                SessionState = 4,
+                SessionFlags = 0x00000040
+            }
+        });
+
+        var viewModel = FlagsOverlayViewModel.ForDisplay(snapshot, now);
+
+        Assert.Single(viewModel.Flags);
+        Assert.Equal(FlagDisplayKind.Debris, viewModel.Flags[0].Kind);
+        Assert.Equal(FlagDisplayCategory.Yellow, viewModel.Flags[0].Category);
+        Assert.Equal("Debris", viewModel.Status);
+    }
+
+    [Fact]
     public void Flags_ForDisplay_UsesCheckeredWhenSessionStateCompletes()
     {
         var now = DateTimeOffset.UtcNow;
@@ -436,6 +459,20 @@ public sealed class SimpleTelemetryOverlayViewModelTests
     }
 
     [Fact]
+    public void SessionWeather_FromLegacySample_DoesNotTurnMissingWeatherFieldsIntoDry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = LegacySampleSnapshot(now, LegacySample(now, trackWetness: -1, weatherDeclaredWet: null));
+
+        var viewModel = SessionWeatherOverlayViewModel.From(snapshot, now, "Metric");
+
+        var surface = Assert.Single(viewModel.Rows, row => row.Label == "Surface");
+        Assert.Equal("--", surface.Value);
+        Assert.Contains(surface.Segments, segment => segment.Label == "Wetness" && segment.Value == "--");
+        Assert.Contains(surface.Segments, segment => segment.Label == "Declared" && segment.Value == "--");
+    }
+
+    [Fact]
     public void SessionWeather_CreateBuilder_HighlightsWeatherRowsAfterChange()
     {
         var now = DateTimeOffset.UtcNow;
@@ -633,6 +670,36 @@ public sealed class SimpleTelemetryOverlayViewModelTests
                 Assert.Contains(section.Rows, row => row.Label == "Tearoff");
                 Assert.Contains(section.Rows, row => row.Label == "Fast repair");
             });
+    }
+
+    [Fact]
+    public void PitService_FromTelemetry_HidesRaceContextOutsideRace()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = Snapshot(now, LiveRaceModels.Empty with
+        {
+            Session = LiveSessionModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                SessionType = "Practice",
+                SessionTimeRemainSeconds = 600d,
+                SessionLapsRemain = 4,
+                SessionLapsTotal = 5
+            },
+            FuelPit = LiveFuelPitModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                PlayerCarInPitStall = true,
+                PitServiceFlags = 0
+            }
+        });
+
+        var viewModel = PitServiceOverlayViewModel.From(snapshot, now, "Metric");
+
+        Assert.DoesNotContain(viewModel.Rows, row => row.Label == "Time / Laps");
+        Assert.DoesNotContain(viewModel.MetricSections, section => section.Title == "Session");
     }
 
     [Fact]
@@ -1153,7 +1220,9 @@ public sealed class SimpleTelemetryOverlayViewModelTests
         DateTimeOffset now,
         bool onPitRoad = false,
         bool pitstopActive = false,
-        int? carLeftRight = null)
+        int? carLeftRight = null,
+        int trackWetness = 1,
+        bool? weatherDeclaredWet = false)
     {
         return new HistoricalTelemetrySample(
             CapturedAtUtc: now,
@@ -1176,8 +1245,8 @@ public sealed class SimpleTelemetryOverlayViewModelTests
             LapBestLapTimeSeconds: 91.8d,
             AirTempC: 21d,
             TrackTempCrewC: 30d,
-            TrackWetness: 1,
-            WeatherDeclaredWet: false,
+            TrackWetness: trackWetness,
+            WeatherDeclaredWet: weatherDeclaredWet,
             PlayerTireCompound: 0,
             SessionTimeRemain: 600d,
             SessionTimeTotal: 3600d,

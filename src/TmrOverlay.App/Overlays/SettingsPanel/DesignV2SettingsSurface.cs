@@ -122,8 +122,6 @@ internal sealed class DesignV2SettingsSurface : Control
     private SettingsRegion _selectedRegion = SettingsRegion.General;
     private string _supportStatusText = string.Empty;
     private bool _supportStatusIsError;
-    private Point? _dragCursorOrigin;
-    private Point? _dragFormOrigin;
 
     public DesignV2SettingsSurface(
         ApplicationSettings applicationSettings,
@@ -324,40 +322,6 @@ internal sealed class DesignV2SettingsSurface : Control
             }
         }
 
-        if (TitleDragBounds().Contains(e.Location))
-        {
-            _dragCursorOrigin = Cursor.Position;
-            _dragFormOrigin = FindForm()?.Location;
-            Capture = true;
-        }
-    }
-
-    protected override void OnMouseMove(MouseEventArgs e)
-    {
-        base.OnMouseMove(e);
-        if (_dragCursorOrigin is not { } cursorOrigin || _dragFormOrigin is not { } formOrigin)
-        {
-            return;
-        }
-
-        var form = FindForm();
-        if (form is null)
-        {
-            return;
-        }
-
-        var cursor = Cursor.Position;
-        form.Location = new Point(
-            formOrigin.X + cursor.X - cursorOrigin.X,
-            formOrigin.Y + cursor.Y - cursorOrigin.Y);
-    }
-
-    protected override void OnMouseUp(MouseEventArgs e)
-    {
-        base.OnMouseUp(e);
-        _dragCursorOrigin = null;
-        _dragFormOrigin = null;
-        Capture = false;
     }
 
     private void RebuildDynamicControls()
@@ -1501,7 +1465,7 @@ internal sealed class DesignV2SettingsSurface : Control
             bounds.Width - 44,
             30);
         DrawLocalhostBox(graphics, definition, urlBox);
-        var browserSize = BrowserOverlayRecommendedSize.For(definition, settings);
+        var browserSize = BrowserOverlayRecommendedSize.ScaledFor(definition, settings);
         var detailTop = urlBox.Bottom + 8;
         DrawText(
             graphics,
@@ -1865,11 +1829,6 @@ internal sealed class DesignV2SettingsSurface : Control
     private static Rectangle CloseButtonBounds()
     {
         return new Rectangle(1132, 54, 30, 24);
-    }
-
-    private static Rectangle TitleDragBounds()
-    {
-        return new Rectangle(ShellX, ShellY, ShellWidth - 80, 58);
     }
 
     private static Rectangle MatrixVisibleCheckBounds(int rowIndex, Rectangle rect, int rowHeight = 24, int rowGap = 5)

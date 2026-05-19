@@ -69,6 +69,8 @@ public sealed class AppPerformanceSnapshotRecorderTests
             var content = File.ReadAllText(file);
             Assert.Contains("\"telemetryFrameCount\":1", content);
             Assert.Contains("\"id\":\"test.operation\"", content);
+            Assert.Contains("\"budget\":", content);
+            Assert.Contains("\"category\":\"unclassified\"", content);
             Assert.Contains("\"iRacingSystem\"", content);
             Assert.Contains("\"id\":\"iracing.chan_quality\"", content);
             Assert.Contains("\"overlayUpdates\"", content);

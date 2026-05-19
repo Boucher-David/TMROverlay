@@ -11,6 +11,9 @@ internal static class LiveRaceProjectionMapper
             return progress;
         }
 
+        var useProjectionLapsRemaining = projection.EstimatedTeamLapsRemaining is not null
+            && !ShouldKeepProgressLapsRemaining(progress, projection);
+
         return progress with
         {
             StrategyLapTimeSeconds = projection.TeamPaceSeconds ?? progress.StrategyLapTimeSeconds,
@@ -21,10 +24,27 @@ internal static class LiveRaceProjectionMapper
             RacePaceSource = projection.OverallLeaderPaceSeconds is not null
                 ? projection.OverallLeaderPaceSource
                 : progress.RacePaceSource,
-            RaceLapsRemaining = projection.EstimatedTeamLapsRemaining ?? progress.RaceLapsRemaining,
-            RaceLapsRemainingSource = projection.EstimatedTeamLapsRemaining is not null
+            RaceLapsRemaining = useProjectionLapsRemaining
+                ? projection.EstimatedTeamLapsRemaining
+                : progress.RaceLapsRemaining,
+            RaceLapsRemainingSource = useProjectionLapsRemaining
                 ? projection.EstimatedTeamLapsRemainingSource
                 : progress.RaceLapsRemainingSource
         };
+    }
+
+    private static bool ShouldKeepProgressLapsRemaining(
+        LiveRaceProgressModel progress,
+        LiveRaceProjectionModel projection)
+    {
+        return progress.RaceLapsRemaining is not null
+            && IsAuthoritativeLapRemainingSource(progress.RaceLapsRemainingSource)
+            && !IsAuthoritativeLapRemainingSource(projection.EstimatedTeamLapsRemainingSource);
+    }
+
+    internal static bool IsAuthoritativeLapRemainingSource(string? source)
+    {
+        return string.Equals(source, "session laps remain", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(source, "session ended", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -34,6 +34,9 @@ internal sealed class GapToLeaderForm : PersistentOverlayForm
     private const double FocusScaleMinimumReferenceGapLaps = 0.5d;
     private const double FocusScaleMinimumRangeSeconds = 20d;
     private const double FocusScaleMinimumRangeLaps = 0.1d;
+    private const double FocusScaleCandidateRangeMinimumSeconds = 15d;
+    private const double FocusScaleCandidateRangeMaximumSeconds = 90d;
+    private const double FocusScaleCandidateRangeLaps = 0.5d;
     private const double FocusScalePaddingMultiplier = 1.18d;
     private const double FocusScaleTriggerRatio = 3d;
     private const double SameLapReferenceBoundaryLaps = 0.95d;
@@ -937,7 +940,10 @@ internal sealed class GapToLeaderForm : PersistentOverlayForm
         double startSeconds,
         double endSeconds)
     {
-        var leaderScaleMax = SelectMaxGapSeconds(selectedSeries, startSeconds, endSeconds);
+        var scaleSeries = selectedSeries
+            .Where(ShouldUseForGapScale)
+            .ToArray();
+        var leaderScaleMax = SelectMaxGapSeconds(scaleSeries, startSeconds, endSeconds);
         var referenceSelection = selectedSeries.FirstOrDefault(selection => selection.State.IsReferenceCar);
         if (referenceSelection is null
             || !_series.TryGetValue(referenceSelection.State.CarIdx, out var rawReferencePoints))
@@ -964,7 +970,7 @@ internal sealed class GapToLeaderForm : PersistentOverlayForm
         var maxAheadSeconds = 0d;
         var maxBehindSeconds = 0d;
         var hasLocalComparison = false;
-        foreach (var selection in selectedSeries.Where(selection => !selection.State.IsClassLeader))
+        foreach (var selection in scaleSeries.Where(selection => !selection.State.IsClassLeader))
         {
             if (!_series.TryGetValue(selection.State.CarIdx, out var points))
             {
@@ -1008,13 +1014,34 @@ internal sealed class GapToLeaderForm : PersistentOverlayForm
             latestReferenceGap);
     }
 
+    private bool ShouldUseForGapScale(ChartSeriesSelection selection)
+    {
+        return GapToLeaderPresentationRules.ShouldUseForFocusScale(
+            selection.State.IsReferenceCar,
+            selection.State.IsClassLeader,
+            selection.IsStale,
+            selection.IsStickyExit,
+            selection.State.IsCurrentlyDesired,
+            selection.State.DeltaSecondsToReference,
+            FocusScaleCandidateRangeSeconds());
+    }
+
+    private double FocusScaleCandidateRangeSeconds()
+    {
+        var lapScaledRange = _lapReferenceSeconds is { } lapSeconds && IsValidLapReference(lapSeconds)
+            ? lapSeconds * FocusScaleCandidateRangeLaps
+            : 0d;
+        return Math.Min(
+            FocusScaleCandidateRangeMaximumSeconds,
+            Math.Max(FocusScaleCandidateRangeMinimumSeconds, lapScaledRange));
+    }
+
     private double FocusScaleMinimumReferenceGap()
     {
-        return Math.Max(
+        return GapToLeaderPresentationRules.FocusScaleTriggerSeconds(
+            _lapReferenceSeconds,
             FocusScaleMinimumReferenceGapSeconds,
-            _lapReferenceSeconds is { } lapSeconds && IsValidLapReference(lapSeconds)
-                ? lapSeconds * FocusScaleMinimumReferenceGapLaps
-                : 0d);
+            FocusScaleMinimumReferenceGapLaps);
     }
 
     private double FocusScaleMinimumRange()

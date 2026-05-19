@@ -106,7 +106,10 @@ public sealed class BrowserOverlayPageRendererTests
             Assert.Contains("Waiting for player in car.", html);
             Assert.Contains("brakeAbsActive", html);
             Assert.Contains("inputGraphEnabled(inputs)", html);
-            Assert.Contains("renderInputRail(inputs, brakeAbsActive)", html);
+            Assert.Contains("renderInputRailContents(inputs, brakeAbsActive)", html);
+            Assert.Contains("renderInputRail(railContents)", html);
+            Assert.Contains("width: min(32px, 100%)", html);
+            Assert.DoesNotContain("width: min(52px, 100%)", html);
             Assert.Contains("var(--tmr-green)", html);
             Assert.Contains("themeColor('--tmr-green'", html);
             Assert.DoesNotContain("tractionControlActive", html);
@@ -129,6 +132,8 @@ public sealed class BrowserOverlayPageRendererTests
         {
             Assert.Contains("fetchOverlayModel('gap-to-leader')", html);
             Assert.Contains("gapDisplayModel", html);
+            Assert.Contains("availableAfterTable >= 260", html);
+            Assert.DoesNotContain("availableAfterTable >= 300", html);
         }
         if (expectedId == "stream-chat")
         {

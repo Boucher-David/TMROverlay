@@ -360,6 +360,11 @@ internal static class PitServiceOverlayViewModel
 
     private static SimpleTelemetryRowViewModel? BuildRaceContextRow(LiveTelemetrySnapshot snapshot)
     {
+        if (OverlayAvailabilityEvaluator.NormalizeSessionKind(OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot)) != OverlaySessionKind.Race)
+        {
+            return null;
+        }
+
         var session = snapshot.Models.Session;
         var timeRemaining = OverlayHeaderTimeFormatter.FormatCompactTimeRemaining(
             session.SessionTimeRemainSeconds,

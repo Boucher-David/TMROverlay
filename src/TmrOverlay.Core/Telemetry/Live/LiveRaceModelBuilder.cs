@@ -627,6 +627,7 @@ internal static class LiveRaceModelBuilder
         LiveSpatialModel spatial,
         LiveProximitySnapshot proximity)
     {
+        var nonCompetitorCarIdxs = NonCompetitorCarIdxs(context);
         var timingRows = timing.OverallRows
             .GroupBy(row => row.CarIdx)
             .Select(group => group.First())
@@ -644,14 +645,50 @@ internal static class LiveRaceModelBuilder
             LiveScoringRowCount: scoredTimingRows.Count(row => row.OverallPosition is not null || row.ClassPosition is not null),
             LiveTimingRowCount: scoredTimingRows.Count(row => row.HasTiming),
             LiveSpatialRowCount: scoredTimingRows.Count(row => row.HasSpatialProgress),
-            LiveProximityRowCount: proximity.NearbyCars.Count);
+            LiveProximityRowCount: proximity.NearbyCars.Count(car => !nonCompetitorCarIdxs.Contains(car.CarIdx)));
     }
 
     private static bool IsRaceRosterDriver(HistoricalSessionDriver driver)
     {
         return driver.CarIdx is >= 0
             && driver.IsSpectator != true
-            && driver.UserId != -1;
+            && driver.UserId != -1
+            && !IsNonCompetitorDriver(driver);
+    }
+
+    private static HashSet<int> NonCompetitorCarIdxs(HistoricalSessionContext context)
+    {
+        return context.Drivers
+            .Where(IsNonCompetitorDriver)
+            .Select(driver => driver.CarIdx!.Value)
+            .ToHashSet();
+    }
+
+    private static bool IsNonCompetitorDriver(HistoricalSessionDriver driver)
+    {
+        if (driver.CarIdx is not >= 0 || !HasPaceOrSafetyIdentity(driver))
+        {
+            return false;
+        }
+
+        return driver.UserId == -1
+            || (driver.IsSpectator == true && driver.CarClassRelSpeed == 0);
+    }
+
+    private static bool HasPaceOrSafetyIdentity(HistoricalSessionDriver driver)
+    {
+        return ContainsPaceOrSafety(driver.UserName)
+            || ContainsPaceOrSafety(driver.TeamName)
+            || ContainsPaceOrSafety(driver.CarPath)
+            || ContainsPaceOrSafety(driver.CarScreenName)
+            || ContainsPaceOrSafety(driver.CarScreenNameShort);
+    }
+
+    private static bool ContainsPaceOrSafety(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+            && (value.Contains("pace car", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("safety", StringComparison.OrdinalIgnoreCase));
     }
 
     private static LiveScoringModel BuildScoring(
@@ -661,7 +698,11 @@ internal static class LiveRaceModelBuilder
         LiveTimingModel timing)
     {
         var selection = SelectScoringResults(context, sample, timing);
-        if (selection.Results.Length == 0)
+        var nonCompetitorCarIdxs = NonCompetitorCarIdxs(context);
+        var selectedResults = selection.Results
+            .Where(result => result.CarIdx is { } carIdx && !nonCompetitorCarIdxs.Contains(carIdx))
+            .ToArray();
+        if (selectedResults.Length == 0)
         {
             return LiveScoringModel.Empty with
             {
@@ -679,7 +720,7 @@ internal static class LiveRaceModelBuilder
             .Concat(timing.ClassRows)
             .GroupBy(row => row.CarIdx)
             .ToDictionary(group => group.Key, group => group.First());
-        var rows = selection.Results
+        var rows = selectedResults
             .Select(result => ToScoringRow(
                 result,
                 driversByCarIdx,
@@ -1080,6 +1121,7 @@ internal static class LiveRaceModelBuilder
         IReadOnlySet<int>? griddedCarIdxs)
     {
         var rows = new List<LiveTimingRow>();
+        var nonCompetitorCarIdxs = NonCompetitorCarIdxs(context);
         var focusCarIdx = FocusCarIdx(sample);
         var playerCarIdx = sample.PlayerCarIdx;
         var classLeaderCarIdx = leaderGap.ClassLeaderCarIdx ?? FocusClassLeaderCarIdx(sample);
@@ -1217,6 +1259,7 @@ internal static class LiveRaceModelBuilder
         var mergedRows = rows
             .GroupBy(row => row.CarIdx)
             .Select(group => ApplyClassGap(MergeRows(group), classGapByCarIdx, classGapEvidence, isRaceSession))
+            .Where(row => !nonCompetitorCarIdxs.Contains(row.CarIdx))
             .OrderBy(row => row.OverallPosition ?? int.MaxValue)
             .ThenBy(row => row.ClassPosition ?? int.MaxValue)
             .ThenByDescending(row => row.ProgressLaps ?? double.MinValue)
@@ -1270,11 +1313,17 @@ internal static class LiveRaceModelBuilder
         LiveReferenceModel reference)
     {
         var referenceClass = reference.ReferenceCarClass;
+        var nonCompetitorCarIdxs = NonCompetitorCarIdxs(context);
         var timingByCarIdx = timing.OverallRows.ToDictionary(row => row.CarIdx);
         var rows = new List<LiveRelativeRow>();
 
         foreach (var car in proximity.NearbyCars)
         {
+            if (nonCompetitorCarIdxs.Contains(car.CarIdx))
+            {
+                continue;
+            }
+
             timingByCarIdx.TryGetValue(car.CarIdx, out var timingRow);
             var inferredRelativeSeconds = car.RelativeSeconds ?? InferRelativeSecondsFromLapDistance(car.RelativeLaps, sample);
             rows.Add(new LiveRelativeRow(
@@ -1309,6 +1358,11 @@ internal static class LiveRaceModelBuilder
 
         foreach (var car in sample.NearbyCars ?? [])
         {
+            if (nonCompetitorCarIdxs.Contains(car.CarIdx))
+            {
+                continue;
+            }
+
             if (!IsPitRoadLike(car.TrackSurface, car.OnPitRoad)
                 || !timingByCarIdx.TryGetValue(car.CarIdx, out var timingRow)
                 || RelativeLapsFromLapDistance(car.LapDistPct, reference.LapDistPct) is not { } relativeLaps)

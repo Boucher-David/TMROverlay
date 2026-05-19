@@ -9,7 +9,7 @@ internal sealed record StandingsOverlayViewModel(
     IReadOnlyList<StandingsOverlayRowViewModel> Rows)
 {
     public const int DefaultMaximumRows = 14;
-    public const int MaximumRenderedRows = 64;
+    public const int MaximumRenderedRows = 24;
 
     public static StandingsOverlayViewModel From(
         LiveTelemetrySnapshot snapshot,

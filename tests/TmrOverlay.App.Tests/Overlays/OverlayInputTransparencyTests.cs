@@ -6,6 +6,7 @@ using TmrOverlay.App.Overlays.CarRadar;
 using TmrOverlay.App.Overlays.DesignV2;
 using TmrOverlay.App.Overlays.Relative;
 using TmrOverlay.App.Overlays.StreamChat;
+using TmrOverlay.App.Telemetry;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
@@ -624,6 +625,18 @@ public sealed class OverlayInputTransparencyTests
             DesignV2LiveOverlayKind.SessionWeather,
             settings,
             RaceSnapshot(timeRemainingSeconds: 600d)));
+    }
+
+    [Fact]
+    public void DesignV2StandingsPreviewTelemetryDoesNotAutoExpandUserSizedWindow()
+    {
+        var preview = SessionPreviewTelemetryFixtures.Build(
+            OverlaySessionKind.Race,
+            DateTimeOffset.UtcNow,
+            generation: 1);
+
+        Assert.False(DesignV2LiveOverlayForm.ShouldAutoExpandStandingsRows(preview));
+        Assert.True(DesignV2LiveOverlayForm.ShouldAutoExpandStandingsRows(RaceSnapshot(timeRemainingSeconds: 600d)));
     }
 
     private static LiveTelemetrySnapshot RaceSnapshot(double timeRemainingSeconds)

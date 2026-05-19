@@ -99,18 +99,15 @@
       background: var(--tmr-title);
     }
 
+    .header[hidden] {
+      display: none !important;
+    }
+
     body.car-radar-page .header,
     body.track-map-page .header,
     body.flags-page .header,
     body.garage-cover-page .header {
       display: none;
-    }
-
-    .title {
-      font-size: 15px;
-      font-weight: 800;
-      letter-spacing: 0;
-      white-space: nowrap;
     }
 
     .header-items {
@@ -137,7 +134,7 @@
     }
 
     .header-item {
-      color: var(--tmr-text);
+      color: var(--tmr-text-muted);
       font-size: 11px;
       font-weight: 800;
       text-align: right;
@@ -146,6 +143,32 @@
       max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .header-item.normal {
+      color: var(--tmr-text-muted);
+    }
+
+    .header-item.info,
+    .header-item.live,
+    .header-item.modeled {
+      color: var(--tmr-cyan);
+    }
+
+    .header-item.success {
+      color: var(--tmr-green);
+    }
+
+    .header-item.warning {
+      color: var(--tmr-amber);
+    }
+
+    .header-item.error {
+      color: var(--tmr-error);
+    }
+
+    .header-item.waiting {
+      color: var(--tmr-text-muted);
     }
 
     .content {

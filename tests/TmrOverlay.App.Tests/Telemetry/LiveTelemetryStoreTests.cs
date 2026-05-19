@@ -322,6 +322,73 @@ DriverInfo:
     }
 
     [Fact]
+    public void RecordFrame_PrefersPublishedLapsRemainingForClassZeroProjection()
+    {
+        var store = new LiveTelemetryStore();
+        store.ApplySessionInfo("""
+WeekendInfo:
+ EventType: Race
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Race
+   SessionName: RACE
+   SessionTime: 14400 sec
+   SessionLaps: unlimited
+   ResultsPositions:
+   - Position: 0
+     ClassPosition: 0
+     CarIdx: 10
+     LastTime: 91.0000
+   - Position: 1
+     ClassPosition: 1
+     CarIdx: 11
+     LastTime: 92.0000
+DriverInfo:
+ DriverCarIdx: 10
+ Drivers:
+ - CarIdx: 10
+   UserName: Class Zero Leader
+   CarNumber: 10
+   CarClassID: 0
+   CarClassShortName:
+ - CarIdx: 11
+   UserName: Class Zero Chase
+   CarNumber: 11
+   CarClassID: 0
+   CarClassShortName:
+""");
+
+        store.RecordFrame(CreateSample(
+            playerCarIdx: 10,
+            focusCarIdx: 10,
+            focusCarClass: 0,
+            teamLapCompleted: 42,
+            teamLapDistPct: 0.50d,
+            teamPosition: 1,
+            teamClassPosition: 1,
+            teamCarClass: 0,
+            sessionState: 4,
+            sessionTimeRemain: 18_000d,
+            sessionLapsRemainEx: 5,
+            sessionLapsTotal: 50,
+            teamLastLapTimeSeconds: 91d));
+
+        var models = store.Snapshot().Models;
+        var classGroup = Assert.Single(models.Scoring.ClassGroups);
+        var classProjection = Assert.Single(models.RaceProjection.ClassProjections);
+
+        Assert.Equal(0, classGroup.CarClass);
+        Assert.Equal("Class 0", classGroup.ClassName);
+        Assert.Equal(0, classProjection.CarClass);
+        Assert.Equal(5d, classProjection.EstimatedLapsRemaining);
+        Assert.Equal("session laps remain", classProjection.EstimatedLapsRemainingSource);
+        Assert.Equal(5d, models.RaceProgress.RaceLapsRemaining);
+        Assert.Equal("session laps remain", models.RaceProgress.RaceLapsRemainingSource);
+    }
+
+    [Fact]
     public void RecordFrame_PublishesRollingRaceProjectionAfterCleanLeaderWindow()
     {
         var store = new LiveTelemetryStore();
@@ -507,6 +574,9 @@ SessionInfo:
      CarIdx: 11
    - Position: 2
      ClassPosition: 2
+     CarIdx: 12
+   - Position: 3
+     ClassPosition: 3
      CarIdx: 63
 DriverInfo:
  DriverCarIdx: 10
@@ -521,6 +591,17 @@ DriverInfo:
    UserID: 1002
    CarNumber: 11
    CarClassID: 4098
+ - CarIdx: 12
+   UserName: Safety First Driver
+   UserID: 1003
+   CarNumber: 12
+   CarClassID: 4098
+   CarClassRelSpeed: 0
+ - CarIdx: 62
+   UserName: Spectator Driver
+   UserID: 1004
+   CarNumber: S
+   IsSpectator: 1
  - CarIdx: 63
    UserName: Pace Car
    UserID: -1
@@ -542,14 +623,19 @@ DriverInfo:
             [
                 Car(10, position: 1, classPosition: 1, lapDistPct: 0.50d, f2TimeSeconds: 45d),
                 Car(11, position: 2, classPosition: 2, lapDistPct: 0.49d, f2TimeSeconds: 46d),
+                Car(12, position: 3, classPosition: 3, lapDistPct: 0.48d, f2TimeSeconds: 47d),
                 Car(63, position: 3, classPosition: 3, lapDistPct: 0.10d, f2TimeSeconds: 120d)
             ]));
 
         var models = store.Snapshot().Models;
 
-        Assert.Equal(2, models.Coverage.RosterCount);
+        Assert.Equal(3, models.Coverage.RosterCount);
         Assert.DoesNotContain(models.Scoring.Rows, row => row.CarIdx == 63);
         Assert.DoesNotContain(models.Timing.OverallRows, row => row.CarIdx == 63);
+        Assert.DoesNotContain(models.Relative.Rows, row => row.CarIdx == 63);
+        Assert.Contains(models.Scoring.Rows, row => row.CarIdx == 12);
+        Assert.Contains(models.Timing.OverallRows, row => row.CarIdx == 12);
+        Assert.Contains(models.DriverDirectory.Drivers, driver => driver.CarIdx == 62 && driver.IsSpectator == true);
     }
 
     [Fact]

@@ -3,9 +3,13 @@ using System.Reflection;
 using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.Content;
+using TmrOverlay.App.Overlays.Flags;
 using TmrOverlay.App.Overlays.InputState;
+using TmrOverlay.App.Overlays.PitService;
 using TmrOverlay.App.Overlays.Relative;
+using TmrOverlay.App.Overlays.SessionWeather;
 using TmrOverlay.App.Overlays.Standings;
+using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
 using Xunit;
@@ -95,7 +99,7 @@ public sealed class OverlayContentColumnSettingsTests
         var standingsSize = BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings);
         var relativeSize = BrowserOverlayRecommendedSize.For(RelativeOverlayDefinition.Definition, relative);
 
-        Assert.Equal(659, standingsSize.Width);
+        Assert.Equal(665, standingsSize.Width);
         Assert.Equal(313, standingsSize.Height);
         Assert.Equal(360, relativeSize.Width);
         Assert.Equal(352, relativeSize.Height);
@@ -177,14 +181,14 @@ public sealed class OverlayContentColumnSettingsTests
             StandingsOverlayDefinition.Definition.DefaultHeight);
         standings.Scale = 1.25d;
 
-        var size = (Size)method.Invoke(null, [StandingsOverlayDefinition.Definition, standings])!;
+        var size = ScaledSize(method, StandingsOverlayDefinition.Definition, standings);
 
-        Assert.Equal(824, size.Width);
+        Assert.Equal(831, size.Width);
         Assert.Equal(391, size.Height);
     }
 
     [Fact]
-    public void TargetOverlayClientSizeForApply_DoesNotPreserveExpandedStandingsPreviewHeight()
+    public void TargetOverlayClientSizeForApply_PreservesExpandedStandingsPreviewHeightAndSettings()
     {
         var standings = new ApplicationSettings().GetOrAddOverlay(
             "standings",
@@ -198,9 +202,9 @@ public sealed class OverlayContentColumnSettingsTests
             currentSize: new Size(StandingsOverlayDefinition.Definition.DefaultWidth, 2160),
             sessionPreviewActive: true);
 
-        Assert.Equal(new Size(659, 313), size);
-        Assert.Equal(659, standings.Width);
-        Assert.Equal(313, standings.Height);
+        Assert.Equal(new Size(665, 2160), size);
+        Assert.Equal(665, standings.Width);
+        Assert.Equal(2160, standings.Height);
     }
 
     [Fact]
@@ -212,24 +216,178 @@ public sealed class OverlayContentColumnSettingsTests
         Assert.NotNull(method);
 
         var full = NewInputStateSettings();
-        Assert.Equal(new Size(520, 260), ScaledInputStateSize(method, full));
-        Assert.Equal(new Size(520, 260), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, full));
+        Assert.Equal(new Size(520, 222), ScaledInputStateSize(method, full));
+        Assert.Equal(new Size(520, 222), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, full));
 
         var railOnly = NewInputStateSettings();
         SetInputBlocks(railOnly, InputGraphBlockIds, false);
-        Assert.Equal(new Size(276, 260), ScaledInputStateSize(method, railOnly));
-        Assert.Equal(new Size(276, 260), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, railOnly));
+        Assert.Equal(new Size(276, 222), ScaledInputStateSize(method, railOnly));
+        Assert.Equal(new Size(276, 222), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, railOnly));
 
         var graphOnly = NewInputStateSettings();
         SetInputBlocks(graphOnly, InputRailBlockIds, false);
-        Assert.Equal(new Size(380, 260), ScaledInputStateSize(method, graphOnly));
-        Assert.Equal(new Size(380, 260), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, graphOnly));
+        Assert.Equal(new Size(380, 222), ScaledInputStateSize(method, graphOnly));
+        Assert.Equal(new Size(380, 222), BrowserOverlayRecommendedSize.For(InputStateOverlayDefinition.Definition, graphOnly));
 
         var empty = NewInputStateSettings();
         SetInputBlocks(empty, InputGraphBlockIds, false);
         SetInputBlocks(empty, InputRailBlockIds, false);
-        Assert.Equal(new Size(276, 260), ScaledInputStateSize(method, empty));
+        Assert.Equal(new Size(276, 222), ScaledInputStateSize(method, empty));
         Assert.False(InputStateRenderModelBuilder.HasEnabledContent(empty));
+    }
+
+    [Fact]
+    public void ChromeAwareSizingReservesHeaderOnlyWhenSessionHeaderIsSelected()
+    {
+        var method = typeof(OverlayManager).GetMethod(
+            "ScaledOverlaySize",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var standings = new ApplicationSettings().GetOrAddOverlay(
+            StandingsOverlayDefinition.Definition.Id,
+            StandingsOverlayDefinition.Definition.DefaultWidth,
+            StandingsOverlayDefinition.Definition.DefaultHeight);
+
+        Assert.Equal(
+            new Size(665, 313),
+            BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings));
+        Assert.Equal(
+            new Size(665, 313),
+            BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Practice));
+
+        standings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, false);
+
+        Assert.Equal(
+            new Size(665, 275),
+            BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Practice));
+        Assert.Equal(
+            new Size(665, 275),
+            ScaledSize(method, StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Practice));
+    }
+
+    [Fact]
+    public void ContentDrivenSizingShrinksRelativeRowsAcrossNativeAndBrowserRecommendations()
+    {
+        var method = typeof(OverlayManager).GetMethod(
+            "ScaledOverlaySize",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var relative = new ApplicationSettings().GetOrAddOverlay(
+            RelativeOverlayDefinition.Definition.Id,
+            RelativeOverlayDefinition.Definition.DefaultWidth,
+            RelativeOverlayDefinition.Definition.DefaultHeight);
+        relative.SetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, 3, 0, 8);
+
+        var browserSize = BrowserOverlayRecommendedSize.For(RelativeOverlayDefinition.Definition, relative);
+        var nativeSize = ScaledSize(method, RelativeOverlayDefinition.Definition, relative);
+
+        Assert.Equal(new Size(360, 248), browserSize);
+        Assert.Equal(browserSize, nativeSize);
+
+        Assert.Equal(
+            new Size(360, 248),
+            BrowserOverlayRecommendedSize.For(RelativeOverlayDefinition.Definition, relative, OverlaySessionKind.Practice));
+    }
+
+    [Fact]
+    public void ContentDrivenSizingShrinksSimpleTelemetryOverlaysToEnabledBlocks()
+    {
+        var method = typeof(OverlayManager).GetMethod(
+            "ScaledOverlaySize",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var pitService = new ApplicationSettings().GetOrAddOverlay(
+            PitServiceOverlayDefinition.Definition.Id,
+            PitServiceOverlayDefinition.Definition.DefaultWidth,
+            PitServiceOverlayDefinition.Definition.DefaultHeight);
+        SetBlocks(pitService, OverlayContentColumnSettings.PitService, false);
+        SetBlock(pitService, OverlayContentColumnSettings.PitService, OverlayContentColumnSettings.PitServiceReleaseBlockId, true);
+
+        var sessionWeather = new ApplicationSettings().GetOrAddOverlay(
+            SessionWeatherOverlayDefinition.Definition.Id,
+            SessionWeatherOverlayDefinition.Definition.DefaultWidth,
+            SessionWeatherOverlayDefinition.Definition.DefaultHeight);
+        SetBlocks(sessionWeather, OverlayContentColumnSettings.SessionWeather, false);
+        SetBlock(sessionWeather, OverlayContentColumnSettings.SessionWeather, OverlayContentColumnSettings.SessionWeatherSessionTypeBlockId, true);
+
+        Assert.Equal(
+            new Size(464, 184),
+            BrowserOverlayRecommendedSize.For(PitServiceOverlayDefinition.Definition, pitService, OverlaySessionKind.Practice));
+        Assert.Equal(
+            new Size(464, 184),
+            BrowserOverlayRecommendedSize.For(PitServiceOverlayDefinition.Definition, pitService));
+        Assert.Equal(
+            new Size(464, 184),
+            ScaledSize(method, PitServiceOverlayDefinition.Definition, pitService));
+        Assert.Equal(
+            new Size(464, 184),
+            BrowserOverlayRecommendedSize.For(SessionWeatherOverlayDefinition.Definition, sessionWeather, OverlaySessionKind.Practice));
+        Assert.Equal(
+            new Size(464, 184),
+            BrowserOverlayRecommendedSize.For(SessionWeatherOverlayDefinition.Definition, sessionWeather));
+        Assert.Equal(
+            new Size(464, 184),
+            ScaledSize(method, SessionWeatherOverlayDefinition.Definition, sessionWeather));
+    }
+
+    [Fact]
+    public void HasRenderableContentHonorsEmptySimpleTelemetryInputAndFlagCategories()
+    {
+        var pitService = new ApplicationSettings().GetOrAddOverlay(
+            PitServiceOverlayDefinition.Definition.Id,
+            PitServiceOverlayDefinition.Definition.DefaultWidth,
+            PitServiceOverlayDefinition.Definition.DefaultHeight);
+        SetBlocks(pitService, OverlayContentColumnSettings.PitService, false);
+        Assert.False(OverlayContentSizing.HasRenderableContent(PitServiceOverlayDefinition.Definition, pitService));
+
+        var input = NewInputStateSettings();
+        SetInputBlocks(input, InputGraphBlockIds, false);
+        SetInputBlocks(input, InputRailBlockIds, false);
+        Assert.False(OverlayContentSizing.HasRenderableContent(InputStateOverlayDefinition.Definition, input));
+
+        var flags = new ApplicationSettings().GetOrAddOverlay(
+            FlagsOverlayDefinition.Definition.Id,
+            FlagsOverlayDefinition.Definition.DefaultWidth,
+            FlagsOverlayDefinition.Definition.DefaultHeight);
+        flags.SetBooleanOption(OverlayOptionKeys.FlagsShowGreen, false);
+        flags.SetBooleanOption(OverlayOptionKeys.FlagsShowBlue, false);
+        flags.SetBooleanOption(OverlayOptionKeys.FlagsShowYellow, false);
+        flags.SetBooleanOption(OverlayOptionKeys.FlagsShowCritical, false);
+        flags.SetBooleanOption(OverlayOptionKeys.FlagsShowFinish, false);
+        Assert.False(OverlayContentSizing.HasRenderableContent(FlagsOverlayDefinition.Definition, flags));
+    }
+
+    [Fact]
+    public void ContentDrivenSizingUsesSessionSpecificContentToggles()
+    {
+        var pitService = new ApplicationSettings().GetOrAddOverlay(
+            PitServiceOverlayDefinition.Definition.Id,
+            PitServiceOverlayDefinition.Definition.DefaultWidth,
+            PitServiceOverlayDefinition.Definition.DefaultHeight);
+        foreach (var block in OverlayContentColumnSettings.PitService.Blocks ?? [])
+        {
+            pitService.SetBooleanOption(
+                OverlayContentColumnSettings.SessionEnabledOptionKey(block.EnabledOptionKey, OverlaySessionKind.Qualifying),
+                false);
+        }
+
+        Assert.True(OverlayContentSizing.HasRenderableContent(
+            PitServiceOverlayDefinition.Definition,
+            pitService,
+            OverlaySessionKind.Practice));
+        Assert.False(OverlayContentSizing.HasRenderableContent(
+            PitServiceOverlayDefinition.Definition,
+            pitService,
+            OverlaySessionKind.Qualifying));
+    }
+
+    [Fact]
+    public void StreamChatUsesStandardOpacityControl()
+    {
+        Assert.True(StreamChatOverlayDefinition.Definition.ShowOpacityControl);
     }
 
     [Fact]
@@ -237,17 +395,17 @@ public sealed class OverlayContentColumnSettingsTests
     {
         Assert.True(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             StandingsOverlayDefinition.Definition,
-            new Size(659, 720),
-            new Size(659, 313)));
-        Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
+            new Size(665, 720),
+            new Size(665, 313)));
+        Assert.True(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             StandingsOverlayDefinition.Definition,
-            new Size(659, 720),
-            new Size(659, 313),
+            new Size(665, 720),
+            new Size(665, 313),
             sessionPreviewActive: true));
         Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             StandingsOverlayDefinition.Definition,
             new Size(500, 720),
-            new Size(659, 313)));
+            new Size(665, 313)));
         Assert.False(OverlayManager.ShouldPreserveExpandedOverlayHeight(
             RelativeOverlayDefinition.Definition,
             new Size(360, 520),
@@ -299,13 +457,13 @@ public sealed class OverlayContentColumnSettingsTests
             width => Assert.Equal(60, width),
             width => Assert.Equal(70, width),
             width => Assert.Equal(70, width),
-            width => Assert.Equal(30, width));
+            width => Assert.Equal(36, width));
         Assert.Collection(
             OverlayContentColumnSettings.Relative.Columns.Select(column => column.DefaultWidth),
             width => Assert.Equal(38, width),
             width => Assert.Equal(250, width),
             width => Assert.Equal(70, width),
-            width => Assert.Equal(30, width));
+            width => Assert.Equal(36, width));
     }
 
     [Fact]
@@ -392,7 +550,16 @@ public sealed class OverlayContentColumnSettingsTests
 
     private static Size ScaledInputStateSize(MethodInfo method, OverlaySettings settings)
     {
-        return (Size)method.Invoke(null, [InputStateOverlayDefinition.Definition, settings])!;
+        return ScaledSize(method, InputStateOverlayDefinition.Definition, settings);
+    }
+
+    private static Size ScaledSize(
+        MethodInfo method,
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind = null)
+    {
+        return (Size)method.Invoke(null, [definition, settings, sessionKind])!;
     }
 
     private static void SetInputBlocks(OverlaySettings settings, IEnumerable<string> blockIds, bool enabled)
@@ -404,5 +571,26 @@ public sealed class OverlayContentColumnSettingsTests
             var block = blocks.Single(block => block.Id == blockId);
             settings.SetBooleanOption(block.EnabledOptionKey, enabled);
         }
+    }
+
+    private static void SetBlocks(
+        OverlaySettings settings,
+        OverlayContentDefinition definition,
+        bool enabled)
+    {
+        foreach (var block in definition.Blocks ?? [])
+        {
+            settings.SetBooleanOption(block.EnabledOptionKey, enabled);
+        }
+    }
+
+    private static void SetBlock(
+        OverlaySettings settings,
+        OverlayContentDefinition definition,
+        string blockId,
+        bool enabled)
+    {
+        var block = (definition.Blocks ?? []).Single(block => block.Id == blockId);
+        settings.SetBooleanOption(block.EnabledOptionKey, enabled);
     }
 }

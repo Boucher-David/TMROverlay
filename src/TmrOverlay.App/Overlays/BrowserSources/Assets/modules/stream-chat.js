@@ -61,6 +61,16 @@ async function pollStreamChatModel() {
 
 function renderStreamChatModel(model) {
   streamChatState.lastModel = model;
+  if (model?.shouldRender === false) {
+    modelRootOpacity = rootOpacityFromModel(model);
+    applyOverlayOpacity(0);
+    contentEl.innerHTML = '';
+    clearStreamChatChrome();
+    return;
+  }
+
+  modelRootOpacity = rootOpacityFromModel(model);
+  applyOverlayOpacity(1);
   const rows = model?.streamChat?.rows || [];
   scheduleBadgeRegistryLoads(rows);
   renderStreamChatLines(rows.length ? rows : [

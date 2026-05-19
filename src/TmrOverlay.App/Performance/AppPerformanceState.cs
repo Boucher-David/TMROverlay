@@ -317,7 +317,6 @@ internal sealed class AppPerformanceState
             var inputInterceptRiskReasons = OverlayWindowInputInterceptRiskReasons(
                 actualVisible,
                 inputTransparent,
-                effectiveSettingsOverlayActive,
                 settingsWindowInputProtected,
                 intersectsSettingsWindow,
                 clampedOpacity);
@@ -537,7 +536,6 @@ internal sealed class AppPerformanceState
     private static IReadOnlyList<string> OverlayWindowInputInterceptRiskReasons(
         bool actualVisible,
         bool inputTransparent,
-        bool effectiveSettingsOverlayActive,
         bool settingsWindowInputProtected,
         bool intersectsSettingsWindow,
         double clampedOpacity)
@@ -548,11 +546,6 @@ internal sealed class AppPerformanceState
         }
 
         var reasons = new List<string>();
-        if (effectiveSettingsOverlayActive)
-        {
-            reasons.Add("settings-overlay-active");
-        }
-
         if (settingsWindowInputProtected)
         {
             reasons.Add("settings-window-input-protected");

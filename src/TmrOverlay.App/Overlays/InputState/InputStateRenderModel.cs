@@ -124,30 +124,33 @@ internal static class InputStateRenderModelBuilder
             trace.ToArray());
     }
 
-    public static bool HasEnabledContent(OverlaySettings settings)
+    public static bool HasEnabledContent(OverlaySettings settings, OverlaySessionKind? sessionKind = null)
     {
-        return BlockEnabled(settings, OverlayContentColumnSettings.InputThrottleTraceBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputBrakeTraceBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputClutchTraceBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputThrottleBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputBrakeBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputClutchBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputSteeringBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputGearBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputSpeedBlockId);
+        return BlockEnabled(settings, OverlayContentColumnSettings.InputThrottleTraceBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputBrakeTraceBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputClutchTraceBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputThrottleBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputBrakeBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputClutchBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputSteeringBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputGearBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputSpeedBlockId, sessionKind);
     }
 
-    public static int BaseWidthForEnabledContent(OverlaySettings settings, int fullWidth)
+    public static int BaseWidthForEnabledContent(
+        OverlaySettings settings,
+        int fullWidth,
+        OverlaySessionKind? sessionKind = null)
     {
-        var hasGraph = BlockEnabled(settings, OverlayContentColumnSettings.InputThrottleTraceBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputBrakeTraceBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputClutchTraceBlockId);
-        var hasRail = BlockEnabled(settings, OverlayContentColumnSettings.InputThrottleBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputBrakeBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputClutchBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputSteeringBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputGearBlockId)
-            || BlockEnabled(settings, OverlayContentColumnSettings.InputSpeedBlockId);
+        var hasGraph = BlockEnabled(settings, OverlayContentColumnSettings.InputThrottleTraceBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputBrakeTraceBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputClutchTraceBlockId, sessionKind);
+        var hasRail = BlockEnabled(settings, OverlayContentColumnSettings.InputThrottleBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputBrakeBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputClutchBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputSteeringBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputGearBlockId, sessionKind)
+            || BlockEnabled(settings, OverlayContentColumnSettings.InputSpeedBlockId, sessionKind);
 
         if (hasGraph && hasRail)
         {

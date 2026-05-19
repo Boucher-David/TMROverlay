@@ -1465,9 +1465,9 @@ internal sealed class DiagnosticsBundleService
                     LapDistanceProgress = "CarIdxLapCompleted >= 0 and CarIdxLapDistPct >= 0",
                     EstimatedTime = "CarIdxEstTime >= 0; positive counts exclude zero placeholders",
                     F2Time = "CarIdxF2Time >= 0; positive counts exclude zero placeholders",
-                    CarClass = "CarIdxClass > 0",
+                    CarClass = "CarIdxClass >= 0",
                     TrackSurface = "CarIdxTrackSurface >= 0",
-                    SentinelNote = "-1 and 0 are not valid official positions; gridding/startup/replay contexts can still have class and progress before official order is populated."
+                    SentinelNote = "-1 and 0 are not valid official positions; CarIdxClass 0 can be a valid single-class identifier; gridding/startup/replay contexts can still have class and progress before official order is populated."
                 },
                 CarFieldCoverage = carFieldCoverage,
                 FocusCar = CarSnapshot(focusCar),
@@ -2348,6 +2348,8 @@ internal sealed class DiagnosticsBundleService
         return new
         {
             RowCount = cars.Count,
+            SdkCarIdxSlotRowCount = cars.Count,
+            CompetitorLikeSignalRowCount = cars.Count(HasCompetitorLikeSignal),
             OfficialPositionValidCount = cars.Count(HasOfficialPosition),
             OfficialClassPositionValidCount = cars.Count(car => car.ClassPosition is > 0),
             LapDistanceProgressValidCount = cars.Count(HasProgress),
@@ -2355,7 +2357,7 @@ internal sealed class DiagnosticsBundleService
             EstimatedTimePositiveCount = cars.Count(car => car.EstimatedTimeSeconds is > 0d),
             F2TimeNonNegativeCount = cars.Count(car => car.F2TimeSeconds is >= 0d),
             F2TimePositiveCount = cars.Count(car => car.F2TimeSeconds is > 0d),
-            CarClassValidCount = cars.Count(car => car.CarClass is > 0),
+            CarClassValidCount = cars.Count(HasKnownCarClass),
             TrackSurfaceValidCount = cars.Count(car => car.TrackSurface is >= 0),
             SessionFlagsKnownCount = cars.Count(car => car.SessionFlags is not null),
             SessionFlagsActiveCount = cars.Count(car => car.SessionFlags is not null and not 0),
@@ -2363,13 +2365,27 @@ internal sealed class DiagnosticsBundleService
             FullOfficialTimingCount = cars.Count(car =>
                 HasOfficialPosition(car)
                 && car.ClassPosition is > 0
-                && car.CarClass is > 0
+                && HasKnownCarClass(car)
                 && car.F2TimeSeconds is >= 0d),
             FullProgressTimingCount = cars.Count(car =>
                 HasProgress(car)
-                && car.CarClass is > 0
+                && HasKnownCarClass(car)
                 && car.EstimatedTimeSeconds is >= 0d)
         };
+    }
+
+    private static bool HasKnownCarClass(HistoricalCarProximity car)
+    {
+        return car.CarClass is >= 0;
+    }
+
+    private static bool HasCompetitorLikeSignal(HistoricalCarProximity car)
+    {
+        return HasOfficialPosition(car)
+            || car.ClassPosition is > 0
+            || HasProgress(car)
+            || car.EstimatedTimeSeconds is > 0d
+            || car.F2TimeSeconds is > 0d;
     }
 
     private static object? CarSnapshot(HistoricalCarProximity? car)

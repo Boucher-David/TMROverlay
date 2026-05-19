@@ -236,6 +236,70 @@ public sealed class LiveOverlayWindowCaptureStoreTests
     }
 
     [Fact]
+    public void Snapshot_DoesNotFlagTopMostNoActivateOverlayBesideSettingsAsInputRisk()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-window-capture-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var store = new LiveOverlayWindowCaptureStore(storage);
+            var definition = StandingsOverlayDefinition.Definition;
+            var settings = new OverlaySettings
+            {
+                Id = definition.Id,
+                Enabled = true,
+                X = 822,
+                Y = 18,
+                Width = 438,
+                Height = 360,
+                Scale = 1d,
+                Opacity = 0.88d
+            };
+
+            store.RecordOverlayWindow(
+                definition,
+                settings,
+                form: null,
+                enabled: true,
+                sessionAllowed: true,
+                settingsPreview: false,
+                desiredVisible: true,
+                actualVisible: true,
+                topMost: true,
+                liveTelemetryAvailable: true,
+                contextRequirement: definition.ContextRequirement.ToString(),
+                contextAvailable: true,
+                contextReason: "not_required",
+                settingsOverlayActive: true,
+                settingsWindowVisible: true,
+                settingsWindowIntersects: false,
+                settingsWindowInputProtected: false,
+                inputTransparent: false,
+                noActivate: true,
+                implementation: "native-v2",
+                nativeFormType: "StandingsForm",
+                nativeRenderer: "winforms",
+                nativeBodyKind: "table");
+
+            var overlay = Assert.Single(store.Snapshot().Overlays);
+
+            Assert.True(overlay.SettingsOverlayActive);
+            Assert.True(overlay.SettingsWindowVisible);
+            Assert.False(overlay.SettingsWindowIntersects);
+            Assert.False(overlay.SettingsWindowInputProtected);
+            Assert.False(overlay.InputInterceptRisk);
+            Assert.Empty(overlay.InputInterceptRiskReasons);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Snapshot_RecordsInputInterceptRiskReasonsOnlyForConcreteInterceptionEvidence()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-window-capture-test", Guid.NewGuid().ToString("N"));

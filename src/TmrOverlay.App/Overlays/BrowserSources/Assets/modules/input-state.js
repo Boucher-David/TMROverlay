@@ -8,6 +8,17 @@ TmrBrowserOverlay.register({
   },
   render() {
     const model = inputDisplayModel;
+    if (model?.shouldRender === false) {
+      inputTrace = [];
+      applyInputOverlayLayoutClasses(false, false, false);
+      modelRootOpacity = rootOpacityFromModel(model);
+      applyOverlayOpacity(0);
+      contentEl.innerHTML = '';
+      renderHeaderItems(model, '');
+      clearFooterSource();
+      return;
+    }
+
     const inputs = model?.inputs || {};
     inputTrace = Array.isArray(inputs.trace) ? inputs.trace : [];
     const hasGraph = inputGraphEnabled(inputs);
@@ -71,8 +82,12 @@ function ensureInputStyle() {
 
     body.input-state-page .content {
       width: 100%;
-      height: calc(100% - 38px);
+      height: 100%;
       padding: 12px 16px 14px;
+    }
+
+    body.input-state-page .overlay.has-header-band .content {
+      height: calc(100% - 38px);
     }
 
     .input-layout {
@@ -215,6 +230,92 @@ function ensureInputStyle() {
       width: min(52px, 100%);
       height: min(52px, 100%);
       max-height: 100%;
+    }
+
+    @media (max-width: 360px), (max-height: 170px) {
+      body.input-state-page {
+        padding: 8px;
+      }
+
+      body.input-state-page .overlay {
+        width: min(312px, calc(100vw - 16px));
+        height: min(156px, calc(100vh - 16px));
+      }
+
+      body.input-state-page .header {
+        min-height: 32px;
+        padding: 7px 10px 6px;
+        gap: 8px;
+      }
+
+      body.input-state-page .content {
+        padding: 6px 7px 7px;
+      }
+
+      body.input-state-page .overlay.has-header-band .content {
+        height: calc(100% - 32px);
+      }
+
+      .input-layout {
+        grid-template-columns: minmax(92px, 1fr) minmax(72px, 36%);
+        gap: 10px;
+      }
+
+      .input-layout.no-rail {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .input-rail {
+        gap: 4px;
+        padding: 4px;
+      }
+
+      .input-bars,
+      .input-readouts {
+        gap: 2px;
+      }
+
+      .input-bar,
+      .input-readout {
+        grid-template-columns: 28px minmax(0, 1fr);
+        column-gap: 4px;
+      }
+
+      .input-bar {
+        grid-template-rows: 9px 7px;
+        min-height: 15px;
+      }
+
+      .input-readout {
+        min-height: 13px;
+      }
+
+      .input-bar-label,
+      .input-readout-label,
+      .input-wheel-label,
+      .input-bar-value {
+        font-size: 7.5px;
+      }
+
+      .input-bar-value,
+      .input-readout-value,
+      .input-wheel-value {
+        font-size: 8.5px;
+      }
+
+      .input-bar-track {
+        height: 8px;
+      }
+
+      .input-wheel {
+        grid-template-columns: 1fr auto;
+        grid-template-rows: 12px;
+        column-gap: 4px;
+      }
+
+      .input-wheel svg {
+        display: none;
+      }
     }
   `;
   document.head.appendChild(style);

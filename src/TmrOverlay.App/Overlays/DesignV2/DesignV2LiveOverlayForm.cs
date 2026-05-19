@@ -50,6 +50,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private const int PaddingSize = 16;
     private const int HeaderHeight = 38;
     private const int FooterHeight = 32;
+    private const float OverlayCornerRadius = 8f;
     private const int BodyGap = 12;
     private const int StreamChatCloseButtonSize = 22;
     private const int StreamChatCloseButtonRightMargin = 10;
@@ -260,6 +261,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             | ControlStyles.ResizeRedraw
             | ControlStyles.UserPaint,
             true);
+        ApplyWindowRegion();
 
         var refreshIntervalMilliseconds = RefreshIntervalFor(kind);
         _refreshTimer = new System.Windows.Forms.Timer
@@ -362,6 +364,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         {
             _refreshTimer.Stop();
             _refreshTimer.Dispose();
+            Region?.Dispose();
         }
 
         base.Dispose(disposing);
@@ -385,6 +388,33 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             && (IsStreamChatCloseButtonHit(clientPoint) || IsStreamChatDragHit(clientPoint, ClientSize));
     }
 
+    private void ApplyWindowRegion()
+    {
+        if (!UsesRoundedWindowRegion(_kind))
+        {
+            var previous = Region;
+            if (previous is not null)
+            {
+                Region = null;
+                previous.Dispose();
+            }
+
+            return;
+        }
+
+        if (ClientSize.Width <= 0 || ClientSize.Height <= 0)
+        {
+            return;
+        }
+
+        using var path = RoundedPath(
+            new RectangleF(0f, 0f, ClientSize.Width, ClientSize.Height),
+            OverlayCornerRadius);
+        var oldRegion = Region;
+        Region = new Region(path);
+        oldRegion?.Dispose();
+    }
+
     protected override void OnMouseUp(MouseEventArgs e)
     {
         if (_kind == DesignV2LiveOverlayKind.StreamChat
@@ -396,6 +426,12 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         }
 
         base.OnMouseUp(e);
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        ApplyWindowRegion();
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -487,7 +523,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             return model with
             {
                 HeaderText = string.Empty,
-                ShowFooter = false
+                ShowFooter = false,
+                ShowHeader = false
             };
         }
 
@@ -502,11 +539,13 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         }
 
         var headerText = BuildHeaderText(_settings, snapshot, HeaderStatusFor(_kind, model.Status));
+        var showHeader = !string.IsNullOrWhiteSpace(headerText);
         var showFooter = ShowFooterForSettings(_kind, _settings, snapshot);
         return model with
         {
             HeaderText = headerText,
-            ShowFooter = showFooter
+            ShowFooter = showFooter,
+            ShowHeader = showHeader
         };
     }
 
@@ -554,17 +593,19 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         var otherRows = OverlayContentColumnSettings.Standings.Blocks is { Count: > 0 } otherBlocks
             ? OverlayContentColumnSettings.BlockCount(_settings, otherBlocks[0])
             : 2;
-        var visibleRows = StandingsVisibleRowsForHeight(ClientSize.Height);
-        if (snapshot.Models.Scoring.HasData)
+        var showHeader = !string.IsNullOrWhiteSpace(BuildHeaderText(_settings, snapshot, HeaderStatusFor(_kind, string.Empty)));
+        var showFooter = ShowFooterForSettings(_kind, _settings, snapshot);
+        var visibleRows = StandingsVisibleRowsForHeight(ClientSize.Height, showHeader, showFooter);
+        if (snapshot.Models.Scoring.HasData && ShouldAutoExpandStandingsRows(snapshot))
         {
             var requiredRows = StandingsOverlayViewModel.ExpandRowBudgetForClassGroups(
                 snapshot.Models.Scoring.ClassGroups,
                 visibleRows,
                 otherRows,
                 showClassSeparators);
-            if (EnsureClientHeightForStandingsRows(requiredRows))
+            if (EnsureClientHeightForStandingsRows(requiredRows, showHeader, showFooter))
             {
-                visibleRows = StandingsVisibleRowsForHeight(ClientSize.Height);
+                visibleRows = StandingsVisibleRowsForHeight(ClientSize.Height, showHeader, showFooter);
             }
         }
 
@@ -595,9 +636,9 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             new DesignV2TableBody(columns, rows));
     }
 
-    private bool EnsureClientHeightForStandingsRows(int rowCount)
+    private bool EnsureClientHeightForStandingsRows(int rowCount, bool showHeader, bool showFooter)
     {
-        var targetHeight = TargetClientHeightForStandingsRows(rowCount);
+        var targetHeight = TargetClientHeightForStandingsRows(rowCount, showHeader, showFooter);
         if (ClientSize.Height >= targetHeight)
         {
             return false;
@@ -607,7 +648,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         return true;
     }
 
-    private int TargetClientHeightForStandingsRows(int rowCount)
+    private int TargetClientHeightForStandingsRows(int rowCount, bool showHeader, bool showFooter)
     {
         var persistedHeight = _settings.Height > 0
             ? _settings.Height
@@ -616,7 +657,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             Math.Max(1, rowCount),
             1,
             StandingsOverlayViewModel.MaximumRenderedRows);
-        var persistedVisibleRows = StandingsVisibleRowsForHeight(persistedHeight);
+        var persistedVisibleRows = StandingsVisibleRowsForHeight(persistedHeight, showHeader, showFooter);
         if (visibleRows <= persistedVisibleRows)
         {
             return persistedHeight;
@@ -624,13 +665,29 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
         return Math.Max(
             persistedHeight,
-            HeaderHeight + FooterHeight + BodyGap + 1 + RowHeight + (visibleRows * (RowHeight + RowGap)));
+            HeaderReserveHeight(showHeader) + FooterReserveHeight(showFooter) + 1 + RowHeight + (visibleRows * (RowHeight + RowGap)));
     }
 
-    private static int StandingsVisibleRowsForHeight(int clientHeight)
+    private static int StandingsVisibleRowsForHeight(int clientHeight, bool showHeader, bool showFooter)
     {
-        var bodyHeight = clientHeight - HeaderHeight - FooterHeight - BodyGap - 1;
+        var bodyHeight = clientHeight - HeaderReserveHeight(showHeader) - FooterReserveHeight(showFooter) - 1;
         return Math.Max(1, (bodyHeight - RowHeight) / (RowHeight + RowGap));
+    }
+
+    internal static bool ShouldAutoExpandStandingsRows(LiveTelemetrySnapshot snapshot)
+    {
+        return snapshot.SourceId is null
+            || !snapshot.SourceId.StartsWith("session-preview-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int HeaderReserveHeight(bool showHeader)
+    {
+        return showHeader ? HeaderHeight + BodyGap : PaddingSize;
+    }
+
+    private static int FooterReserveHeight(bool showFooter)
+    {
+        return showFooter ? FooterHeight : 8;
     }
 
     private static IReadOnlyList<string> ValuesForStandingsRow(
@@ -2839,8 +2896,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         DesignV2OverlayModel model,
         DesignV2InputsBody inputs)
     {
-        var header = new RectangleF(rect.Left, rect.Top, rect.Width, HeaderHeight);
-        var content = InputsContentBounds(rect, header);
+        var content = InputsContentBounds(rect);
         return new DesignV2LayoutDiagnostics(
             "design-v2-layout/v1",
             KindName(_kind),
@@ -2848,11 +2904,9 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             constants)
         {
             Outer = LayoutRect(rect),
-            Header = LayoutRect(header),
             Body = LayoutRect(content),
-            ShowHeader = true,
+            ShowHeader = false,
             ShowFooter = false,
-            HeaderText = model.HeaderText ?? string.Empty,
             BodyLayout = BuildInputsLayout(content, inputs)
         };
     }
@@ -3930,11 +3984,19 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 bounds.Top + row * (cellHeight + FlagCellGap),
                 cellWidth,
                 cellHeight);
-            var poleX = cell.Left + Math.Max(12f, cell.Width * 0.16f);
+            var compact = cell.Height < 92f || cell.Width < 132f;
+            var labelHeight = compact ? 16f : 18f;
+            var flagArea = new RectangleF(
+                cell.Left,
+                cell.Top,
+                cell.Width,
+                Math.Max(32f, cell.Height - labelHeight));
+            var poleX = flagArea.Left + Math.Max(12f, flagArea.Width * 0.16f);
             var clothLeft = poleX + 1f;
-            var clothWidth = Math.Max(48f, cell.Right - clothLeft - 8f);
-            var clothHeight = Math.Max(24f, Math.Min(cell.Height * 0.7f, clothWidth * 0.58f));
-            var clothTop = cell.Top + Math.Max(4f, (cell.Height - clothHeight) * 0.32f);
+            var clothWidth = Math.Max(48f, flagArea.Right - clothLeft - 8f);
+            var clothHeight = Math.Max(24f, Math.Min(flagArea.Height * 0.7f, clothWidth * 0.58f));
+            var clothTop = flagArea.Top + Math.Max(4f, (flagArea.Height - clothHeight) * 0.32f);
+            var labelBounds = new RectangleF(cell.Left + 2f, cell.Top, Math.Max(1f, cell.Width - 4f), Math.Max(1f, cell.Height - 1f));
             cells.Add(new DesignV2LayoutFlagCell(
                 index,
                 row,
@@ -3943,7 +4005,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 body.Flags[index].Label,
                 body.Flags[index].Detail,
                 LayoutRect(cell),
-                LayoutRect(new RectangleF(clothLeft, clothTop, clothWidth, clothHeight))));
+                LayoutRect(new RectangleF(clothLeft, clothTop, clothWidth, clothHeight)),
+                LayoutRect(labelBounds)));
         }
 
         return new DesignV2LayoutBody("flags", LayoutRect(rect))
@@ -4199,7 +4262,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private void DrawOverlay(Graphics graphics, Rectangle bounds, DesignV2OverlayModel model)
     {
         var outer = RectangleF.Inflate(bounds, -0.5f, -0.5f);
-        FillRounded(graphics, outer, 8, Surface, Border);
+        FillRounded(graphics, outer, OverlayCornerRadius, Surface, Border);
         FillRounded(graphics, new RectangleF(outer.Left, outer.Top + 7, 3, Math.Max(1, outer.Height - 14)), 2, EvidenceColor(model.Evidence), null);
         var headerBottom = outer.Top;
         if (model.ShowHeader)
@@ -4211,19 +4274,14 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 graphics.FillRectangle(accent, outer.Left, header.Bottom - 1, outer.Width, 2);
             }
 
-            using var titleFont = FontOf(14, FontStyle.Bold);
             using var statusFont = FontOf(11, FontStyle.Bold);
             var closeButtonSpace = _kind == DesignV2LiveOverlayKind.StreamChat ? StreamChatCloseButtonStatusReserve : 0;
-            var titleWidth = _kind == DesignV2LiveOverlayKind.StreamChat
-                ? Math.Min(190, Math.Max(80, outer.Width * 0.44f))
-                : Math.Min(230, outer.Width * 0.55f);
-            DrawText(graphics, model.Title, titleFont, TextPrimary, new RectangleF(outer.Left + 14, header.Top + 10, titleWidth, 18));
             DrawText(
                 graphics,
                 model.HeaderText ?? string.Empty,
                 statusFont,
                 EvidenceColor(model.Evidence),
-                new RectangleF(outer.Left + titleWidth + 24, header.Top + 10, Math.Max(1, outer.Width - titleWidth - 38 - closeButtonSpace), 18),
+                new RectangleF(outer.Left + 14, header.Top + 10, Math.Max(1, outer.Width - 28 - closeButtonSpace), 18),
                 ContentAlignment.MiddleRight);
             if (_kind == DesignV2LiveOverlayKind.StreamChat)
             {
@@ -4231,6 +4289,10 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             }
 
             headerBottom = header.Bottom;
+        }
+        else if (_kind == DesignV2LiveOverlayKind.StreamChat)
+        {
+            DrawStreamChatCloseButton(graphics, StreamChatCloseButtonBounds(outer));
         }
 
         var footerReserve = model.ShowFooter ? FooterHeight : 8;
@@ -5924,21 +5986,13 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private void DrawInputsOverlay(Graphics graphics, RectangleF rect, DesignV2OverlayModel model, DesignV2InputsBody body)
     {
         FillRounded(graphics, rect, 8, Surface, Color.FromArgb(235, Cyan));
-        var header = new RectangleF(rect.Left, rect.Top, rect.Width, HeaderHeight);
-        using (var titleBrush = new SolidBrush(TitleBar))
-        {
-            graphics.FillRectangle(titleBrush, header);
-        }
 
         using (var accent = new SolidBrush(Magenta))
         {
-            graphics.FillRectangle(accent, rect.Left, header.Bottom - 2, rect.Width, 2);
+            graphics.FillRectangle(accent, rect.Left, rect.Top + 7, 3, Math.Max(1, rect.Height - 14));
         }
 
-        using var titleFont = FontOf(13f, FontStyle.Bold);
-        DrawText(graphics, "Inputs", titleFont, TextPrimary, new RectangleF(rect.Left + 14, rect.Top + 10, 100, 16));
-
-        var content = InputsContentBounds(rect, header);
+        var content = InputsContentBounds(rect);
         if (!body.HasContent)
         {
             using var waitingFont = FontOf(11, FontStyle.Bold);
@@ -7129,9 +7183,15 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private static void DrawFlagCell(Graphics graphics, RectangleF cell, FlagOverlayDisplayItem flag, int index)
     {
         var compact = cell.Height < 92f || cell.Width < 132f;
-        var poleX = cell.Left + Math.Max(12f, cell.Width * 0.16f);
-        var poleTop = cell.Top + 4f;
-        var poleBottom = cell.Bottom - 2f;
+        var labelHeight = compact ? 16f : 18f;
+        var flagArea = new RectangleF(
+            cell.Left,
+            cell.Top,
+            cell.Width,
+            Math.Max(32f, cell.Height - labelHeight));
+        var poleX = flagArea.Left + Math.Max(12f, flagArea.Width * 0.16f);
+        var poleTop = flagArea.Top + 4f;
+        var poleBottom = flagArea.Bottom - 2f;
         using (var shadowPen = new Pen(FlagPoleShadowColor, compact ? 2f : 3f)
         {
             StartCap = LineCap.Round,
@@ -7150,12 +7210,13 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         }
 
         var clothLeft = poleX + 1f;
-        var clothWidth = Math.Max(48f, cell.Right - clothLeft - 8f);
-        var clothHeight = Math.Max(24f, Math.Min(cell.Height * 0.7f, clothWidth * 0.58f));
-        var clothTop = cell.Top + Math.Max(4f, (cell.Height - clothHeight) * 0.32f);
+        var clothWidth = Math.Max(48f, flagArea.Right - clothLeft - 8f);
+        var clothHeight = Math.Max(24f, Math.Min(flagArea.Height * 0.7f, clothWidth * 0.58f));
+        var clothTop = flagArea.Top + Math.Max(4f, (flagArea.Height - clothHeight) * 0.32f);
         var clothBounds = new RectangleF(clothLeft, clothTop, clothWidth, clothHeight);
         using var path = CreateFlagPath(clothBounds, compact ? 3.5f : 5.5f, index);
         DrawFlagCloth(graphics, path, flag, clothBounds);
+        DrawFlagLabel(graphics, cell, flag, compact);
     }
 
     private static void DrawFlagCloth(
@@ -7186,9 +7247,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 diameter,
                 diameter);
         }
-        else if (flag.Kind == FlagDisplayKind.Caution)
+        else if (flag.Kind == FlagDisplayKind.Caution || flag.Kind == FlagDisplayKind.Debris)
         {
-            using var stripeBrush = new SolidBrush(Color.FromArgb(72, 0, 0, 0));
+            using var stripeBrush = new SolidBrush(flag.Kind == FlagDisplayKind.Debris
+                ? Color.FromArgb(208, 245, 124, 38)
+                : Color.FromArgb(72, 0, 0, 0));
             var stripeWidth = Math.Max(8f, clothBounds.Width * 0.12f);
             var oldClip = graphics.Clip;
             try
@@ -7214,6 +7277,28 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         }
 
         DrawFlagOutline(graphics, path, flag.Kind);
+    }
+
+    private static void DrawFlagLabel(
+        Graphics graphics,
+        RectangleF cell,
+        FlagOverlayDisplayItem flag,
+        bool compact)
+    {
+        var label = string.IsNullOrWhiteSpace(flag.Detail)
+            ? flag.Label
+            : $"{flag.Label} {flag.Detail}";
+        using var font = new Font("Segoe UI", compact ? 7.5f : 8.5f, FontStyle.Bold, GraphicsUnit.Point);
+        using var brush = new SolidBrush(TextPrimary);
+        using var format = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Far,
+            Trimming = StringTrimming.EllipsisCharacter,
+            FormatFlags = StringFormatFlags.NoWrap
+        };
+        var labelRect = new RectangleF(cell.Left + 2f, cell.Top, Math.Max(1f, cell.Width - 4f), Math.Max(1f, cell.Height - 1f));
+        graphics.DrawString(label, font, brush, labelRect, format);
     }
 
     private static void DrawCheckeredFlag(Graphics graphics, GraphicsPath path, RectangleF clothBounds)
@@ -7299,6 +7384,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             FlagDisplayKind.Green => Color.FromArgb(48, 214, 109),
             FlagDisplayKind.Blue => Color.FromArgb(55, 162, 255),
             FlagDisplayKind.Yellow or FlagDisplayKind.Caution => Color.FromArgb(255, 207, 74),
+            FlagDisplayKind.Debris => Color.FromArgb(255, 207, 74),
             FlagDisplayKind.Red => Color.FromArgb(236, 76, 86),
             FlagDisplayKind.Black or FlagDisplayKind.Meatball => Color.FromArgb(8, 10, 12),
             FlagDisplayKind.White => Color.FromArgb(246, 248, 250),
@@ -7412,6 +7498,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         return kind is DesignV2LiveOverlayKind.TrackMap
             or DesignV2LiveOverlayKind.CarRadar
             or DesignV2LiveOverlayKind.Flags;
+    }
+
+    internal static bool UsesRoundedWindowRegion(DesignV2LiveOverlayKind kind)
+    {
+        return !UsesTransparentBackground(kind);
     }
 
     private static string RadarStatusText(DesignV2RadarBody radar)
@@ -7747,13 +7838,13 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         return new RectangleF(outer.Left + 10, outer.Bottom - 24, Math.Max(1, outer.Width - 20), 14);
     }
 
-    private static RectangleF InputsContentBounds(RectangleF rect, RectangleF header)
+    private static RectangleF InputsContentBounds(RectangleF rect)
     {
         return new RectangleF(
             rect.Left + 16,
-            header.Bottom + 12,
+            rect.Top + 12,
             Math.Max(1, rect.Width - 32),
-            Math.Max(1, rect.Height - HeaderHeight - 26));
+            Math.Max(1, rect.Height - 26));
     }
 
     private static float TableCellHorizontalPadding(float width)
@@ -8302,7 +8393,8 @@ internal sealed record DesignV2LayoutFlagCell(
     string Label,
     string? Detail,
     DesignV2LayoutRect Bounds,
-    DesignV2LayoutRect ClothBounds);
+    DesignV2LayoutRect ClothBounds,
+    DesignV2LayoutRect LabelBounds);
 
 internal sealed record DesignV2TableBody(
     IReadOnlyList<DesignV2Column> Columns,

@@ -67,6 +67,7 @@ public sealed class BrowserOverlayModelFactoryTests
         }));
         var settings = new ApplicationSettings();
         var overlay = settings.GetOrAddOverlay("fuel-calculator", 600, 340);
+        overlay.Enabled = true;
         overlay.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingTest, false);
         overlay.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, false);
         overlay.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying, false);
@@ -158,6 +159,7 @@ public sealed class BrowserOverlayModelFactoryTests
         }));
         var settings = new ApplicationSettings();
         var overlay = settings.GetOrAddOverlay("flags", 360, 170);
+        overlay.Enabled = true;
         overlay.SetBooleanOption(OverlayOptionKeys.FlagsShowBlue, false);
         var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
         var snapshot = LiveTelemetrySnapshot.Empty with

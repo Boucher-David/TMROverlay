@@ -849,6 +849,7 @@ internal static class Program
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "waiting", "Waiting"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
+            new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "rightmost-evidence", "Rightmost Evidence"),
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
@@ -915,7 +916,7 @@ internal static class Program
 
         if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
-            return ReviewRelativeModel(previewMode);
+            return ReviewRelativeModel(previewMode, includePitColumn: false);
         }
 
         if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
@@ -962,6 +963,12 @@ internal static class Program
             && ReviewAlignedNativeModel(overlayId, OverlaySessionKind.Race) is { } chromeModel)
         {
             return WithoutSharedChrome(chromeModel);
+        }
+
+        if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "rightmost-evidence", StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewRelativeModel(OverlaySessionKind.Race, includePitColumn: true);
         }
 
         if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
@@ -1088,32 +1095,39 @@ internal static class Program
                     new DesignV2Column("INT", 60, ContentAlignment.MiddleRight),
                     new DesignV2Column("FAST", 70, ContentAlignment.MiddleRight),
                     new DesignV2Column("LAST", 70, ContentAlignment.MiddleRight),
-                    new DesignV2Column("PIT", 30, ContentAlignment.MiddleRight)
+                    new DesignV2Column("PIT", 36, ContentAlignment.MiddleRight)
                 ],
                 rows),
             HeaderText: "06:37:08",
             ShowFooter: false);
     }
 
-    private static DesignV2OverlayModel ReviewRelativeModel(OverlaySessionKind previewMode)
+    private static DesignV2OverlayModel ReviewRelativeModel(OverlaySessionKind previewMode, bool includePitColumn)
     {
         var status = $"5 - 2/4 cars | {ReviewPreviewLabel(previewMode)}";
         var showLapRelationship = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) == OverlaySessionKind.Race;
-        var rows = Enumerable.Repeat(ReviewBlankTableRow(3), 11).ToArray();
-        rows[4] = ReviewTableRow(["3", "#34 Near Ahead", "-2.350"], "#33CEFF", relativeLapDelta: showLapRelationship ? (int?)1 : null);
-        rows[5] = ReviewTableRow(["5", "#55 Focus Driver", "0.000"], "#FFDA59", isReference: true, relativeLapDelta: showLapRelationship ? (int?)0 : null);
-        rows[6] = ReviewTableRow(["6", "#61 Near Behind", "+1.200"], "#FF4FD8", relativeLapDelta: showLapRelationship ? (int?)-2 : null);
+        var rows = Enumerable.Repeat(ReviewBlankTableRow(includePitColumn ? 4 : 3), 11).ToArray();
+        rows[4] = ReviewTableRow(includePitColumn ? ["3", "#34 Near Ahead", "-2.350", ""] : ["3", "#34 Near Ahead", "-2.350"], "#33CEFF", relativeLapDelta: showLapRelationship ? (int?)1 : null);
+        rows[5] = ReviewTableRow(includePitColumn ? ["5", "#55 Focus Driver", "0.000", ""] : ["5", "#55 Focus Driver", "0.000"], "#FFDA59", isReference: true, relativeLapDelta: showLapRelationship ? (int?)0 : null);
+        rows[6] = ReviewTableRow(includePitColumn ? ["6", "#61 Near Behind", "+1.200", "IN"] : ["6", "#61 Near Behind", "+1.200"], "#FF4FD8", relativeLapDelta: showLapRelationship ? (int?)-2 : null);
+        var columns = new List<DesignV2Column>
+        {
+            new("Pos", 38, ContentAlignment.MiddleRight),
+            new("Driver", 250, ContentAlignment.MiddleLeft),
+            new("Delta", 70, ContentAlignment.MiddleRight)
+        };
+        if (includePitColumn)
+        {
+            columns.Add(new DesignV2Column("Pit", 36, ContentAlignment.MiddleRight));
+        }
+
         return new DesignV2OverlayModel(
             "Relative",
             status,
             "source: review fixture",
             DesignV2Evidence.Live,
             new DesignV2TableBody(
-                [
-                    new DesignV2Column("Pos", 38, ContentAlignment.MiddleRight),
-                    new DesignV2Column("Driver", 250, ContentAlignment.MiddleLeft),
-                    new DesignV2Column("Delta", 70, ContentAlignment.MiddleRight)
-                ],
+                columns,
                 rows),
             HeaderText: "06:37:08",
             ShowFooter: false);
@@ -1842,7 +1856,7 @@ internal static class Program
             new FlagOverlayDisplayItem(FlagDisplayKind.Green, FlagDisplayCategory.Green, "Green", null, SimpleTelemetryTone.Success),
             new FlagOverlayDisplayItem(FlagDisplayKind.Blue, FlagDisplayCategory.Blue, "Blue", null, SimpleTelemetryTone.Info),
             new FlagOverlayDisplayItem(FlagDisplayKind.Yellow, FlagDisplayCategory.Yellow, "Yellow", null, SimpleTelemetryTone.Warning),
-            new FlagOverlayDisplayItem(FlagDisplayKind.Yellow, FlagDisplayCategory.Yellow, "Debris", null, SimpleTelemetryTone.Warning),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Debris, FlagDisplayCategory.Yellow, "Debris", null, SimpleTelemetryTone.Warning),
             new FlagOverlayDisplayItem(FlagDisplayKind.Caution, FlagDisplayCategory.Yellow, "Caution", "waving", SimpleTelemetryTone.Warning),
             new FlagOverlayDisplayItem(FlagDisplayKind.Red, FlagDisplayCategory.Critical, "Red", null, SimpleTelemetryTone.Error),
             new FlagOverlayDisplayItem(FlagDisplayKind.Black, FlagDisplayCategory.Critical, "Black", null, SimpleTelemetryTone.Error),
@@ -4445,7 +4459,7 @@ internal static class Program
             fill = FlagFillColor(cell.Kind),
             bounds = RectEvidence(cell.Bounds),
             clothBounds = RectEvidence(cell.ClothBounds),
-            labelBounds = (object?)null
+            labelBounds = RectEvidence(cell.LabelBounds)
         };
     }
 
@@ -4520,6 +4534,7 @@ internal static class Program
             "green" => "rgb(48, 214, 109)",
             "blue" => "rgb(55, 162, 255)",
             "yellow" or "caution" => "rgb(255, 207, 74)",
+            "debris" => "orange-yellow-striped",
             "red" => "rgb(236, 76, 86)",
             "white" => "rgb(246, 248, 250)",
             "checkered" => "checkered",

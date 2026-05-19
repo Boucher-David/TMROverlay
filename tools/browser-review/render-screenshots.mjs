@@ -42,6 +42,7 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'fuel-calculator', slug: 'waiting', query: 'fixture=fuel-waiting' },
   { overlayId: 'standings', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'relative', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'relative', slug: 'rightmost-evidence', query: 'fixture=rightmost-evidence' },
   { overlayId: 'fuel-calculator', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'gap-to-leader', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'session-weather', slug: 'chrome-off', query: 'fixture=chrome-off' },
@@ -310,12 +311,13 @@ function settingsComponentRoute(relativePath, urlPath, clip, metadata = {}) {
 }
 
 function overlayRoute(relativePath, urlPath, metadata = {}) {
+  const { viewport, ...metadataWithoutViewport } = metadata;
   const configuredCanvasSize = metadata.overlayId ? configuredCanvasOverlaySizes.get(metadata.overlayId) : null;
   return {
     relativePath,
     urlPath,
     selector: '.overlay',
-    viewport: metadata.viewport || configuredCanvasSize || { width: 1440, height: 900 },
+    viewport: viewport || configuredCanvasSize || { width: 1440, height: 900 },
     minBytes: 1_000,
     renderer: 'browser-overlay-assets',
     moduleAsset: metadata.overlayId ? `src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/${metadata.overlayId}.js` : null,
@@ -327,7 +329,7 @@ function overlayRoute(relativePath, urlPath, metadata = {}) {
     compositingMode: configuredCanvasSize ? 'solid-review-backdrop' : null,
     captureBackdrop: configuredCanvasSize ? configuredCanvasCaptureBackdrop : null,
     minScale: metadata.minScale || null,
-    ...metadata
+    ...metadataWithoutViewport
   };
 }
 
@@ -415,6 +417,7 @@ async function captureRoute(page, route, manifest) {
     bodyKind: stringOrNull(model?.bodyKind),
     shouldRender: booleanOrNull(model?.shouldRender),
     headerItems: modelHeaderItems(model),
+    effectiveSettings: model?.effectiveSettings || null,
     rowCount: modelRowCount(model, dom.layout),
     metricCount: arrayLength(model?.metrics) + arrayLength(model?.metricSections) + arrayLength(model?.gridSections),
     flagCount: arrayLength(model?.flags?.flags),
@@ -708,6 +711,14 @@ async function readDomDiagnostics(element) {
     const activeRegion = String(node.querySelector('.region-segment.active')?.textContent || '')
       .replace(/\s+/g, ' ')
       .trim();
+    const matchingElements = (selector) => {
+      const matches = [];
+      if (node.matches?.(selector)) {
+        matches.push(node);
+      }
+      matches.push(...Array.from(node.querySelectorAll(selector)));
+      return matches;
+    };
     const selectors = [
       '#settings-app',
       '.titlebar',
@@ -739,7 +750,7 @@ async function readDomDiagnostics(element) {
     const rootRect = node.getBoundingClientRect();
     const elements = [];
     for (const [role, selector] of roleSelectors) {
-      Array.from(node.querySelectorAll(selector)).forEach((element, index) => {
+      matchingElements(selector).forEach((element, index) => {
         const bounds = rectFor(element, rootRect);
         if (!bounds) return;
         elements.push({
@@ -757,7 +768,7 @@ async function readDomDiagnostics(element) {
       });
     }
     const rects = selectors
-      .flatMap((selector) => Array.from(node.querySelectorAll(selector)))
+      .flatMap((selector) => matchingElements(selector))
       .map((element) => element.getBoundingClientRect())
       .filter((rect) => rect.width > 0 && rect.height > 0);
     if (!rects.length) {
@@ -1284,7 +1295,7 @@ function flagCellEvidence(flags, layout) {
       visualKind: flagVisualKind(flag),
       label: stringOrNull(flag?.label),
       detail: stringOrNull(flag?.detail),
-      fill: flagColor(flag?.kind),
+      fill: flagColor(flagVisualKind(flag)),
       bounds: cellBounds,
       clothBounds: cellBounds ? flagClothBounds(cellBounds) : null,
       labelBounds: labelElement?.bounds || null
@@ -1324,11 +1335,14 @@ function computedFlagCells(svgBounds, grid, count) {
 }
 
 function flagClothBounds(cell) {
+  const compact = cell.height < 92 || cell.width < 132;
+  const labelHeight = compact ? 16 : 18;
+  const flagAreaHeight = Math.max(32, cell.height - labelHeight);
   const poleX = cell.x + Math.max(12, cell.width * 0.16);
   const clothLeft = poleX + 1;
   const clothWidth = Math.max(48, cell.x + cell.width - clothLeft - 8);
-  const clothHeight = Math.max(24, Math.min(cell.height * 0.7, clothWidth * 0.58));
-  const clothTop = cell.y + Math.max(4, (cell.height - clothHeight) * 0.32);
+  const clothHeight = Math.max(24, Math.min(flagAreaHeight * 0.7, clothWidth * 0.58));
+  const clothTop = cell.y + Math.max(4, (flagAreaHeight - clothHeight) * 0.32);
   return rectEvidence({
     x: clothLeft,
     y: clothTop,
@@ -1348,6 +1362,7 @@ function flagColor(kind) {
   const token = String(kind || '').toLowerCase();
   if (token === 'green') return 'rgb(48, 214, 109)';
   if (token === 'blue') return 'rgb(55, 162, 255)';
+  if (token === 'debris') return 'orange-yellow-striped';
   if (token === 'yellow' || token === 'caution') return 'rgb(255, 207, 74)';
   if (token === 'red') return 'rgb(236, 76, 86)';
   if (token === 'white') return 'rgb(246, 248, 250)';

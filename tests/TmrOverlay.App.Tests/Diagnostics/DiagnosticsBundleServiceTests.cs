@@ -50,17 +50,46 @@ public sealed class DiagnosticsBundleServiceTests
                     EstimatedTimeSeconds: 92d,
                     Position: 2,
                     ClassPosition: 2,
+                    CarClass: 0,
+                    TrackSurface: 3,
+                    OnPitRoad: false),
+                new HistoricalCarProximity(
+                    CarIdx: 12,
+                    LapCompleted: 12,
+                    LapDistPct: 0.39d,
+                    F2TimeSeconds: 93d,
+                    EstimatedTimeSeconds: 93d,
+                    Position: 3,
+                    ClassPosition: 3,
                     CarClass: null,
                     TrackSurface: 3,
+                    OnPitRoad: false),
+                new HistoricalCarProximity(
+                    CarIdx: 63,
+                    LapCompleted: -1,
+                    LapDistPct: -1d,
+                    F2TimeSeconds: null,
+                    EstimatedTimeSeconds: null,
+                    Position: 0,
+                    ClassPosition: 0,
+                    CarClass: null,
+                    TrackSurface: null,
                     OnPitRoad: false)
             }
         ]);
-        var json = System.Text.Json.JsonSerializer.SerializeToNode(coverage);
+        var json = System.Text.Json.JsonSerializer.SerializeToNode(
+            coverage,
+            new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            });
 
-        Assert.Equal(2, ((int?)json?["rowCount"]) ?? -1);
-        Assert.Equal(1, ((int?)json?["carClassValidCount"]) ?? -1);
-        Assert.Equal(1, ((int?)json?["fullOfficialTimingCount"]) ?? -1);
-        Assert.Equal(1, ((int?)json?["fullProgressTimingCount"]) ?? -1);
+        Assert.Equal(4, ((int?)json?["rowCount"]) ?? -1);
+        Assert.Equal(4, ((int?)json?["sdkCarIdxSlotRowCount"]) ?? -1);
+        Assert.Equal(3, ((int?)json?["competitorLikeSignalRowCount"]) ?? -1);
+        Assert.Equal(2, ((int?)json?["carClassValidCount"]) ?? -1);
+        Assert.Equal(2, ((int?)json?["fullOfficialTimingCount"]) ?? -1);
+        Assert.Equal(2, ((int?)json?["fullProgressTimingCount"]) ?? -1);
     }
 
     [Fact]

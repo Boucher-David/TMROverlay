@@ -67,7 +67,6 @@ internal sealed class LiveOverlayWindowCaptureStore
         var inputInterceptRiskReasons = InputInterceptRiskReasons(
             actualVisible,
             inputTransparent,
-            effectiveSettingsOverlayActive,
             settingsWindowInputProtected,
             settingsWindowIntersects,
             opacity);
@@ -169,7 +168,6 @@ internal sealed class LiveOverlayWindowCaptureStore
     private static IReadOnlyList<string> InputInterceptRiskReasons(
         bool actualVisible,
         bool inputTransparent,
-        bool effectiveSettingsOverlayActive,
         bool settingsWindowInputProtected,
         bool settingsWindowIntersects,
         double opacity)
@@ -180,11 +178,6 @@ internal sealed class LiveOverlayWindowCaptureStore
         }
 
         var reasons = new List<string>();
-        if (effectiveSettingsOverlayActive)
-        {
-            reasons.Add("settings-overlay-active");
-        }
-
         if (settingsWindowInputProtected)
         {
             reasons.Add("settings-window-input-protected");

@@ -175,14 +175,11 @@ internal sealed class StreamChatForm : PersistentOverlayForm
         graphics.FillRectangle(headerBrush, header);
         graphics.DrawLine(borderPen, 0, header.Bottom, ClientSize.Width, header.Bottom);
 
-        using var titleFont = OverlayTheme.Font(_fontFamily, 11f, FontStyle.Bold);
         using var statusFont = OverlayTheme.Font(_fontFamily, 8.7f);
-        using var titleBrush = new SolidBrush(OverlayTheme.Colors.TextPrimary);
         using var statusBrush = new SolidBrush(OverlayTheme.Colors.TextSubtle);
-        graphics.DrawString("Stream Chat", titleFont, titleBrush, 14, 11);
 
         var closeButton = CloseButtonBounds();
-        var statusRect = new RectangleF(132, 13, Math.Max(60, closeButton.Left - 142), 18);
+        var statusRect = new RectangleF(14, 13, Math.Max(60, closeButton.Left - 24), 18);
         using var statusFormat = new StringFormat
         {
             Alignment = StringAlignment.Far,

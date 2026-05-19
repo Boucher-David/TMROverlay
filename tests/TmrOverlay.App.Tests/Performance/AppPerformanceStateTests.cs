@@ -199,7 +199,7 @@ public sealed class AppPerformanceStateTests
             alwaysOnTopSetting: true,
             inputTransparent: false,
             noActivate: true,
-            settingsOverlayActive: false,
+            settingsOverlayActive: true,
             settingsWindowVisible: true,
             intersectsSettingsWindow: false,
             settingsWindowInputProtected: false,

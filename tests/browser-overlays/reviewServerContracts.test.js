@@ -63,6 +63,67 @@ describe('browser review server validation contracts', () => {
     });
   });
 
+  it('exposes header item tone evidence for localhost model chrome', async () => {
+    const model = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race')).model;
+
+    expect.soft(model.headerItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'timeRemaining', tone: 'success' })
+    ]));
+    expect.soft(model.effectiveSettings.rendered.headerItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'timeRemaining', tone: 'success' })
+    ]));
+  });
+
+  it('keeps ordinary previews settings-faithful and moves rightmost proof into an explicit fixture', async () => {
+    await reviewServer.postReviewPatch({
+      kind: 'content',
+      overlayId: 'relative',
+      key: 'relative.content.relative.pit.enabled',
+      label: 'Pit status',
+      session: 'Race',
+      enabled: false
+    });
+
+    const normal = (await reviewServer.getJson('/api/overlay-model/relative?preview=race')).model;
+    const fixture = (await reviewServer.getJson('/api/overlay-model/relative?preview=race&fixture=rightmost-evidence')).model;
+
+    expect.soft((normal.columns || []).map((column) => column.dataKey)).not.toContain('pit');
+    expect.soft(normal.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'relative.content.relative.pit.enabled',
+      session: 'race',
+      value: false
+    }));
+
+    expect.soft((fixture.columns || []).map((column) => column.dataKey)).toContain('pit');
+    expect.soft(fixture.effectiveSettings.sources.browserReview.fixtureVariant).toBe('rightmost-evidence');
+    expect.soft(fixture.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'relative.content.relative.pit.enabled',
+      session: 'race',
+      value: true
+    }));
+  });
+
+  it('does not make global session preview force Garage Cover preview visibility', async () => {
+    await reviewServer.postReviewPatch({
+      kind: 'garageCover',
+      overlayId: 'garage-cover',
+      action: 'clear'
+    });
+    await reviewServer.postReviewPatch({
+      kind: 'garageCover',
+      overlayId: 'garage-cover',
+      action: 'import'
+    });
+
+    const model = (await reviewServer.getJson('/api/overlay-model/garage-cover?preview=race')).model;
+
+    expect.soft(model.garageCover?.browserSettings?.previewVisible).toBe(false);
+    expect.soft(model.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'garage-cover.previewVisible',
+      value: false
+    }));
+  });
+
   it('hides localhost OBS models when product visibility is disabled', async () => {
     await reviewServer.postReviewPatch({
       kind: 'overlayEnabled',

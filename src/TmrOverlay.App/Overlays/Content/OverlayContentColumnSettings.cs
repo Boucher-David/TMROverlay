@@ -189,7 +189,7 @@ internal static class OverlayContentColumnSettings
         new(StandingsIntervalColumnId, "INT", DataInterval, true, 5, 60, 50, 160, OverlayOptionKeys.StandingsColumnIntervalWidth, SettingsLabel: "Focus interval"),
         new(StandingsFastestLapColumnId, "FAST", DataFastestLap, true, 6, 70, 56, 150, OverlayOptionKeys.StandingsColumnFastestLapWidth, SettingsLabel: "Fastest lap"),
         new(StandingsLastLapColumnId, "LAST", DataLastLap, true, 7, 70, 56, 150, OverlayOptionKeys.StandingsColumnLastLapWidth, SettingsLabel: "Last lap"),
-        new(StandingsPitColumnId, "PIT", DataPit, true, 8, 30, 24, 90, OverlayOptionKeys.StandingsColumnPitWidth, SettingsLabel: "Pit status")
+        new(StandingsPitColumnId, "PIT", DataPit, true, 8, 36, 36, 90, OverlayOptionKeys.StandingsColumnPitWidth, SettingsLabel: "Pit status")
     ],
         Blocks:
     [
@@ -217,7 +217,7 @@ internal static class OverlayContentColumnSettings
         new(RelativePositionColumnId, "Pos", DataRelativePosition, true, 1, 38, 32, 100, SettingsLabel: "Relative position"),
         new(RelativeDriverColumnId, "Driver", DataDriver, true, 2, 250, 180, 520, Alignment: OverlayContentColumnAlignment.Left),
         new(RelativeGapColumnId, "Delta", DataGap, true, 3, 70, 60, 160, SettingsLabel: "Relative delta"),
-        new(RelativePitColumnId, "Pit", DataPit, false, 4, 30, 24, 90, SettingsLabel: "Pit status")
+        new(RelativePitColumnId, "Pit", DataPit, false, 4, 36, 36, 90, SettingsLabel: "Pit status")
     ]);
 
     public static OverlayContentDefinition InputState { get; } = new(

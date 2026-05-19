@@ -8,6 +8,8 @@ internal sealed class RuntimeState
 
     public required DateTimeOffset StartedAtUtc { get; init; }
 
+    public int ProcessId { get; init; }
+
     public DateTimeOffset? LastHeartbeatAtUtc { get; set; }
 
     public DateTimeOffset? StoppedAtUtc { get; set; }

@@ -4685,7 +4685,8 @@ function flagItemsFromSession(sessionFlags, sessionState) {
   if ((value & 0x00100000) !== 0) items.push(flagItem('meatball', 'critical', 'Repair', null, 'error'));
   if ((value & 0x00010000) !== 0) items.push(flagItem('black', 'critical', 'Black', null, 'error'));
   if ((value & 0x00008000) !== 0 || (value & 0x00004000) !== 0) items.push(flagItem('caution', 'yellow', 'Caution', (value & 0x00008000) !== 0 ? 'waving' : null, 'warning'));
-  else if ((value & 0x00000008) !== 0 || (value & 0x00000100) !== 0 || (value & 0x00000200) !== 0 || (value & 0x00000040) !== 0 || (value & 0x00002000) !== 0) items.push(flagItem('yellow', 'yellow', (value & 0x00000200) !== 0 ? 'One to green' : (value & 0x00000040) !== 0 ? 'Debris' : 'Yellow', (value & 0x00000100) !== 0 || (value & 0x00002000) !== 0 ? 'waving' : null, 'warning'));
+  else if ((value & 0x00000040) !== 0) items.push(flagItem('debris', 'yellow', 'Debris', null, 'warning'));
+  else if ((value & 0x00000008) !== 0 || (value & 0x00000100) !== 0 || (value & 0x00000200) !== 0 || (value & 0x00002000) !== 0) items.push(flagItem('yellow', 'yellow', (value & 0x00000200) !== 0 ? 'One to green' : 'Yellow', (value & 0x00000100) !== 0 || (value & 0x00002000) !== 0 ? 'waving' : null, 'warning'));
   if ((value & 0x00000020) !== 0) items.push(flagItem('blue', 'blue', 'Blue', null, 'info'));
   if ((value & 0x00000001) !== 0 || sessionState === 5) items.push(flagItem('checkered', 'finish', 'Checkered', sessionState === 5 && (value & 0x00000001) === 0 ? 'session complete' : null, 'info'));
   if ((value & 0x00000002) !== 0 || (value & 0x00001000) !== 0 || (value & 0x00000800) !== 0 || (value & 0x00000080) !== 0) items.push(flagItem('white', 'finish', (value & 0x00000002) !== 0 ? 'White' : (value & 0x00001000) !== 0 ? 'Five to go' : (value & 0x00000800) !== 0 ? 'Ten to go' : 'Crossed', null, 'info'));
@@ -5712,7 +5713,7 @@ function relativeColumns() {
     { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
     { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
     ...(relativeShowPitColumn
-      ? [{ id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 30, alignment: 'right' }]
+      ? [{ id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 36, alignment: 'right' }]
       : [])
   ];
 }

@@ -7,7 +7,7 @@ internal static class StandingsOverlayDefinition
     public static OverlayDefinition Definition { get; } = new(
         Id: "standings",
         DisplayName: "Standings",
-        DefaultWidth: 659,
+        DefaultWidth: 665,
         DefaultHeight: 313,
         FadeWhenLiveTelemetryUnavailable: true);
 }

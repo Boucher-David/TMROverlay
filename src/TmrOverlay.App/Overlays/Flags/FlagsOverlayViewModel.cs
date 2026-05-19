@@ -484,6 +484,15 @@ internal static class FlagsOverlayViewModel
         else if (HasFlag(flags, DebrisFlag))
         {
             label = "Debris";
+            items.Add(new PrioritizedFlagDisplayItem(
+                42,
+                new FlagOverlayDisplayItem(
+                    FlagDisplayKind.Debris,
+                    FlagDisplayCategory.Yellow,
+                    label,
+                    detail,
+                    SimpleTelemetryTone.Warning)));
+            return;
         }
         else if (HasFlag(flags, WavingYellowFlag) || HasFlag(flags, RandomWavingFlag))
         {
@@ -636,6 +645,7 @@ internal enum FlagDisplayKind
     Green,
     Blue,
     Yellow,
+    Debris,
     Caution,
     Red,
     Black,

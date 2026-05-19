@@ -1,5 +1,6 @@
     const page = {{PAGE_JSON}};
     const overlayEl = document.querySelector('.overlay');
+    const headerEl = document.querySelector('.header');
     const statusEl = document.getElementById('status');
     const timeRemainingEl = document.getElementById('time-remaining');
     const headerItemsEl = document.querySelector('.header-items');
@@ -424,7 +425,8 @@
         .filter((item) => String(item?.key || '').toLowerCase() !== 'status')
         .map((item) => ({
           key: String(item?.key || '').trim(),
-          value: String(item?.value || '').trim()
+          value: String(item?.value || '').trim(),
+          tone: toneClass(item?.tone)
         }))
         .filter((item) => item.value);
       if (statusEl) {
@@ -437,14 +439,16 @@
           const key = item.key.toLowerCase();
           const id = key === 'timeremaining' ? ' id="time-remaining"' : '';
           const className = key === 'timeremaining'
-            ? 'header-item time-remaining'
-            : `header-item header-item-${cssClassToken(key || 'item')}`;
-          return `<div${id} class="${className}" data-key="${escapeHtml(item.key)}">${escapeHtml(item.value)}</div>`;
+            ? `header-item time-remaining ${item.tone}`
+            : `header-item header-item-${cssClassToken(key || 'item')} ${item.tone}`;
+          return `<div${id} class="${className}" data-key="${escapeHtml(item.key)}" data-tone="${escapeAttribute(item.tone)}">${escapeHtml(item.value)}</div>`;
         }).join('');
+        setHeaderBandVisible(visibleItems.length > 0);
       } else if (timeRemainingEl) {
         const value = visibleItems.find((item) => item.key.toLowerCase() === 'timeremaining')?.value || '';
         timeRemainingEl.textContent = value;
         timeRemainingEl.hidden = !value;
+        setHeaderBandVisible(Boolean(value));
       }
     }
 
@@ -470,6 +474,19 @@
       } else if (timeRemainingEl) {
         timeRemainingEl.hidden = true;
         timeRemainingEl.textContent = '';
+      }
+      setHeaderBandVisible(false);
+    }
+
+    function setHeaderBandVisible(hasRenderedItems) {
+      const keepStaticHeader = document.body.classList.contains('stream-chat-page');
+      const visible = hasRenderedItems || keepStaticHeader;
+      if (headerEl) {
+        headerEl.hidden = !visible;
+      }
+      if (overlayEl) {
+        overlayEl.classList.toggle('has-header-items', hasRenderedItems);
+        overlayEl.classList.toggle('has-header-band', visible);
       }
     }
 
@@ -895,7 +912,7 @@
     }
 
     function gapMetricsTableWidth(width) {
-      const metricsWidth = 184;
+      const metricsWidth = 204;
       const availableAfterTable = width - 58 - 38 - 10 - metricsWidth;
       return availableAfterTable >= 300 ? metricsWidth : 0;
     }
@@ -953,8 +970,8 @@
       ctx.font = '8px "Segoe UI", Arial, sans-serif';
       ctx.fillStyle = themeColor('--tmr-text-muted', '#8caed4');
       ctx.fillText('Metric', rect.left + 8, rect.top + 26);
-      ctx.fillText(graph?.comparisonLabel || '--', rect.left + 56, rect.top + 26);
-      ctx.fillText('Threat', rect.left + 108, rect.top + 26);
+      ctx.fillText(graph?.comparisonLabel || '--', rect.left + 62, rect.top + 26);
+      ctx.fillText('Threat', rect.left + 124, rect.top + 26);
 
       ctx.font = `${rowHeight < 16 ? '8px' : '9px'} "Segoe UI", Arial, sans-serif`;
       visibleMetrics.forEach((metric, index) => {
@@ -962,9 +979,9 @@
         ctx.fillStyle = themeColor('--tmr-text-secondary', '#cdd8e4');
         ctx.fillText(metric?.label || '--', rect.left + 8, y);
         ctx.fillStyle = gapMetricValueColor(metric, numberOr(graph?.metricDeadbandSeconds, 0.25));
-        ctx.fillText(gapMetricValueText(metric), rect.left + 56, y);
+        ctx.fillText(gapMetricValueText(metric), rect.left + 62, y);
         ctx.fillStyle = gapMetricChaserColor(metric);
-        ctx.fillText(gapMetricChaserText(metric), rect.left + 108, y);
+        ctx.fillText(gapMetricChaserText(metric), rect.left + 124, y);
       });
       ctx.restore();
     }

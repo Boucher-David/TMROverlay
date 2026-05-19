@@ -75,7 +75,9 @@ test.describe('browser overlay Playwright integration', () => {
     await expect(page.locator('.chat-name')).toHaveText('TMR');
     await expect(page.locator('.chat-text')).toHaveText('Choose Streamlabs or Twitch in the Stream Chat settings tab.');
     await expect(page.locator('.header')).toBeVisible();
-    await expect(page.locator('.title')).toHaveText('Stream Chat');
+    await expect(page.locator('.title')).toHaveCount(0);
+    await expect(page.locator('.header')).not.toContainText('Stream Chat');
+    await expect(page).toHaveTitle('TMR Stream Chat');
     await expect(page.locator('.overlay')).toHaveCSS('opacity', '1');
     const overlayBox = await page.locator('.overlay').boundingBox();
     expect(overlayBox?.width).toBe(380);
@@ -633,7 +635,7 @@ test.describe('browser overlay Playwright integration', () => {
     await page.locator('.matrix-session button').nth(3).click();
     await page.locator('.matrix-session button').nth(6).click();
     await page.getByRole('tab', { name: 'General' }).click();
-    await expect(page.getByText('OBS size 276 x 260')).toBeVisible();
+    await expect(page.getByText('OBS size 276 x 222')).toBeVisible();
 
     await page.getByRole('link', { name: 'Pit Service' }).click();
     await page.getByRole('tab', { name: 'Header' }).click();
@@ -647,6 +649,8 @@ test.describe('browser overlay Playwright integration', () => {
       session: 'Practice',
       enabled: false
     });
+    await page.getByRole('tab', { name: 'General' }).click();
+    await expect(page.getByText('OBS size 530 x 684')).toBeVisible();
   });
 
   test('application scale and opacity sliders update UI state and localhost model settings', async ({ page }) => {
@@ -701,6 +705,24 @@ test.describe('browser overlay Playwright integration', () => {
         return;
       }
 
+      if (url.hostname === 'localhost' && url.pathname === '/api/overlay-model/stream-chat') {
+        const opacityPercent = reviewState.overlays['stream-chat']?.opacityPercent ?? 100;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json; charset=utf-8',
+          body: JSON.stringify({
+            model: {
+              overlayId: 'stream-chat',
+              title: 'Stream Chat',
+              bodyKind: 'stream-chat',
+              rootOpacity: opacityPercent / 100,
+              streamChat: { status: 'configured_twitch', rows: [] }
+            }
+          })
+        });
+        return;
+      }
+
       await route.fulfill({
         status: 404,
         contentType: 'text/plain; charset=utf-8',
@@ -715,7 +737,7 @@ test.describe('browser overlay Playwright integration', () => {
     await scaleSlider.focus();
     await page.keyboard.press('ArrowRight');
     await expect(page.getByText('125%')).toBeVisible();
-    await expect(page.getByText('OBS size 650 x 325')).toBeVisible();
+    await expect(page.getByText('OBS size 650 x 278')).toBeVisible();
     expect(patches).toContainEqual({
       kind: 'number',
       overlayId: 'input-state',
@@ -739,6 +761,25 @@ test.describe('browser overlay Playwright integration', () => {
       return response.json();
     });
     expect(modelResponse.model.rootOpacity).toBe(0.9);
+
+    await page.getByRole('link', { name: 'Stream Chat' }).click();
+    await expect(page.getByRole('slider', { name: 'Opacity' })).toBeVisible();
+    const streamChatOpacitySlider = page.getByRole('slider', { name: 'Opacity' });
+    await streamChatOpacitySlider.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByText('90%')).toBeVisible();
+    expect(patches).toContainEqual({
+      kind: 'number',
+      overlayId: 'stream-chat',
+      key: 'opacityPercent',
+      value: 90
+    });
+
+    const streamChatModelResponse = await page.evaluate(async () => {
+      const response = await fetch('/api/overlay-model/stream-chat');
+      return response.json();
+    });
+    expect(streamChatModelResponse.model.rootOpacity).toBe(0.9);
   });
 
   test('application browser source copy button writes the localhost overlay URL', async ({ page }) => {
@@ -1015,7 +1056,7 @@ function standingsDisplayModel() {
       { id: 'standings.interval', label: 'INT', dataKey: 'interval', width: 60, alignment: 'right' },
       { id: 'standings.fastest-lap', label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
       { id: 'standings.last-lap', label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
-      { id: 'standings.pit', label: 'PIT', dataKey: 'pit', width: 30, alignment: 'right' }
+      { id: 'standings.pit', label: 'PIT', dataKey: 'pit', width: 36, alignment: 'right' }
     ],
     rows: [
       headerRow('LMP2', '2 cars | ~10 laps', '#33CEFF'),

@@ -181,6 +181,29 @@ public sealed class SimpleTelemetryOverlayViewModelTests
     }
 
     [Fact]
+    public void Flags_ForDisplay_RendersDebrisAsDistinctYellowFamilyKind()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = Snapshot(now, LiveRaceModels.Empty with
+        {
+            Session = LiveSessionModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                SessionState = 4,
+                SessionFlags = 0x00000040
+            }
+        });
+
+        var viewModel = FlagsOverlayViewModel.ForDisplay(snapshot, now);
+
+        Assert.Single(viewModel.Flags);
+        Assert.Equal(FlagDisplayKind.Debris, viewModel.Flags[0].Kind);
+        Assert.Equal(FlagDisplayCategory.Yellow, viewModel.Flags[0].Category);
+        Assert.Equal("Debris", viewModel.Status);
+    }
+
+    [Fact]
     public void Flags_ForDisplay_UsesCheckeredWhenSessionStateCompletes()
     {
         var now = DateTimeOffset.UtcNow;

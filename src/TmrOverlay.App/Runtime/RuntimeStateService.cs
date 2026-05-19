@@ -49,6 +49,7 @@ internal sealed class RuntimeStateService : IHostedService, IDisposable
         _currentState = new RuntimeState
         {
             StartedAtUtc = DateTimeOffset.UtcNow,
+            ProcessId = Environment.ProcessId,
             LastHeartbeatAtUtc = DateTimeOffset.UtcNow,
             StoppedCleanly = false,
             AppVersion = AppVersionInfo.Current

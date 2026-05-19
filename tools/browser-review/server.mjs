@@ -34,7 +34,6 @@ const assetBackedReviewOverlayModelIds = new Set([
   'stream-chat'
 ]);
 const opacityExcludedOverlayIds = new Set([
-  'stream-chat',
   'car-radar',
   'flags',
   'garage-cover',
@@ -709,7 +708,7 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
       hasImage: overlayState.garageHasImage === true,
       imageVersion: overlayState.garageHasImage === true ? 'review' : null,
       fallbackReason: overlayState.garageHasImage === true ? null : 'not_configured',
-      previewVisible: overlayState.garagePreviewVisible === true || previewMode !== 'off'
+      previewVisible: overlayState.garagePreviewVisible === true
     };
   }
 
@@ -943,6 +942,11 @@ function reviewInputTrace() {
 }
 
 function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
+  const hiddenModel = hiddenProductDisplayModel(overlayId, previewMode);
+  if (hiddenModel) {
+    return withEffectiveSettingsEvidence({ ...hiddenModel, rootOpacity: 1 }, overlayId, previewMode, searchParams);
+  }
+
   const model = reviewDisplayModel(overlayId, previewMode, searchParams);
   if (!model) {
     return model;
@@ -958,6 +962,48 @@ function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off', searc
   return withEffectiveSettingsEvidence({ ...model, rootOpacity: opacity }, overlayId, previewMode, searchParams);
 }
 
+function hiddenProductDisplayModel(overlayId, previewMode = 'off') {
+  const overlayState = reviewAppState.overlays[overlayId] || {};
+  const session = sessionKeyFromPreview(previewMode);
+  const overlayDisabled = Object.hasOwn(overlayState, 'enabled') && overlayState.enabled === false;
+  const sessionDisabled = Object.hasOwn(overlayState?.sessions || {}, session) && overlayState.sessions[session] === false;
+  if (!overlayDisabled && !sessionDisabled) {
+    return null;
+  }
+
+  const page = browserOverlayPage(overlayId);
+  return {
+    overlayId,
+    title: page.title,
+    status: overlayDisabled ? 'disabled | product hidden' : 'hidden | session disabled',
+    source: '',
+    bodyKind: hiddenBodyKind(overlayId),
+    columns: [],
+    rows: [],
+    metrics: [],
+    points: [],
+    headerItems: [],
+    shouldRender: false
+  };
+}
+
+function hiddenBodyKind(overlayId) {
+  return {
+    standings: 'table',
+    relative: 'table',
+    'fuel-calculator': 'metrics',
+    'session-weather': 'metrics',
+    'pit-service': 'metrics',
+    'input-state': 'inputs',
+    'car-radar': 'car-radar',
+    'gap-to-leader': 'graph',
+    'track-map': 'track-map',
+    flags: 'flags',
+    'garage-cover': 'garage-cover',
+    'stream-chat': 'stream-chat'
+  }[overlayId] || 'table';
+}
+
 function withEffectiveSettingsEvidence(model, overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
   return {
     ...model,
@@ -969,25 +1015,53 @@ function reviewEffectiveSettings(model, overlayId, previewMode = 'off', searchPa
   const normalizedPreviewMode = normalizePreviewMode(previewMode);
   const session = sessionKeyFromPreview(previewMode);
   const overlayState = reviewAppState.overlays[overlayId] || {};
+  const effectiveOverlayState = effectiveSettingsOverlayState(overlayId, overlayState, searchParams);
+  const fixture = fixtureVariant(searchParams) || null;
   return {
     overlayId,
     previewMode: normalizedPreviewMode,
     sources: {
-      browserReview: { applied: true },
-      localhostObs: { applied: true },
-      windowsNative: { applied: true }
+      browserReview: { applied: true, fixtureVariant: fixture },
+      localhostObs: { applied: true, fixtureVariant: fixture },
+      windowsNative: { applied: true, fixtureVariant: fixture }
     },
     rendered: {
       bodyKind: model?.bodyKind || null,
       shouldRender: model?.shouldRender !== false,
-      rowCount: (model?.rows || []).length,
+      rowCount: effectiveRenderedRowCount(model),
       headerItems: (model?.headerItems || []).map((item) => ({
         key: item?.key || null,
-        value: item?.value || ''
+        value: item?.value || '',
+        tone: normalizeHeaderTone(item?.tone)
       }))
     },
-    settings: reviewEffectiveSettingList(overlayId, overlayState, session, searchParams)
+    settings: reviewEffectiveSettingList(overlayId, effectiveOverlayState, session, searchParams)
   };
+}
+
+function effectiveRenderedRowCount(model) {
+  if (model?.bodyKind === 'stream-chat' && Array.isArray(model?.streamChat?.rows)) {
+    return model.streamChat.rows.length;
+  }
+
+  return (model?.rows || []).length;
+}
+
+function effectiveSettingsOverlayState(overlayId, overlayState, searchParams = new URLSearchParams()) {
+  if (overlayId === 'relative' && fixtureVariant(searchParams) === 'rightmost-evidence') {
+    return {
+      ...overlayState,
+      content: {
+        ...(overlayState.content || {}),
+        'Pit status': true,
+        'Pit status.race': true,
+        'relative.content.relative.pit.enabled': true,
+        'relative.content.relative.pit.enabled.race': true
+      }
+    };
+  }
+
+  return overlayState;
 }
 
 function reviewEffectiveSettingList(overlayId, overlayState, session, searchParams = new URLSearchParams()) {
@@ -1202,7 +1276,21 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
     case 'standings':
       return withChrome(filterTableModelContent(filterStandingsReviewRows(standingsDisplayModel(previewLabel), overlayState), 'standings', overlayState, session));
     case 'relative':
-      return withChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), overlayState), 'relative', overlayState, session));
+      {
+        const effectiveOverlayState = fixture === 'rightmost-evidence'
+          ? {
+              ...overlayState,
+              content: {
+                ...(overlayState.content || {}),
+                'Pit status': true,
+                'Pit status.race': true,
+                'relative.content.relative.pit.enabled': true,
+                'relative.content.relative.pit.enabled.race': true
+              }
+            }
+          : overlayState;
+        return withChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), effectiveOverlayState), 'relative', effectiveOverlayState, session));
+      }
     case 'fuel-calculator':
       {
         if (fixture === 'fuel-waiting') {
@@ -1626,7 +1714,7 @@ function reviewGapPoints(overlayState) {
     return [];
   }
 
-  return [249.8, 247.2, 245.4, 243.6, 241.9, 239.7];
+  return [7.2, 6.8, 6.3, 5.9, 5.5, 5.1];
 }
 
 function reviewEmptyGapGraph() {
@@ -1661,14 +1749,14 @@ function reviewGapGraph() {
   const endSeconds = startSeconds + 420;
   const timestampStart = Date.parse('2026-05-17T12:00:00.000Z');
   const trend = [
-    { offset: 0, p1: 0, altP1: 5.4, focus: 249.8 },
-    { offset: 60, p1: 0.4, altP1: 4.8, focus: 247.2 },
-    { offset: 120, p1: 0.1, altP1: 4.3, focus: 245.4 },
-    { offset: 180, p1: 0.6, altP1: 3.7, focus: 243.6 },
-    { offset: 240, p1: 0.3, altP1: 3.2, focus: 241.9 },
-    { offset: 300, p1: 0.2, altP1: 2.6, focus: 240.5 },
-    { offset: 360, p1: 0.5, altP1: 2.1, focus: 239.7 },
-    { offset: 420, p1: 0.0, altP1: 1.8, focus: 238.9 }
+    { offset: 0, leader: 0, ahead: 231.7, focus: 238.9, threat: 250.6 },
+    { offset: 60, leader: 0.4, ahead: 232.1, focus: 238.5, threat: 249.2 },
+    { offset: 120, leader: 0.1, ahead: 232.5, focus: 238.1, threat: 247.8 },
+    { offset: 180, leader: 0.6, ahead: 232.8, focus: 237.7, threat: 246.1 },
+    { offset: 240, leader: 0.3, ahead: 233.1, focus: 237.4, threat: 244.8 },
+    { offset: 300, leader: 0.2, ahead: 233.4, focus: 237.1, threat: 243.2 },
+    { offset: 360, leader: 0.5, ahead: 233.8, focus: 236.8, threat: 241.8 },
+    { offset: 420, leader: 0.0, ahead: 234.2, focus: 236.5, threat: 240.4 }
   ];
   const point = (sample, carIdx, gapSeconds, isReference, isClassLeader, classPosition, index) => ({
     timestampUtc: new Date(timestampStart + sample.offset * 1000).toISOString(),
@@ -1680,10 +1768,13 @@ function reviewGapGraph() {
     classPosition,
     startsSegment: index === 0
   });
+  const referencePoints = trend.map((sample, index) => point(sample, 42, sample.focus, true, false, 24, index));
+  const threat = { carIdx: 43, label: 'P25', gainSeconds: 5.3 };
   const series = [
-    reviewGapSeries(8, false, true, 1, trend.map((sample, index) => point(sample, 8, sample.p1, false, true, 1, index))),
-    reviewGapSeries(17, false, true, 1, trend.map((sample, index) => point(sample, 17, sample.altP1, false, true, 1, index))),
-    reviewGapSeries(42, true, false, 24, trend.map((sample, index) => point(sample, 42, sample.focus, true, false, 24, index)))
+    reviewGapSeries(8, false, true, 1, trend.map((sample, index) => point(sample, 8, sample.leader, false, true, 1, index))),
+    reviewGapSeries(41, false, false, 23, trend.map((sample, index) => point(sample, 41, sample.ahead, false, false, 23, index))),
+    reviewGapSeries(42, true, false, 24, referencePoints),
+    reviewGapSeries(43, false, false, 25, trend.map((sample, index) => point(sample, 43, sample.threat, false, false, 25, index)))
   ];
   return {
     series,
@@ -1692,30 +1783,30 @@ function reviewGapGraph() {
     driverChanges: [],
     startSeconds,
     endSeconds,
-    maxGapSeconds: 500,
-    lapReferenceSeconds: 525.8,
+    maxGapSeconds: 20,
+    lapReferenceSeconds: 40.5,
     selectedSeriesCount: series.length,
     trendMetrics: [
-      { label: '5L', focusGapChangeSeconds: null, chaser: null, state: 'warming', stateLabel: '0.0L' },
-      { label: '10L', focusGapChangeSeconds: null, chaser: null, state: 'warming', stateLabel: '0.0L' },
+      { label: '5L', focusGapChangeSeconds: -1.8, chaser: threat, state: 'ready', stateLabel: null },
+      { label: '10L', focusGapChangeSeconds: -3.4, chaser: threat, state: 'ready', stateLabel: null },
       { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'pit', stateLabel: null },
       { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'pitLap', stateLabel: null },
-      { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null },
+      { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, comparisonText: '18L', threatText: '17L' },
       { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null },
-      { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, comparisonText: '8:13.000' },
-      { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track' }
+      { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, comparisonText: '1:32.540', threatText: '1:32.120' },
+      { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track', threatText: 'Track' }
     ],
-    activeThreat: null,
-    threatCarIdx: null,
+    activeThreat: { label: '5L', chaser: threat, state: 'ready', focusGapChangeSeconds: null },
+    threatCarIdx: 43,
     metricDeadbandSeconds: 0.25,
-    comparisonLabel: 'P1',
+    comparisonLabel: 'P23',
     scale: {
-      maxGapSeconds: 500,
-      isFocusRelative: false,
-      aheadSeconds: 0,
-      behindSeconds: 0,
-      referencePoints: [],
-      latestReferenceGapSeconds: 0
+      maxGapSeconds: 20,
+      isFocusRelative: true,
+      aheadSeconds: 8,
+      behindSeconds: 8,
+      referencePoints,
+      latestReferenceGapSeconds: 236.5
     }
   };
 }
@@ -1741,6 +1832,7 @@ function applyReviewChrome(model, overlayId, previewMode, forceChromeOff = false
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const session = sessionKeyFromPreview(previewMode);
   const showTime = !forceChromeOff && chromeEnabled(overlayState, 'header', 'Time remaining', session, true);
+  const fallbackTone = headerToneForModel(overlayId, model);
   return {
     ...model,
     headerItems: (model.headerItems || []).filter((item) => {
@@ -1748,8 +1840,35 @@ function applyReviewChrome(model, overlayId, previewMode, forceChromeOff = false
       if (key === 'timeremaining') return showTime;
       if (key === 'status') return false;
       return true;
-    })
+    }).map((item) => ({
+      ...item,
+      tone: normalizeHeaderTone(item?.tone || fallbackTone)
+    }))
   };
+}
+
+function headerToneForModel(overlayId, model) {
+  const status = String(model?.status || '').toLowerCase();
+  if (model?.shouldRender === false) return 'waiting';
+  if (overlayId === 'standings') return status.includes('waiting') ? 'waiting' : 'normal';
+  if (overlayId === 'relative') return status.includes('waiting') ? 'waiting' : 'info';
+  if (overlayId === 'fuel-calculator') return status.includes('waiting') || status.includes('disconnected') ? 'waiting' : 'success';
+  if (overlayId === 'session-weather') return status.includes('unavailable') || status.includes('unknown') ? 'waiting' : 'normal';
+  if (overlayId === 'pit-service') {
+    if (status.includes('service active')) return 'error';
+    if (status.includes('ready')) return 'success';
+    return 'normal';
+  }
+  if (overlayId === 'gap-to-leader') return status.includes('live') ? 'info' : 'waiting';
+  return status.includes('waiting') || status.includes('hidden') || status.includes('disabled') ? 'waiting' : 'normal';
+}
+
+function normalizeHeaderTone(tone) {
+  const token = String(tone || '').trim().toLowerCase();
+  if (token === 'modeled') return 'info';
+  return ['normal', 'waiting', 'info', 'success', 'warning', 'error'].includes(token)
+    ? token
+    : 'normal';
 }
 
 function supportsSharedChrome(overlayId) {
@@ -1816,7 +1935,7 @@ function relativeDisplayModel(previewLabel = 'review fixture', session = 'practi
       { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 38, alignment: 'right' },
       { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
       { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
-      { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 30, alignment: 'right' }
+      { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 36, alignment: 'right' }
     ],
     rows: [
       relativeRow(['3', '#34 Near Ahead', '-2.350', ''], { carClassColorHex: '#33CEFF', relativeLapDelta: showLapRelationship ? 1 : null }),
@@ -1964,7 +2083,11 @@ function tableContentLabel(overlayId, column) {
 }
 
 function tableContentDefault(overlayId, label) {
-  return overlayId === 'relative' && label === 'Pit status' ? false : true;
+  if (overlayId === 'relative' && label === 'Pit status') {
+    return false;
+  }
+
+  return true;
 }
 
 function tableModel(overlayId, title, status, rows) {
@@ -2202,7 +2325,7 @@ function standingsDisplayModel(previewLabel = 'review fixture') {
       { label: 'INT', dataKey: 'interval', width: 60, alignment: 'right' },
       { label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
       { label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
-      { label: 'PIT', dataKey: 'pit', width: 30, alignment: 'right' }
+      { label: 'PIT', dataKey: 'pit', width: 36, alignment: 'right' }
     ],
     rows: [
       headerRow('LMP2', '2 cars | ~10 laps', '#33CEFF'),

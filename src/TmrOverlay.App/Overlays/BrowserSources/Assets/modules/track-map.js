@@ -13,6 +13,17 @@ TmrBrowserOverlay.register({
 });
 
 function renderTrackMap(model) {
+  if (model?.shouldRender === false) {
+    modelRootOpacity = rootOpacityFromModel(model);
+    applyOverlayOpacity(0);
+    contentEl.innerHTML = '';
+    renderHeaderItems(model, '');
+    clearFooterSource();
+    return;
+  }
+
+  modelRootOpacity = rootOpacityFromModel(model);
+  applyOverlayOpacity(1);
   const renderModel = model?.trackMap?.renderModel;
   contentEl.innerHTML = `
     <div class="track">

@@ -99,7 +99,7 @@ public sealed class OverlayContentColumnSettingsTests
         var standingsSize = BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings);
         var relativeSize = BrowserOverlayRecommendedSize.For(RelativeOverlayDefinition.Definition, relative);
 
-        Assert.Equal(665, standingsSize.Width);
+        Assert.Equal(677, standingsSize.Width);
         Assert.Equal(313, standingsSize.Height);
         Assert.Equal(360, relativeSize.Width);
         Assert.Equal(352, relativeSize.Height);
@@ -188,6 +188,20 @@ public sealed class OverlayContentColumnSettingsTests
     }
 
     [Fact]
+    public void BrowserRecommendedSize_AppliesScaleAfterBrowserSourceBaseSize()
+    {
+        var standings = new ApplicationSettings().GetOrAddOverlay(
+            "standings",
+            StandingsOverlayDefinition.Definition.DefaultWidth,
+            StandingsOverlayDefinition.Definition.DefaultHeight);
+        standings.Scale = 1.25d;
+
+        var size = BrowserOverlayRecommendedSize.ScaledFor(StandingsOverlayDefinition.Definition, standings);
+
+        Assert.Equal(new Size(846, 391), size);
+    }
+
+    [Fact]
     public void TargetOverlayClientSizeForApply_DoesNotPreserveExpandedStandingsHeightDuringPreview()
     {
         var standings = new ApplicationSettings().GetOrAddOverlay(
@@ -250,16 +264,16 @@ public sealed class OverlayContentColumnSettingsTests
             StandingsOverlayDefinition.Definition.DefaultHeight);
 
         Assert.Equal(
-            new Size(665, 313),
+            new Size(677, 313),
             BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings));
         Assert.Equal(
-            new Size(665, 313),
+            new Size(677, 313),
             BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Practice));
 
         standings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, false);
 
         Assert.Equal(
-            new Size(665, 275),
+            new Size(677, 275),
             BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Practice));
         Assert.Equal(
             new Size(665, 275),
@@ -479,13 +493,13 @@ public sealed class OverlayContentColumnSettingsTests
             width => Assert.Equal(60, width),
             width => Assert.Equal(70, width),
             width => Assert.Equal(70, width),
-            width => Assert.Equal(36, width));
+            width => Assert.Equal(48, width));
         Assert.Collection(
             OverlayContentColumnSettings.Relative.Columns.Select(column => column.DefaultWidth),
             width => Assert.Equal(38, width),
             width => Assert.Equal(250, width),
             width => Assert.Equal(70, width),
-            width => Assert.Equal(36, width));
+            width => Assert.Equal(48, width));
     }
 
     [Fact]

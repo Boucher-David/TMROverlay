@@ -987,7 +987,7 @@ function standingsColumns() {
     column('standings.interval', 'INT', 'interval', 60, 'right'),
     column('standings.fastest-lap', 'FAST', 'fastest-lap', 70, 'right'),
     column('standings.last-lap', 'LAST', 'last-lap', 70, 'right'),
-    column('standings.pit', 'PIT', 'pit', 36, 'right')
+    column('standings.pit', 'PIT', 'pit', 48, 'right')
   ];
 }
 
@@ -996,7 +996,7 @@ function relativeColumns() {
     column('relative.position', 'Pos', 'relative-position', 38, 'right'),
     column('relative.driver', 'Driver', 'driver', 250, 'left'),
     column('relative.gap', 'Delta', 'gap', 70, 'right'),
-    column('relative.pit', 'Pit', 'pit', 36, 'right')
+    column('relative.pit', 'Pit', 'pit', 48, 'right')
   ];
 }
 

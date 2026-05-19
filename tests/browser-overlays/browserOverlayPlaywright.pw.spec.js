@@ -1056,7 +1056,7 @@ function standingsDisplayModel() {
       { id: 'standings.interval', label: 'INT', dataKey: 'interval', width: 60, alignment: 'right' },
       { id: 'standings.fastest-lap', label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
       { id: 'standings.last-lap', label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
-      { id: 'standings.pit', label: 'PIT', dataKey: 'pit', width: 36, alignment: 'right' }
+      { id: 'standings.pit', label: 'PIT', dataKey: 'pit', width: 48, alignment: 'right' }
     ],
     rows: [
       headerRow('LMP2', '2 cars | ~10 laps', '#33CEFF'),

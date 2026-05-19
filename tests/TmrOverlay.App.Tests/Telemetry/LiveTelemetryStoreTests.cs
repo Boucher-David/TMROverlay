@@ -2996,6 +2996,7 @@ QualifyResultsInfo:
     public void LiveModelParityAnalyzer_HasNoMismatchesForCurrentOverlayInputs()
     {
         var store = new LiveTelemetryStore();
+        ApplyRaceSession(store);
 
         store.RecordFrame(CreateSample(
             playerCarIdx: 10,

@@ -2502,14 +2502,28 @@ internal sealed class BrowserOverlayModelFactory
     {
         var sessionKind = OverlayAvailabilityEvaluator.NormalizeSessionKind(OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
         var session = EffectiveSettingsSessionKey(sessionKind);
-        var overlay = TryGetDefinition(overlayId, out var definition)
+        var hasDefinition = TryGetDefinition(overlayId, out var definition);
+        var overlay = hasDefinition
             ? OverlayOrDefault(settings, definition)
             : FindOverlay(settings, overlayId) ?? new OverlaySettings { Id = overlayId };
+        var browserBaseSize = hasDefinition
+            ? BrowserOverlayRecommendedSize.For(definition, overlay, sessionKind)
+            : new System.Drawing.Size(Math.Max(0, overlay.Width), Math.Max(0, overlay.Height));
+        var browserScaledSize = hasDefinition
+            ? BrowserOverlayRecommendedSize.ScaledFor(definition, overlay, sessionKind)
+            : browserBaseSize;
+        var clampedScale = Math.Clamp(overlay.Scale, 0.6d, 2d);
+        var clampedOpacity = Math.Clamp(overlay.Opacity, 0d, 1d);
+        var browserRootOpacity = hasDefinition
+            ? BrowserRootOpacity(definition, overlay)
+            : clampedOpacity;
         var effectiveSettings = new List<BrowserOverlayEffectiveSetting>
         {
             new("overlayEnabled", overlay.Enabled),
             new($"session.{session}.enabled", OverlayEnabledForSession(overlay, sessionKind)),
-            new("general.unitSystem", UnitSystem(settings))
+            new("general.unitSystem", UnitSystem(settings)),
+            new("scalePercent", (int)Math.Round(clampedScale * 100d)),
+            new("opacityPercent", (int)Math.Round(clampedOpacity * 100d))
         };
 
         AddContentEffectiveSettings(effectiveSettings, overlay, sessionKind, session);
@@ -2528,7 +2542,16 @@ internal sealed class BrowserOverlayModelFactory
                 RowCount: model.Rows.Count,
                 HeaderItems: model.HeaderItems
                     .Select(item => new BrowserOverlayEffectiveHeaderItem(item.Key, item.Value, item.Tone))
-                    .ToArray()),
+                    .ToArray(),
+                BrowserSource: new BrowserOverlayEffectiveBrowserSource(
+                    BaseWidth: browserBaseSize.Width,
+                    BaseHeight: browserBaseSize.Height,
+                    Width: browserScaledSize.Width,
+                    Height: browserScaledSize.Height,
+                    Scale: Math.Round(clampedScale, 3),
+                    ScalePercent: (int)Math.Round(clampedScale * 100d),
+                    Opacity: Math.Round(browserRootOpacity, 3),
+                    OpacityPercent: (int)Math.Round(browserRootOpacity * 100d))),
             Settings: effectiveSettings);
     }
 
@@ -3012,7 +3035,18 @@ internal sealed record BrowserOverlayEffectiveRendered(
     string BodyKind,
     bool ShouldRender,
     int RowCount,
-    IReadOnlyList<BrowserOverlayEffectiveHeaderItem> HeaderItems);
+    IReadOnlyList<BrowserOverlayEffectiveHeaderItem> HeaderItems,
+    BrowserOverlayEffectiveBrowserSource BrowserSource);
+
+internal sealed record BrowserOverlayEffectiveBrowserSource(
+    int BaseWidth,
+    int BaseHeight,
+    int Width,
+    int Height,
+    double Scale,
+    int ScalePercent,
+    double Opacity,
+    int OpacityPercent);
 
 internal sealed record BrowserOverlayEffectiveHeaderItem(
     string Key,

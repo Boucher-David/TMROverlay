@@ -423,6 +423,10 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
             Assert.Equal(1, lapDelta.GetProperty("observedFrames").GetInt32());
             Assert.Equal(1, lapDelta.GetProperty("framesWithAnyValue").GetInt32());
             Assert.Equal(0, lapDelta.GetProperty("framesWithAnyUsableValue").GetInt32());
+            Assert.Equal("values_present_without_usable_quality_all_zero", lapDelta.GetProperty("classification").GetString());
+            Assert.True(lapDelta.GetProperty("valuesPresentWithoutUsableQuality").GetBoolean());
+            Assert.True(lapDelta.GetProperty("allObservedValuesZero").GetBoolean());
+            Assert.Contains("all-zero placeholders", lapDelta.GetProperty("interpretation").GetString(), StringComparison.Ordinal);
             Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toBestLap").GetInt32());
             Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toOptimalLap").GetInt32());
             Assert.Equal(1, lapDelta.GetProperty("valueFrameCounts").GetProperty("toSessionBestLap").GetInt32());

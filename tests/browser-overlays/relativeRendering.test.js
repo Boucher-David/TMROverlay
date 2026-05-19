@@ -62,7 +62,7 @@ function relativeDisplayModel({ includeLapDeltas = true } = {}) {
       { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 38, alignment: 'right' },
       { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
       { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
-      { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 36, alignment: 'right' }
+      { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 48, alignment: 'right' }
     ],
     rows: [
       row(['', '', '', ''], { isPlaceholder: true }),

@@ -218,8 +218,11 @@ public sealed class GapToLeaderLiveModelAdapterTests
         LiveTimingModel timing,
         LiveRaceProgressModel progress)
     {
+        var context = RaceContext();
         return LiveTelemetrySnapshot.Empty with
         {
+            Context = context,
+            Combo = HistoricalComboIdentity.From(context),
             LeaderGap = new LiveLeaderGapSnapshot(
                 HasData: true,
                 ReferenceOverallPosition: 2,
@@ -238,6 +241,21 @@ public sealed class GapToLeaderLiveModelAdapterTests
                 Timing = timing,
                 RaceProgress = progress
             }
+        };
+    }
+
+    private static HistoricalSessionContext RaceContext()
+    {
+        return new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity(),
+            Track = new HistoricalTrackIdentity(),
+            Session = new HistoricalSessionIdentity
+            {
+                SessionType = "Race",
+                EventType = "Race"
+            },
+            Conditions = new HistoricalSessionInfoConditions()
         };
     }
 

@@ -26,6 +26,34 @@ public sealed class AppPerformanceStateTests
     }
 
     [Fact]
+    public void Snapshot_ClassifiesOperationPerformanceBudgets()
+    {
+        var state = new AppPerformanceState();
+
+        state.RecordOperation(AppPerformanceMetricIds.OverlayFlagsPaint, TimeSpan.FromMilliseconds(40));
+        state.RecordOperation(AppPerformanceMetricIds.LocalhostRequest, TimeSpan.FromMilliseconds(400));
+        state.RecordOperation(AppPerformanceMetricIds.OverlaySettingsApply, TimeSpan.FromMilliseconds(90));
+        state.RecordOperation("test.operation", TimeSpan.FromMilliseconds(1));
+
+        var snapshot = state.Snapshot();
+        var paint = Assert.Single(snapshot.Metrics.Where(metric => metric.Id == AppPerformanceMetricIds.OverlayFlagsPaint));
+        var localhost = Assert.Single(snapshot.Metrics.Where(metric => metric.Id == AppPerformanceMetricIds.LocalhostRequest));
+        var settings = Assert.Single(snapshot.Metrics.Where(metric => metric.Id == AppPerformanceMetricIds.OverlaySettingsApply));
+        var unclassified = Assert.Single(snapshot.Metrics.Where(metric => metric.Id == "test.operation"));
+
+        Assert.Equal("overlay-paint", paint.Budget.Category);
+        Assert.Equal(16.667d, paint.Budget.BudgetMilliseconds.GetValueOrDefault());
+        Assert.Equal("over_budget", paint.Budget.Status);
+        Assert.Equal("localhost-request", localhost.Budget.Category);
+        Assert.Equal(250d, localhost.Budget.BudgetMilliseconds.GetValueOrDefault());
+        Assert.Equal("over_budget", localhost.Budget.Status);
+        Assert.Equal("settings-ux", settings.Budget.Category);
+        Assert.Equal("within_budget", settings.Budget.Status);
+        Assert.Equal("unclassified", unclassified.Budget.Category);
+        Assert.Equal("unclassified", unclassified.Budget.Status);
+    }
+
+    [Fact]
     public void Snapshot_CalculatesTelemetryFrameRateFromFrameTimestamps()
     {
         var state = new AppPerformanceState();
@@ -414,6 +442,12 @@ public sealed class AppPerformanceStateTests
             metric.Id == "localhost.request.route.gap_to_leader.status_code" && metric.Last == 500d);
         Assert.Contains(snapshot.OverlayUpdates, metric =>
             metric.Id == "localhost.request.route.gap_to_leader.duration_ms" && metric.P95 == 750d);
+        var queued = Assert.Single(snapshot.OverlayUpdates.Where(metric => metric.Id == "overlay.settings.apply.queued_ms"));
+        var routeDuration = Assert.Single(snapshot.OverlayUpdates.Where(metric => metric.Id == "localhost.request.route.gap_to_leader.duration_ms"));
+        Assert.Equal("settings-ux", queued.Budget.Category);
+        Assert.Equal("over_budget", queued.Budget.Status);
+        Assert.Equal("localhost-request", routeDuration.Budget.Category);
+        Assert.Equal("over_budget", routeDuration.Budget.Status);
         Assert.True(snapshot.Process.WorkingSetBytes > 0);
         Assert.True(snapshot.Process.PrivateMemoryBytes > 0);
         Assert.True(snapshot.Process.ManagedHeapBytes > 0);

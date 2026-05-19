@@ -53,10 +53,19 @@ describe('browser review server validation contracts', () => {
       },
       rendered: {
         rowCount: 5,
-        headerItems: []
+        headerItems: [],
+        browserSource: {
+          baseWidth: 360,
+          baseHeight: 158,
+          width: 360,
+          height: 158,
+          scalePercent: 100,
+          opacityPercent: 100
+        }
       },
       settings: expect.arrayContaining([
         expect.objectContaining({ key: 'carsEachSide', value: 2 }),
+        expect.objectContaining({ key: 'scalePercent', value: 100 }),
         expect.objectContaining({ key: 'relative.content.relative.pit.enabled', session: 'race', value: false }),
         expect.objectContaining({ key: 'chrome.header.time-remaining.race', value: false })
       ])

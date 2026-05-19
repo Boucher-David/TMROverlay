@@ -77,8 +77,8 @@ public sealed class LiveOverlayWindowCaptureStoreTests
             Assert.Equal("/overlays/standings", overlay.BrowserRoute);
             Assert.True(overlay.BrowserRequiresTelemetry);
             Assert.Equal(250, overlay.BrowserRefreshIntervalMilliseconds);
-            Assert.True(overlay.BrowserRecommendedWidth > 0);
-            Assert.True(overlay.BrowserRecommendedHeight > 0);
+            Assert.Equal(846, overlay.BrowserRecommendedWidth);
+            Assert.Equal(391, overlay.BrowserRecommendedHeight);
             Assert.Equal(definition.DefaultWidth, overlay.DefaultWidth);
             Assert.Equal(definition.DefaultHeight, overlay.DefaultHeight);
             Assert.False(overlay.ScreenshotRepresentsCurrentState);

@@ -601,6 +601,8 @@ async function readDomDiagnostics(element) {
         href: element.getAttribute('href') || null,
         evidenceKey: element.getAttribute('data-evidence-key') || null,
         evidenceRole: element.getAttribute('data-evidence-role') || null,
+        dataKey: element.getAttribute('data-key') || null,
+        dataTone: element.getAttribute('data-tone') || null,
         value: value || null,
         checked: 'checked' in element ? Boolean(element.checked) : null,
         selected: 'selected' in element ? Boolean(element.selected) : null,

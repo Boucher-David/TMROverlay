@@ -1465,7 +1465,7 @@ internal sealed class DesignV2SettingsSurface : Control
             bounds.Width - 44,
             30);
         DrawLocalhostBox(graphics, definition, urlBox);
-        var browserSize = BrowserOverlayRecommendedSize.For(definition, settings);
+        var browserSize = BrowserOverlayRecommendedSize.ScaledFor(definition, settings);
         var detailTop = urlBox.Bottom + 8;
         DrawText(
             graphics,

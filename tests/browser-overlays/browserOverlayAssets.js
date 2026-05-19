@@ -507,9 +507,9 @@ function settingsOverlaySubtitle(id) {
   }[id] || 'Overlay settings and browser-source controls.';
 }
 
-function settingsBrowserSize(id, overlayState = {}, previewMode = 'off') {
+export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = 'off') {
   const base = {
-    standings: [665, 313],
+    standings: [677, 313],
     relative: [360, 352],
     'gap-to-leader': [654, 336],
     'track-map': [360, 360],
@@ -536,7 +536,19 @@ function settingsBrowserSize(id, overlayState = {}, previewMode = 'off') {
   }
   base[1] = settingsChromeAdjustedBaseHeight(id, overlayState, base[1], previewMode);
   const scale = Math.max(0.6, Math.min(2, Number(overlayState.scalePercent || 100) / 100));
-  return `${Math.round(base[0] * scale)} x ${Math.round(base[1] * scale)}`;
+  return {
+    baseWidth: Math.round(base[0]),
+    baseHeight: Math.round(base[1]),
+    width: Math.round(base[0] * scale),
+    height: Math.round(base[1] * scale),
+    scale: Number(scale.toFixed(3)),
+    scalePercent: Math.round(scale * 100)
+  };
+}
+
+function settingsBrowserSize(id, overlayState = {}, previewMode = 'off') {
+  const size = settingsBrowserSourceSize(id, overlayState, previewMode);
+  return `${size.width} x ${size.height}`;
 }
 
 function settingsChromeAdjustedBaseHeight(id, overlayState, fullHeight, previewMode = 'off') {

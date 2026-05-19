@@ -1,8 +1,10 @@
 using System.Text.Json;
 using TmrOverlay.App.History;
 using TmrOverlay.App.Overlays.BrowserSources;
+using TmrOverlay.App.Overlays.FuelCalculator;
 using TmrOverlay.App.Overlays.GapToLeader;
 using TmrOverlay.App.Overlays.PitService;
+using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
@@ -55,6 +57,46 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.Equal("off", effectiveSettings.PreviewMode);
         Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "overlayEnabled" && Equals(setting.Value, true));
         Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "general.unitSystem" && Equals(setting.Value, "Metric"));
+        Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "scalePercent" && Equals(setting.Value, 100));
+        Assert.Equal(FuelCalculatorOverlayDefinition.Definition.DefaultWidth, effectiveSettings.Rendered.BrowserSource.BaseWidth);
+        Assert.Equal(FuelCalculatorOverlayDefinition.Definition.DefaultHeight, effectiveSettings.Rendered.BrowserSource.BaseHeight);
+        Assert.Equal(FuelCalculatorOverlayDefinition.Definition.DefaultWidth, effectiveSettings.Rendered.BrowserSource.Width);
+        Assert.Equal(FuelCalculatorOverlayDefinition.Definition.DefaultHeight, effectiveSettings.Rendered.BrowserSource.Height);
+    }
+
+    [Fact]
+    public void EffectiveSettings_IncludesScaleAwareBrowserSourceSize()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        var standings = settings.GetOrAddOverlay(
+            StandingsOverlayDefinition.Definition.Id,
+            StandingsOverlayDefinition.Definition.DefaultWidth,
+            StandingsOverlayDefinition.Definition.DefaultHeight);
+        standings.Enabled = true;
+        standings.Scale = 1.25d;
+        standings.Opacity = 0.8d;
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        var built = factory.TryBuild("standings", LiveTelemetrySnapshot.Empty, settings, now, out var response);
+
+        Assert.True(built);
+        var browserSource = response.Model.EffectiveSettings!.Rendered.BrowserSource;
+        Assert.Equal(677, browserSource.BaseWidth);
+        Assert.Equal(313, browserSource.BaseHeight);
+        Assert.Equal(846, browserSource.Width);
+        Assert.Equal(391, browserSource.Height);
+        Assert.Equal(1.25d, browserSource.Scale);
+        Assert.Equal(125, browserSource.ScalePercent);
+        Assert.Equal(0.8d, browserSource.Opacity);
+        Assert.Equal(80, browserSource.OpacityPercent);
+        Assert.Contains(response.Model.EffectiveSettings.Settings, setting => setting.Key == "scalePercent" && Equals(setting.Value, 125));
+        Assert.Contains(response.Model.EffectiveSettings.Settings, setting => setting.Key == "opacityPercent" && Equals(setting.Value, 80));
     }
 
     [Fact]
@@ -114,8 +156,8 @@ public sealed class BrowserOverlayModelFactoryTests
 
         Assert.True(built);
         Assert.Empty(response.Model.HeaderItems);
-        Assert.Equal("source: waiting", response.Model.Source);
-        Assert.Equal("waiting for iRacing", response.Model.Status);
+        Assert.Equal(string.Empty, response.Model.Source);
+        Assert.Equal("hidden | waiting for iRacing", response.Model.Status);
     }
 
     [Fact]

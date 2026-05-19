@@ -12,7 +12,8 @@ import {
   renderOverlayIndexHtml,
   renderAppValidatorReviewHtml,
   renderInstallerReviewHtml,
-  renderSettingsGeneralReviewHtml
+  renderSettingsGeneralReviewHtml,
+  settingsBrowserSourceSize
 } from '../../tests/browser-overlays/browserOverlayAssets.js';
 
 const port = Number.parseInt(process.env.TMR_BROWSER_REVIEW_PORT || '5177', 10);
@@ -1059,9 +1060,22 @@ function reviewEffectiveSettings(model, overlayId, previewMode = 'off', searchPa
         key: item?.key || null,
         value: item?.value || '',
         tone: normalizeHeaderTone(item?.tone)
-      }))
+      })),
+      browserSource: reviewEffectiveBrowserSource(overlayId, effectiveOverlayState, normalizedPreviewMode)
     },
     settings: reviewEffectiveSettingList(overlayId, effectiveOverlayState, session, searchParams)
+  };
+}
+
+function reviewEffectiveBrowserSource(overlayId, overlayState, previewMode) {
+  const sourceSize = settingsBrowserSourceSize(overlayId, overlayState, previewMode);
+  const opacityPercent = opacityExcludedOverlayIds.has(overlayId)
+    ? 100
+    : clampInteger(overlayState?.opacityPercent, 100, overlayId === 'track-map' ? 0 : 20, 100);
+  return {
+    ...sourceSize,
+    opacity: Number((opacityPercent / 100).toFixed(3)),
+    opacityPercent
   };
 }
 
@@ -1094,7 +1108,15 @@ function reviewEffectiveSettingList(overlayId, overlayState, session, searchPara
   const settings = [
     effectiveSetting('overlayEnabled', overlayState.enabled === true),
     effectiveSetting(`session.${session}.enabled`, overlaySessionEnabled(overlayId, overlayState, session)),
-    effectiveSetting('general.unitSystem', reviewAppState.unitSystem)
+    effectiveSetting('general.unitSystem', reviewAppState.unitSystem),
+    effectiveSetting('scalePercent', clampInteger(overlayState?.scalePercent, 100, 60, 200)),
+    effectiveSetting(
+      'opacityPercent',
+      clampInteger(
+        overlayState?.opacityPercent,
+        overlayId === 'track-map' ? 0 : 100,
+        overlayId === 'track-map' ? 0 : 20,
+        100))
   ];
 
   if (overlayId === 'relative') {

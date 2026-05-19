@@ -592,9 +592,11 @@ internal sealed record StandingsOverlayViewModel(
         var isReference = referenceCarIdx is not null && row.CarIdx == referenceCarIdx;
         var fastestLapSeconds = BestLapTimeSeconds(row);
         var lastLapSeconds = LastLapTimeSeconds(row);
-        var isClassFastestLap = IsMatchingLapTime(fastestLapSeconds, classFastestLapSeconds);
-        var isClassFastestLastLap = IsMatchingLapTime(lastLapSeconds, classFastestLapSeconds);
-        var isRecentCarBestLap = IsRecentCarBestLap(fastestLapSeconds, lastLapSeconds, isClassFastestLap);
+        var lapToneFlags = LapToneFlags(
+            fastestLapSeconds,
+            lastLapSeconds,
+            classFastestLapSeconds,
+            highlightClassFastestLaps);
         return new StandingsOverlayRowViewModel(
             ClassPosition: row.ClassPosition is { } classPosition ? $"{classPosition}" : "--",
             CarNumber: FormatCarNumber(row),
@@ -609,10 +611,10 @@ internal sealed record StandingsOverlayViewModel(
             CarClassColorHex: row.CarClassColorHex,
             FastestLap: FormatLapTime(fastestLapSeconds),
             LastLap: FormatLapTime(lastLapSeconds),
-            IsClassFastestLap: highlightClassFastestLaps && isClassFastestLap,
-            IsClassFastestLastLap: highlightClassFastestLaps && isClassFastestLastLap,
-            IsRecentCarBestLap: isRecentCarBestLap,
-            IsRecentCarBestLastLap: isRecentCarBestLap && !isClassFastestLastLap);
+            IsClassFastestLap: lapToneFlags.IsClassFastestLap,
+            IsClassFastestLastLap: lapToneFlags.IsClassFastestLastLap,
+            IsRecentCarBestLap: lapToneFlags.IsRecentCarBestLap,
+            IsRecentCarBestLastLap: lapToneFlags.IsRecentCarBestLastLap);
     }
 
     private static StandingsOverlayRowViewModel ToRow(
@@ -631,9 +633,11 @@ internal sealed record StandingsOverlayViewModel(
         var hasTakenGrid = scoringRow.HasTakenGrid || timingRow?.HasTakenGrid == true;
         var fastestLapSeconds = BestLapTimeSeconds(scoringRow, timingRow);
         var lastLapSeconds = LastLapTimeSeconds(scoringRow, timingRow);
-        var isClassFastestLap = IsMatchingLapTime(fastestLapSeconds, classFastestLapSeconds);
-        var isClassFastestLastLap = IsMatchingLapTime(lastLapSeconds, classFastestLapSeconds);
-        var isRecentCarBestLap = IsRecentCarBestLap(fastestLapSeconds, lastLapSeconds, isClassFastestLap);
+        var lapToneFlags = LapToneFlags(
+            fastestLapSeconds,
+            lastLapSeconds,
+            classFastestLapSeconds,
+            highlightClassFastestLaps);
         return new StandingsOverlayRowViewModel(
             ClassPosition: classPositionOverride is { } liveClassPosition
                 ? $"{liveClassPosition}"
@@ -651,10 +655,10 @@ internal sealed record StandingsOverlayViewModel(
             IsPendingGrid: showPendingGridRows && !hasTakenGrid,
             FastestLap: FormatLapTime(fastestLapSeconds),
             LastLap: FormatLapTime(lastLapSeconds),
-            IsClassFastestLap: highlightClassFastestLaps && isClassFastestLap,
-            IsClassFastestLastLap: highlightClassFastestLaps && isClassFastestLastLap,
-            IsRecentCarBestLap: isRecentCarBestLap,
-            IsRecentCarBestLastLap: isRecentCarBestLap && !isClassFastestLastLap);
+            IsClassFastestLap: lapToneFlags.IsClassFastestLap,
+            IsClassFastestLastLap: lapToneFlags.IsClassFastestLastLap,
+            IsRecentCarBestLap: lapToneFlags.IsRecentCarBestLap,
+            IsRecentCarBestLastLap: lapToneFlags.IsRecentCarBestLastLap);
     }
 
     private static string SourceText(LiveCoverageModel coverage)
@@ -908,6 +912,29 @@ internal sealed record StandingsOverlayViewModel(
     {
         return !isClassFastestLap
             && IsMatchingLapTime(lastLapSeconds, fastestLapSeconds);
+    }
+
+    private static (
+        bool IsClassFastestLap,
+        bool IsClassFastestLastLap,
+        bool IsRecentCarBestLap,
+        bool IsRecentCarBestLastLap) LapToneFlags(
+            double? fastestLapSeconds,
+            double? lastLapSeconds,
+            double? classFastestLapSeconds,
+            bool highlightClassFastestLaps)
+    {
+        var matchesClassFastestLap = IsMatchingLapTime(fastestLapSeconds, classFastestLapSeconds);
+        var matchesClassFastestLastLap = IsMatchingLapTime(lastLapSeconds, classFastestLapSeconds);
+        var isRecentCarBestLap = IsRecentCarBestLap(
+            fastestLapSeconds,
+            lastLapSeconds,
+            matchesClassFastestLap);
+        return (
+            highlightClassFastestLaps && matchesClassFastestLap,
+            highlightClassFastestLaps && matchesClassFastestLastLap,
+            isRecentCarBestLap,
+            isRecentCarBestLap && !matchesClassFastestLastLap);
     }
 
     private static string FormatLapTime(double? seconds)

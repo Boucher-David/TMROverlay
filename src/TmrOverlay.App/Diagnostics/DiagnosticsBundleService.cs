@@ -857,6 +857,11 @@ internal sealed class DiagnosticsBundleService
             warnings.Add("recent_update_check_failures");
         }
 
+        if (updateEvents.UpdateFailureSummary.TransientFailureCount > 0)
+        {
+            warnings.Add("transient_update_check_failures");
+        }
+
         var visibleWithoutPixelEvidence = liveOverlays.Overlays
             .Where(overlay => overlay.ActualVisible && string.IsNullOrWhiteSpace(overlay.ScreenshotPath))
             .Select(overlay => overlay.OverlayId)
@@ -923,11 +928,8 @@ internal sealed class DiagnosticsBundleService
                 LatestSuccessAtUtc = updateEvents.LatestUpdateCheckSuccessAtUtc,
                 LatestSuccessSource = updateEvents.LatestUpdateCheckSuccessSource,
                 LatestSuccessResult = updateEvents.LatestUpdateCheckSuccessResult,
-                Interpretation = updateEvents.UpdateCheckFailedCount > 0 && updateEvents.UpdateCheckSucceededCount > 0
-                    ? "Transient update-check failures were observed even though a later check succeeded; inspect events/*.jsonl before relying only on metadata/release-updates.json."
-                    : updateEvents.UpdateCheckFailedCount > 0
-                        ? "Recent update-check failures were observed in events/*.jsonl."
-                        : "No recent update-check failures were found in bundled event logs."
+                Summary = updateEvents.UpdateFailureSummary,
+                Interpretation = updateEvents.UpdateFailureSummary.Interpretation
             },
             LatestCapture = new
             {
@@ -1146,6 +1148,7 @@ internal sealed class DiagnosticsBundleService
                 LatestUpdateCheckSuccessResult: null,
                 UpdateCheckFailureSourceCounts: EmptyStringIntDictionary(),
                 UpdateCheckFailureErrorCounts: EmptyStringIntDictionary(),
+                UpdateFailureSummary: BuildUpdateFailureSummary([], []),
                 Files: []);
         }
 
@@ -1232,9 +1235,77 @@ internal sealed class DiagnosticsBundleService
             LatestUpdateCheckSuccessResult: latestSuccess?.Result,
             UpdateCheckFailureSourceCounts: CountBy(failed.Select(item => item.Source), "unknown"),
             UpdateCheckFailureErrorCounts: CountBy(failed.Select(item => item.Error), "unknown"),
+            UpdateFailureSummary: BuildUpdateFailureSummary(failed, succeeded),
             Files: fileDiagnostics
                 .OrderBy(file => file.FileName, StringComparer.OrdinalIgnoreCase)
                 .ToArray());
+    }
+
+    private static UpdateFailureSummaryDiagnostics BuildUpdateFailureSummary(
+        IReadOnlyList<UpdateCheckEvent> failed,
+        IReadOnlyList<UpdateCheckEvent> succeeded)
+    {
+        var recoveriesByFailure = failed
+            .Select(failure => new
+            {
+                Failure = failure,
+                Recovery = FirstSuccessAfterFailure(failure, succeeded)
+            })
+            .ToArray();
+        var recoveredFailures = recoveriesByFailure
+            .Where(item => item.Recovery is not null)
+            .ToArray();
+        var unrecoveredFailureCount = failed.Count - recoveredFailures.Length;
+        var latestFailure = LatestEvent(failed);
+        var latestTransientFailure = recoveredFailures
+            .OrderByDescending(item => item.Failure.TimestampUtc ?? DateTimeOffset.MinValue)
+            .FirstOrDefault();
+        var latestRecovery = latestTransientFailure?.Recovery;
+        var classification = failed.Count == 0
+            ? "no_update_check_failures"
+            : recoveredFailures.Length > 0
+                ? unrecoveredFailureCount > 0
+                    ? "mixed_transient_and_unrecovered_update_check_failures"
+                    : "transient_update_check_failures_recovered"
+                : "unrecovered_update_check_failures";
+
+        return new UpdateFailureSummaryDiagnostics(
+            Classification: classification,
+            FailureCount: failed.Count,
+            SuccessCount: succeeded.Count,
+            TransientFailureCount: recoveredFailures.Length,
+            UnrecoveredFailureCount: unrecoveredFailureCount,
+            LatestFailureAtUtc: latestFailure?.TimestampUtc,
+            LatestFailureSource: latestFailure?.Source,
+            LatestFailureError: latestFailure?.Error,
+            LatestTransientFailureAtUtc: latestTransientFailure?.Failure.TimestampUtc,
+            LatestTransientFailureSource: latestTransientFailure?.Failure.Source,
+            LatestTransientFailureError: latestTransientFailure?.Failure.Error,
+            LatestRecoveryAtUtc: latestRecovery?.TimestampUtc,
+            LatestRecoverySource: latestRecovery?.Source,
+            LatestRecoveryResult: latestRecovery?.Result,
+            Interpretation: classification switch
+            {
+                "transient_update_check_failures_recovered" => "Update-check failures were observed and later recovered in events/*.jsonl; treat the updater as transiently degraded rather than permanently failed.",
+                "mixed_transient_and_unrecovered_update_check_failures" => "Some update-check failures recovered, but at least one recent failure has no later successful check in the scanned event logs.",
+                "unrecovered_update_check_failures" => "Recent update-check failures were observed with no later successful update check in the scanned event logs.",
+                _ => "No recent update-check failures were found in bundled event logs."
+            });
+    }
+
+    private static UpdateCheckEvent? FirstSuccessAfterFailure(
+        UpdateCheckEvent failure,
+        IReadOnlyList<UpdateCheckEvent> succeeded)
+    {
+        if (failure.TimestampUtc is not { } failedAtUtc)
+        {
+            return null;
+        }
+
+        return succeeded
+            .Where(success => success.TimestampUtc is { } succeededAtUtc && succeededAtUtc >= failedAtUtc)
+            .OrderBy(success => success.TimestampUtc)
+            .FirstOrDefault();
     }
 
     private static bool TryReadAppEvent(
@@ -1325,14 +1396,25 @@ internal sealed class DiagnosticsBundleService
         var pitServiceNonPlayerFocusFrames = (int?)fuel?["pitServiceNonPlayerFocusFrames"];
         var fuelLocalStrategyUnavailableFrames = (int?)fuel?["fuelLocalStrategyUnavailableFrames"];
         var reasonCounts = JsonObjectToIntDictionary(fuel?["fuelLocalStrategyUnavailableReasonCounts"]);
-        var hasMissingLocalFuelEvidence =
-            (completedValidLaps.GetValueOrDefault() <= 0 || validDistanceLaps.GetValueOrDefault() <= 0d)
-            && (teamContextWithoutFuelLevelFrames.GetValueOrDefault() > 0
-                || fuelLocalStrategyUnavailableFrames.GetValueOrDefault() > 0
-                || pitServiceNonPlayerFocusFrames.GetValueOrDefault() > 0);
+        var hasSynthesisMetrics = validDistanceLaps is not null || completedValidLaps is not null;
+        var hasFuelDiagnostics = fuel is not null;
+        var hasNoCompletedLocalDistance = hasSynthesisMetrics
+            && (completedValidLaps.GetValueOrDefault() <= 0 || validDistanceLaps.GetValueOrDefault() <= 0d);
+        var hasLocalFuelEvidenceGap = teamContextWithoutFuelLevelFrames.GetValueOrDefault() > 0
+            || fuelLocalStrategyUnavailableFrames.GetValueOrDefault() > 0
+            || pitServiceNonPlayerFocusFrames.GetValueOrDefault() > 0
+            || reasonCounts.Count > 0;
+        var classification = ClassifyPostRaceFuelEvidence(
+            hasSynthesisMetrics,
+            hasFuelDiagnostics,
+            hasNoCompletedLocalDistance,
+            hasLocalFuelEvidenceGap);
 
         return new
         {
+            EvidenceAvailable = hasSynthesisMetrics || hasFuelDiagnostics,
+            SynthesisMetricsAvailable = hasSynthesisMetrics,
+            LiveFuelDiagnosticsAvailable = hasFuelDiagnostics,
             ValidDistanceLaps = validDistanceLaps,
             CompletedValidLaps = completedValidLaps,
             FramesWithFuelLevel = framesWithFuelLevel,
@@ -1340,12 +1422,50 @@ internal sealed class DiagnosticsBundleService
             PitServiceNonPlayerFocusFrames = pitServiceNonPlayerFocusFrames,
             FuelLocalStrategyUnavailableFrames = fuelLocalStrategyUnavailableFrames,
             FuelLocalStrategyUnavailableReasonCounts = reasonCounts,
-            Classification = hasMissingLocalFuelEvidence
-                ? "missing_local_player_fuel_evidence"
-                : "not_classified_missing_local_fuel",
-            Interpretation = hasMissingLocalFuelEvidence
-                ? "The capture contains post-race/fuel failure evidence tied to local-player or team fuel availability, not just generic zero valid laps."
-                : "The bundled metadata does not prove a local-player fuel evidence gap."
+            MissingLocalPlayerFuelEvidence = string.Equals(classification, "missing_local_player_fuel_evidence", StringComparison.Ordinal),
+            Classification = classification,
+            Interpretation = PostRaceFuelEvidenceInterpretation(classification)
+        };
+    }
+
+    private static string ClassifyPostRaceFuelEvidence(
+        bool hasSynthesisMetrics,
+        bool hasFuelDiagnostics,
+        bool hasNoCompletedLocalDistance,
+        bool hasLocalFuelEvidenceGap)
+    {
+        if (!hasSynthesisMetrics && !hasFuelDiagnostics)
+        {
+            return "not_recorded";
+        }
+
+        if (hasNoCompletedLocalDistance && hasLocalFuelEvidenceGap)
+        {
+            return "missing_local_player_fuel_evidence";
+        }
+
+        if (hasLocalFuelEvidenceGap)
+        {
+            return "local_player_fuel_evidence_degraded";
+        }
+
+        if (hasNoCompletedLocalDistance)
+        {
+            return "missing_valid_lap_distance";
+        }
+
+        return "not_classified_missing_local_fuel";
+    }
+
+    private static string PostRaceFuelEvidenceInterpretation(string classification)
+    {
+        return classification switch
+        {
+            "missing_local_player_fuel_evidence" => "The capture contains post-race/fuel failure evidence tied to local-player or team fuel availability, not just generic zero valid laps.",
+            "local_player_fuel_evidence_degraded" => "Fuel diagnostics show local-player/team fuel evidence gaps even though the summary has some valid lap-distance evidence.",
+            "missing_valid_lap_distance" => "Post-race synthesis lacks valid completed local distance, but bundled fuel diagnostics do not prove a local-player fuel evidence gap.",
+            "not_recorded" => "No post-race synthesis metrics or live fuel diagnostics were available in the bundle.",
+            _ => "The bundled metadata does not prove a local-player fuel evidence gap."
         };
     }
 
@@ -2810,9 +2930,14 @@ internal sealed class DiagnosticsBundleService
             PlayerCarIdx = playerCarIdx,
             FocusCarIdx = focusCarIdx,
             FocusDiffersFromPlayer = focusDiffersFromPlayer,
+            Classification = focusDiffersFromPlayer
+                ? "focus_differs_from_local_strategy_context"
+                : "focus_matches_local_strategy_context",
             StrategyContext = "local-player/team",
+            StrategyContextLabel = ContextLabel("local-player/team", playerCarIdx),
             StrategyContextCarIdx = playerCarIdx,
             ReferenceContext = "focus/reference",
+            ReferenceContextLabel = ContextLabel("focus/reference", focusCarIdx),
             ReferenceContextCarIdx = focusCarIdx,
             StrategyAndReferenceContextsDiffer = focusDiffersFromPlayer,
             StrategyFieldsAreLocalPlayerOrTeam = true,
@@ -2824,10 +2949,37 @@ internal sealed class DiagnosticsBundleService
             progress.StrategyClassPosition,
             progress.ReferenceClassPosition,
             StrategyLooksUnavailableWhileReferenceHasProgress = strategyLooksUnavailableWhileReferenceHasProgress,
+            Evidence = new
+            {
+                ReferenceModelHasData = reference.HasData,
+                reference.HasExplicitNonPlayerFocus,
+                reference.FocusUsesPlayerLocalFallback,
+                ReferenceMissingSignals = reference.MissingSignals,
+                StrategyFields = new[]
+                {
+                    nameof(progress.StrategyCarProgressLaps),
+                    nameof(progress.StrategyOverallPosition),
+                    nameof(progress.StrategyClassPosition)
+                },
+                ReferenceFields = new[]
+                {
+                    nameof(progress.ReferenceCarProgressLaps),
+                    nameof(progress.ReferenceOverallPosition),
+                    nameof(progress.ReferenceClassPosition)
+                },
+                Rule = "Fuel/strategy fields describe local-player/team context; focus/reference fields describe the active camera/reference car."
+            },
             Interpretation = strategyLooksUnavailableWhileReferenceHasProgress
                 ? "Strategy progress/position appears unavailable for the local-player/team context while reference progress is available for the focused car. Labels should not imply strategy fields describe the focused competitor."
                 : "Strategy fields describe the local-player/team context; reference fields describe the focused/reference car context."
         };
+    }
+
+    private static string ContextLabel(string context, int? carIdx)
+    {
+        return carIdx is { } value
+            ? $"{context} car {value}"
+            : $"{context} unavailable";
     }
 
     private static object RaceProjectionModelSummary(LiveRaceProjectionModel projection)
@@ -3828,7 +3980,25 @@ internal sealed record UpdateEventDiagnosticsSnapshot(
     string? LatestUpdateCheckSuccessResult,
     IReadOnlyDictionary<string, int> UpdateCheckFailureSourceCounts,
     IReadOnlyDictionary<string, int> UpdateCheckFailureErrorCounts,
+    UpdateFailureSummaryDiagnostics UpdateFailureSummary,
     IReadOnlyList<UpdateEventFileDiagnostics> Files);
+
+internal sealed record UpdateFailureSummaryDiagnostics(
+    string Classification,
+    int FailureCount,
+    int SuccessCount,
+    int TransientFailureCount,
+    int UnrecoveredFailureCount,
+    DateTimeOffset? LatestFailureAtUtc,
+    string? LatestFailureSource,
+    string? LatestFailureError,
+    DateTimeOffset? LatestTransientFailureAtUtc,
+    string? LatestTransientFailureSource,
+    string? LatestTransientFailureError,
+    DateTimeOffset? LatestRecoveryAtUtc,
+    string? LatestRecoverySource,
+    string? LatestRecoveryResult,
+    string Interpretation);
 
 internal sealed record UpdateEventFileDiagnostics(
     string FileName,

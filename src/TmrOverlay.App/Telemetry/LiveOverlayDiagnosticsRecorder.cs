@@ -558,6 +558,16 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             {
                 FinalizeActivePitWindow(finishedAtUtc);
                 FinalizeFlagDisplayState(finishedAtUtc);
+                var lapDeltaClassification = ClassifyLapDeltaQuality(
+                    _lapDeltaObservedFrames,
+                    _lapDeltaFramesWithAnyValue,
+                    _lapDeltaFramesWithAnyUsableValue,
+                    _maxAbsLapDeltaSeconds);
+                var lapDeltaValuesPresentWithoutUsableQuality = _lapDeltaFramesWithAnyValue > 0
+                    && _lapDeltaFramesWithAnyUsableValue <= 0;
+                var lapDeltaAllObservedValuesZero = lapDeltaValuesPresentWithoutUsableQuality
+                    && (_maxAbsLapDeltaSeconds is null || Math.Abs(_maxAbsLapDeltaSeconds.Value) <= double.Epsilon);
+
                 var artifact = new LiveOverlayDiagnosticsArtifact(
                     FormatVersion: 1,
                     SourceId: _sourceId,
@@ -702,6 +712,12 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                         FramesWithAnyValue: _lapDeltaFramesWithAnyValue,
                         FramesWithAnyUsableValue: _lapDeltaFramesWithAnyUsableValue,
                         MaxAbsDeltaSeconds: Round(_maxAbsLapDeltaSeconds),
+                        Classification: lapDeltaClassification,
+                        ValuesPresentWithoutUsableQuality: lapDeltaValuesPresentWithoutUsableQuality,
+                        AllObservedValuesZero: lapDeltaAllObservedValuesZero,
+                        Interpretation: lapDeltaValuesPresentWithoutUsableQuality
+                            ? "Lap-delta values are present but no OK/quality flag marks them usable; treat all-zero placeholders as unavailable."
+                            : "Lap-delta quality is either usable or no lap-delta values were observed.",
                         ValueFrameCounts: Sorted(_lapDeltaValueCounts),
                         UsableFrameCounts: Sorted(_lapDeltaUsableCounts)),
                     LapProfile: new LapProfileDiagnosticsSummary(
@@ -2406,6 +2422,32 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             sample.LapDeltaToSessionLastLapOk);
     }
 
+    private static string ClassifyLapDeltaQuality(
+        int observedFrames,
+        int framesWithAnyValue,
+        int framesWithAnyUsableValue,
+        double? maxAbsDeltaSeconds)
+    {
+        if (observedFrames <= 0)
+        {
+            return "no_observed_frames";
+        }
+
+        if (framesWithAnyValue <= 0)
+        {
+            return "no_values";
+        }
+
+        if (framesWithAnyUsableValue > 0)
+        {
+            return "usable";
+        }
+
+        return maxAbsDeltaSeconds is null || Math.Abs(maxAbsDeltaSeconds.Value) <= double.Epsilon
+            ? "values_present_without_usable_quality_all_zero"
+            : "values_present_without_usable_quality";
+    }
+
     private IReadOnlyList<HistoricalTrackSector> SectorDefinitions(LiveTelemetrySnapshot snapshot)
     {
         if (_sectorDefinitions.Count >= 2)
@@ -3848,6 +3890,10 @@ internal sealed record LapDeltaDiagnosticsSummary(
     int FramesWithAnyValue,
     int FramesWithAnyUsableValue,
     double? MaxAbsDeltaSeconds,
+    string Classification,
+    bool ValuesPresentWithoutUsableQuality,
+    bool AllObservedValuesZero,
+    string Interpretation,
     IReadOnlyDictionary<string, int> ValueFrameCounts,
     IReadOnlyDictionary<string, int> UsableFrameCounts);
 

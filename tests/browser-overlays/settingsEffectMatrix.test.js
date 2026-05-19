@@ -29,6 +29,36 @@ describe('settings effect matrix', () => {
     });
   }, 15000);
 
+  it('keeps settings OBS size and effective browser-source evidence scale-aware', async () => {
+    await withReviewServer(async (server) => {
+      for (const patch of visibleOverlayPatches('standings')) {
+        await server.postReviewPatch(patch);
+      }
+      await server.postReviewPatch(numberPatch('standings', 'scalePercent', 125));
+      await server.postReviewPatch(numberPatch('standings', 'opacityPercent', 80));
+
+      const config = await settingsConfig(server, 'standings');
+      const overlay = overlayConfig(config, 'standings');
+      expect.soft(overlay.scalePercent).toBe(125);
+      expect.soft(overlay.opacityPercent).toBe(80);
+      expect.soft(overlay.browserSize).toBe('846 x 391');
+
+      const model = (await server.getJson(modelPath('standings'))).model;
+      expect.soft(model.effectiveSettings.rendered.browserSource).toMatchObject({
+        baseWidth: 677,
+        baseHeight: 313,
+        width: 846,
+        height: 391,
+        scalePercent: 125,
+        opacityPercent: 80
+      });
+      expect.soft(model.effectiveSettings.settings).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'scalePercent', value: 125 }),
+        expect.objectContaining({ key: 'opacityPercent', value: 80 })
+      ]));
+    });
+  }, 15000);
+
   it('requires effective-settings source evidence for every exposed content toggle', async () => {
     await withReviewServer(async (server) => {
       const initialConfig = await settingsConfig(server);

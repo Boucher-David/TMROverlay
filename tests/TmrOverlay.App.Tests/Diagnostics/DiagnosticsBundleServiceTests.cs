@@ -22,6 +22,48 @@ namespace TmrOverlay.App.Tests.Diagnostics;
 public sealed class DiagnosticsBundleServiceTests
 {
     [Fact]
+    public void UpdateFailureSummary_ClassifiesRecoveredTransientFailures()
+    {
+        var method = typeof(DiagnosticsBundleService).GetMethod(
+            "BuildUpdateFailureSummary",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var summary = method.Invoke(null, [
+            new[]
+            {
+                new UpdateCheckEvent(
+                    "events.jsonl",
+                    DateTimeOffset.Parse("2026-05-01T12:00:00Z"),
+                    Source: "startup",
+                    Result: null,
+                    Error: "HttpRequestException")
+            },
+            new[]
+            {
+                new UpdateCheckEvent(
+                    "events.jsonl",
+                    DateTimeOffset.Parse("2026-05-01T12:00:30Z"),
+                    Source: "manual",
+                    Result: "up_to_date",
+                    Error: null)
+            }
+        ]);
+        var json = System.Text.Json.JsonSerializer.SerializeToNode(
+            summary,
+            new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            });
+
+        Assert.Equal("transient_update_check_failures_recovered", (string?)json?["classification"]);
+        Assert.Equal(1, ((int?)json?["transientFailureCount"]) ?? -1);
+        Assert.Equal(0, ((int?)json?["unrecoveredFailureCount"]) ?? -1);
+        Assert.Equal("startup", (string?)json?["latestTransientFailureSource"]);
+        Assert.Equal("manual", (string?)json?["latestRecoverySource"]);
+    }
+
+    [Fact]
     public void LiveTelemetrySynthesisCoverage_TreatsZeroCarClassAsKnownValue()
     {
         var method = typeof(DiagnosticsBundleService).GetMethod(
@@ -1058,6 +1100,8 @@ public sealed class DiagnosticsBundleServiceTests
                     string.Equals((string?)warning, "live_overlay_screenshot_capture_disabled", StringComparison.Ordinal));
                 Assert.Contains(warnings, warning =>
                     string.Equals((string?)warning, "recent_update_check_failures", StringComparison.Ordinal));
+                Assert.Contains(warnings, warning =>
+                    string.Equals((string?)warning, "transient_update_check_failures", StringComparison.Ordinal));
                 Assert.True(((bool?)evidenceQualityJson?["liveTelemetry"]?["currentConnected"]) == true);
                 Assert.True(((bool?)evidenceQualityJson?["latestCapture"]?["captureSynthesisExists"]) == true);
                 Assert.False(((bool?)evidenceQualityJson?["liveOverlayWindows"]?["visualProof"]?["canProveVisibleOverlayPixels"]) ?? true);
@@ -1067,8 +1111,13 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.True(((bool?)evidenceQualityJson?["updateFlow"]?["hasRecentUpdateCheckFailures"]) == true);
                 Assert.Equal("startup", (string?)evidenceQualityJson?["updateFlow"]?["latestFailureSource"]);
                 Assert.Equal("HttpRequestException", (string?)evidenceQualityJson?["updateFlow"]?["latestFailureError"]);
+                Assert.Equal("transient_update_check_failures_recovered", (string?)evidenceQualityJson?["updateFlow"]?["summary"]?["classification"]);
+                Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["summary"]?["transientFailureCount"]) ?? -1);
+                Assert.Equal(0, ((int?)evidenceQualityJson?["updateFlow"]?["summary"]?["unrecoveredFailureCount"]) ?? -1);
+                Assert.Equal("manual", (string?)evidenceQualityJson?["updateFlow"]?["summary"]?["latestRecoverySource"]);
                 Assert.Equal(1, ((int?)evidenceQualityJson?["updateEvents"]?["updateCheckFailedCount"]) ?? -1);
                 Assert.Equal(1, ((int?)evidenceQualityJson?["updateEvents"]?["updateCheckFailureErrorCounts"]?["HttpRequestException"]) ?? -1);
+                Assert.Equal("transient_update_check_failures_recovered", (string?)evidenceQualityJson?["updateEvents"]?["updateFailureSummary"]?["classification"]);
             }
 
             var latestCaptureEvidenceEntry = archive.GetEntry("metadata/latest-capture-evidence.json");
@@ -1082,7 +1131,11 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(3, ((int?)latestCaptureEvidenceJson?["latestSession"]?["setupSignalCount"]) ?? -1);
                 Assert.Equal(3, ((int?)latestCaptureEvidenceJson?["setupAdjustmentEvidence"]?["staticWingOrArbSignalCount"]) ?? -1);
                 Assert.False(((bool?)latestCaptureEvidenceJson?["setupAdjustmentEvidence"]?["liveAdjustmentChangeEvidenceAvailable"]) ?? true);
+                Assert.True(((bool?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["evidenceAvailable"]) == true);
+                Assert.True(((bool?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["synthesisMetricsAvailable"]) == true);
+                Assert.True(((bool?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["liveFuelDiagnosticsAvailable"]) == true);
                 Assert.Equal("missing_local_player_fuel_evidence", (string?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["classification"]);
+                Assert.True(((bool?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["missingLocalPlayerFuelEvidence"]) == true);
                 Assert.Equal(453983, ((int?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["fuelLocalStrategyUnavailableFrames"]) ?? -1);
                 Assert.Equal(453983, ((int?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["fuelLocalStrategyUnavailableReasonCounts"]?["focus_on_another_car"]) ?? -1);
                 Assert.Equal("values_present_without_usable_quality_all_zero", (string?)latestCaptureEvidenceJson?["lapDeltaQuality"]?["classification"]);
@@ -1255,10 +1308,16 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(42, ((int?)liveTelemetrySynthesisJson?["focus"]?["focusCarIdx"]) ?? -1);
                 Assert.True(((bool?)liveTelemetrySynthesisJson?["focus"]?["focusDiffersFromPlayer"]) == true);
                 Assert.True(((bool?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["strategyAndReferenceContextsDiffer"]) == true);
+                Assert.Equal("focus_differs_from_local_strategy_context", (string?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["classification"]);
                 Assert.Equal("local-player/team", (string?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["strategyContext"]);
+                Assert.Equal("local-player/team car 10", (string?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["strategyContextLabel"]);
                 Assert.Equal("focus/reference", (string?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["referenceContext"]);
+                Assert.Equal("focus/reference car 42", (string?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["referenceContextLabel"]);
                 Assert.Equal(10, ((int?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["strategyContextCarIdx"]) ?? -1);
                 Assert.Equal(42, ((int?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["referenceContextCarIdx"]) ?? -1);
+                Assert.Equal(
+                    "Fuel/strategy fields describe local-player/team context; focus/reference fields describe the active camera/reference car.",
+                    (string?)liveTelemetrySynthesisJson?["focusVsLocalContext"]?["evidence"]?["rule"]);
                 Assert.Equal("values_present_without_usable_quality_all_zero", (string?)liveTelemetrySynthesisJson?["lapDeltaQuality"]?["classification"]);
                 Assert.True(((bool?)liveTelemetrySynthesisJson?["lapDeltaQuality"]?["valuesPresentWithoutUsableQuality"]) == true);
                 Assert.Equal("parade-laps", (string?)liveTelemetrySynthesisJson?["sessionPhase"]?["label"]);

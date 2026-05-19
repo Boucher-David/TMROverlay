@@ -5740,7 +5740,7 @@ function relativeColumns() {
     { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
     { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
     ...(relativeShowPitColumn
-      ? [{ id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 36, alignment: 'right' }]
+      ? [{ id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 48, alignment: 'right' }]
       : [])
   ];
 }

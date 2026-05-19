@@ -73,7 +73,7 @@ internal sealed class LiveOverlayWindowCaptureStore
         var inputInterceptRisk = actualVisible
             && !inputTransparent
             && inputInterceptRiskReasons.Count > 0;
-        var browserRecommendedSize = BrowserOverlayRecommendedSize.For(definition, settings);
+        var browserRecommendedSize = BrowserOverlayRecommendedSize.ScaledFor(definition, settings);
         var hasBrowserPage = BrowserOverlayCatalog.TryGetPageByOverlayId(definition.Id, out var browserPage);
         LiveOverlayWindowState? previous;
         lock (_sync)

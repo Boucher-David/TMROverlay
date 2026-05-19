@@ -111,7 +111,7 @@ internal static class LiveOverlayPreviewScreenshotCapture
                     performanceState);
                 screenshots.Add(capture.State);
                 images.Add(capture.Image);
-                if (capture.State.StreamChatExternalSourceSuppressed)
+                if (capture.State.StreamChatExternalSourceSuppressed == true)
                 {
                     warnings.Add("stream_chat_external_source_suppressed_for_preview_capture");
                 }

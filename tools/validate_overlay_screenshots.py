@@ -4348,6 +4348,7 @@ def validate_input_state_contract(path: str, values: dict[str, object], failures
     rail = typed_dict(inputs.get("rail"))
     graph_bounds = typed_dict(graph.get("bounds"))
     rail_bounds = typed_dict(rail.get("bounds"))
+    rail_items = evidence_list(rail, "items")
     require_input_bounds_within_layout(path, values, graph_bounds, rail_bounds, "input-state", failures)
     if rects_intersect(graph_bounds, rail_bounds):
         failures.append(f"{path}: input-state graph bounds intersect rail bounds")
@@ -4370,7 +4371,8 @@ def validate_input_state_contract(path: str, values: dict[str, object], failures
     abs_series = next((item for item in series if text_value(item, "kind") == "brake-abs"), None)
     throttle = next((item for item in series if text_value(item, "kind") == "throttle"), None)
     if isinstance(throttle, dict) and isinstance(brake, dict):
-        require_trace_overlap(path, throttle, brake, "throttle/brake", failures)
+        require_trace_shared_x_domain(path, throttle, brake, "throttle/brake", failures)
+    require_input_trace_matches_rail(path, series, rail_items, graph_bounds, failures)
     if isinstance(brake, dict) and isinstance(abs_series, dict):
         if get_manifest_value(abs_series, "pointCount") != 0 or not isinstance(get_manifest_value(abs_series, "curveCount"), int) or get_manifest_value(abs_series, "curveCount") <= 0:
             failures.append(f"{path}: input-state ABS series must be curve-only and non-empty")
@@ -4378,7 +4380,6 @@ def validate_input_state_contract(path: str, values: dict[str, object], failures
             failures.append(f"{path}: input-state ABS stroke should be thicker than brake stroke")
     if "ABS" not in str(values.get("status") or "") or "ABS" not in str(values.get("textSample") or ""):
         failures.append(f"{path}: input-state status/text did not expose ABS")
-    rail_items = evidence_list(rail, "items")
     require_sequence(path, "input-state rail item kinds", [text_value(item, "kind") for item in rail_items], ["Throttle", "Brake", "Clutch", "SteeringWheel", "Gear", "Speed"], failures)
     expected_rail_labels = {
         "Throttle": "THR",
@@ -5190,29 +5191,74 @@ def point_in_rect(point: object, rect: dict[str, object]) -> bool:
     return rx - 0.5 <= x <= rx + rw + 0.5 and ry - 0.5 <= y <= ry + rh + 0.5
 
 
-def require_trace_overlap(path: str, first: dict[str, object], second: dict[str, object], label: str, failures: list[str]) -> None:
+def require_trace_shared_x_domain(path: str, first: dict[str, object], second: dict[str, object], label: str, failures: list[str]) -> None:
     first_points = [point for point in evidence_list(first, "points") if isinstance(point, dict)]
     second_points = [point for point in evidence_list(second, "points") if isinstance(point, dict)]
     if len(first_points) < 2 or len(second_points) < 2:
-        failures.append(f"{path}: input-state {label} overlap could not be checked without point evidence")
+        failures.append(f"{path}: input-state {label} shared trace domain could not be checked without point evidence")
         return
-    close_points = 0
     horizontal_pairs = 0
     for first_point, second_point in zip(first_points, second_points):
         first_x = rect_number(first_point, "x")
-        first_y = rect_number(first_point, "y")
         second_x = rect_number(second_point, "x")
-        second_y = rect_number(second_point, "y")
-        if None in (first_x, first_y, second_x, second_y):
+        if None in (first_x, second_x):
             continue
         if abs(first_x - second_x) <= 0.75:
             horizontal_pairs += 1
-            if abs(first_y - second_y) <= 10:
-                close_points += 1
     if horizontal_pairs < 120:
         failures.append(f"{path}: input-state {label} expected at least 120 comparable trace points, got {horizontal_pairs}")
-    if close_points < 24:
-        failures.append(f"{path}: input-state {label} expected at least 24 visually overlapping trace points, got {close_points}")
+
+
+def require_input_trace_matches_rail(
+    path: str,
+    series: list[object],
+    rail_items: list[object],
+    graph_bounds: dict[str, object],
+    failures: list[str],
+) -> None:
+    expected_rail_kinds = {
+        "throttle": "Throttle",
+        "brake": "Brake",
+        "clutch": "Clutch",
+    }
+    for trace_kind, rail_kind in expected_rail_kinds.items():
+        trace = next((item for item in series if isinstance(item, dict) and text_value(item, "kind") == trace_kind), None)
+        rail = next((item for item in rail_items if isinstance(item, dict) and text_value(item, "kind") == rail_kind), None)
+        if not isinstance(trace, dict) or not isinstance(rail, dict):
+            continue
+        points = [point for point in evidence_list(trace, "points") if isinstance(point, dict)]
+        if not points:
+            continue
+        expected_ratio = input_rail_ratio(rail)
+        if expected_ratio is None:
+            continue
+        actual_ratio = input_trace_point_ratio(points[-1], graph_bounds)
+        if actual_ratio is None:
+            continue
+        if abs(actual_ratio - expected_ratio) > 0.08:
+            failures.append(
+                f"{path}: input-state {trace_kind} latest trace value {actual_ratio:.2f} "
+                f"does not match rail readout {expected_ratio:.2f}"
+            )
+
+
+def input_trace_point_ratio(point: dict[str, object], graph_bounds: dict[str, object]) -> float | None:
+    y = rect_number(point, "y")
+    graph_y = rect_number(graph_bounds, "y")
+    graph_height = rect_number(graph_bounds, "height")
+    if y is None or graph_y is None or graph_height is None or graph_height <= 0:
+        return None
+    return max(0.0, min(1.0, (graph_y + graph_height - y) / graph_height))
+
+
+def input_rail_ratio(rail_item: dict[str, object]) -> float | None:
+    fill_ratio = get_manifest_value(rail_item, "fillRatio")
+    if isinstance(fill_ratio, (int, float)):
+        return max(0.0, min(1.0, float(fill_ratio)))
+    match = re.search(r"(\d+(?:\.\d+)?)\s*%", text_value(rail_item, "text"))
+    if match is None:
+        return None
+    return max(0.0, min(1.0, float(match.group(1)) / 100.0))
 
 
 def graph_series_rendered_points(series: dict[str, object]) -> list[dict[str, object]]:
@@ -5793,12 +5839,12 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
-        name="input throttle/brake trace no longer overlaps visually",
+        name="input brake trace no longer matches rail readout",
         path="browser-overlays/input-state.png",
         base=mutation_input_screenshot(),
-        mutate=mutate_input_trace_without_visual_overlap,
+        mutate=mutate_input_trace_without_rail_sync,
         validate=validate_input_state_contract,
-        expected_tokens=("input-state throttle/brake expected at least 24 visually overlapping trace points",),
+        expected_tokens=("input-state brake latest trace value", "does not match rail readout"),
         failures=failures,
     )
     expect_mutation_failure(
@@ -6748,14 +6794,14 @@ def mutation_input_min_scale_screenshot() -> dict[str, object]:
     }
 
 
-def mutate_input_trace_without_visual_overlap(screenshot: dict[str, object]) -> None:
+def mutate_input_trace_without_rail_sync(screenshot: dict[str, object]) -> None:
     series = evidence_list(typed_dict(typed_dict(screenshot.get("modelEvidence")).get("inputs")), "series")
     brake = next((item for item in series if isinstance(item, dict) and text_value(item, "kind") == "brake"), None)
     if not isinstance(brake, dict):
         raise KeyError("brake")
     for point in evidence_list(brake, "points"):
         if isinstance(point, dict):
-            point["y"] = 205
+            point["y"] = 220
 
 
 def mutate_overlay_chrome_radius_flat(screenshot: dict[str, object]) -> None:

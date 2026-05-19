@@ -6636,12 +6636,9 @@ def mutate_pit_service_grid_cells_include_label(screenshot: dict[str, object]) -
 def mutation_input_screenshot() -> dict[str, object]:
     graph_bounds = {"x": 20, "y": 20, "width": 360, "height": 200}
     rail_bounds = {"x": 400, "y": 20, "width": 100, "height": 200}
-    throttle_points = [{"x": 24 + index * 1.5, "y": 80 + (index % 10)} for index in range(180)]
-    brake_points = [
-        {"x": point["x"], "y": point["y"] + (5 if index < 40 else 65)}
-        for index, point in enumerate(throttle_points)
-    ]
-    clutch_points = [{"x": 24 + index * 1.5, "y": 130 + (index % 8)} for index in range(180)]
+    throttle_points = mutation_input_trace_points(graph_bounds, final_ratio=0.78, x_start=24, x_step=1.5)
+    brake_points = mutation_input_trace_points(graph_bounds, final_ratio=0.16, x_start=24, x_step=1.5)
+    clutch_points = mutation_input_trace_points(graph_bounds, final_ratio=0.0, x_start=24, x_step=1.5)
     return {
         "status": "trace live | ABS active",
         "textSample": "Throttle Brake ABS Clutch",
@@ -6691,18 +6688,9 @@ def mutation_input_screenshot() -> dict[str, object]:
 def mutation_input_min_scale_screenshot() -> dict[str, object]:
     graph_bounds = {"x": 8, "y": 46, "width": 172, "height": 96}
     rail_bounds = {"x": 192, "y": 46, "width": 112, "height": 96}
-    throttle_points = [
-        {"x": 12 + index * (164 / 179), "y": 82 + (index % 8)}
-        for index in range(180)
-    ]
-    brake_points = [
-        {"x": point["x"], "y": point["y"] + (5 if index < 40 else 42)}
-        for index, point in enumerate(throttle_points)
-    ]
-    clutch_points = [
-        {"x": 12 + index * (164 / 179), "y": 118 + (index % 5)}
-        for index in range(180)
-    ]
+    throttle_points = mutation_input_trace_points(graph_bounds, final_ratio=0.78, x_start=12, x_step=164 / 179)
+    brake_points = mutation_input_trace_points(graph_bounds, final_ratio=0.16, x_start=12, x_step=164 / 179)
+    clutch_points = mutation_input_trace_points(graph_bounds, final_ratio=0.0, x_start=12, x_step=164 / 179)
     item_bounds = [
         {"x": 198, "y": 50 + index * 14, "width": 98, "height": 12}
         for index in range(6)
@@ -6792,6 +6780,24 @@ def mutation_input_min_scale_screenshot() -> dict[str, object]:
             },
         },
     }
+
+
+def mutation_input_trace_points(
+    graph_bounds: dict[str, float | int],
+    *,
+    final_ratio: float,
+    x_start: float,
+    x_step: float,
+) -> list[dict[str, float]]:
+    graph_y = float(graph_bounds["y"])
+    graph_height = float(graph_bounds["height"])
+    return [
+        {
+            "x": x_start + index * x_step,
+            "y": graph_y + graph_height - final_ratio * graph_height,
+        }
+        for index in range(180)
+    ]
 
 
 def mutate_input_trace_without_rail_sync(screenshot: dict[str, object]) -> None:

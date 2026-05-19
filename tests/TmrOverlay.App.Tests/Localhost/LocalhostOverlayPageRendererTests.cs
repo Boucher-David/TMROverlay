@@ -106,7 +106,8 @@ public sealed class BrowserOverlayPageRendererTests
             Assert.Contains("Waiting for player in car.", html);
             Assert.Contains("brakeAbsActive", html);
             Assert.Contains("inputGraphEnabled(inputs)", html);
-            Assert.Contains("renderInputRail(inputs, brakeAbsActive)", html);
+            Assert.Contains("renderInputRailContents(inputs, brakeAbsActive)", html);
+            Assert.Contains("renderInputRail(railContents)", html);
             Assert.Contains("width: min(32px, 100%)", html);
             Assert.DoesNotContain("width: min(52px, 100%)", html);
             Assert.Contains("var(--tmr-green)", html);

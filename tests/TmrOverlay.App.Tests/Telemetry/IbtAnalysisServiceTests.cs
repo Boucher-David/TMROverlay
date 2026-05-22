@@ -256,7 +256,7 @@ public sealed class IbtAnalysisServiceTests
             Assert.Equal(nearDiskStartPath, result.SourcePath);
             var selection = ReadCandidateSelection(captureDirectory);
             Assert.Equal(nearDiskStartPath, selection.GetProperty("selectedPath").GetString());
-            Assert.InRange(selection.GetProperty("candidateScore").GetDouble(), -80d, 0d);
+            Assert.InRange(selection.GetProperty("candidateScore").GetDouble(), 0d, 40d);
         }
         finally
         {

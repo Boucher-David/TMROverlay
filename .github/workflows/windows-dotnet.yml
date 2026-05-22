@@ -102,6 +102,39 @@ jobs:
       - name: Validate overlay evidence contract
         run: npm run test:evidence-contract
 
+  javascript_coverage:
+    name: JavaScript coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install browser test dependencies
+        run: npm ci
+
+      - name: Collect Vitest coverage
+        run: npm run test:coverage:js
+
+      - name: Add JavaScript coverage summary
+        if: always()
+        run: node tools/ci/summarize-vitest-coverage.mjs
+
+      - name: Upload JavaScript coverage report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: javascript-coverage
+          path: coverage/js
+          if-no-files-found: error
+          retention-days: 14
+
   browser_review_screenshots:
     name: Browser review screenshots
     runs-on: ubuntu-latest
@@ -200,6 +233,9 @@ jobs:
       - name: Validate active screenshot contracts
         run: python tools/validate_overlay_screenshots.py --profile app-static
 
+      - name: Test manifest comparator units
+        run: python -m unittest discover -s tests/tools -p "test_*.py"
+
       - name: Validate release tutorial image
         run: python tools/validate_overlay_screenshots.py --profile release-tutorial --root docs/assets
 
@@ -242,7 +278,104 @@ jobs:
         run: dotnet test tests\TmrOverlay.App.Tests\TmrOverlay.App.Tests.csproj --configuration Release --no-restore --filter DataContracts
 
       - name: Test native app
-        run: dotnet test tmrOverlay.sln --configuration Release --no-restore
+        shell: pwsh
+        run: |
+          $results = ".\artifacts\dotnet-test-results\native"
+          dotnet test tmrOverlay.sln `
+            --configuration Release `
+            --no-restore `
+            --logger "trx;LogFileName=native.trx" `
+            --results-directory $results
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
+              .\tools\ci\annotate-dotnet-test-results.ps1 -ResultsDirectory $results
+              exit $testExitCode
+          }
+
+  dotnet_coverage:
+    name: .NET coverage
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore tmrOverlay.sln
+
+      - name: Install .NET coverage tools
+        run: |
+          dotnet tool install --global dotnet-coverage
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Collect .NET coverage
+        shell: pwsh
+        run: |
+          $results = ".\artifacts\dotnet-test-results\coverage"
+          $coverageArtifacts = ".\artifacts\coverage\dotnet"
+          $rawCoverage = Join-Path $results "coverage.cobertura.xml"
+          New-Item -ItemType Directory -Force $results | Out-Null
+          New-Item -ItemType Directory -Force $coverageArtifacts | Out-Null
+
+          $dotnetCoverage = Join-Path $env:USERPROFILE ".dotnet\tools\dotnet-coverage.exe"
+          $testCommand = 'dotnet test tests\TmrOverlay.App.Tests\TmrOverlay.App.Tests.csproj --configuration Release --no-restore --logger "trx;LogFileName=coverage.trx" --results-directory artifacts\dotnet-test-results\coverage'
+          & $dotnetCoverage collect $testCommand -f cobertura -o $rawCoverage
+          $coverageExitCode = $LASTEXITCODE
+          if ($coverageExitCode -ne 0) {
+              "dotnet-coverage collect exited with code $coverageExitCode." | Out-File -FilePath (Join-Path $coverageArtifacts "coverage-collection-failure.txt") -Encoding utf8
+              .\tools\ci\annotate-dotnet-test-results.ps1 -ResultsDirectory $results
+              Write-Host "Coverage collection artifacts:"
+              Get-ChildItem -Path .\artifacts -Recurse -File | ForEach-Object { Write-Host $_.FullName }
+              exit $coverageExitCode
+          }
+
+          if (-not (Test-Path -LiteralPath $rawCoverage -PathType Leaf)) {
+              "dotnet-coverage collect completed but did not produce $rawCoverage." | Out-File -FilePath (Join-Path $coverageArtifacts "coverage-collection-failure.txt") -Encoding utf8
+              throw "No Cobertura coverage file was produced by dotnet-coverage."
+          }
+
+      - name: Generate .NET coverage report
+        shell: pwsh
+        run: |
+          $reports = Get-ChildItem -Path .\artifacts\dotnet-test-results -Filter coverage.cobertura.xml -Recurse
+          if ($reports.Count -eq 0) {
+              throw "No Cobertura coverage files were produced."
+          }
+
+          $reportPaths = ($reports | ForEach-Object { $_.FullName }) -join ";"
+          $reportGenerator = Join-Path $env:USERPROFILE ".dotnet\tools\reportgenerator.exe"
+          & $reportGenerator `
+            "-reports:$reportPaths" `
+            "-targetdir:artifacts\coverage\dotnet" `
+            "-reporttypes:Html;Cobertura;MarkdownSummaryGithub" `
+            "-assemblyfilters:+TMROverlay;+TmrOverlay.*;-TmrOverlay.App.Tests" `
+            "-filefilters:-*.g.cs;-*.Designer.cs"
+          if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+          }
+
+          $summary = "artifacts\coverage\dotnet\SummaryGithub.md"
+          if (Test-Path $summary) {
+              Get-Content $summary >> $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Validate .NET coverage assemblies
+        shell: pwsh
+        run: .\tools\ci\assert-dotnet-coverage-assemblies.ps1 -CoveragePath .\artifacts\coverage\dotnet\Cobertura.xml
+
+      - name: Upload .NET coverage report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dotnet-coverage
+          path: artifacts/coverage/dotnet
+          if-no-files-found: error
+          retention-days: 14
 
   windows_overlay_screenshots:
     name: Windows overlay screenshots
@@ -582,6 +715,8 @@ jobs:
       - windows_static_validation
       - windows_build
       - windows_tests
+      - dotnet_coverage
+      - javascript_coverage
       - windows_overlay_screenshots
       - windows_installer_screenshots
       - windows_publish_dry_run

@@ -100,6 +100,48 @@ public sealed class LocalhostOverlayStateTests
     }
 
     [Fact]
+    public void Snapshot_BoundsRecentRequestAndPageEventSamples()
+    {
+        var state = new LocalhostOverlayState(new LocalhostOverlayOptions
+        {
+            Enabled = true,
+            Port = 9123
+        });
+
+        for (var index = 0; index < 30; index++)
+        {
+            state.RecordRequest(
+                "overlay_model",
+                "GET",
+                $"/api/overlay-model/relative/{index}",
+                200,
+                TimeSpan.FromMilliseconds(index),
+                "Mozilla/5.0 OBS Studio/32.1.2");
+            state.RecordPageEvent(new LocalhostOverlayPageEvent(
+                Event: $"event-{index}",
+                OverlayId: "relative",
+                ClientId: $"client-{index}",
+                ClientKind: "obs-browser",
+                ShouldRender: index % 2 == 0,
+                Status: $"status-{index}",
+                Error: null));
+        }
+
+        var snapshot = state.Snapshot();
+
+        Assert.Equal(30L, snapshot.TotalRequests);
+        Assert.Equal(25, snapshot.RecentRequests.Count);
+        Assert.Equal("/api/overlay-model/relative/5", snapshot.RecentRequests.First().Path);
+        Assert.Equal("/api/overlay-model/relative/29", snapshot.RecentRequests.Last().Path);
+        Assert.Equal(25, snapshot.RecentPageEvents.Count);
+        Assert.Equal("event-5", snapshot.RecentPageEvents.First().Event);
+        Assert.Equal("event-29", snapshot.RecentPageEvents.Last().Event);
+        Assert.Equal(1L, snapshot.PageEventCounts["event-0"]);
+        Assert.Equal(1L, snapshot.PageEventCounts["event-29"]);
+        Assert.All(snapshot.RecentPageEvents, item => Assert.Equal("obs", item.ClientKind));
+    }
+
+    [Fact]
     public void Snapshot_NormalizesObsLikeBrowserSourceClientKinds()
     {
         var state = new LocalhostOverlayState(new LocalhostOverlayOptions

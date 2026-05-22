@@ -2692,6 +2692,15 @@ def validate_effective_settings_contract(path: str, values: dict[str, object], f
             failures.append(f"{path}: effectiveSettings source {source_name} missing overlaySettingsHash")
         if shared_hash or overlay_hash:
             fingerprints.add((shared_hash, overlay_hash))
+        if source_name == "windowsNative":
+            pixel_evidence = typed_dict(source.get("pixelEvidence"))
+            pixel_status = str(pixel_evidence.get("status") or "").strip()
+            if pixel_status not in {"captured", "disabled", "unsupported", "not-applicable"}:
+                failures.append(
+                    f"{path}: effectiveSettings source windowsNative pixelEvidence status expected captured/disabled/unsupported/not-applicable, got {pixel_status!r}"
+                )
+            if not str(pixel_evidence.get("reason") or "").strip():
+                failures.append(f"{path}: effectiveSettings source windowsNative pixelEvidence missing reason")
     if len(fingerprints) > 1:
         failures.append(f"{path}: effectiveSettings source fingerprints differ across browser/localhost/native: {sorted(fingerprints)!r}")
 
@@ -9031,6 +9040,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="effective settings native pixel evidence loses explicit reason",
+        path="browser-overlays/fuel-calculator-race.png",
+        base=mutation_effective_settings_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("effectiveSettings", "sources", "windowsNative", "pixelEvidence", "reason"), ""),
+        validate=validate_effective_settings_contract,
+        expected_tokens=("effectiveSettings source windowsNative pixelEvidence missing reason",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="garage-cover global preview forces preview cover visible",
         path="browser-overlays/garage-cover-race.png",
         base=mutation_effective_settings_screenshot(overlay_id="garage-cover", body_kind="garage-cover"),
@@ -9135,6 +9153,7 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         expected_tokens=("shared header item semantics differ",),
         failures=failures,
     )
+    validate_manifest_comparator_mutations(failures)
     expect_validator_failure(
         name="browser/localhost/native preview parity catches native header tone mismatch",
         run=lambda local_failures: compare_web_windows_overlay_parity(
@@ -9144,6 +9163,250 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         expected_tokens=("shared header item semantics differ",),
         failures=failures,
     )
+
+
+def validate_manifest_comparator_mutations(failures: list[str]) -> None:
+    import compare_screenshot_manifests as comparator
+
+    matrix_left = mutation_comparator_settings_matrix_ui(offset_x=44, offset_y=36, checked=True)
+    matrix_right = mutation_comparator_settings_matrix_ui(offset_x=0, offset_y=0, checked=True)
+    support_left = mutation_comparator_support_ui(offset_x=44, offset_y=36, legacy_key=True, text="On")
+    support_right = mutation_comparator_support_ui(offset_x=0, offset_y=0, legacy_key=False, text="On")
+    effective_left = mutation_comparator_effective_settings_manifest()
+    effective_right = copy.deepcopy(effective_left)
+
+    baseline_failures: list[str] = []
+    baseline_stats = comparator.ComparisonStats()
+    comparator.require_structural_ui_evidence(
+        "synthetic settings comparator",
+        matrix_left,
+        "browser",
+        baseline_failures,
+        baseline_stats)
+    comparator.require_structural_ui_evidence(
+        "synthetic settings comparator",
+        matrix_right,
+        "Windows",
+        baseline_failures,
+        baseline_stats)
+    comparator.compare_settings_matrix_geometry(
+        "synthetic settings comparator",
+        matrix_left,
+        matrix_right,
+        baseline_failures,
+        baseline_stats)
+    comparator.compare_ui_geometry_matrix(
+        "synthetic support comparator",
+        support_left,
+        support_right,
+        "settings",
+        baseline_failures,
+        baseline_stats)
+    comparator.compare_rect(
+        "synthetic region crop comparator",
+        "cropBounds",
+        {"x": 300, "y": 128, "width": 420, "height": 52},
+        {"x": 300, "y": 128, "width": 420, "height": 52},
+        baseline_failures,
+        baseline_stats,
+        tolerance=0)
+    comparator.compare_effective_settings_evidence(
+        "synthetic unsupported native surface comparator",
+        "metrics",
+        effective_left,
+        effective_right,
+        baseline_failures,
+        baseline_stats)
+    if baseline_failures:
+        failures.append(f"validator mutation baseline 'manifest comparator synthetic evidence' failed unexpectedly: {baseline_failures[:5]!r}")
+        return
+
+    expect_validator_failure(
+        name="settings matrix comparator catches toggle state mismatch",
+        run=lambda local_failures: comparator.compare_settings_matrix_geometry(
+            "synthetic settings comparator",
+            matrix_left,
+            mutation_comparator_settings_matrix_ui(offset_x=0, offset_y=0, checked=False),
+            local_failures,
+            comparator.ComparisonStats()),
+        expected_tokens=("settings matrix[standings.header:settings-check:time-remaining:race].checked differs",),
+        failures=failures,
+    )
+    expect_validator_failure(
+        name="settings geometry comparator catches support detail text mismatch",
+        run=lambda local_failures: comparator.compare_ui_geometry_matrix(
+            "synthetic support comparator",
+            support_left,
+            mutation_comparator_support_ui(offset_x=0, offset_y=0, legacy_key=False, text="Off"),
+            "settings",
+            local_failures,
+            comparator.ComparisonStats()),
+        expected_tokens=("settings geometry[settings-field-value:support.analysis.local-map-building.detail].text differs",),
+        failures=failures,
+    )
+    expect_validator_failure(
+        name="settings region crop comparator catches origin mismatch",
+        run=lambda local_failures: comparator.compare_rect(
+            "synthetic region crop comparator",
+            "cropBounds",
+            {"x": 300, "y": 128, "width": 420, "height": 52},
+            {"x": 301, "y": 128, "width": 420, "height": 52},
+            local_failures,
+            comparator.ComparisonStats(),
+            tolerance=0),
+        expected_tokens=("cropBounds.x differs by more than 0px",),
+        failures=failures,
+    )
+    expect_validator_failure(
+        name="effective settings comparator keeps unsupported native status strict",
+        run=lambda local_failures: comparator.compare_effective_settings_evidence(
+            "synthetic unsupported native surface comparator",
+            "metrics",
+            effective_left,
+            mutation_comparator_effective_settings_manifest(windows_status="captured"),
+            local_failures,
+            comparator.ComparisonStats()),
+        expected_tokens=("effectiveSettings.sources.windowsNative.pixelEvidence.status differs",),
+        failures=failures,
+    )
+
+
+def mutation_comparator_settings_matrix_ui(offset_x: int, offset_y: int, checked: bool) -> dict[str, object]:
+    panel = {
+        "role": "settings-panel",
+        "text": "Header",
+        "bounds": {"x": offset_x + 262, "y": offset_y + 178, "width": 414, "height": 232},
+    }
+    controls = [
+        mutation_settings_matrix_element(
+            "settings-matrix",
+            "Item Race",
+            offset_x + 284,
+            offset_y + 236,
+            368,
+            42),
+        mutation_settings_matrix_element(
+            "settings-matrix-row",
+            "Time remaining",
+            offset_x + 284,
+            offset_y + 256,
+            260,
+            22,
+            row_key="time-remaining",
+            column_key="item"),
+        mutation_settings_matrix_element(
+            "settings-matrix-cell",
+            "Race",
+            offset_x + 558,
+            offset_y + 236,
+            72,
+            16,
+            row_key="__header__",
+            column_key="race"),
+        mutation_settings_matrix_element(
+            "settings-check",
+            "",
+            offset_x + 584,
+            offset_y + 258,
+            19,
+            19,
+            row_key="time-remaining",
+            column_key="race",
+            checked=checked),
+    ]
+    return {
+        "panels": [panel],
+        "controls": controls,
+        "geometryMatrix": mutation_ui_geometry_matrix("settings", [panel, *controls]),
+    }
+
+
+def mutation_comparator_support_ui(offset_x: int, offset_y: int, legacy_key: bool, text: str) -> dict[str, object]:
+    evidence_key = (
+        "settings-field-value:field-value-track-geometry"
+        if legacy_key
+        else "support.analysis.local-map-building.detail"
+    )
+    shell = {
+        "role": "settings-shell",
+        "id": "shell",
+        "text": "Settings shell",
+        "bounds": {"x": offset_x, "y": offset_y, "width": 1152, "height": 608},
+    }
+    panel = {
+        "role": "settings-panel",
+        "id": "support-analysis",
+        "text": "Data Analysis Opt-out",
+        "bounds": {"x": offset_x + 682, "y": offset_y + 178, "width": 414, "height": 278},
+    }
+    label = {
+        "role": "settings-field-label",
+        "id": "support.analysis.local-map-building.label",
+        "text": "Local map building",
+        "bounds": {"x": offset_x + 704, "y": offset_y + 238, "width": 160, "height": 18},
+    }
+    value = {
+        "role": "settings-field-value",
+        "id": evidence_key,
+        "text": text,
+        "bounds": {"x": offset_x + 910, "y": offset_y + 238, "width": 48, "height": 18},
+    }
+    toggle = {
+        "role": "settings-toggle",
+        "id": "support.analysis.local-map-building.value",
+        "text": "",
+        "bounds": {"x": offset_x + 1018, "y": offset_y + 232, "width": 56, "height": 28},
+        "enabled": True,
+        "visible": True,
+        "checked": text == "On",
+    }
+    elements = [shell, panel, label, value, toggle]
+    return {
+        "panels": [panel],
+        "controls": [label, value, toggle],
+        "textFields": [label, value],
+        "geometryMatrix": mutation_ui_geometry_matrix("settings", elements),
+    }
+
+
+def mutation_comparator_effective_settings_manifest(windows_status: str = "unsupported") -> dict[str, object]:
+    source = {
+        "applied": True,
+        "fixtureVariant": "",
+        "sharedSettingsHash": "shared-hash",
+        "overlaySettingsHash": "overlay-hash",
+        "routePath": "/overlays/fuel-calculator",
+        "pixelEvidence": {"status": "captured", "reason": "synthetic comparator"},
+    }
+    return {
+        "overlayId": "fuel-calculator",
+        "previewMode": "race",
+        "bodyKind": "metrics",
+        "effectiveSettings": {
+            "overlayId": "fuel-calculator",
+            "previewMode": "race",
+            "sources": {
+                "browserReview": copy.deepcopy(source),
+                "localhostObs": copy.deepcopy(source),
+                "windowsNative": {
+                    **copy.deepcopy(source),
+                    "routePath": "/native/fuel-calculator",
+                    "pixelEvidence": {
+                        "status": windows_status,
+                        "reason": "native surface unsupported in synthetic comparator",
+                    },
+                },
+            },
+            "rendered": {
+                "bodyKind": "metrics",
+                "shouldRender": True,
+                "rowCount": 1,
+                "placeholderRowCount": 0,
+                "unavailableContentPolicy": "render",
+                "headerItems": [],
+            },
+        },
+    }
 
 
 def expect_mutation_failure(

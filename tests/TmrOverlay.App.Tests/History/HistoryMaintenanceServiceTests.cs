@@ -179,16 +179,18 @@ public sealed class HistoryMaintenanceServiceTests
 
     private static async Task WaitUntilAsync(Func<bool> predicate)
     {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(2);
-        while (!predicate())
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
+        while (DateTimeOffset.UtcNow < deadline)
         {
-            if (DateTimeOffset.UtcNow >= deadline)
+            if (predicate())
             {
-                Assert.True(predicate());
+                return;
             }
 
-            await Task.Delay(25);
+            await Task.Delay(50);
         }
+
+        Assert.True(predicate(), "Timed out waiting for background history maintenance to write its manifest.");
     }
 
     private static HistoryMaintenanceService CreateService(

@@ -11,6 +11,7 @@
     "test:localhost:unit": "vitest run tests/browser-overlays/browserOverlayShell.test.js tests/browser-overlays/overlayCatalogueBehaviour.test.js tests/browser-overlays/standingsRendering.test.js tests/browser-overlays/relativeRendering.test.js",
     "test:settings-effects": "vitest run --bail=0 tests/browser-overlays/v102ValidationCoverage.test.js tests/browser-overlays/v103ForensicsValidation.test.js tests/browser-overlays/reviewServerContracts.test.js tests/browser-overlays/settingsEffectMatrix.test.js",
     "test:evidence-contract": "vitest run --bail=0 tests/browser-overlays/overlayEvidenceContract.test.js",
+    "test:coverage:js": "vitest run --coverage",
     "test:localhost:playwright": "playwright test --grep-invert \"application|settings\"",
     "test:browser:install": "playwright install chromium",
     "review:browser": "node tools/browser-review/server.mjs",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
+    "@vitest/coverage-v8": "^3.2.4",
     "jsdom": "^27.1.0",
     "vitest": "^3.2.4"
   }

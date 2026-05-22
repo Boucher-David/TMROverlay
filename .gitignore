@@ -14,6 +14,7 @@ node_modules/
 [Oo]bj/
 [Tt]est[Rr]esult*/
 test-results/
+coverage/
 *.user
 *.suo
 *.rsuser

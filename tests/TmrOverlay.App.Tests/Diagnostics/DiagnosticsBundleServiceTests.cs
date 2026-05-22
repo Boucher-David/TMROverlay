@@ -194,6 +194,235 @@ public sealed class DiagnosticsBundleServiceTests
     }
 
     [Fact]
+    public void SupportDiagnosticsSurface_ExposesStableSemanticKeysAndToggleEvidence()
+    {
+        var templatePath = FindRepoFile("src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html");
+        var template = File.ReadAllText(templatePath);
+
+        var expectedSupportKeys = new[]
+        {
+            "support.capture.raw.enabled",
+            "support.capture.raw.description",
+            "support.bundle.latest",
+            "support.bundle.create",
+            "support.bundle.open-folder",
+            "support.bundle.create.description",
+            "support.analysis.local-map-building",
+            "support.analysis.car-track-history",
+            "support.analysis.fuel-history",
+            "support.analysis.radar-calibration",
+            "support.analysis.post-race-analysis"
+        };
+        foreach (var key in expectedSupportKeys)
+        {
+            Assert.Contains(key, template, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("`${key}.label`, 'data-evidence-role': 'label'", template, StringComparison.Ordinal);
+        Assert.Contains("`${key}.detail`, 'data-evidence-role': 'value'", template, StringComparison.Ordinal);
+        Assert.Contains("`${key}.value`, 'data-evidence-role': 'value'", template, StringComparison.Ordinal);
+        Assert.Contains("[isOn ? 'On' : 'Off']", template, StringComparison.Ordinal);
+        Assert.Contains("toggle(isOn, onChange, ariaLabel, { disabled: !onChange, evidenceKey: `${key}.value` })", template, StringComparison.Ordinal);
+        Assert.Contains("`toggle${isOn ? ' on' : ''}${disabled ? ' disabled' : ''}`", template, StringComparison.Ordinal);
+        Assert.Contains("'aria-pressed': isOn ? 'true' : 'false'", template, StringComparison.Ordinal);
+        Assert.Contains("'data-evidence-key': options.evidenceKey || null", template, StringComparison.Ordinal);
+        Assert.Contains("`segment${option === selected ? ' active' : ''}`", template, StringComparison.Ordinal);
+        Assert.Contains("'aria-pressed': option === selected ? 'true' : 'false'", template, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CreateBundle_IncludesStableSemanticMetadataAndOsStableTriageWithoutRawTelemetry()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var stamp = now.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture);
+            var storage = CreateStorage(root);
+            Directory.CreateDirectory(storage.LogsRoot);
+            Directory.CreateDirectory(storage.EventsRoot);
+            Directory.CreateDirectory(storage.SettingsRoot);
+            Directory.CreateDirectory(Path.GetDirectoryName(storage.RuntimeStatePath)!);
+            Directory.CreateDirectory(Path.Combine(storage.LogsRoot, "edge-cases"));
+            Directory.CreateDirectory(Path.Combine(storage.LogsRoot, "model-parity"));
+            Directory.CreateDirectory(Path.Combine(storage.LogsRoot, "overlay-diagnostics"));
+
+            File.WriteAllText(storage.RuntimeStatePath, "{}");
+            File.WriteAllText(Path.Combine(storage.SettingsRoot, "settings.json"), """{"overlays":[]}""");
+            File.WriteAllText(Path.Combine(storage.LogsRoot, $"tmroverlay-{stamp}.log"), "fresh log line");
+            File.WriteAllText(Path.Combine(storage.LogsRoot, "edge-cases", $"session-{stamp}-edge-cases.json"), """{"clipCount":1}""");
+            File.WriteAllText(Path.Combine(storage.LogsRoot, "model-parity", $"session-{stamp}-live-model-parity.json"), """{"frameCount":1}""");
+            File.WriteAllText(Path.Combine(storage.LogsRoot, "overlay-diagnostics", $"session-{stamp}-live-overlay-diagnostics.json"), """{"frameCount":1}""");
+            File.WriteAllText(
+                Path.Combine(storage.EventsRoot, $"events-{stamp}.jsonl"),
+                $$$"""
+                {"timestampUtc":"{{{now:O}}}","name":"update_check_succeeded","properties":{"source":"manual","result":"up_to_date"}}
+                """);
+
+            var captureDirectory = Path.Combine(storage.CaptureRoot, $"capture-{stamp}-semantic");
+            Directory.CreateDirectory(captureDirectory);
+            File.WriteAllText(
+                Path.Combine(captureDirectory, "capture-manifest.json"),
+                $$"""
+                {
+                  "captureId": "capture-{{stamp}}-semantic",
+                  "collectionId": "collection-{{stamp}}",
+                  "startedAtUtc": "{{now.AddMinutes(-1):O}}",
+                  "finishedAtUtc": "{{now:O}}",
+                  "telemetryFile": "telemetry.bin",
+                  "schemaFile": "telemetry-schema.json",
+                  "latestSessionInfoFile": "latest-session.yaml",
+                  "sessionInfoDirectory": "session-info",
+                  "sdkVersion": 2,
+                  "bufferLength": 32,
+                  "frameCount": 12,
+                  "droppedFrameCount": 0,
+                  "sessionInfoSnapshotCount": 1,
+                  "tickRate": 60,
+                  "variableCount": 4
+                }
+                """);
+            File.WriteAllText(Path.Combine(captureDirectory, "telemetry-schema.json"), "[]");
+            File.WriteAllText(
+                Path.Combine(captureDirectory, "latest-session.yaml"),
+                """
+                WeekendInfo:
+                 TrackDisplayName: Semantic Test Track
+                SessionInfo:
+                 CurrentSessionNum: 0
+                 Sessions:
+                 - SessionNum: 0
+                   SessionType: Race
+                   SessionName: RACE
+                DriverInfo:
+                 DriverCarIdx: 0
+                 Drivers:
+                 - CarIdx: 0
+                   CarScreenName: Semantic Test Car
+                   CarScreenNameShort: Semantic Test Car
+                """);
+            File.WriteAllText(Path.Combine(captureDirectory, "capture-synthesis.json"), """{"frameScan":{"totalFrameRecords":12,"sampledFrameCount":12}}""");
+            File.WriteAllText(Path.Combine(captureDirectory, "live-model-parity.json"), "{}");
+            File.WriteAllText(Path.Combine(captureDirectory, "live-overlay-diagnostics.json"), """{"totals":{"frameCount":12}}""");
+            File.WriteAllText(Path.Combine(captureDirectory, "telemetry.bin"), "raw telemetry must stay out");
+            var ibtAnalysisDirectory = Path.Combine(captureDirectory, "ibt-analysis");
+            Directory.CreateDirectory(ibtAnalysisDirectory);
+            File.WriteAllText(Path.Combine(ibtAnalysisDirectory, "status.json"), """{"status":"skipped","reason":"fresh_fixture"}""");
+            File.WriteAllText(Path.Combine(ibtAnalysisDirectory, "source.ibt"), "raw ibt must stay out");
+
+            var state = new TelemetryCaptureState();
+            state.SetCaptureRoot(storage.CaptureRoot);
+            state.MarkCaptureStarted(captureDirectory, now.AddMinutes(-1));
+            state.RecordFrame(now);
+            state.RecordCaptureWrite(new TelemetryCaptureWriteStatus(
+                now,
+                CaptureId: $"capture-{stamp}-semantic",
+                DirectoryPath: captureDirectory,
+                FramesWritten: 12,
+                SessionInfoSnapshotCount: 1,
+                PendingMessageCount: 0,
+                TelemetryFileBytes: 2048,
+                Exception: null));
+            var (service, streamChatSource) = CreateDiagnosticsBundleService(
+                root,
+                storage,
+                state,
+                new TestLiveTelemetrySource(LiveTelemetrySnapshot.Empty with
+                {
+                    IsConnected = true,
+                    IsCollecting = true,
+                    LastUpdatedAtUtc = now
+                }));
+
+            string bundlePath;
+            using (streamChatSource)
+            {
+                bundlePath = service.CreateBundle();
+            }
+
+            using var archive = ZipFile.OpenRead(bundlePath);
+            var entryNames = archive.Entries.Select(entry => entry.FullName).ToHashSet(StringComparer.Ordinal);
+            Assert.Contains("metadata/browser-overlays.json", entryNames);
+            Assert.Contains("metadata/shared-settings-contract.json", entryNames);
+            Assert.Contains("metadata/overlay-geometry-contract.json", entryNames);
+            Assert.Contains("metadata/latest-capture-evidence.json", entryNames);
+            Assert.Contains("metadata/evidence-quality.json", entryNames);
+            Assert.Contains("live-overlays/manifest.json", entryNames);
+            Assert.Contains("live-overlays/previews/manifest.json", entryNames);
+            Assert.Contains("runtime/runtime-state.json", entryNames);
+            Assert.Contains("settings/settings.json", entryNames);
+            Assert.Contains($"logs/tmroverlay-{stamp}.log", entryNames);
+            Assert.Contains($"events/events-{stamp}.jsonl", entryNames);
+            Assert.Contains($"edge-cases/session-{stamp}-edge-cases.json", entryNames);
+            Assert.Contains($"model-parity/session-{stamp}-live-model-parity.json", entryNames);
+            Assert.Contains($"overlay-diagnostics/session-{stamp}-live-overlay-diagnostics.json", entryNames);
+            Assert.Contains("latest-capture/capture-manifest.json", entryNames);
+            Assert.Contains("latest-capture/telemetry-schema.json", entryNames);
+            Assert.Contains("latest-capture/latest-session.yaml", entryNames);
+            Assert.Contains("latest-capture/capture-synthesis.json", entryNames);
+            Assert.Contains("latest-capture/live-model-parity.json", entryNames);
+            Assert.Contains("latest-capture/live-overlay-diagnostics.json", entryNames);
+            Assert.Contains("latest-capture/ibt-analysis/status.json", entryNames);
+            Assert.DoesNotContain("latest-capture/telemetry.bin", entryNames);
+            Assert.DoesNotContain("latest-capture/ibt-analysis/source.ibt", entryNames);
+            Assert.All(entryNames, entryName => Assert.DoesNotContain("\\", entryName, StringComparison.Ordinal));
+
+            var browserOverlaysJson = ReadJsonEntry(archive, "metadata/browser-overlays.json");
+            var pages = Assert.IsType<JsonArray>(browserOverlaysJson?["pages"]);
+            Assert.Contains(pages, page =>
+                string.Equals((string?)page?["id"], "standings", StringComparison.Ordinal)
+                && string.Equals((string?)page?["canonicalRoute"], "/overlays/standings", StringComparison.Ordinal)
+                && ((int?)page?["refreshIntervalMilliseconds"]) == 250);
+
+            var sharedContractJson = ReadJsonEntry(archive, "metadata/shared-settings-contract.json");
+            Assert.True(((int?)sharedContractJson?["settingsVersion"]) >= 11);
+            Assert.Equal("Metric", (string?)sharedContractJson?["defaultUnitSystem"]);
+            Assert.False(string.IsNullOrWhiteSpace((string?)sharedContractJson?["defaultFontFamily"]));
+
+            var overlayGeometryJson = ReadJsonEntry(archive, "metadata/overlay-geometry-contract.json");
+            Assert.Equal("overlay-geometry-contract", (string?)overlayGeometryJson?["source"]);
+            Assert.Equal(1, ((int?)overlayGeometryJson?["evidenceVersion"]) ?? -1);
+            Assert.Equal(64, ((string?)overlayGeometryJson?["runtimeContractSha256"])?.Length ?? -1);
+            Assert.NotNull(overlayGeometryJson?["current"]?["settingsGeometry"]);
+
+            var liveOverlaysJson = ReadJsonEntry(archive, "live-overlays/manifest.json");
+            Assert.NotNull(liveOverlaysJson?["screenshotCoverage"]);
+            Assert.NotNull(liveOverlaysJson?["screenshotCoverage"]?["visibleOverlayCount"]);
+            Assert.NotNull(liveOverlaysJson?["evidenceWarnings"]);
+
+            var previewManifestJson = ReadJsonEntry(archive, "live-overlays/previews/manifest.json");
+            Assert.NotNull(previewManifestJson?["coverage"]);
+            Assert.True(((int?)previewManifestJson?["coverage"]?["requestedScreenshotCount"]) > 0);
+
+            var latestCaptureJson = ReadJsonEntry(archive, "metadata/latest-capture-evidence.json");
+            Assert.True(((bool?)latestCaptureJson?["exists"]) == true);
+            Assert.Equal(12, ((int?)latestCaptureJson?["manifest"]?["frameCount"]) ?? -1);
+
+            var evidenceQualityJson = ReadJsonEntry(archive, "metadata/evidence-quality.json");
+            Assert.True(((bool?)evidenceQualityJson?["liveTelemetry"]?["currentConnected"]) == true);
+            Assert.True(((bool?)evidenceQualityJson?["latestCapture"]?["captureManifestExists"]) == true);
+            Assert.True(((bool?)evidenceQualityJson?["latestCapture"]?["ibtStatusExists"]) == true);
+
+            if (SharedOverlayContract.TryFindDefaultContractPath() is not null)
+            {
+                Assert.Contains("shared/tmr-overlay-contract.json", entryNames);
+            }
+
+            if (SharedOverlayContract.TryFindDefaultSchemaPath() is not null)
+            {
+                Assert.Contains("shared/tmr-overlay-contract.schema.json", entryNames);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void CreateBundle_IncludesTriageFilesAndExcludesRawTelemetry()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
@@ -1700,6 +1929,89 @@ public sealed class DiagnosticsBundleServiceTests
             EventsRoot = Path.Combine(root, "logs", "events"),
             RuntimeStatePath = Path.Combine(root, "runtime-state.json")
         };
+    }
+
+    private static (DiagnosticsBundleService Service, StreamChatOverlaySource StreamChatSource) CreateDiagnosticsBundleService(
+        string root,
+        AppStorageOptions storage,
+        TelemetryCaptureState state,
+        ILiveTelemetrySource liveTelemetry)
+    {
+        var localhostState = new LocalhostOverlayState(new LocalhostOverlayOptions());
+        var performance = new AppPerformanceState();
+        var performanceRecorder = new AppPerformanceSnapshotRecorder(storage);
+        var trackMapStore = new TrackMapStore(storage);
+        var settingsStore = new AppSettingsStore(storage);
+        var releaseUpdates = new ReleaseUpdateService(
+            new ReleaseUpdateOptions { Enabled = false },
+            new AppEventRecorder(storage),
+            NullLogger<ReleaseUpdateService>.Instance);
+        var sessionPreview = new SessionPreviewState(new AppEventRecorder(storage));
+        var liveOverlayWindowStore = new LiveOverlayWindowCaptureStore(storage);
+        var streamChatSource = new StreamChatOverlaySource(
+            NullLogger<StreamChatOverlaySource>.Instance,
+            performance);
+
+        var service = new DiagnosticsBundleService(
+            storage,
+            new LiveModelParityOptions(),
+            new LiveOverlayDiagnosticsOptions(),
+            new IbtAnalysisOptions
+            {
+                Enabled = true,
+                TelemetryLoggingEnabled = true,
+                TelemetryRoot = Path.Combine(root, "ibt")
+            },
+            state,
+            localhostState,
+            trackMapStore,
+            settingsStore,
+            liveTelemetry,
+            CreateBrowserModelFactory(storage, trackMapStore, streamChatSource),
+            sessionPreview,
+            performance,
+            performanceRecorder,
+            liveOverlayWindowStore,
+            new ForegroundWindowTracker(),
+            releaseUpdates,
+            streamChatSource,
+            NullLogger<DiagnosticsBundleService>.Instance);
+
+        return (service, streamChatSource);
+    }
+
+    private static JsonNode? ReadJsonEntry(ZipArchive archive, string entryName)
+    {
+        var entry = archive.GetEntry(entryName);
+        Assert.NotNull(entry);
+        using var reader = new StreamReader(entry.Open());
+        return JsonNode.Parse(reader.ReadToEnd());
+    }
+
+    private static string FindRepoFile(string relativePath)
+    {
+        var candidates = new[]
+        {
+            Directory.GetCurrentDirectory(),
+            AppContext.BaseDirectory
+        };
+
+        foreach (var candidate in candidates)
+        {
+            var directory = new DirectoryInfo(candidate);
+            while (directory is not null)
+            {
+                var path = Path.Combine(directory.FullName, relativePath);
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+
+                directory = directory.Parent;
+            }
+        }
+
+        throw new FileNotFoundException($"Could not locate repo file {relativePath}.");
     }
 
     private static BrowserOverlayModelFactory CreateBrowserModelFactory(

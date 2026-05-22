@@ -275,7 +275,19 @@ jobs:
         run: dotnet test tests\TmrOverlay.App.Tests\TmrOverlay.App.Tests.csproj --configuration Release --no-restore --filter DataContracts
 
       - name: Test native app
-        run: dotnet test tmrOverlay.sln --configuration Release --no-restore
+        shell: pwsh
+        run: |
+          $results = ".\artifacts\dotnet-test-results\native"
+          dotnet test tmrOverlay.sln `
+            --configuration Release `
+            --no-restore `
+            --logger "trx;LogFileName=native.trx" `
+            --results-directory $results
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
+              .\tools\ci\annotate-dotnet-test-results.ps1 -ResultsDirectory $results
+              exit $testExitCode
+          }
 
   dotnet_coverage:
     name: .NET coverage
@@ -294,7 +306,21 @@ jobs:
         run: dotnet restore tmrOverlay.sln
 
       - name: Collect .NET coverage
-        run: dotnet test tests\TmrOverlay.App.Tests\TmrOverlay.App.Tests.csproj --configuration Release --no-restore --settings tools\ci\coverlet.runsettings --collect "XPlat Code Coverage" --results-directory artifacts/dotnet-test-results
+        shell: pwsh
+        run: |
+          $results = ".\artifacts\dotnet-test-results\coverage"
+          dotnet test tests\TmrOverlay.App.Tests\TmrOverlay.App.Tests.csproj `
+            --configuration Release `
+            --no-restore `
+            --settings tools\ci\coverlet.runsettings `
+            --collect "XPlat Code Coverage" `
+            --logger "trx;LogFileName=coverage.trx" `
+            --results-directory $results
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
+              .\tools\ci\annotate-dotnet-test-results.ps1 -ResultsDirectory $results
+              exit $testExitCode
+          }
 
       - name: Install ReportGenerator
         run: dotnet tool install --global dotnet-reportgenerator-globaltool

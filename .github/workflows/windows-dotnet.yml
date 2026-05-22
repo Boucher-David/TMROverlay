@@ -233,6 +233,9 @@ jobs:
       - name: Validate active screenshot contracts
         run: python tools/validate_overlay_screenshots.py --profile app-static
 
+      - name: Test manifest comparator units
+        run: python -m unittest discover -s tests/tools -p "test_*.py"
+
       - name: Validate release tutorial image
         run: python tools/validate_overlay_screenshots.py --profile release-tutorial --root docs/assets
 

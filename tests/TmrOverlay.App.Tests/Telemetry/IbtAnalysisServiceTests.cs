@@ -170,6 +170,187 @@ public sealed class IbtAnalysisServiceTests
     }
 
     [Fact]
+    public async Task WriteAsync_AppliesCoveragePenaltyWhenCandidateIsTooShortForCapture()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-coverage-penalty-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var telemetryRoot = Path.Combine(root, "ibt");
+            var captureDirectory = Path.Combine(root, "captures", "capture-test");
+            Directory.CreateDirectory(telemetryRoot);
+            Directory.CreateDirectory(captureDirectory);
+
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-20T18:03:06Z");
+            var fullPath = Path.Combine(telemetryRoot, "full-race.ibt");
+            var shortPath = Path.Combine(telemetryRoot, "short-post-session.ibt");
+            WriteSyntheticIbt(
+                fullPath,
+                startedAtUtc,
+                recordCount: 36_000,
+                endSessionTime: 600d,
+                lastWriteAtUtc: startedAtUtc.AddMinutes(10));
+            WriteSyntheticIbt(
+                shortPath,
+                startedAtUtc,
+                recordCount: 600,
+                endSessionTime: 10d,
+                lastWriteAtUtc: startedAtUtc.AddMinutes(11));
+            WriteCaptureManifest(captureDirectory, startedAtUtc, frameCount: 36_000);
+            WriteLiveSchema(captureDirectory);
+
+            var service = CreateService(telemetryRoot);
+
+            var result = await service.WriteAsync(captureDirectory);
+
+            Assert.Equal(IbtAnalysisStatus.Succeeded, result.Status);
+            Assert.Equal(fullPath, result.SourcePath);
+            var selection = ReadCandidateSelection(captureDirectory);
+            Assert.Equal(fullPath, selection.GetProperty("selectedPath").GetString());
+            Assert.Equal(36_000, selection.GetProperty("candidateRecordCount").GetInt32());
+            Assert.Equal(1d, selection.GetProperty("candidateCaptureCoverageRatio").GetDouble());
+            Assert.True(selection.GetProperty("candidateScore").GetDouble() < 0d);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_UsesDiskStartDistanceBeforeLastWriteWhenDiskStartIsKnown()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-disk-start-distance-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var telemetryRoot = Path.Combine(root, "ibt");
+            var captureDirectory = Path.Combine(root, "captures", "capture-test");
+            Directory.CreateDirectory(telemetryRoot);
+            Directory.CreateDirectory(captureDirectory);
+
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-20T18:03:06Z");
+            var nearDiskStartPath = Path.Combine(telemetryRoot, "near-disk-start.ibt");
+            var newerFarDiskStartPath = Path.Combine(telemetryRoot, "newer-far-disk-start.ibt");
+            WriteSyntheticIbt(
+                nearDiskStartPath,
+                startedAtUtc.AddSeconds(-30),
+                recordCount: 36_000,
+                endSessionTime: 600d,
+                lastWriteAtUtc: startedAtUtc.AddMinutes(11));
+            WriteSyntheticIbt(
+                newerFarDiskStartPath,
+                startedAtUtc.AddMinutes(-5),
+                recordCount: 36_000,
+                endSessionTime: 600d,
+                lastWriteAtUtc: startedAtUtc.AddMinutes(12));
+            WriteCaptureManifest(captureDirectory, startedAtUtc, frameCount: 36_000);
+            WriteLiveSchema(captureDirectory);
+
+            var service = CreateService(telemetryRoot);
+
+            var result = await service.WriteAsync(captureDirectory);
+
+            Assert.Equal(IbtAnalysisStatus.Succeeded, result.Status);
+            Assert.Equal(nearDiskStartPath, result.SourcePath);
+            var selection = ReadCandidateSelection(captureDirectory);
+            Assert.Equal(nearDiskStartPath, selection.GetProperty("selectedPath").GetString());
+            Assert.InRange(selection.GetProperty("candidateScore").GetDouble(), -80d, 0d);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_UsesNewestLastWriteWhenManifestIsUnavailable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-no-manifest-fallback-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var telemetryRoot = Path.Combine(root, "ibt");
+            var captureDirectory = Path.Combine(root, "captures", "capture-test");
+            Directory.CreateDirectory(telemetryRoot);
+            Directory.CreateDirectory(captureDirectory);
+            WriteLiveSchema(captureDirectory);
+
+            var baseUtc = DateTimeOffset.Parse("2026-05-20T18:03:06Z");
+            var olderPath = Path.Combine(telemetryRoot, "older.ibt");
+            var newerPath = Path.Combine(telemetryRoot, "newer.ibt");
+            WriteSyntheticIbt(olderPath, baseUtc, lastWriteAtUtc: baseUtc.AddMinutes(5));
+            WriteSyntheticIbt(newerPath, baseUtc.AddMinutes(-30), lastWriteAtUtc: baseUtc.AddMinutes(6));
+
+            var service = CreateService(telemetryRoot);
+
+            var result = await service.WriteAsync(captureDirectory);
+
+            Assert.Equal(IbtAnalysisStatus.Succeeded, result.Status);
+            Assert.Equal(newerPath, result.SourcePath);
+            Assert.Equal(newerPath, ReadCandidateSelection(captureDirectory).GetProperty("selectedPath").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_UsesLastWriteDistanceWhenDiskStartIsUnavailable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-no-disk-start-fallback-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var telemetryRoot = Path.Combine(root, "ibt");
+            var captureDirectory = Path.Combine(root, "captures", "capture-test");
+            Directory.CreateDirectory(telemetryRoot);
+            Directory.CreateDirectory(captureDirectory);
+
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-20T18:03:06Z");
+            var nearLastWritePath = Path.Combine(telemetryRoot, "near-last-write.ibt");
+            var farLastWritePath = Path.Combine(telemetryRoot, "far-last-write.ibt");
+            WriteSyntheticIbt(
+                nearLastWritePath,
+                startedAtUtc.AddHours(-4),
+                recordCount: 36_000,
+                endSessionTime: 600d,
+                lastWriteAtUtc: startedAtUtc.AddSeconds(30),
+                startUnixSecondsOverride: long.MaxValue);
+            WriteSyntheticIbt(
+                farLastWritePath,
+                startedAtUtc.AddHours(-4),
+                recordCount: 36_000,
+                endSessionTime: 600d,
+                lastWriteAtUtc: startedAtUtc.AddMinutes(20),
+                startUnixSecondsOverride: long.MaxValue);
+            WriteCaptureManifest(captureDirectory, startedAtUtc, frameCount: 36_000);
+            WriteLiveSchema(captureDirectory);
+
+            var service = CreateService(telemetryRoot);
+
+            var result = await service.WriteAsync(captureDirectory);
+
+            Assert.Equal(IbtAnalysisStatus.Succeeded, result.Status);
+            Assert.Equal(nearLastWritePath, result.SourcePath);
+            Assert.Equal(nearLastWritePath, ReadCandidateSelection(captureDirectory).GetProperty("selectedPath").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task WriteAsync_WritesSkippedStatusWhenTelemetryRootIsMissing()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-missing-root-test", Guid.NewGuid().ToString("N"));
@@ -204,13 +385,157 @@ public sealed class IbtAnalysisServiceTests
         }
     }
 
+    [Fact]
+    public void FindPendingAnalysisCaptures_ReturnsCapturesMissingStatus()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-status-recovery-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var captureRoot = Path.Combine(root, "captures");
+            var missingStatusCapture = Path.Combine(captureRoot, "capture-missing-status");
+            Directory.CreateDirectory(missingStatusCapture);
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-20T18:03:06Z");
+            WriteCaptureManifest(missingStatusCapture, startedAtUtc);
+            WriteLiveSchema(missingStatusCapture);
+
+            var service = CreateService(Path.Combine(root, "ibt"));
+
+            var pending = service.FindPendingAnalysisCaptures(captureRoot);
+
+            var item = Assert.Single(pending);
+            Assert.Equal(missingStatusCapture, item.DirectoryPath);
+            Assert.Equal("capture-missing-status", item.CaptureId);
+            Assert.Equal(startedAtUtc, item.StartedAtUtc);
+            Assert.Equal("missing_ibt_analysis_status", item.Reason);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void HasSuccessfulAnalysis_RecoversMissingAndMalformedStatusAsUnsuccessful()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-malformed-status-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var missingStatusCapture = Path.Combine(root, "capture-missing-status");
+            var malformedStatusCapture = Path.Combine(root, "capture-malformed-status");
+            Directory.CreateDirectory(missingStatusCapture);
+            Directory.CreateDirectory(Path.Combine(malformedStatusCapture, "ibt-analysis"));
+            File.WriteAllText(Path.Combine(malformedStatusCapture, "ibt-analysis", "status.json"), "{not valid json");
+
+            var service = CreateService(Path.Combine(root, "ibt"));
+
+            Assert.False(service.HasSuccessfulAnalysis(missingStatusCapture));
+            Assert.False(service.HasSuccessfulAnalysis(malformedStatusCapture));
+            Assert.False(service.HasAnalysisStatus(missingStatusCapture));
+            Assert.True(service.HasAnalysisStatus(malformedStatusCapture));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void FindPendingAnalysisCaptures_SortsMissingStatusByCaptureStartTime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-status-sort-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var captureRoot = Path.Combine(root, "captures");
+            var laterCapture = Path.Combine(captureRoot, "capture-later");
+            var earlierCapture = Path.Combine(captureRoot, "capture-earlier");
+            Directory.CreateDirectory(laterCapture);
+            Directory.CreateDirectory(earlierCapture);
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-20T18:03:06Z");
+            WriteCaptureManifest(laterCapture, startedAtUtc.AddMinutes(5));
+            WriteCaptureManifest(earlierCapture, startedAtUtc);
+            WriteLiveSchema(laterCapture);
+            WriteLiveSchema(earlierCapture);
+
+            var service = CreateService(Path.Combine(root, "ibt"));
+
+            var pending = service.FindPendingAnalysisCaptures(captureRoot);
+
+            Assert.Collection(
+                pending,
+                item => Assert.Equal(earlierCapture, item.DirectoryPath),
+                item => Assert.Equal(laterCapture, item.DirectoryPath));
+            Assert.All(pending, item => Assert.Equal("missing_ibt_analysis_status", item.Reason));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_WritesStableSkippedStatusWhenCandidatesAreAbsentOrTooYoung()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-stable-skip-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var telemetryRoot = Path.Combine(root, "ibt");
+            var emptyCapture = Path.Combine(root, "captures", "capture-empty");
+            var tooYoungCapture = Path.Combine(root, "captures", "capture-too-young");
+            Directory.CreateDirectory(telemetryRoot);
+            Directory.CreateDirectory(emptyCapture);
+            Directory.CreateDirectory(tooYoungCapture);
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-20T18:03:06Z");
+            WriteCaptureManifest(emptyCapture, startedAtUtc);
+            WriteCaptureManifest(tooYoungCapture, startedAtUtc);
+
+            var emptyResult = await CreateService(telemetryRoot).WriteAsync(emptyCapture);
+
+            Assert.Equal(IbtAnalysisStatus.Skipped, emptyResult.Status);
+            Assert.Equal("no_ibt_files_found", emptyResult.Reason);
+            Assert.Equal("no_ibt_files_found", ReadStatus(emptyCapture).GetProperty("reason").GetString());
+
+            WriteSyntheticIbt(
+                Path.Combine(telemetryRoot, "still-writing.ibt"),
+                startedAtUtc,
+                recordCount: 36_000,
+                endSessionTime: 600d,
+                lastWriteAtUtc: startedAtUtc.AddMinutes(10));
+            var tooYoungResult = await CreateService(telemetryRoot, minStableAgeSeconds: int.MaxValue).WriteAsync(tooYoungCapture);
+
+            Assert.Equal(IbtAnalysisStatus.Skipped, tooYoungResult.Status);
+            Assert.Equal("no_matching_ibt_candidate", tooYoungResult.Reason);
+            var status = ReadStatus(tooYoungCapture);
+            Assert.Equal("no_matching_ibt_candidate", status.GetProperty("reason").GetString());
+            var selection = status.GetProperty("candidateSelection");
+            Assert.Equal("no_matching_ibt_candidate", selection.GetProperty("skipReason").GetString());
+            Assert.Equal(1, selection.GetProperty("rejectedCounts").GetProperty("still_writing").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static void WriteSyntheticIbt(
         string path,
         DateTimeOffset startedAtUtc,
         int recordCount = 4,
         double startSessionTime = 0d,
         double endSessionTime = 3d,
-        DateTimeOffset? lastWriteAtUtc = null)
+        DateTimeOffset? lastWriteAtUtc = null,
+        long? startUnixSecondsOverride = null)
     {
         var fields = new[]
         {
@@ -255,7 +580,7 @@ public sealed class IbtAnalysisServiceTests
             writer.Write(bufferOffset);
             writer.Write(new byte[telemetryHeaderBytes - 56]);
 
-            writer.Write(startedAtUtc.ToUnixTimeSeconds());
+            writer.Write(startUnixSecondsOverride ?? startedAtUtc.ToUnixTimeSeconds());
             writer.Write(startSessionTime);
             writer.Write(endSessionTime);
             writer.Write(1);
@@ -335,6 +660,34 @@ public sealed class IbtAnalysisServiceTests
             Path.Combine(captureDirectory, "telemetry-schema.json"),
             JsonSerializer.Serialize(schema));
         File.WriteAllBytes(Path.Combine(captureDirectory, "telemetry.bin"), new byte[32]);
+    }
+
+    private static IbtAnalysisService CreateService(
+        string telemetryRoot,
+        int minStableAgeSeconds = 0)
+    {
+        return new IbtAnalysisService(
+            new IbtAnalysisOptions
+            {
+                Enabled = true,
+                TelemetryRoot = telemetryRoot,
+                MaxCandidateAgeMinutes = 60,
+                MaxAnalysisMilliseconds = 10_000,
+                MaxSampledRecords = 100,
+                MinStableAgeSeconds = minStableAgeSeconds
+            },
+            NullLogger<IbtAnalysisService>.Instance);
+    }
+
+    private static JsonElement ReadStatus(string captureDirectory)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(captureDirectory, "ibt-analysis", "status.json")));
+        return document.RootElement.Clone();
+    }
+
+    private static JsonElement ReadCandidateSelection(string captureDirectory)
+    {
+        return ReadStatus(captureDirectory).GetProperty("candidateSelection");
     }
 
     private sealed record TestIbtField(

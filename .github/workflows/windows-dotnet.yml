@@ -294,7 +294,7 @@ jobs:
         run: dotnet restore tmrOverlay.sln
 
       - name: Collect .NET coverage
-        run: dotnet test tests\TmrOverlay.App.Tests\TmrOverlay.App.Tests.csproj --configuration Release --no-restore --collect "XPlat Code Coverage" --results-directory artifacts/dotnet-test-results
+        run: dotnet test tests\TmrOverlay.App.Tests\TmrOverlay.App.Tests.csproj --configuration Release --no-restore --settings tools\ci\coverlet.runsettings --collect "XPlat Code Coverage" --results-directory artifacts/dotnet-test-results
 
       - name: Install ReportGenerator
         run: dotnet tool install --global dotnet-reportgenerator-globaltool

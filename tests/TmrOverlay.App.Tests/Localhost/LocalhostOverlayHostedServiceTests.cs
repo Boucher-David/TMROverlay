@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using TmrOverlay.App.Events;
 using TmrOverlay.App.History;
@@ -132,13 +133,77 @@ public sealed class LocalhostOverlayHostedServiceTests
         }
     }
 
+    [Fact]
+    public async Task OverlayModelResponses_DisableCachingAndReturnNoRenderSemanticsWhenUnavailable()
+    {
+        var storage = CreateStorageOptions();
+        var options = new LocalhostOverlayOptions
+        {
+            Enabled = true,
+            Host = IPAddress.Loopback.ToString(),
+            Port = ReserveLoopbackPort()
+        };
+        var state = new LocalhostOverlayState(options);
+        var service = CreateService(options, state, storage);
+
+        try
+        {
+            await service.StartAsync(CancellationToken.None);
+
+            using var client = new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(5)
+            };
+            using var response = await SendGetResponseAsync(
+                client,
+                $"{options.Prefix}api/overlay-model/relative?clientKind=obs",
+                "Mozilla/5.0 OBS Studio/32.1.2");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.True(response.Headers.TryGetValues("Cache-Control", out var cacheControl));
+            Assert.Contains("no-store", string.Join(", ", cacheControl));
+            Assert.True(response.Headers.TryGetValues("Pragma", out var pragma));
+            Assert.Contains("no-cache", string.Join(", ", pragma));
+
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var model = document.RootElement.GetProperty("model");
+            Assert.False(model.GetProperty("shouldRender").GetBoolean());
+            Assert.Contains("hidden", model.GetProperty("status").GetString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(model.GetProperty("columns").EnumerateArray());
+            Assert.Empty(model.GetProperty("rows").EnumerateArray());
+            Assert.Empty(model.GetProperty("points").EnumerateArray());
+            Assert.False(model.GetProperty("effectiveSettings").GetProperty("rendered").GetProperty("shouldRender").GetBoolean());
+
+            var snapshot = await WaitForSnapshotAsync(
+                state,
+                item => item.TotalRequests == 1,
+                TimeSpan.FromSeconds(3));
+            Assert.Equal(1L, snapshot.RouteCounts["overlay_model"]);
+            Assert.Equal(1L, snapshot.RouteClientCounts["overlay_model|obs"]);
+            Assert.Equal(1L, snapshot.PathClientCounts["/api/overlay-model/relative|obs"]);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+            if (Directory.Exists(storage.AppDataRoot))
+            {
+                Directory.Delete(storage.AppDataRoot, recursive: true);
+            }
+        }
+    }
+
     private static async Task SendGetAsync(HttpClient client, string url, string userAgent)
+    {
+        using var response = await SendGetResponseAsync(client, url, userAgent);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        _ = await response.Content.ReadAsStringAsync();
+    }
+
+    private static async Task<HttpResponseMessage> SendGetResponseAsync(HttpClient client, string url, string userAgent)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.UserAgent.ParseAdd(userAgent);
-        using var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        _ = await response.Content.ReadAsStringAsync();
+        return await client.SendAsync(request);
     }
 
     private static async Task SendPostJsonAsync(HttpClient client, string url, string json, string userAgent)

@@ -255,8 +255,8 @@ public sealed class DiagnosticsBundleServiceTests
             File.WriteAllText(Path.Combine(storage.LogsRoot, "overlay-diagnostics", $"session-{stamp}-live-overlay-diagnostics.json"), """{"frameCount":1}""");
             File.WriteAllText(
                 Path.Combine(storage.EventsRoot, $"events-{stamp}.jsonl"),
-                $$"""
-                {"timestampUtc":"{{now:O}}","name":"update_check_succeeded","properties":{"source":"manual","result":"up_to_date"}}
+                $$$"""
+                {"timestampUtc":"{{{now:O}}}","name":"update_check_succeeded","properties":{"source":"manual","result":"up_to_date"}}
                 """);
 
             var captureDirectory = Path.Combine(storage.CaptureRoot, $"capture-{stamp}-semantic");

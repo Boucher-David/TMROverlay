@@ -82,6 +82,26 @@ jobs:
       - name: Validate settings effect matrix
         run: npm run test:settings-effects
 
+  overlay_evidence_contract_tests:
+    name: Overlay evidence contract
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install browser test dependencies
+        run: npm ci
+
+      - name: Validate overlay evidence contract
+        run: npm run test:evidence-contract
+
   browser_review_screenshots:
     name: Browser review screenshots
     runs-on: ubuntu-latest
@@ -106,6 +126,8 @@ jobs:
         run: npm run screenshots:browser-review -- --output artifacts/browser-review-screenshots
 
       - name: Validate browser review screenshots
+        id: validate_browser_review
+        continue-on-error: true
         run: python3 tools/validate_overlay_screenshots.py --profile browser-review-ci --root artifacts/browser-review-screenshots
 
       - name: Upload browser review screenshots
@@ -117,8 +139,12 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Fail on browser review screenshot validation
+        if: ${{ steps.validate_browser_review.outcome == 'failure' }}
+        run: exit 1
+
   localhost_screenshots:
-    name: Localhost route screenshots
+    name: Localhost screenshots
     runs-on: ubuntu-latest
 
     steps:
@@ -141,6 +167,8 @@ jobs:
         run: npm run screenshots:localhost -- --output artifacts/localhost-screenshots
 
       - name: Validate localhost screenshots
+        id: validate_localhost
+        continue-on-error: true
         run: python3 tools/validate_overlay_screenshots.py --profile localhost-ci --root artifacts/localhost-screenshots
 
       - name: Upload localhost screenshots
@@ -151,6 +179,10 @@ jobs:
           path: artifacts/localhost-screenshots
           if-no-files-found: error
           retention-days: 14
+
+      - name: Fail on localhost screenshot validation
+        if: ${{ steps.validate_localhost.outcome == 'failure' }}
+        run: exit 1
 
   windows_static_validation:
     name: Windows static validation
@@ -212,8 +244,8 @@ jobs:
       - name: Test native app
         run: dotnet test tmrOverlay.sln --configuration Release --no-restore
 
-  windows_screenshots:
-    name: Windows screenshots
+  windows_overlay_screenshots:
+    name: Windows overlay screenshots
     runs-on: windows-latest
 
     steps:
@@ -239,6 +271,8 @@ jobs:
             -- .\artifacts\windows-overlay-screenshots
 
       - name: Validate Windows overlay screenshots
+        id: validate_windows_overlay
+        continue-on-error: true
         run: python tools/validate_overlay_screenshots.py --profile windows-ci --root artifacts/windows-overlay-screenshots
 
       - name: Upload Windows overlay screenshots
@@ -247,8 +281,12 @@ jobs:
         with:
           name: windows-overlay-screenshots
           path: artifacts/windows-overlay-screenshots
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
+
+      - name: Fail on Windows overlay screenshot validation
+        if: ${{ steps.validate_windows_overlay.outcome == 'failure' }}
+        run: exit 1
 
   windows_installer_screenshots:
     name: Windows installer screenshots
@@ -350,6 +388,8 @@ jobs:
             -- "${{ steps.velopack_pack.outputs.msi_path }}" .\artifacts\windows-installer-screenshots
 
       - name: Validate Windows installer screenshots
+        id: validate_windows_installer
+        continue-on-error: true
         run: python tools/validate_overlay_screenshots.py --profile windows-installer-ci --root artifacts/windows-installer-screenshots
 
       - name: Upload Windows installer screenshots
@@ -358,53 +398,12 @@ jobs:
         with:
           name: windows-installer-screenshots
           path: artifacts/windows-installer-screenshots
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
 
-  windows_screenshot_bundle:
-    name: Windows screenshot bundle
-    runs-on: ubuntu-latest
-    needs:
-      - windows_screenshots
-      - windows_installer_screenshots
-    if: ${{ needs.windows_screenshots.result == 'success' && needs.windows_installer_screenshots.result == 'success' }}
-
-    steps:
-      - name: Download Windows overlay screenshots
-        uses: actions/download-artifact@v7
-        if: needs.windows_screenshots.result != 'skipped'
-        continue-on-error: true
-        with:
-          name: windows-overlay-screenshots
-          path: artifacts/windows-screenshots/overlays
-
-      - name: Download Windows installer screenshots
-        uses: actions/download-artifact@v7
-        if: needs.windows_installer_screenshots.result != 'skipped'
-        continue-on-error: true
-        with:
-          name: windows-installer-screenshots
-          path: artifacts/windows-screenshots/installer
-
-      - name: Summarize Windows screenshot bundle
-        shell: bash
-        run: |
-          mkdir -p artifacts/windows-screenshots
-          {
-            echo "# Windows screenshot bundle"
-            echo
-            echo "- overlays/: native Windows overlay and settings screenshots"
-            echo "- installer/: Windows installer menu screenshots"
-          } > artifacts/windows-screenshots/README.md
-
-      - name: Upload combined Windows screenshots
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: windows-screenshots
-          path: artifacts/windows-screenshots
-          if-no-files-found: ignore
-          retention-days: 14
+      - name: Fail on Windows installer screenshot validation
+        if: ${{ steps.validate_windows_installer.outcome == 'failure' }}
+        run: exit 1
 
   screenshot_manifest_parity:
     name: Screenshot manifest parity
@@ -412,8 +411,9 @@ jobs:
     needs:
       - browser_review_screenshots
       - localhost_screenshots
-      - windows_screenshots
+      - windows_overlay_screenshots
       - windows_installer_screenshots
+    if: ${{ always() && !cancelled() }}
 
     steps:
       - name: Check out repository
@@ -426,24 +426,28 @@ jobs:
 
       - name: Download browser review screenshots
         uses: actions/download-artifact@v7
+        continue-on-error: true
         with:
           name: browser-review-screenshots
           path: artifacts/screenshot-manifest-parity/browser-review
 
       - name: Download localhost screenshots
         uses: actions/download-artifact@v7
+        continue-on-error: true
         with:
           name: localhost-screenshots
           path: artifacts/screenshot-manifest-parity/localhost
 
       - name: Download Windows overlay screenshots
         uses: actions/download-artifact@v7
+        continue-on-error: true
         with:
           name: windows-overlay-screenshots
           path: artifacts/screenshot-manifest-parity/windows
 
       - name: Download Windows installer screenshots
         uses: actions/download-artifact@v7
+        continue-on-error: true
         with:
           name: windows-installer-screenshots
           path: artifacts/screenshot-manifest-parity/installer
@@ -578,7 +582,7 @@ jobs:
       - windows_static_validation
       - windows_build
       - windows_tests
-      - windows_screenshots
+      - windows_overlay_screenshots
       - windows_installer_screenshots
       - windows_publish_dry_run
     runs-on: windows-latest

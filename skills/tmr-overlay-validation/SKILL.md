@@ -45,7 +45,58 @@ The same pass should add or update:
 - browser review, localhost, and Windows/native screenshot generation plus validation profiles, or a documented reason a surface does not exist on one of those runtimes;
 - parity comparison logic that checks semantic equality across browser, localhost, and Windows/native instead of relying on manually inspected PNGs.
 
+For each overlay, prefer screenshot coverage that includes at least one populated synthetic/live example and one no-data/unavailable example. The populated example should show the overlay's intended rich state; the no-data example should prove the product contract for hidden, no-render, or placeholder behavior. Do not treat no-data screenshots as optional edge cases when an overlay can realistically lose telemetry or have every meaningful content source unavailable.
+
 Do not leave new UI validation as a follow-up unless the user explicitly asks to split it out. If the current artifacts cannot prove the intended behavior, add evidence capture first and keep assertions strict.
+
+## Native/Browser/Localhost Parity Inspection
+
+For every overlay behavior, renderer, availability, sizing, content-gating, or evidence-contract change, inspect all three active product surfaces in the same pass:
+
+- Windows native: the WinForms/DesignV2 form, native render model builder, screenshot diagnostic model, and any native-only placeholder/fade/no-render logic.
+- Browser review: deterministic fixture generation, browser overlay assets/modules, manifest evidence, screenshot generator, and browser-review validation profile.
+- Localhost/OBS: production browser-source model factory, route/page assets, localhost-specific model shaping, manifest evidence, screenshot generator, and localhost validation profile.
+
+If Windows execution is unavailable on the current machine, still read the native C# path and report exactly what was inspected plus the remaining unexecuted Windows build/screenshot gap. Do not conclude parity from browser review and localhost alone.
+
+When the issue involves waiting, unavailable, stale, hidden, or all-content-disabled states, validate no-render semantics explicitly. Check model fields such as `ShouldRender`, `HasContent`, opacity/fade state, row/metric/graph/input collections, screenshot text samples, and manifest evidence. A visible empty shell with status text is product behavior and must either be intentionally documented or removed across Windows native, browser review, and localhost.
+
+## Shared Renderer Contract Gate
+
+For overlay, settings UI, browser-source, screenshot evidence, or diagnostics changes that touch measured layout or parity data, do not add or update isolated renderer-local constants as the primary source of truth.
+
+Contract-owned values include:
+
+- app/settings shell and content geometry;
+- overlay default sizes and browser source sizes;
+- table/grid column widths, row/header heights, metric row gaps, graph/canvas bounds, Stream Chat row/badge/header geometry, and other values CI compares;
+- fitting-sensitive typography such as line heights, label/value lane widths, monospaced support path sizes, and control/button hit areas;
+- crop bounds, manifest geometry, screenshot evidence, and diagnostic fields used to explain parity.
+
+The expected implementation shape is:
+
+- Update `src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json` or add an equivalent explicit contract for the new domain.
+- Regenerate `src/TmrOverlay.App/Overlays/OverlayGeometryContractValues.g.cs` with `python3 tools/generate_overlay_geometry_constants.py` when C# consumes the contract.
+- Feed browser review and localhost from the same JSON or generated CSS variables, not hand-copied literals.
+- Make Windows native renderers and `tools/TmrOverlay.WindowsScreenshots` consume generated constants or shared model/evidence helpers.
+- Add validator checks so stale generated constants, unknown CSS variables, wrong fallback values, or copied evidence literals fail before screenshots are trusted.
+- Add or update diagnostics metadata when the contract is needed to compare a real Windows support bundle against CI artifacts.
+
+After changing a shared geometry contract, run:
+
+```bash
+python3 tools/generate_overlay_geometry_constants.py --check
+```
+
+```bash
+python3 tools/validate_overlay_screenshots.py --profile app-static
+```
+
+```bash
+env PYTHONPYCACHEPREFIX=/tmp/tmr-pycache python3 -m py_compile tools/validate_overlay_screenshots.py tools/generate_overlay_geometry_constants.py
+```
+
+Paint-only values may remain local only when they are decorative and unmeasured. If a value affects bounds, text fit, crops, hit areas, manifests, diagnostics, or parity assertions, move it into a shared contract in the same pass.
 
 ## Branch-Complete Release Hygiene
 

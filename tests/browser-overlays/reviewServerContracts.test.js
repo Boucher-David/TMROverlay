@@ -55,10 +55,10 @@ describe('browser review server validation contracts', () => {
         rowCount: 5,
         headerItems: [],
         browserSource: {
-          baseWidth: 360,
-          baseHeight: 158,
-          width: 360,
-          height: 158,
+          baseWidth: 392,
+          baseHeight: 212,
+          width: 392,
+          height: 212,
           scalePercent: 100,
           opacityPercent: 100
         }
@@ -76,14 +76,249 @@ describe('browser review server validation contracts', () => {
     const model = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race')).model;
 
     expect.soft(model.headerItems).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'timeRemaining', tone: 'success' })
+      expect.objectContaining({ key: 'timeRemaining', tone: 'normal' })
     ]));
     expect.soft(model.effectiveSettings.rendered.headerItems).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'timeRemaining', tone: 'success' })
+      expect.objectContaining({ key: 'timeRemaining', tone: 'normal' })
     ]));
   });
 
+  it('exposes fuel calculating and content-off review fixtures', async () => {
+    const calculating = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-calculating')).model;
+    expect.soft(calculating.status).toBe('calculating strategy');
+    expect.soft(metricSectionTitles(calculating)).toEqual(['Race Information']);
+    expect.soft(allMetricText(calculating)).toMatch(/\bCalculating\b/);
+    expect.soft(allMetricText(calculating)).not.toMatch(/\bCovered\b|\bNone\b/);
+    expect.soft(calculating.effectiveSettings.rendered.fuelStrategy).toMatchObject({
+      additionalFuelNeedState: 'unavailable',
+      successCopyRequiresMeasuredNeed: true
+    });
+    expect.soft(calculating.effectiveSettings.rendered.browserSource.baseHeight).toBeLessThan(298);
+
+    const stintsOff = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-stint-targets-off')).model;
+    expect.soft(metricSectionTitles(stintsOff)).toEqual(['Race Information']);
+    expect.soft(metricRowLabels(stintsOff, 'Race Information')).toEqual(['Plan', 'Fuel']);
+    expect.soft(allMetricText(stintsOff)).not.toMatch(/\bStint Targets\b|\bStint 1\b/);
+    expect.soft(stintsOff.effectiveSettings.rendered.browserSource.baseHeight).toBeLessThan(298);
+
+    const raceInfoOff = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-race-information-off')).model;
+    expect.soft(metricSectionTitles(raceInfoOff)).toEqual(['Stint Targets']);
+    expect.soft(metricRowLabels(raceInfoOff, 'Stint Targets')).toEqual(['Stint 1', 'Stint 2', 'Stint 3']);
+    expect.soft(allMetricText(raceInfoOff)).not.toMatch(/\bRace Information\b|\bPlan\b|\bFuel\b/);
+    expect.soft(raceInfoOff.effectiveSettings.rendered.browserSource.baseHeight).toBeLessThan(298);
+  });
+
+  it('proves v1.0.2 non-race display contracts in practice and qualifying previews', async () => {
+    for (const preview of ['practice', 'qualifying']) {
+      const standings = (await reviewServer.getJson(`/api/overlay-model/standings?preview=${preview}`)).model;
+      const standingsColumns = columnLabels(standings);
+      const standingsText = tableText(standings);
+
+      expect.soft(
+        standingsColumns,
+        `V102-004 ${preview}: non-race Standings must not expose race GAP header`
+      ).not.toContain('GAP');
+      expect.soft(
+        standingsColumns,
+        `V102-004 ${preview}: non-race Standings must not expose race INT header`
+      ).not.toContain('INT');
+      expect.soft(
+        standingsText,
+        `V102-004 ${preview}: non-race Standings must not render race leader gap wording`
+      ).not.toMatch(/\bLeader\b/);
+
+      const relative = (await reviewServer.getJson(`/api/overlay-model/relative?preview=${preview}`)).model;
+      const relativeColumns = columnLabels(relative);
+      const relativeText = tableText(relative);
+      if (preview === 'practice') {
+        expect.soft(relativeColumns, 'Relative practice should match race timing column semantics').toContain('Delta');
+        expect.soft(
+          (relative.rows || []).map((row) => row.relativeLapDelta).filter((value) => value !== null && value !== undefined),
+          'Relative practice should preserve whole-lap relationship evidence like race'
+        ).toEqual([1, 0, -2]);
+      } else {
+        expect.soft(relative.shouldRender, 'Qualifying Relative should not render because it lacks useful proximity semantics').toBe(false);
+        expect.soft(relative.status).toContain('qualifying unsupported');
+        expect.soft(relativeColumns, 'Qualifying Relative should not expose table columns').toEqual([]);
+        expect.soft(relative.rows || [], 'Qualifying Relative should not expose stale rows').toEqual([]);
+        expect.soft(relative.headerItems || [], 'Qualifying Relative should not render header-only chrome').toEqual([]);
+        expect.soft(
+          relativeText,
+          `V102-005 ${preview}: qualifying Relative must not render F2/estimated timing as physical proximity without evidence`
+        ).not.toMatch(/[+-]?\d+(?:\.\d+)?s\b/);
+        expect.soft(relative.effectiveSettings?.rendered?.shouldRender).toBe(false);
+        expect.soft(relative.effectiveSettings?.rendered?.rowCount).toBe(0);
+        expect.soft(relative.effectiveSettings?.rendered?.columnKeys).toEqual([]);
+        expect.soft(
+          relative.effectiveSettings?.rendered?.relativeTimingEvidence,
+          `V102-005 ${preview}: qualifying Relative needs source evidence for any displayed timing/proximity column`
+        ).toMatchObject({
+          sessionKind: preview,
+          physicalProximityAvailable: false
+        });
+      }
+
+      const fuel = (await reviewServer.getJson(`/api/overlay-model/fuel-calculator?preview=${preview}`)).model;
+      expect.soft(
+        metricSectionTitles(fuel),
+        `V102-006 ${preview}: non-race Fuel must use range/usage sections, not race strategy sections`
+      ).toEqual(['Fuel Range', 'Fuel Usage']);
+      expect.soft(
+        allMetricText(fuel),
+        `V102-006 ${preview}: non-race Fuel must not expose race plan/stint language`
+      ).not.toMatch(/\bRace Information\b|\bStint Targets\b|\bstops?\b/i);
+
+      const sessionWeather = (await reviewServer.getJson(`/api/overlay-model/session-weather?preview=${preview}`)).model;
+      expect.soft(
+        metricRowLabels(sessionWeather, 'Session'),
+        `V102-007 ${preview}: Session/Weather must not show estimated race lap rows outside race sessions`
+      ).not.toContain('Laps');
+      expect.soft(
+        allMetricText(sessionWeather),
+        `V102-007 ${preview}: Session/Weather must not render estimated lap text outside race sessions`
+      ).not.toMatch(/\b\d+(?:\.\d+)?\s+est\b/i);
+
+      const pitService = (await reviewServer.getJson(`/api/overlay-model/pit-service?preview=${preview}`)).model;
+      expect.soft(
+        metricRowLabels(pitService, 'Session'),
+        `V102-009 ${preview}: Pit Service must not show race lap context outside race sessions`
+      ).not.toContain('Time / Laps');
+      expect.soft(
+        allMetricText(pitService),
+        `V102-009 ${preview}: Pit Service must not render race lap counters outside race sessions`
+      ).not.toMatch(/\b\d+\s*\/\s*\d+\s*laps\b/i);
+    }
+  });
+
+  it('proves v1.0.2 row parity and fastest-lap precedence contracts in race previews', async () => {
+    const standings = (await reviewServer.getJson('/api/overlay-model/standings?preview=race')).model;
+    expect.soft(
+      standings.rows || [],
+      'V102-016 Standings rowCount must describe the actual deterministic rendered row set'
+    ).toHaveLength(standings.effectiveSettings?.rendered?.rowCount);
+
+    const rowWithFastestLast = (standings.rows || []).find((row) => {
+      const fastest = row.cells?.[5];
+      const last = row.cells?.[6];
+      return fastest && fastest === last;
+    });
+    expect.soft(rowWithFastestLast, 'V102-023 fixture must include a row where last lap is also fastest lap').toBeTruthy();
+    expect.soft(
+      rowWithFastestLast?.cellTones?.[5],
+      'V102-023 FAST cell must use fastest-lap tone'
+    ).toBe('best-lap');
+    expect.soft(
+      rowWithFastestLast?.cellTones?.[6],
+      'V102-023 LAST cell must preserve fastest-lap precedence over personal-best green'
+    ).toBe('best-lap');
+
+    const relative = (await reviewServer.getJson('/api/overlay-model/relative?preview=race')).model;
+    expect.soft(
+      relative.rows || [],
+      'V102-014/V102-016 Relative rowCount must describe the actual deterministic rendered row set'
+    ).toHaveLength(relative.effectiveSettings?.rendered?.rowCount);
+    expect.soft(
+      (relative.rows || []).filter((row) => row.isReference),
+      'V102-014/V102-016 Relative must expose exactly one reference row across browser and localhost contracts'
+    ).toHaveLength(1);
+  });
+
+  it('proves v1.0.2 Gap To Leader trend, threat, color, and focus-window evidence', async () => {
+    const model = (await reviewServer.getJson('/api/overlay-model/gap-to-leader?preview=race')).model;
+    const graph = model.graph || {};
+    const metricsByLabel = new Map((graph.trendMetrics || []).map((metric) => [String(metric.label || '').toUpperCase(), metric]));
+    expect.soft(
+      (graph.trendMetrics || []).map((metric) => metric?.label),
+      'Gap trend rows should put Last above 5L so the latest lap delta is the first trend signal'
+    ).toEqual(['Last', '5L', '10L', 'Pit', 'PLap', 'Stint', 'Tire', 'Status']);
+
+    const last = metricsByLabel.get('LAST');
+    expect.soft(last?.comparisonText, 'Gap Last comparison should be a signed last-lap delta, not a raw lap time').toMatch(/^[+-]\d+(?:\.\d+)?$/);
+    expect.soft(last?.threatText, 'Gap Last threat should be a signed last-lap delta, not a raw lap time').toMatch(/^[+-]\d+(?:\.\d+)?$/);
+    expect.soft(`${last?.comparisonText || ''} ${last?.threatText || ''}`, 'Gap Last cells should not expose m:ss raw last-lap values').not.toMatch(/\d+:\d{2}\.\d{3}/);
+
+    for (const label of ['5L', '10L']) {
+      const metric = metricsByLabel.get(label);
+      expect.soft(metric, `V102-018 Gap ${label} metric missing`).toBeTruthy();
+      expect.soft(
+        metric?.focusGapChangeSeconds,
+        `V102-018 Gap ${label} must expose time-delta semantics`
+      ).toEqual(expect.any(Number));
+      expect.soft(
+        metric?.completedReferenceLaps ?? -1,
+        `V102-018 Gap ${label} must prove completed reference-lap readiness before showing a value`
+      ).toBeGreaterThanOrEqual(label === '5L' ? 5 : 10);
+      expect.soft(
+        [metric?.stateLabel, metric?.valueText, metric?.chaserText].filter(Boolean).join(' '),
+        `V102-018 Gap ${label} must not expose lap-count text as a trend value`
+      ).not.toMatch(/[+-]?\d+(?:\.\d+)?L\b/i);
+    }
+
+    expect.soft(graph.scale?.isFocusRelative, 'V102-017/V102-021 Gap scale must be focus-relative').toBe(true);
+    expect.soft(
+      Number.isFinite(graph.scale?.maxGapSeconds) ? graph.scale.maxGapSeconds : Number.POSITIVE_INFINITY,
+      'V102-017/V102-021 Gap focus-window scale should stay bounded'
+    ).toBeLessThanOrEqual(30);
+    expect.soft(graph.comparisonLabel, 'V102-024 Gap Last comparison must not point at class leader for a P24 reference').not.toMatch(/^(P1|Leader)$/i);
+    expect.soft(graph.activeThreat?.chaser?.label, 'V102-025 Gap threat label must use position').toMatch(/^P\d+$/);
+
+    const threatCarIdx = graph.threatCarIdx;
+    const series = graph.series || [];
+    expect.soft(series.length, 'V102-026 Gap color exclusivity needs rendered series evidence').toBeGreaterThan(0);
+    for (const item of series) {
+      const renderedColor = item.renderedColor || item.baseColor || '';
+      expect.soft(
+        renderedColor.length,
+        `V102-026 Gap series ${item.carIdx ?? '?'} missing color evidence`
+      ).toBeGreaterThan(0);
+      if (item.carIdx !== threatCarIdx) {
+        expect.soft(
+          renderedColor,
+          `V102-026 Gap non-threat series ${item.carIdx ?? '?'} must not use red`
+        ).not.toMatch(/#(?:ff|ec|e[0-9a-f])[0-9a-f]{4}|rgb\(\s*(?:18\d|19\d|2[0-5]\d)\s*,\s*(?:[0-9]|[1-9]\d|1[0-2]\d)\s*,/i);
+      }
+    }
+  });
+
+  it('carries Stream Chat opacity into settings, model, and browser-source evidence', async () => {
+    await reviewServer.postReviewPatch({
+      kind: 'number',
+      overlayId: 'stream-chat',
+      key: 'opacityPercent',
+      value: 70
+    });
+
+    const settings = await reviewSettingsConfig('race');
+    const streamChatSettings = settings.overlays.find((overlay) => overlay.id === 'stream-chat');
+    const model = (await reviewServer.getJson('/api/overlay-model/stream-chat?preview=race&fixture=stream-chat-twitch-rich')).model;
+
+    expect.soft(streamChatSettings?.opacityPercent, 'V102-050 settings must expose Stream Chat opacity').toBe(70);
+    expect.soft(model.rootOpacity, 'V102-050 Stream Chat model root opacity').toBeCloseTo(0.7, 5);
+    expect.soft(model.effectiveSettings?.rendered?.browserSource, 'V102-050 Stream Chat browser-source opacity evidence').toMatchObject({
+      opacity: 0.7,
+      opacityPercent: 70
+    });
+    expect.soft(model.effectiveSettings?.settings, 'V102-050 Stream Chat effective settings opacity entry').toContainEqual(expect.objectContaining({
+      key: 'opacityPercent',
+      value: 70
+    }));
+  });
+
   it('keeps ordinary previews settings-faithful and moves rightmost proof into an explicit fixture', async () => {
+    await reviewServer.postReviewPatch({
+      kind: 'number',
+      overlayId: 'relative',
+      key: 'carsEachSide',
+      value: 3
+    });
+    await reviewServer.postReviewPatch({
+      kind: 'chrome',
+      overlayId: 'relative',
+      area: 'header',
+      label: 'Time remaining',
+      session: 'Race',
+      enabled: true
+    });
     await reviewServer.postReviewPatch({
       kind: 'content',
       overlayId: 'relative',
@@ -105,11 +340,70 @@ describe('browser review server validation contracts', () => {
 
     expect.soft((fixture.columns || []).map((column) => column.dataKey)).toContain('pit');
     expect.soft(fixture.effectiveSettings.sources.browserReview.fixtureVariant).toBe('rightmost-evidence');
+    expect.soft(fixture.effectiveSettings.rendered.browserSource).toMatchObject({
+      baseWidth: 440,
+      baseHeight: 308,
+      width: 440,
+      height: 308
+    });
     expect.soft(fixture.effectiveSettings.settings).toContainEqual(expect.objectContaining({
       key: 'relative.content.relative.pit.enabled',
       session: 'race',
       value: true
     }));
+  });
+
+  it('exposes Relative column-off and no-content fixtures for screenshot validation', async () => {
+    await reviewServer.postReviewPatch({
+      kind: 'number',
+      overlayId: 'relative',
+      key: 'carsEachSide',
+      value: 3
+    });
+    await reviewServer.postReviewPatch({
+      kind: 'chrome',
+      overlayId: 'relative',
+      area: 'header',
+      label: 'Time remaining',
+      session: 'Race',
+      enabled: true
+    });
+
+    const driverOnly = (await reviewServer.getJson('/api/overlay-model/relative?preview=race&fixture=relative-driver-only')).model;
+    expect.soft((driverOnly.columns || []).map((column) => column.dataKey)).toEqual(['driver']);
+    expect.soft(driverOnly.rows || []).toHaveLength(7);
+    expect.soft((driverOnly.rows || []).find((row) => row.isReference)?.cells).toEqual(['#55 Focus Driver']);
+    expect.soft(driverOnly.effectiveSettings.rendered.browserSource).toMatchObject({
+      baseWidth: 274,
+      baseHeight: 308
+    });
+
+    const positionDriver = (await reviewServer.getJson('/api/overlay-model/relative?preview=race&fixture=relative-position-driver')).model;
+    expect.soft((positionDriver.columns || []).map((column) => column.dataKey)).toEqual(['relative-position', 'driver']);
+    expect.soft((positionDriver.rows || []).find((row) => row.isReference)?.cells).toEqual(['5', '#55 Focus Driver']);
+    expect.soft(positionDriver.effectiveSettings.rendered.browserSource).toMatchObject({
+      baseWidth: 322,
+      baseHeight: 308
+    });
+
+    const noContent = (await reviewServer.getJson('/api/overlay-model/relative?preview=race&fixture=relative-no-content')).model;
+    expect.soft(noContent.shouldRender).toBe(false);
+    expect.soft(noContent.status).toContain('no enabled content');
+    expect.soft(noContent.columns || []).toEqual([]);
+    expect.soft(noContent.rows || []).toEqual([]);
+    expect.soft(noContent.headerItems || []).toEqual([]);
+    for (const key of [
+      'relative.content.relative.position.enabled',
+      'relative.content.relative.driver.enabled',
+      'relative.content.relative.gap.enabled',
+      'relative.content.relative.pit.enabled'
+    ]) {
+      expect.soft(noContent.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+        key,
+        session: 'race',
+        value: false
+      }));
+    }
   });
 
   it('does not make global session preview force Garage Cover preview visibility', async () => {
@@ -126,7 +420,10 @@ describe('browser review server validation contracts', () => {
 
     const model = (await reviewServer.getJson('/api/overlay-model/garage-cover?preview=race')).model;
 
+    expect.soft(model.shouldRender).toBe(false);
+    expect.soft(model.garageCover?.shouldCover).toBe(false);
     expect.soft(model.garageCover?.browserSettings?.previewVisible).toBe(false);
+    expect.soft(model.effectiveSettings.rendered.shouldRender).toBe(false);
     expect.soft(model.effectiveSettings.settings).toContainEqual(expect.objectContaining({
       key: 'garage-cover.previewVisible',
       value: false
@@ -252,7 +549,7 @@ describe('browser review server validation contracts', () => {
 
   it('hides content-driven localhost OBS models when every renderable content row is disabled', async () => {
     const config = await reviewSettingsConfig('race');
-    const overlayIds = ['standings', 'relative', 'session-weather', 'pit-service', 'input-state', 'flags'];
+    const overlayIds = ['standings', 'relative', 'fuel-calculator', 'session-weather', 'pit-service', 'input-state', 'flags'];
 
     for (const overlayId of overlayIds) {
       const overlay = config.overlays.find((candidate) => candidate.id === overlayId);
@@ -320,6 +617,46 @@ function expectHiddenOverlayModel(model, overlayId) {
   if (model.streamChat) {
     expect.soft(model.streamChat.rows ?? [], `${overlayId}: product-hidden stream chat rows`).toEqual([]);
   }
+}
+
+function columnLabels(model) {
+  return (model.columns || []).map((column) => column.label).filter(Boolean);
+}
+
+function tableText(model) {
+  return (model.rows || [])
+    .flatMap((row) => [
+      row.headerTitle,
+      row.headerDetail,
+      ...(row.cells || [])
+    ])
+    .filter(Boolean)
+    .join(' ');
+}
+
+function metricSectionTitles(model) {
+  return (model.metricSections || []).map((section) => section.title);
+}
+
+function metricRowLabels(model, sectionTitle) {
+  return (model.metricSections || [])
+    .filter((section) => section.title === sectionTitle)
+    .flatMap((section) => section.rows || [])
+    .map((row) => row.label);
+}
+
+function allMetricText(model) {
+  return (model.metricSections || [])
+    .flatMap((section) => [
+      section.title,
+      ...(section.rows || []).flatMap((row) => [
+        row.label,
+        row.value,
+        ...(row.segments || []).flatMap((segment) => [segment.label, segment.value])
+      ])
+    ])
+    .filter(Boolean)
+    .join(' ');
 }
 
 async function reviewSettingsConfig(preview = 'race') {

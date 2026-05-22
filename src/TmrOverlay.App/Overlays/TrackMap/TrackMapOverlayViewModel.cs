@@ -39,10 +39,11 @@ internal sealed record TrackMapOverlayViewModel(
         var availability = OverlayAvailabilityEvaluator.FromSnapshot(snapshot, now);
         var sessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot);
         var models = snapshot.CompleteModels();
+        var hasGeneratedTrackMap = HasGeneratedTrackMap(trackMap);
         return new TrackMapOverlayViewModel(
             Title: "Track Map",
-            Status: availability.IsAvailable ? "live" : availability.StatusText,
-            Source: availability.IsAvailable ? "source: live position telemetry" : "source: waiting",
+            Status: TrackMapStatus(availability, hasGeneratedTrackMap),
+            Source: TrackMapSource(availability, hasGeneratedTrackMap),
             IsAvailable: availability.IsAvailable,
             Markers: BuildMarkers(snapshot with { Models = models }),
             Sectors: models.TrackMap.Sectors,
@@ -58,6 +59,33 @@ internal sealed record TrackMapOverlayViewModel(
                 defaultEnabled: true,
                 sessionKind),
             TrackMap: trackMap);
+    }
+
+    private static string TrackMapStatus(OverlayAvailabilitySnapshot availability, bool hasGeneratedTrackMap)
+    {
+        if (!availability.IsAvailable)
+        {
+            return availability.StatusText;
+        }
+
+        return hasGeneratedTrackMap ? "live" : "track map | circle fallback";
+    }
+
+    private static string TrackMapSource(OverlayAvailabilitySnapshot availability, bool hasGeneratedTrackMap)
+    {
+        if (!availability.IsAvailable)
+        {
+            return "source: waiting";
+        }
+
+        return hasGeneratedTrackMap
+            ? "source: live position telemetry"
+            : "source: live position telemetry | map fallback: no generated track map";
+    }
+
+    private static bool HasGeneratedTrackMap(TrackMapDocument? trackMap)
+    {
+        return (trackMap?.RacingLine.Points.Count(point => double.IsFinite(point.X) && double.IsFinite(point.Y)) ?? 0) >= 3;
     }
 
     public static TrackMapBrowserSettings BrowserSettingsFrom(
@@ -119,7 +147,8 @@ internal sealed record TrackMapOverlayViewModel(
                 isFocus,
                 scoringRow?.CarClassColorHex ?? row.CarClassColorHex,
                 Position(row, scoringRow),
-                row.TrackSurface);
+                row.TrackSurface,
+                IsPlayerFocus: IsPlayerFocus(models.Reference, row.CarIdx, isFocus, row.IsPlayer, scoringRow?.IsPlayer));
             if (!markers.TryGetValue(row.CarIdx, out var existing)
                 || marker.IsFocus
                 || !existing.IsFocus)
@@ -133,13 +162,20 @@ internal sealed record TrackMapOverlayViewModel(
             && focusProgress is { } progress
             && TrackMapMarkerPolicy.IsValidProgress(progress))
         {
+            markers.TryGetValue(focusMarkerCarIdx, out var existing);
             markers[focusMarkerCarIdx] = new TrackMapOverlayMarker(
                 focusMarkerCarIdx,
                 NormalizeProgress(progress),
                 IsFocus: true,
-                ClassColorHex: null,
-                Position: FocusPosition(models, scoringByCarIdx, focusMarkerCarIdx),
-                TrackSurface: FocusTrackSurface(models.Reference));
+                ClassColorHex: FocusClassColor(models, scoringByCarIdx, focusMarkerCarIdx, existing),
+                Position: FocusPosition(models, scoringByCarIdx, focusMarkerCarIdx, existing),
+                TrackSurface: FocusTrackSurface(models.Reference),
+                IsPlayerFocus: IsPlayerFocus(
+                    models.Reference,
+                    focusMarkerCarIdx,
+                    isFocus: true,
+                    rowIsPlayer: existing?.IsPlayerFocus == true,
+                    scoringIsPlayer: null));
         }
 
         return markers.Values
@@ -165,15 +201,59 @@ internal sealed record TrackMapOverlayViewModel(
     private static int? FocusPosition(
         LiveRaceModels models,
         IReadOnlyDictionary<int, LiveScoringRow> scoringByCarIdx,
-        int focusCarIdx)
+        int focusCarIdx,
+        TrackMapOverlayMarker? existing)
     {
         if (scoringByCarIdx.TryGetValue(focusCarIdx, out var scoringRow))
         {
-            return Position(scoringRow);
+            return Position(scoringRow) ?? existing?.Position;
         }
 
-        return Position(models.Timing.FocusRow)
+        return existing?.Position
+            ?? Position(models.Timing.FocusRow)
             ?? Position(models.Reference);
+    }
+
+    private static string? FocusClassColor(
+        LiveRaceModels models,
+        IReadOnlyDictionary<int, LiveScoringRow> scoringByCarIdx,
+        int focusCarIdx,
+        TrackMapOverlayMarker? existing)
+    {
+        if (!string.IsNullOrWhiteSpace(existing?.ClassColorHex))
+        {
+            return existing.ClassColorHex;
+        }
+
+        if (scoringByCarIdx.TryGetValue(focusCarIdx, out var scoringRow)
+            && !string.IsNullOrWhiteSpace(scoringRow.CarClassColorHex))
+        {
+            return scoringRow.CarClassColorHex;
+        }
+
+        return string.IsNullOrWhiteSpace(models.Timing.FocusRow?.CarClassColorHex)
+            ? null
+            : models.Timing.FocusRow.CarClassColorHex;
+    }
+
+    private static bool IsPlayerFocus(
+        LiveReferenceModel reference,
+        int carIdx,
+        bool isFocus,
+        bool rowIsPlayer,
+        bool? scoringIsPlayer)
+    {
+        if (!isFocus)
+        {
+            return false;
+        }
+
+        if (reference.FocusCarIdx == carIdx)
+        {
+            return reference.FocusIsPlayer;
+        }
+
+        return rowIsPlayer || scoringIsPlayer == true || reference.PlayerCarIdx == carIdx;
     }
 
     private static int? Position(LiveReferenceModel reference)
@@ -219,7 +299,8 @@ internal sealed record TrackMapOverlayMarker(
     int? Position,
     int? TrackSurface = null,
     TrackMapMarkerAlertKind AlertKind = TrackMapMarkerAlertKind.None,
-    double AlertPulseProgress = 0d);
+    double AlertPulseProgress = 0d,
+    bool IsPlayerFocus = true);
 
 internal enum TrackMapMarkerAlertKind
 {

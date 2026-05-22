@@ -1,4 +1,6 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
+using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.Styling;
 using TmrOverlay.Core.Settings;
@@ -38,6 +40,20 @@ public sealed class BrowserOverlayPageRendererTests
         Assert.Contains($"--tmr-cyan: {SharedColor("cyan")}", html);
         Assert.Contains($"--tmr-magenta: {SharedColor("magenta")}", html);
         Assert.Contains($"--tmr-amber: {SharedColor("amber")}", html);
+        Assert.Contains("--tmr-stream-chat-overlay-width: 380px", html);
+        Assert.Contains("\"gapGraph\"", html);
+        Assert.Contains("\"metricRows\"", html);
+        Assert.Contains("\"inputState\"", html);
+        Assert.Contains("\"flags\"", html);
+        Assert.Contains("\"canvasOverlays\"", html);
+        Assert.Contains(
+            $"--tmr-metric-row-segmented-height: {OverlayGeometryContracts.MetricRows.SegmentedRowHeight.ToString("0.###", CultureInfo.InvariantCulture)}px",
+            html);
+        Assert.Contains("--tmr-overlay-sizes-input-state-width: 520px", html);
+        Assert.Contains("--tmr-input-state-rail-preferred-width-fraction: 0.4", html);
+        Assert.Contains("--tmr-flags-refresh-interval-milliseconds: 250", html);
+        Assert.Contains("--tmr-canvas-overlays-track-map-width: 360px", html);
+        Assert.DoesNotContain("{{GEOMETRY_", html);
         Assert.Contains("border-bottom: 2px solid var(--tmr-cyan)", html);
         Assert.Contains("var(--tmr-surface-raised)", html);
         Assert.Contains("themeColor", html);
@@ -103,12 +119,15 @@ public sealed class BrowserOverlayPageRendererTests
             Assert.Contains("fetchOverlayModel('input-state')", html);
             Assert.Contains("inputDisplayModel", html);
             Assert.Contains("model?.inputs", html);
-            Assert.Contains("Waiting for player in car.", html);
+            Assert.Contains("model?.shouldRender === false", html);
+            Assert.Contains("applyOverlayOpacity(0)", html);
+            Assert.Contains("clearHeaderItems()", html);
             Assert.Contains("brakeAbsActive", html);
             Assert.Contains("inputGraphEnabled(inputs)", html);
             Assert.Contains("renderInputRailContents(inputs, brakeAbsActive)", html);
             Assert.Contains("renderInputRail(railContents)", html);
-            Assert.Contains("width: min(32px, 100%)", html);
+            Assert.Contains("--tmr-input-state-wheel-svg-size: 32px", html);
+            Assert.Contains("width: min(var(--tmr-input-state-wheel-svg-size), 100%)", html);
             Assert.DoesNotContain("width: min(52px, 100%)", html);
             Assert.Contains("var(--tmr-green)", html);
             Assert.Contains("themeColor('--tmr-green'", html);
@@ -132,7 +151,7 @@ public sealed class BrowserOverlayPageRendererTests
         {
             Assert.Contains("fetchOverlayModel('gap-to-leader')", html);
             Assert.Contains("gapDisplayModel", html);
-            Assert.Contains("availableAfterTable >= 260", html);
+            Assert.Contains("gapGeometryNumber('metricsMinimumPlotWidth', 260)", html);
             Assert.DoesNotContain("availableAfterTable >= 300", html);
         }
         if (expectedId == "stream-chat")
@@ -153,6 +172,18 @@ public sealed class BrowserOverlayPageRendererTests
             Assert.Contains("browserSettings", html);
             Assert.Contains("shouldCover", html);
         }
+    }
+
+    [Theory]
+    [InlineData("/overlays/relative?client=obs-main&clientKind=obs", "relative")]
+    [InlineData("/overlays/relative&client=obs-main&clientKind=obsNow", "relative")]
+    [InlineData("/overlays/stream-chatclientKind=obs", "stream-chat")]
+    public void TryRender_ToleratesBrowserSourceClientQuerySuffixes(string route, string expectedId)
+    {
+        var rendered = BrowserOverlayPageRenderer.TryRender(route, out var html);
+
+        Assert.True(rendered);
+        Assert.Contains("\"id\":\"" + expectedId + "\"", html);
     }
 
     [Fact]

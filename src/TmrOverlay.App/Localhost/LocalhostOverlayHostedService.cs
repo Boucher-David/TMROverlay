@@ -26,6 +26,7 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNameCaseInsensitive = true,
         WriteIndented = false
     };
 
@@ -157,7 +158,23 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
                 break;
             }
 
-            _ = Task.Run(() => HandleRequestAsync(context, cancellationToken), CancellationToken.None);
+            _ = Task.Run(() => RunRequestAsync(context, cancellationToken), CancellationToken.None);
+        }
+    }
+
+    private async Task RunRequestAsync(HttpListenerContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await HandleRequestAsync(context, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Unhandled localhost overlay request task failure.");
+            _events.Record("localhost_overlay_request_task_failed", new Dictionary<string, string?>
+            {
+                ["error"] = exception.Message
+            });
         }
     }
 
@@ -165,12 +182,15 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
     {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var route = "unknown";
+        var requestMethod = SafeRequestMethod(context.Request);
+        var requestPath = SafeRequestPath(context.Request);
+        var requestUserAgent = SafeRequestUserAgent(context.Request);
         var statusCode = (int)HttpStatusCode.InternalServerError;
         Exception? requestException = null;
         try
         {
             AddCorsHeaders(context.Response);
-            if (string.Equals(context.Request.HttpMethod, "OPTIONS", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(requestMethod, "OPTIONS", StringComparison.OrdinalIgnoreCase))
             {
                 route = "options";
                 context.Response.StatusCode = (int)HttpStatusCode.NoContent;
@@ -179,18 +199,55 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
                 return;
             }
 
-            if (!string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(requestMethod, "GET", StringComparison.OrdinalIgnoreCase))
             {
-                route = "method_not_allowed";
-                await WriteJsonAsync(context.Response, HttpStatusCode.MethodNotAllowed, new
+                if (!string.Equals(requestMethod, "POST", StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(requestPath.TrimEnd('/'), "/api/browser-source-event", StringComparison.OrdinalIgnoreCase))
                 {
-                    error = "method_not_allowed"
+                    route = "method_not_allowed";
+                    await WriteJsonAsync(context.Response, HttpStatusCode.MethodNotAllowed, new
+                    {
+                        error = "method_not_allowed"
+                    }, cancellationToken).ConfigureAwait(false);
+                    statusCode = (int)HttpStatusCode.MethodNotAllowed;
+                    return;
+                }
+            }
+
+            var path = requestPath.TrimEnd('/');
+            if (string.Equals(path, "/api/browser-source-event", StringComparison.OrdinalIgnoreCase))
+            {
+                route = "browser_source_event";
+                if (!string.Equals(requestMethod, "POST", StringComparison.OrdinalIgnoreCase))
+                {
+                    await WriteJsonAsync(context.Response, HttpStatusCode.MethodNotAllowed, new
+                    {
+                        error = "method_not_allowed"
+                    }, cancellationToken).ConfigureAwait(false);
+                    statusCode = (int)HttpStatusCode.MethodNotAllowed;
+                    return;
+                }
+
+                var pageEvent = await ReadJsonBodyAsync<LocalhostOverlayPageEvent>(context.Request, cancellationToken).ConfigureAwait(false);
+                if (pageEvent is null)
+                {
+                    await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new
+                    {
+                        error = "invalid_browser_source_event"
+                    }, cancellationToken).ConfigureAwait(false);
+                    statusCode = (int)HttpStatusCode.BadRequest;
+                    return;
+                }
+
+                _state.RecordPageEvent(pageEvent);
+                await WriteJsonAsync(context.Response, HttpStatusCode.OK, new
+                {
+                    ok = true
                 }, cancellationToken).ConfigureAwait(false);
-                statusCode = (int)HttpStatusCode.MethodNotAllowed;
+                statusCode = (int)HttpStatusCode.OK;
                 return;
             }
 
-            var path = context.Request.Url?.AbsolutePath.TrimEnd('/') ?? string.Empty;
             if (TryGetOverlayModelId(path, out var overlayModelId))
             {
                 route = "overlay_model";
@@ -406,8 +463,8 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
             _events.Record("localhost_overlay_request_failed", new Dictionary<string, string?>
             {
                 ["route"] = route,
-                ["method"] = context.Request.HttpMethod,
-                ["path"] = context.Request.Url?.AbsolutePath ?? string.Empty,
+                ["method"] = requestMethod,
+                ["path"] = requestPath,
                 ["error"] = exception.Message
             });
             try
@@ -428,13 +485,50 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
             var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started);
             _state.RecordRequest(
                 route,
-                context.Request.HttpMethod,
-                context.Request.Url?.AbsolutePath ?? string.Empty,
+                requestMethod,
+                requestPath,
                 statusCode,
                 elapsed,
-                requestException);
+                userAgent: requestUserAgent,
+                exception: requestException);
             _performanceState.RecordOperation(AppPerformanceMetricIds.LocalhostRequest, elapsed, requestException is null && statusCode < 500);
             _performanceState.RecordLocalhostRequest(route, statusCode, elapsed, requestException is null && statusCode < 500);
+        }
+    }
+
+    private static string SafeRequestMethod(HttpListenerRequest request)
+    {
+        try
+        {
+            return string.IsNullOrWhiteSpace(request.HttpMethod) ? "unknown" : request.HttpMethod;
+        }
+        catch (Exception exception) when (exception is ObjectDisposedException or HttpListenerException)
+        {
+            return "unknown";
+        }
+    }
+
+    private static string SafeRequestPath(HttpListenerRequest request)
+    {
+        try
+        {
+            return request.Url?.AbsolutePath ?? string.Empty;
+        }
+        catch (Exception exception) when (exception is ObjectDisposedException or HttpListenerException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string? SafeRequestUserAgent(HttpListenerRequest request)
+    {
+        try
+        {
+            return request.UserAgent;
+        }
+        catch (Exception exception) when (exception is ObjectDisposedException or HttpListenerException)
+        {
+            return null;
         }
     }
 
@@ -567,7 +661,7 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
     private static void AddCorsHeaders(HttpListenerResponse response)
     {
         response.Headers["Access-Control-Allow-Origin"] = "*";
-        response.Headers["Access-Control-Allow-Methods"] = "GET, OPTIONS";
+        response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
         response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
     }
 
@@ -622,8 +716,30 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
         response.StatusCode = (int)statusCode;
         response.ContentType = contentType;
         response.ContentLength64 = bytes.Length;
+        AddNoCacheHeaders(response);
         await response.OutputStream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
         response.Close();
+    }
+
+    private static void AddNoCacheHeaders(HttpListenerResponse response)
+    {
+        response.Headers["Cache-Control"] = "no-store, no-cache, max-age=0";
+        response.Headers["Pragma"] = "no-cache";
+        response.Headers["Expires"] = "0";
+    }
+
+    private static async Task<T?> ReadJsonBodyAsync<T>(
+        HttpListenerRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await JsonSerializer.DeserializeAsync<T>(request.InputStream, JsonOptions, cancellationToken).ConfigureAwait(false);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
     }
 }
 

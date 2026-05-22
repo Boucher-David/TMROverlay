@@ -1,4 +1,5 @@
 using System.Globalization;
+using TmrOverlay.App.Overlays.Abstractions;
 using TmrOverlay.App.Overlays.Content;
 using TmrOverlay.App.Overlays.SimpleTelemetry;
 using TmrOverlay.Core.Overlays;
@@ -103,14 +104,16 @@ internal static class SessionWeatherOverlayViewModel
         {
             Segments = EventSegments(session)
         };
-        var clockRow = new SimpleTelemetryRowViewModel("Clock", FormatClock(session))
+        var clockRow = new SimpleTelemetryRowViewModel("Clock", FormatClock(snapshot))
         {
-            Segments = ClockSegments(session)
+            Segments = ClockSegments(snapshot)
         };
-        var lapsRow = new SimpleTelemetryRowViewModel("Laps", FormatLaps(session, raceProgress, raceProjection))
-        {
-            Segments = LapsSegments(session, raceProgress, raceProjection)
-        };
+        var lapsRow = IsRaceSession(session)
+            ? new SimpleTelemetryRowViewModel("Laps", FormatLaps(session, raceProgress, raceProjection))
+            {
+                Segments = LapsSegments(session, raceProgress, raceProjection)
+            }
+            : null;
         var trackRow = new SimpleTelemetryRowViewModel("Track", FormatTrack(session, unitSystem))
         {
             Segments = TrackSegments(session, unitSystem)
@@ -144,21 +147,21 @@ internal static class SessionWeatherOverlayViewModel
         AddIfAvailable(sessionRows, eventRow);
         sessionRows.Add(trackRow);
         AddIfAvailable(sessionRows, lapsRow);
-        var weatherRows = new List<SimpleTelemetryRowViewModel>
-        {
-            surfaceRow,
-            skyRow,
-            windRow,
-            tempsRow
-        };
-        AddIfAvailable(weatherRows, atmosphereRow);
+        var weatherRows = new List<SimpleTelemetryRowViewModel>();
+        AddIfMeaningful(weatherRows, surfaceRow);
+        AddIfMeaningful(weatherRows, skyRow);
+        AddIfMeaningful(weatherRows, windRow);
+        AddIfMeaningful(weatherRows, tempsRow);
+        AddIfMeaningful(weatherRows, atmosphereRow);
 
-        var rows = sessionRows.Concat(weatherRows).ToArray();
         var metricSections = new[]
         {
             new SimpleTelemetryMetricSectionViewModel("Session", sessionRows),
             new SimpleTelemetryMetricSectionViewModel("Weather", weatherRows)
-        };
+        }
+        .Where(section => section.Rows.Count > 0)
+        .ToArray();
+        var rows = metricSections.SelectMany(section => section.Rows).ToArray();
 
         var model = new SimpleTelemetryOverlayViewModel(
             Title: "Session / Weather",
@@ -217,9 +220,9 @@ internal static class SessionWeatherOverlayViewModel
             Trim(session.CarDisplayName));
     }
 
-    private static string FormatClock(LiveSessionModel session)
+    private static string FormatClock(LiveTelemetrySnapshot snapshot)
     {
-        var (elapsed, remain, remainingLabel, total) = ClockParts(session);
+        var (elapsed, remain, remainingLabel, total) = ClockParts(snapshot);
         if (elapsed == "--" && remain == "--" && total == "--")
         {
             return "--";
@@ -231,11 +234,20 @@ internal static class SessionWeatherOverlayViewModel
             total == "--" ? null : $"{total} total");
     }
 
-    private static (string Elapsed, string Remaining, string RemainingLabel, string Total) ClockParts(LiveSessionModel session)
+    private static (string Elapsed, string Remaining, string RemainingLabel, string Total) ClockParts(LiveTelemetrySnapshot snapshot)
     {
+        var session = snapshot.Models.Session;
+        var sessionTimeIsUnlimited = OverlayHeaderTimeFormatter.SessionTimeIsUnlimited(snapshot);
         var elapsed = SimpleTelemetryOverlayViewModel.FormatDuration(session.SessionTimeSeconds, compact: true);
-        var remaining = SimpleTelemetryOverlayViewModel.FormatDuration(session.SessionTimeRemainSeconds, compact: true);
-        var total = SimpleTelemetryOverlayViewModel.FormatDuration(session.SessionTimeTotalSeconds, compact: true);
+        var remaining = OverlayHeaderTimeFormatter.FormatCompactTimeRemaining(snapshot);
+        if (string.IsNullOrWhiteSpace(remaining))
+        {
+            remaining = "--";
+        }
+
+        var total = sessionTimeIsUnlimited
+            ? "--"
+            : SimpleTelemetryOverlayViewModel.FormatDuration(session.SessionTimeTotalSeconds, compact: true);
         return (elapsed, remaining, IsRacePreGreen(session) ? "Countdown" : "Left", total);
     }
 
@@ -475,9 +487,9 @@ internal static class SessionWeatherOverlayViewModel
         ];
     }
 
-    private static IReadOnlyList<SimpleTelemetryMetricSegmentViewModel> ClockSegments(LiveSessionModel session)
+    private static IReadOnlyList<SimpleTelemetryMetricSegmentViewModel> ClockSegments(LiveTelemetrySnapshot snapshot)
     {
-        var (elapsed, remaining, remainingLabel, total) = ClockParts(session);
+        var (elapsed, remaining, remainingLabel, total) = ClockParts(snapshot);
         return
         [
             Segment("Elapsed", elapsed, key: OverlayContentColumnSettings.SessionWeatherClockElapsedBlockId),
@@ -853,12 +865,28 @@ internal static class SessionWeatherOverlayViewModel
             OverlayContextRequirement.LocalPlayerInCar).IsAvailable;
     }
 
-    private static void AddIfAvailable(List<SimpleTelemetryRowViewModel> rows, SimpleTelemetryRowViewModel row)
+    private static void AddIfAvailable(List<SimpleTelemetryRowViewModel> rows, SimpleTelemetryRowViewModel? row)
     {
-        if (row.Value != "--")
+        if (row is not null && row.Value != "--")
         {
             rows.Add(row);
         }
+    }
+
+    private static void AddIfMeaningful(List<SimpleTelemetryRowViewModel> rows, SimpleTelemetryRowViewModel row)
+    {
+        if (row.Segments.Any(segment => IsMeaningfulValue(segment.Value)))
+        {
+            rows.Add(row);
+        }
+    }
+
+    private static bool IsMeaningfulValue(string? value)
+    {
+        var trimmed = value?.Trim();
+        return !string.IsNullOrWhiteSpace(trimmed)
+            && !string.Equals(trimmed, "--", StringComparison.Ordinal)
+            && !string.Equals(trimmed, "Unknown", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsChanged(ChangeTracker? tracker, string key, string value, DateTimeOffset now)

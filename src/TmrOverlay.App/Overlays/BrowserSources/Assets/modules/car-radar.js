@@ -9,24 +9,27 @@ TmrBrowserOverlay.register({
   },
   render() {
     if (carRadarDisplayModel?.shouldRender === false) {
+      postBrowserSourceEvent('model-hidden', carRadarDisplayModel);
       modelRootOpacity = rootOpacityFromModel(carRadarDisplayModel);
       applyOverlayOpacity(0);
       clearRadarSurface();
-      renderHeaderItems(carRadarDisplayModel, '');
+      clearHeaderItems();
       clearFooterSource();
       return;
     }
 
     const renderModel = carRadarDisplayModel?.carRadar?.renderModel || null;
     if (!isRenderableModel(renderModel)) {
+      postBrowserSourceEvent(carRadarDisplayModel ? 'model-hidden' : 'model-null', carRadarDisplayModel);
       modelRootOpacity = rootOpacityFromModel(carRadarDisplayModel);
-      applyOverlayOpacity(1);
+      applyOverlayOpacity(0);
       clearRadarSurface();
-      renderHeaderItems(carRadarDisplayModel, carRadarDisplayModel?.status || 'waiting');
-      renderFooterSource(carRadarDisplayModel);
+      clearHeaderItems();
+      clearFooterSource();
       return;
     }
 
+    postBrowserSourceEvent('model-render', carRadarDisplayModel);
     modelRootOpacity = rootOpacityFromModel(carRadarDisplayModel);
     applyOverlayOpacity(1);
     if (renderModel.shouldRender) {

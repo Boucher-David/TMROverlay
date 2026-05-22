@@ -112,7 +112,7 @@ public sealed class StreamChatIrcParserTests
         var viewModel = source.Snapshot(settings);
 
         Assert.Equal("Stream Chat", viewModel.Title);
-        Assert.Equal("waiting for chat source", viewModel.Status);
+        Assert.Equal("chat source not configured", viewModel.Status);
         Assert.Equal(string.Empty, viewModel.Source);
         Assert.False(viewModel.HasLiveRows);
         Assert.Equal(StreamChatMessageKind.System, viewModel.Rows.Single().Kind);

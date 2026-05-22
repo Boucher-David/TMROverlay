@@ -22,6 +22,30 @@ public sealed class StandingsBrowserSettingsTests
     }
 
     [Fact]
+    public void From_UsesConfiguredCarsInClass()
+    {
+        var settings = new ApplicationSettings();
+        var standings = settings.GetOrAddOverlay("standings", 620, 340);
+        standings.SetIntegerOption(OverlayOptionKeys.StandingsCarsInClass, 8, 1, 24);
+
+        var browserSettings = StandingsBrowserSettings.From(settings);
+
+        Assert.Equal(8, browserSettings.MaximumRows);
+    }
+
+    [Fact]
+    public void From_ClampsConfiguredCarsInClass()
+    {
+        var settings = new ApplicationSettings();
+        var standings = settings.GetOrAddOverlay("standings", 620, 340);
+        standings.Options[OverlayOptionKeys.StandingsCarsInClass] = "99";
+
+        var browserSettings = StandingsBrowserSettings.From(settings);
+
+        Assert.Equal(24, browserSettings.MaximumRows);
+    }
+
+    [Fact]
     public void From_ClampsConfiguredOtherClassRows()
     {
         var settings = new ApplicationSettings();

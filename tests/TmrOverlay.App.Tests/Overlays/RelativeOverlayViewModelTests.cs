@@ -241,18 +241,20 @@ public sealed class RelativeOverlayViewModelTests
             carsBehind: 5);
 
         Assert.Equal(new[] { "14", "15" }, viewModel.Rows.Select(row => row.Position));
-        Assert.Equal("15 - 1 cars", viewModel.Status);
+        Assert.Equal("15 - 1 car", viewModel.Status);
     }
 
-    [Fact]
-    public void From_CarriesWholeLapRelationshipForLappedRowsDuringRace()
+    [Theory]
+    [InlineData("Practice")]
+    [InlineData("Race")]
+    public void From_CarriesWholeLapRelationshipForLappedRowsDuringPracticeAndRace(string sessionType)
     {
         var now = DateTimeOffset.UtcNow;
         var snapshot = WithSession(Snapshot(
             now,
             RelativeRow(carIdx: 11, isAhead: true, seconds: 8.4d, classPosition: 4, lapDeltaToReference: 1),
             RelativeRow(carIdx: 12, isAhead: false, seconds: 12.1d, classPosition: 8, lapDeltaToReference: -2)),
-            "Race");
+            sessionType);
 
         var viewModel = RelativeOverlayViewModel.From(
             snapshot,
@@ -265,10 +267,8 @@ public sealed class RelativeOverlayViewModelTests
 
     [Theory]
     [InlineData(null)]
-    [InlineData("Practice")]
-    [InlineData("Open Practice")]
     [InlineData("Qualify")]
-    public void From_SuppressesWholeLapRelationshipOutsideRace(string? sessionType)
+    public void From_SuppressesWholeLapRelationshipWhenSessionDoesNotUseRelativeTiming(string? sessionType)
     {
         var now = DateTimeOffset.UtcNow;
         var snapshot = WithSession(Snapshot(
@@ -286,8 +286,10 @@ public sealed class RelativeOverlayViewModelTests
         Assert.Equal(new int?[] { null, null, null }, viewModel.Rows.Select(row => row.LapDeltaToReference));
     }
 
-    [Fact]
-    public void From_FormatsTimingFallbackRowsByDirection()
+    [Theory]
+    [InlineData("Practice")]
+    [InlineData("Race")]
+    public void From_FormatsTimingFallbackRowsByDirectionInPracticeAndRace(string sessionType)
     {
         var now = DateTimeOffset.UtcNow;
         var snapshot = WithSession(Snapshot(
@@ -308,7 +310,7 @@ public sealed class RelativeOverlayViewModelTests
                 source: "class-gap",
                 quality: LiveModelQuality.Inferred,
                 placementEvidence: LiveSignalEvidence.Unavailable("class-gap", "no_lap_distance_placement"))),
-            "Race");
+            sessionType);
 
         var viewModel = RelativeOverlayViewModel.From(
             snapshot,
@@ -323,7 +325,69 @@ public sealed class RelativeOverlayViewModelTests
     }
 
     [Fact]
-    public void From_SuppressesTimingFallbackRowsOutsideRace()
+    public void From_FormatsLongRelativeGapsAsMinutesSecondsHundredths()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = WithSession(Snapshot(
+            now,
+            RelativeRow(carIdx: 11, isAhead: true, seconds: 183d, classPosition: 5),
+            RelativeRow(carIdx: 12, isAhead: false, seconds: 240d, classPosition: 7)),
+            "Race");
+
+        var viewModel = RelativeOverlayViewModel.From(
+            snapshot,
+            now,
+            carsAhead: 5,
+            carsBehind: 5);
+
+        Assert.Equal("-3:03:00", viewModel.Rows[0].Gap);
+        Assert.Equal("0.000", viewModel.Rows[1].Gap);
+        Assert.Equal("+4:00:00", viewModel.Rows[2].Gap);
+    }
+
+    [Theory]
+    [InlineData("Practice")]
+    [InlineData("Race")]
+    public void LiveModelBuilder_CalculatesLapDeltaToReferenceFromCompletedLapsInPracticeAndRace(string sessionType)
+    {
+        var context = RelativeBuilderContext(sessionType);
+        var sample = RelativeBuilderSample(
+            nearbyCars:
+            [
+                new HistoricalCarProximity(11, 51, 0.54d, F2TimeSeconds: 12.4d, EstimatedTimeSeconds: 12.4d, Position: 4, ClassPosition: 4, CarClass: 4098, TrackSurface: 3, OnPitRoad: false),
+                new HistoricalCarProximity(12, 48, 0.46d, F2TimeSeconds: 14.8d, EstimatedTimeSeconds: 14.8d, Position: 8, ClassPosition: 8, CarClass: 4098, TrackSurface: 3, OnPitRoad: false)
+            ]);
+        var proximity = new LiveProximitySnapshot(
+            HasData: true,
+            ReferenceCarClass: 4098,
+            CarLeftRight: null,
+            SideStatus: "clear",
+            HasCarLeft: false,
+            HasCarRight: false,
+            NearbyCars:
+            [
+                new LiveProximityCar(11, 0.04d, 2.4d, 120d, 4, 4, 4098, 3, false, 12.4d, 12.4d),
+                new LiveProximityCar(12, -0.04d, 3.2d, -120d, 8, 8, 4098, 3, false, 14.8d, 14.8d)
+            ],
+            NearestAhead: null,
+            NearestBehind: null,
+            MulticlassApproaches: [],
+            StrongestMulticlassApproach: null,
+            SideOverlapWindowSeconds: 0.22d);
+
+        var models = LiveRaceModelBuilder.From(
+            context,
+            sample,
+            LiveFuelSnapshot.From(context, sample),
+            proximity,
+            LiveLeaderGapSnapshot.From(sample));
+
+        Assert.Equal(1, models.Relative.Rows.Single(row => row.CarIdx == 11).LapDeltaToReference);
+        Assert.Equal(-2, models.Relative.Rows.Single(row => row.CarIdx == 12).LapDeltaToReference);
+    }
+
+    [Fact]
+    public void From_SuppressesTimingFallbackRowsWhenSessionDoesNotUseRelativeTiming()
     {
         var now = DateTimeOffset.UtcNow;
         var snapshot = WithSession(Snapshot(
@@ -336,7 +400,7 @@ public sealed class RelativeOverlayViewModelTests
                 source: "class-gap",
                 quality: LiveModelQuality.Inferred,
                 placementEvidence: LiveSignalEvidence.Unavailable("class-gap", "no_lap_distance_placement"))),
-            "Practice");
+            "Qualify");
 
         var viewModel = RelativeOverlayViewModel.From(
             snapshot,
@@ -378,7 +442,7 @@ public sealed class RelativeOverlayViewModelTests
     }
 
     [Fact]
-    public void From_SuppressesWeakProximityTimingOutsideRace()
+    public void From_SuppressesWeakProximityTimingWhenSessionDoesNotUseRelativeTiming()
     {
         var now = DateTimeOffset.UtcNow;
         var snapshot = WithSession(Snapshot(
@@ -391,7 +455,7 @@ public sealed class RelativeOverlayViewModelTests
                     quality: LiveModelQuality.Partial,
                     timingEvidence: LiveSignalEvidence.Partial("proximity-relative-seconds", "relative_seconds_missing"),
                     placementEvidence: LiveSignalEvidence.Unavailable("CarIdxLapDistPct", "missing_lap_distance"))),
-            "Practice");
+            "Qualify");
 
         var viewModel = RelativeOverlayViewModel.From(
             snapshot,
@@ -658,6 +722,71 @@ public sealed class RelativeOverlayViewModelTests
                     Rows: rows)
             }
         };
+    }
+
+    private static HistoricalSessionContext RelativeBuilderContext(string sessionType)
+    {
+        return new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity
+            {
+                DriverCarFuelMaxLiters = 100d,
+                DriverCarFuelKgPerLiter = 0.75d,
+                DriverCarEstLapTimeSeconds = 90d
+            },
+            Track = new HistoricalTrackIdentity
+            {
+                TrackLengthKm = 5d
+            },
+            Session = new HistoricalSessionIdentity
+            {
+                SessionType = sessionType,
+                SessionName = sessionType,
+                EventType = sessionType
+            },
+            Conditions = new HistoricalSessionInfoConditions()
+        };
+    }
+
+    private static HistoricalTelemetrySample RelativeBuilderSample(IReadOnlyList<HistoricalCarProximity> nearbyCars)
+    {
+        return new HistoricalTelemetrySample(
+            CapturedAtUtc: DateTimeOffset.UtcNow,
+            SessionTime: 120d,
+            SessionTick: 100,
+            SessionInfoUpdate: 1,
+            IsOnTrack: true,
+            IsInGarage: false,
+            OnPitRoad: false,
+            PitstopActive: false,
+            PlayerCarInPitStall: false,
+            FuelLevelLiters: 40d,
+            FuelLevelPercent: 0.4d,
+            FuelUsePerHourKg: 90d,
+            SpeedMetersPerSecond: 48d,
+            Lap: 50,
+            LapCompleted: 50,
+            LapDistPct: 0.5d,
+            LapLastLapTimeSeconds: 90d,
+            LapBestLapTimeSeconds: 88d,
+            AirTempC: 20d,
+            TrackTempCrewC: 26d,
+            TrackWetness: 1,
+            WeatherDeclaredWet: false,
+            PlayerTireCompound: 0,
+            SessionTimeRemain: 1_200d,
+            SessionTimeTotal: 3_600d,
+            SessionState: 4,
+            PlayerCarIdx: 10,
+            FocusCarIdx: 10,
+            TeamLapCompleted: 50,
+            TeamLapDistPct: 0.5d,
+            TeamPosition: 5,
+            TeamClassPosition: 5,
+            TeamCarClass: 4098,
+            TeamLastLapTimeSeconds: 90d,
+            TeamBestLapTimeSeconds: 88d,
+            NearbyCars: nearbyCars);
     }
 
     private static LiveTelemetrySnapshot WithSession(LiveTelemetrySnapshot snapshot, string? sessionType)

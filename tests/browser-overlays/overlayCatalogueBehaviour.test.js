@@ -149,6 +149,39 @@ describe('browser overlay catalogue behaviour', () => {
     expect(waiting.metricSections.find((section) => section.title === 'Fuel Usage').rows[0].value).toBe('waiting for completed lap');
   });
 
+  it('hides unlimited time sentinel in lap-limited race header fixtures', () => {
+    const live = freshLiveSnapshot({
+      ...localPlayerModels(),
+      session: {
+        hasData: true,
+        sessionType: 'Race',
+        sessionName: 'RACE',
+        sessionState: 4,
+        sessionTime: 'unlimited',
+        sessionTimeRemainSeconds: 604800,
+        sessionTimeTotalSeconds: 604800,
+        sessionLapsRemain: 3,
+        sessionLapsTotal: 3
+      },
+      fuelPit: {
+        hasData: true,
+        fuel: {
+          fuelLevelLiters: 42,
+          fuelPerLapLiters: 5.2,
+          lapTimeSeconds: 92
+        }
+      },
+      raceProgress: {
+        raceLapsRemaining: 3,
+        raceLapsRemainingSource: 'session laps remain'
+      }
+    });
+
+    const model = browserOverlayApiResponse('fuel-calculator', '/api/overlay-model/fuel-calculator', { live }).model;
+
+    expect(model.headerItems.some((item) => item.key === 'timeRemaining')).toBe(false);
+  });
+
   for (const scenario of browserScenarios()) {
     it(`renders ${scenario.id} catalogue behaviour`, async () => {
       currentOverlay = await renderBrowserOverlay(scenario.id, scenario.fixture());
@@ -174,6 +207,65 @@ describe('browser overlay catalogue behaviour', () => {
     expect(render.multiclassArc?.label?.text).toBe('Faster class approaching 4.2s');
     expect(render.cars.filter((car) => car.kind === 'nearby')).toHaveLength(0);
     expect(render.cars.find((car) => car.kind === 'focus')).toBeTruthy();
+  });
+
+  it('preserves spectated Track Map focus position and class color', () => {
+    const response = browserOverlayApiResponse('track-map', '/api/overlay-model/track-map', {
+      live: freshLiveSnapshot({
+        reference: {
+          hasData: true,
+          playerCarIdx: 10,
+          focusCarIdx: 12,
+          focusIsPlayer: false,
+          hasExplicitNonPlayerFocus: true,
+          lapDistPct: 0.58,
+          trackSurface: 3
+        },
+        driverDirectory: { hasData: true, playerCarIdx: 10, focusCarIdx: 12 },
+        timing: {
+          focusCarIdx: 12,
+          focusRow: {
+            carIdx: 12,
+            isFocus: true,
+            isPlayer: false,
+            lapDistPct: 0.58,
+            hasSpatialProgress: true,
+            hasTakenGrid: false,
+            classPosition: 7,
+            overallPosition: 13,
+            carClassColorHex: '#FFDA59',
+            trackSurface: 3
+          },
+          overallRows: [
+            {
+              carIdx: 12,
+              isFocus: true,
+              isPlayer: false,
+              lapDistPct: 0.58,
+              hasSpatialProgress: true,
+              hasTakenGrid: false,
+              classPosition: 7,
+              overallPosition: 13,
+              carClassColorHex: '#FFDA59',
+              trackSurface: 3
+            }
+          ],
+          classRows: []
+        }
+      }),
+      settings: {
+        trackMap: trackMapAsset(),
+        trackMapSettings: { internalOpacity: 1, showSectorBoundaries: true }
+      }
+    });
+    const focus = response.model.trackMap.renderModel.markers.find((marker) => marker.isFocus);
+
+    expect(focus).toMatchObject({
+      carIdx: 12,
+      isPlayerFocus: false,
+      label: '7',
+      fill: { red: 255, green: 218, blue: 89, alpha: 245 }
+    });
   });
 
   it('renders spoofed stream chat replay rows without configuring an external provider', () => {
@@ -636,13 +728,13 @@ function browserScenarios() {
             lapReferenceSeconds: 80,
             selectedSeriesCount: 2,
             trendMetrics: [
-              { label: '5L', focusGapChangeSeconds: -1.4, chaser: { carIdx: 14, label: 'P14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null },
-              { label: '10L', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null },
+              { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, primaryText: '0.0', threatText: '-0.9', comparisonText: '+0.3' },
+              { label: '5L', focusGapChangeSeconds: -1.4, chaser: { carIdx: 14, label: 'P14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null, completedReferenceLaps: 5 },
+              { label: '10L', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null, completedReferenceLaps: 5 },
               { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null },
               { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null },
               { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, primaryText: '5L', threatText: '6L', comparisonText: '5L' },
               { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'unavailable', stateLabel: null },
-              { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, primaryText: '1:31.842', threatText: '1:30.913', comparisonText: '1:32.104' },
               { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, primaryText: 'Track', threatText: 'Track', comparisonText: 'Pit' }
             ],
             activeThreat: { label: 'Threat', focusGapChangeSeconds: null, chaser: { carIdx: 14, label: 'P14', gainSeconds: 0.8 }, state: 'ready', stateLabel: null },
@@ -980,7 +1072,7 @@ function metricsModel(overlayId, title, status, metrics, source = 'source: catal
 
 function standingsColumns() {
   return [
-    column('standings.class-position', 'CLS', 'class-position', 35, 'right'),
+    column('standings.class-position', 'Pos', 'class-position', 35, 'right'),
     column('standings.car-number', 'CAR', 'car-number', 50, 'right'),
     column('standings.driver', 'Driver', 'driver', 250, 'left'),
     column('standings.gap', 'GAP', 'gap', 60, 'right'),
@@ -993,8 +1085,8 @@ function standingsColumns() {
 
 function relativeColumns() {
   return [
-    column('relative.position', 'Pos', 'relative-position', 38, 'right'),
-    column('relative.driver', 'Driver', 'driver', 250, 'left'),
+    column('relative.position', 'Pos', 'relative-position', 48, 'right'),
+    column('relative.driver', 'Driver', 'driver', 240, 'left'),
     column('relative.gap', 'Delta', 'gap', 70, 'right'),
     column('relative.pit', 'Pit', 'pit', 48, 'right')
   ];

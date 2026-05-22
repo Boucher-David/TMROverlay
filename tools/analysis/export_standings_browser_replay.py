@@ -44,7 +44,7 @@ from extract_live_telemetry_fixture_corpus import (  # noqa: E402
 
 
 DEFAULT_COLUMNS = [
-    {"id": "standings.class-position", "label": "CLS", "dataKey": "class-position", "width": 35, "alignment": "right"},
+    {"id": "standings.class-position", "label": "Pos", "dataKey": "class-position", "width": 35, "alignment": "right"},
     {"id": "standings.car-number", "label": "CAR", "dataKey": "car-number", "width": 50, "alignment": "right"},
     {"id": "standings.driver", "label": "Driver", "dataKey": "driver", "width": 250, "alignment": "left"},
     {"id": "standings.gap", "label": "GAP", "dataKey": "gap", "width": 60, "alignment": "right"},

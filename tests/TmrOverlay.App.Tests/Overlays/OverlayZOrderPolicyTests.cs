@@ -7,44 +7,59 @@ namespace TmrOverlay.App.Tests.Overlays;
 public sealed class OverlayZOrderPolicyTests
 {
     [Fact]
-    public void SettingsWindow_IsTopMostOnlyWhileFocused()
+    public void SettingsWindow_RemainsNormalDesktopWindow()
     {
-        Assert.True(OverlayZOrderPolicy.ShouldSettingsWindowBeTopMost(settingsWindowFocused: true));
-        Assert.False(OverlayZOrderPolicy.ShouldSettingsWindowBeTopMost(settingsWindowFocused: false));
+        Assert.False(OverlayZOrderPolicy.ShouldSettingsWindowBeTopMost(settingsWindowVisible: true));
+        Assert.False(OverlayZOrderPolicy.ShouldSettingsWindowBeTopMost(settingsWindowVisible: false));
     }
 
     [Fact]
-    public void ManagedOverlays_KeepTheirAlwaysOnTopLayerIndependentOfSettingsFocus()
+    public void ManagedOverlays_KeepTheirAlwaysOnTopLayerUnlessTheyCoverActiveSettings()
     {
         Assert.True(OverlayZOrderPolicy.ShouldManagedOverlayBeTopMost(new OverlaySettings
         {
             Id = "standings",
             AlwaysOnTop = true
-        }));
+        }, settingsWindowActive: false));
+        Assert.True(OverlayZOrderPolicy.ShouldManagedOverlayBeTopMost(new OverlaySettings
+        {
+            Id = "standings",
+            AlwaysOnTop = true
+        }, settingsWindowActive: true, intersectsSettingsWindow: false));
+        Assert.True(OverlayZOrderPolicy.ShouldManagedOverlayBeTopMost(new OverlaySettings
+        {
+            Id = "standings",
+            AlwaysOnTop = true
+        }, settingsWindowActive: false, intersectsSettingsWindow: true));
+        Assert.False(OverlayZOrderPolicy.ShouldManagedOverlayBeTopMost(new OverlaySettings
+        {
+            Id = "standings",
+            AlwaysOnTop = true
+        }, settingsWindowActive: true, intersectsSettingsWindow: true));
         Assert.False(OverlayZOrderPolicy.ShouldManagedOverlayBeTopMost(new OverlaySettings
         {
             Id = "standings",
             AlwaysOnTop = false
-        }));
+        }, settingsWindowActive: false));
     }
 
     [Fact]
-    public void SettingsWindowProtection_OnlyProtectsActiveIntersectingSettingsWindow()
+    public void SettingsWindowProtection_ProtectsVisibleIntersectingSettingsWindow()
     {
         Assert.False(OverlayZOrderPolicy.ShouldProtectSettingsWindowInput(
-            settingsWindowActive: true,
+            settingsWindowVisible: true,
             isSettingsWindow: true,
             intersectsSettingsWindow: true));
         Assert.True(OverlayZOrderPolicy.ShouldProtectSettingsWindowInput(
-            settingsWindowActive: true,
+            settingsWindowVisible: true,
             isSettingsWindow: false,
             intersectsSettingsWindow: true));
         Assert.False(OverlayZOrderPolicy.ShouldProtectSettingsWindowInput(
-            settingsWindowActive: true,
+            settingsWindowVisible: true,
             isSettingsWindow: false,
             intersectsSettingsWindow: false));
         Assert.False(OverlayZOrderPolicy.ShouldProtectSettingsWindowInput(
-            settingsWindowActive: false,
+            settingsWindowVisible: false,
             isSettingsWindow: false,
             intersectsSettingsWindow: true));
     }
@@ -55,31 +70,31 @@ public sealed class OverlayZOrderPolicyTests
         Assert.True(OverlayZOrderPolicy.ShouldOverlayBeInputTransparent(
             intrinsicallyTransparent: true,
             forceInputTransparent: false,
-            settingsWindowActive: false,
+            settingsWindowVisible: false,
             isSettingsWindow: false,
             intersectsSettingsWindow: false));
         Assert.True(OverlayZOrderPolicy.ShouldOverlayBeInputTransparent(
             intrinsicallyTransparent: false,
             forceInputTransparent: true,
-            settingsWindowActive: false,
+            settingsWindowVisible: false,
             isSettingsWindow: false,
             intersectsSettingsWindow: false));
         Assert.False(OverlayZOrderPolicy.ShouldOverlayBeInputTransparent(
             intrinsicallyTransparent: false,
             forceInputTransparent: false,
-            settingsWindowActive: true,
+            settingsWindowVisible: true,
             isSettingsWindow: true,
             intersectsSettingsWindow: true));
         Assert.False(OverlayZOrderPolicy.ShouldOverlayBeInputTransparent(
             intrinsicallyTransparent: false,
             forceInputTransparent: false,
-            settingsWindowActive: true,
+            settingsWindowVisible: true,
             isSettingsWindow: false,
             intersectsSettingsWindow: false));
         Assert.True(OverlayZOrderPolicy.ShouldOverlayBeInputTransparent(
             intrinsicallyTransparent: false,
             forceInputTransparent: false,
-            settingsWindowActive: true,
+            settingsWindowVisible: true,
             isSettingsWindow: false,
             intersectsSettingsWindow: true));
     }

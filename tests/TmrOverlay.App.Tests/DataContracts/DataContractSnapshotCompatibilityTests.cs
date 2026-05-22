@@ -114,6 +114,7 @@ public sealed class DataContractSnapshotCompatibilityTests
             Assert.False(standings.Options.ContainsKey(OverlayOptionKeys.ChromeHeaderStatusRace));
             Assert.False(standings.GetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, defaultValue: true));
             Assert.False(standings.Options.ContainsKey(OverlayOptionKeys.ChromeFooterSourceRace));
+            Assert.Equal(14, standings.GetIntegerOption(OverlayOptionKeys.StandingsCarsInClass, 14, 1, 24));
             Assert.Equal(0, standings.GetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, 2, 0, 6));
             Assert.Equal(360, standings.GetIntegerOption(OverlayOptionKeys.StandingsColumnDriverWidth, 250, 180, 520));
             Assert.True(standings.GetBooleanOption(OverlayOptionKeys.StandingsClassSeparatorsEnabled, defaultValue: false));
@@ -124,13 +125,22 @@ public sealed class DataContractSnapshotCompatibilityTests
             Assert.False(relative.GetBooleanOption("relative.content.relative.pit.enabled", defaultValue: true));
 
             var fuel = settings.Overlays.Single(overlay => overlay.Id == "fuel-calculator");
+            Assert.Equal(600, fuel.Width);
+            Assert.Equal(340, fuel.Height);
+            Assert.Equal(1d, fuel.Scale);
             Assert.True(fuel.GetBooleanOption(OverlayOptionKeys.FuelAdvice, defaultValue: false));
 
             var sessionWeather = settings.Overlays.Single(overlay => overlay.Id == "session-weather");
+            Assert.Equal(480, sessionWeather.Width);
+            Assert.Equal(520, sessionWeather.Height);
+            Assert.Equal(1d, sessionWeather.Scale);
             Assert.False(sessionWeather.GetBooleanOption("session-weather.clock.total.enabled", defaultValue: true));
             Assert.True(sessionWeather.GetBooleanOption("session-weather.wind.facing.enabled", defaultValue: false));
 
             var pitService = settings.Overlays.Single(overlay => overlay.Id == "pit-service");
+            Assert.Equal(420, pitService.Width);
+            Assert.Equal(560, pitService.Height);
+            Assert.Equal(1d, pitService.Scale);
             Assert.True(pitService.GetBooleanOption(OverlayOptionKeys.PitServiceShowTirePressure, defaultValue: false));
             Assert.True(pitService.GetBooleanOption("pit-service.service.fast-repair-available.enabled", defaultValue: false));
 

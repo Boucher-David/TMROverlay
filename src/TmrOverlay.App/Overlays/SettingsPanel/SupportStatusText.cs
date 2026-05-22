@@ -6,6 +6,8 @@ namespace TmrOverlay.App.Overlays.SettingsPanel;
 
 internal static class SupportStatusText
 {
+    private const int MaxLatestBundleValueLength = 30;
+
     public static SupportAppStatus AppStatus(TelemetryCaptureStatusSnapshot snapshot)
     {
         var status = AppDiagnosticsStatusModel.From(snapshot);
@@ -54,7 +56,20 @@ internal static class SupportStatusText
             return "Latest bundle: none created yet";
         }
 
-        return $"Latest bundle: {Path.GetFileName(bundlePath)}";
+        return $"Latest bundle: {LatestBundleValueText(bundlePath)}";
+    }
+
+    public static string LatestBundleValueText(string? bundlePath)
+    {
+        if (string.IsNullOrWhiteSpace(bundlePath))
+        {
+            return "No bundle yet";
+        }
+
+        var fileName = FileNameFromPath(bundlePath);
+        return string.IsNullOrWhiteSpace(fileName)
+            ? "Bundle ready"
+            : CompactMiddle(fileName, MaxLatestBundleValueLength);
     }
 
     public static string AppVersionText(AppVersionInfo appVersion)
@@ -81,6 +96,38 @@ internal static class SupportStatusText
         return version.EndsWith(".0", StringComparison.Ordinal) && version.Count(character => character == '.') == 3
             ? version[..^2]
             : version;
+    }
+
+    private static string FileNameFromPath(string path)
+    {
+        var trimmed = path.Trim().TrimEnd('\\', '/');
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return string.Empty;
+        }
+
+        var separatorIndex = trimmed.LastIndexOfAny(new[] { '\\', '/' });
+        return separatorIndex >= 0 && separatorIndex + 1 < trimmed.Length
+            ? trimmed[(separatorIndex + 1)..]
+            : Path.GetFileName(trimmed);
+    }
+
+    private static string CompactMiddle(string value, int maxLength)
+    {
+        if (value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        const string ellipsis = "...";
+        var suffixLength = Math.Min(15, maxLength - ellipsis.Length - 1);
+        var prefixLength = maxLength - ellipsis.Length - suffixLength;
+        if (prefixLength <= 0)
+        {
+            return value[..maxLength];
+        }
+
+        return value[..prefixLength] + ellipsis + value[^suffixLength..];
     }
 
     private static string FormatCount(long value)

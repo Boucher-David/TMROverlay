@@ -11,5 +11,5 @@ internal static class FuelCalculatorBrowserSource
         aliases: ["/overlays/calculator"],
         fadeWhenTelemetryUnavailable: FuelCalculatorOverlayDefinition.Definition.FadeWhenLiveTelemetryUnavailable,
         moduleAssetName: "fuel-calculator",
-        bodyClass: "fuel-calculator-page");
+        bodyClass: "fuel-calculator-page metric-telemetry-page");
 }

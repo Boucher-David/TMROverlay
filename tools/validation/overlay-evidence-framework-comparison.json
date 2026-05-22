@@ -1,0 +1,165 @@
+{
+  "contract": "overlay-validation-framework-comparison/v1",
+  "tracker": "docs/v1.0.3.md",
+  "lane": {
+    "name": "Overlay Evidence Contract",
+    "command": "npm run test:evidence-contract",
+    "ciJob": "Overlay evidence contract",
+    "status": "integrated parallel validation lane",
+    "reason": "Run beside the existing screenshot/settings fleet while the same evidence fields are emitted by browser review and the production browser/localhost model factory. Product regressions stay red; missing evidence plumbing should not be the reason."
+  },
+  "currentFramework": {
+    "primarySignal": "artifact, screenshot manifest, route, and selected model-field assertions",
+    "strengths": [
+      "proves screenshot generation and route coverage exists",
+      "catches final layout, clipping, text-fit, and pixel-level regressions",
+      "keeps known V1.0.2/V1.0.3 findings tied to source files and generated artifacts",
+      "can compare browser, localhost, and native manifests after screenshots exist"
+    ],
+    "blindSpots": [
+      "presence of a model or screenshot can pass without proving semantic parity",
+      "row counts can pass while row identity, placeholder rows, and clipped rows differ",
+      "fixture previews can look live unless provenance is explicit",
+      "localhost/browser/native settings can drift unless shared fingerprints are compared before render",
+      "unavailable states can carry stale graph/table/input content without a policy field",
+      "visual parity failures arrive late and can hide data-contract failures underneath"
+    ]
+  },
+  "evidenceContractFramework": {
+    "primarySignal": "normalized semantic evidence contract emitted or inferred before pixels",
+    "strengths": [
+      "fails before screenshot generation when the data contract is already insufficient",
+      "compares settings fingerprints, route identity, provenance, and runtime evidence as first-class fields",
+      "asserts both required and forbidden text/data",
+      "treats tables as row and column identity instead of row count",
+      "separates live-capture, synthetic-preview, stale-history, and unavailable evidence",
+      "keeps screenshot tests focused on pixel/layout proof after semantic correctness is established"
+    ],
+    "primaryAssertions": [
+      "no redundant ordinary overlay title",
+      "browserReview, localhostObs, and windowsNative settings fingerprints exist and match",
+      "browser and localhost route paths are explicit",
+      "native pixel evidence is captured or explicitly unsupported/disabled",
+      "preview provenance declares evidence class, source contract, and capture specificity",
+      "table overlays expose column keys, row identities, and placeholder counts",
+      "unavailable states suppress stale rendered content unless marked stale-history or section-aware placeholder evidence",
+      "fuel success copy requires measured additional-fuel-need evidence",
+      "metric overlays expose content density and unused-height ratios",
+      "fallback/synthetic states are labelled separately from live capture"
+    ],
+    "integratedSources": [
+      "tools/browser-review/server.mjs",
+      "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
+      "tests/TmrOverlay.App.Tests/Overlays/BrowserOverlayModelFactoryTests.cs",
+      "tools/validation/overlay-evidence-contract.mjs",
+      "tests/browser-overlays/overlayEvidenceContract.test.js"
+    ]
+  },
+  "detectionMatrix": [
+    {
+      "failureClass": "visible overlays lack current pixels",
+      "v103Ids": ["V103-001"],
+      "currentFramework": "screenshot validators can catch missing files after artifact generation",
+      "evidenceContract": "runtime surface evidence requires captured/disabled/unsupported pixel status and reason before parity is accepted",
+      "improvement": "turns missing pixels into explicit evidence quality instead of an absent artifact"
+    },
+    {
+      "failureClass": "synthetic previews mistaken for capture evidence",
+      "v103Ids": ["V103-002"],
+      "currentFramework": "scenario manifests mention source files but do not make evidence class the main assertion",
+      "evidenceContract": "provenance requires evidenceClass, captureSpecific, sourceContract, and syntheticStateKind where applicable",
+      "improvement": "separates fixture proof from live capture proof"
+    },
+    {
+      "failureClass": "redundant localhost/browser overlay titles",
+      "v103Ids": ["V103-003"],
+      "currentFramework": "can catch once screenshot/model manifest includes title",
+      "evidenceContract": "fails directly on title/renderedTitle/visibleText before pixels",
+      "improvement": "moves chrome contract to data/model layer"
+    },
+    {
+      "failureClass": "settings drift across surfaces",
+      "v103Ids": ["V103-004"],
+      "currentFramework": "settings-effect tests assert selected values but do not provide one normalized parity object",
+      "evidenceContract": "sharedSettingsHash and overlaySettingsHash are required for every runtime surface and compared as one fingerprint",
+      "improvement": "catches browser/localhost/native divergence even when all three render something plausible"
+    },
+    {
+      "failureClass": "table count passes while row identity drifts",
+      "v103Ids": ["V103-005"],
+      "currentFramework": "row count and screenshot parity can miss placeholder/clipped identity mismatches",
+      "evidenceContract": "columnKeys, rowIdentities, and placeholderRowCount are mandatory table evidence",
+      "improvement": "tests the table contract users actually see"
+    },
+    {
+      "failureClass": "standings clipped rows and absurd intervals",
+      "v103Ids": ["V103-006"],
+      "currentFramework": "screenshot validators can see clipping only after a generated artifact exists",
+      "evidenceContract": "tableStatus and timingSanity are required semantic evidence",
+      "improvement": "makes row/status/timing sanity independently testable"
+    },
+    {
+      "failureClass": "fuel and pit collapsed-content oversized shells",
+      "v103Ids": ["V103-007"],
+      "currentFramework": "pixel checks detect oversized shells late",
+      "evidenceContract": "layout.contentRowCount and layout.unusedHeightRatio are required model evidence",
+      "improvement": "turns visual emptiness into an auditable model contract"
+    },
+    {
+      "failureClass": "input preview unavailable despite fixture controls",
+      "v103Ids": ["V103-008"],
+      "currentFramework": "screenshot may show waiting UI but not prove fixture controls existed",
+      "evidenceContract": "inputAvailability.fixtureControlsAvailable and non-empty trace evidence are required",
+      "improvement": "distinguishes unavailable data from lost mapping"
+    },
+    {
+      "failureClass": "gap graph content while unavailable",
+      "v103Ids": ["V103-009"],
+      "currentFramework": "graph pixels can exist without proving whether they are stale",
+      "evidenceContract": "unavailable rendered content requires suppress-rendered-content, section-aware placeholders, or stale-history provenance",
+      "improvement": "prevents stale-looking data from masquerading as unavailable truth"
+    },
+    {
+      "failureClass": "track-map circle fallback labelled live",
+      "v103Ids": ["V103-010"],
+      "currentFramework": "vector manifest may show circle geometry but status can still say live",
+      "evidenceContract": "circle mapKind requires mapFallback provenance and cannot be live-labelled",
+      "improvement": "separates fallback geometry from a real readable map"
+    },
+    {
+      "failureClass": "IBT sidecar mismatch",
+      "v103Ids": ["V103-011"],
+      "currentFramework": "diagnostic tests can inspect sidecar metadata after bundle creation",
+      "evidenceContract": "future capture contracts should attach sidecar identity to provenance before overlay evidence is trusted",
+      "improvement": "connects source identity to overlay proof"
+    },
+    {
+      "failureClass": "localhost route evidence is only request stats",
+      "v103Ids": ["V103-012"],
+      "currentFramework": "localhost request stats can pass without per-overlay render proof",
+      "evidenceContract": "localhostObs.routePath is required per overlay and compared alongside runtime settings evidence",
+      "improvement": "per-overlay route proof becomes mandatory"
+    },
+    {
+      "failureClass": "Garage Cover metadata without evidence",
+      "v103Ids": ["V103-013"],
+      "currentFramework": "catalogue tests can expose route presence but not native/browser/localhost support status",
+      "evidenceContract": "every supported overlay declares runtime surface evidence or an unsupported reason",
+      "improvement": "forces first-class support decisions into the contract"
+    },
+    {
+      "failureClass": "diagnostic sample frames miss race phase",
+      "v103Ids": ["V103-014"],
+      "currentFramework": "aggregate diagnostics can pass while concrete samples come from the wrong session phase",
+      "evidenceContract": "future capture contracts should require per-session sample provenance before aggregates prove overlay behavior",
+      "improvement": "moves aggregate/sample alignment into evidence quality"
+    },
+    {
+      "failureClass": "flags, radar, and stream chat synthetic provenance",
+      "v103Ids": ["V103-015"],
+      "currentFramework": "fixture states can be useful but ambiguous",
+      "evidenceContract": "syntheticStateKind is required for forced or suppressed-state fixtures",
+      "improvement": "prevents demo states from being counted as live evidence"
+    }
+  ]
+}

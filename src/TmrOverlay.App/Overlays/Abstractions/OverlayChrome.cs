@@ -283,7 +283,7 @@ internal static class OverlayChrome
         using var titleFont = OverlayTheme.Font(fontFamily, OverlayTheme.Typography.OverlayTitleSize, FontStyle.Bold);
         using var statusFont = OverlayTheme.Font(fontFamily, OverlayTheme.Typography.OverlayStatusSize);
         using var titleBrush = new SolidBrush(OverlayTheme.Colors.TextPrimary);
-        using var statusBrush = new SolidBrush(StatusTextColor(state.Tone));
+        using var timeRemainingBrush = new SolidBrush(HeaderTimeRemainingTextColor());
         graphics.DrawString(state.Title, titleFont, titleBrush, OverlayTheme.Layout.OuterPadding, OverlayTheme.Layout.OverlayTitleTop);
         var headerSlots = HeaderSlots(state, clientWidth, titleWidth);
         if (headerSlots.Contains(HeaderTimeRemainingSlotKey))
@@ -292,7 +292,7 @@ internal static class OverlayChrome
                 graphics,
                 state.TimeRemaining ?? string.Empty,
                 statusFont,
-                statusBrush,
+                timeRemainingBrush,
                 HeaderTimeRemainingRectangle(clientWidth, titleWidth));
         }
     }
@@ -355,7 +355,7 @@ internal static class OverlayChrome
         {
             changed |= SetTextIfChanged(timeRemainingLabel, state.TimeRemaining);
             changed |= SetVisibleIfChanged(timeRemainingLabel, showTimeRemaining);
-            changed |= SetForeColorIfChanged(timeRemainingLabel, StatusTextColor(state.Tone));
+            changed |= SetForeColorIfChanged(timeRemainingLabel, HeaderTimeRemainingTextColor());
         }
 
         changed |= SetTextIfChanged(sourceLabel, state.Source);
@@ -423,6 +423,11 @@ internal static class OverlayChrome
             OverlayChromeTone.Info => OverlayTheme.Colors.InfoText,
             _ => OverlayTheme.Colors.TextSubtle
         };
+    }
+
+    internal static Color HeaderTimeRemainingTextColor()
+    {
+        return OverlayTheme.Colors.TextMuted;
     }
 
     public static bool SetTextIfChanged(Label label, string? value)

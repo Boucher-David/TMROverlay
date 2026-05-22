@@ -16,11 +16,12 @@ TmrBrowserOverlay.register({
 
 function renderGarageCover(model) {
   if (model?.shouldRender === false) {
+    postBrowserSourceEvent('model-hidden', model);
     modelRootOpacity = rootOpacityFromModel(model);
     applyOverlayOpacity(0);
     lastGarageCoverRenderKey = '';
     contentEl.innerHTML = '';
-    renderHeaderItems(model, '');
+    clearHeaderItems();
     clearFooterSource();
     return;
   }
@@ -29,6 +30,7 @@ function renderGarageCover(model) {
   const settings = garageCover?.browserSettings || garageCoverSettings;
   const detection = garageCover?.detection || { displayText: 'localhost offline', isFresh: false };
   const shouldCover = garageCover?.shouldCover ?? true;
+  postBrowserSourceEvent(shouldCover ? 'model-render' : model ? 'model-hidden' : 'model-null', model);
   modelRootOpacity = rootOpacityFromModel(model);
   applyOverlayOpacity(shouldCover ? 1 : 0);
 

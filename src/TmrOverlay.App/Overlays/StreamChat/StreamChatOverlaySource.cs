@@ -18,7 +18,7 @@ internal sealed class StreamChatOverlaySource : IDisposable
     private readonly List<StoredStreamChatMessage> _messages = [];
     private CancellationTokenSource? _connectionCancellation;
     private Task? _connectionTask;
-    private string _status = "waiting for chat source";
+    private string _status = "chat source not configured";
     private string _source = string.Empty;
     private string? _activeSettingsKey;
     private string? _lastLoggedError;

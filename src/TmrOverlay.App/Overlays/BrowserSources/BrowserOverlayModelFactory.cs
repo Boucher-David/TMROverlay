@@ -1,4 +1,5 @@
 using TmrOverlay.App.History;
+using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.Abstractions;
 using TmrOverlay.App.Overlays.CarRadar;
 using TmrOverlay.App.Overlays.Content;
@@ -56,11 +57,6 @@ internal sealed class BrowserOverlayModelFactory
     private const double GapThreatGainLapFraction = 0.005d;
     private const double GapFuelStintResetMinimumLiters = 5d;
     private const int GapOnTrackSurface = 3;
-    private const int FuelHeaderHeight = 38;
-    private const int FuelFooterHeight = 32;
-    private const int FuelBodyGap = 12;
-    private const int FuelRowHeight = 30;
-    private const int FuelRowGap = 5;
     private const double TrackMapReloadIntervalSeconds = 10d;
     private readonly SessionHistoryQueryService _historyQueryService;
     private readonly TrackMapStore? _trackMapStore;
@@ -68,6 +64,7 @@ internal sealed class BrowserOverlayModelFactory
     private readonly SessionWeatherOverlayViewModel.StatefulBuilder _sessionWeatherBuilder;
     private readonly PitServiceOverlayViewModel.StatefulBuilder _pitServiceBuilder;
     private readonly TrackMapRenderModelBuilder _trackMapRenderBuilder = new();
+    private readonly object _buildSync = new();
     private readonly object _gapSync = new();
     private readonly List<double> _gapPoints = [];
     private readonly Dictionary<int, List<BrowserGapTrendPoint>> _gapSeries = [];
@@ -116,6 +113,19 @@ internal sealed class BrowserOverlayModelFactory
         DateTimeOffset now,
         out BrowserOverlayModelResponse response)
     {
+        lock (_buildSync)
+        {
+            return TryBuildCore(overlayId, snapshot, settings, now, out response);
+        }
+    }
+
+    private bool TryBuildCore(
+        string overlayId,
+        LiveTelemetrySnapshot snapshot,
+        ApplicationSettings settings,
+        DateTimeOffset now,
+        out BrowserOverlayModelResponse response)
+    {
         var modelSnapshot = snapshot with { Models = snapshot.CompleteModels() };
         var unitSystem = UnitSystem(settings);
         var sessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(modelSnapshot);
@@ -145,6 +155,7 @@ internal sealed class BrowserOverlayModelFactory
             var headerItems = HeaderItems(overlay, modelSnapshot, viewModel.Status, SimpleChromeTone(viewModel.Tone));
             var shouldRender = overlay is null
                 || OverlayContentSizing.HasRenderableContent(SessionWeatherOverlayDefinition.Definition, overlay, sessionKind);
+            shouldRender &= HasSimpleTelemetryContent(viewModel);
             model = FromSimple(
                 SessionWeatherOverlayDefinition.Definition.Id,
                 viewModel,
@@ -159,6 +170,7 @@ internal sealed class BrowserOverlayModelFactory
             var headerItems = HeaderItems(overlay, modelSnapshot, PitServiceOverlayViewModel.HeaderStatus(viewModel.Status), SimpleChromeTone(viewModel.Tone));
             var shouldRender = overlay is null
                 || OverlayContentSizing.HasRenderableContent(PitServiceOverlayDefinition.Definition, overlay, sessionKind);
+            shouldRender &= HasSimpleTelemetryContent(viewModel);
             model = FromSimple(
                 PitServiceOverlayDefinition.Definition.Id,
                 viewModel,
@@ -200,6 +212,8 @@ internal sealed class BrowserOverlayModelFactory
             response = null!;
             return false;
         }
+
+        model = SuppressUnavailableRenderedContent(WithoutOrdinaryOverlayTitle(model));
 
         if (TryGetDefinition(overlayId, out var definition))
         {
@@ -260,7 +274,8 @@ internal sealed class BrowserOverlayModelFactory
             SourceText(overlay, snapshot, viewModel.Source),
             columns,
             rows,
-            headerItems);
+            headerItems,
+            ShouldRenderTable(columns, rows));
     }
 
     private static string StandingsCell(StandingsOverlayRowViewModel row, string dataKey)
@@ -350,7 +365,8 @@ internal sealed class BrowserOverlayModelFactory
             SourceText(overlay, snapshot, viewModel.Source),
             columns,
             rows,
-            headerItems);
+            headerItems,
+            ShouldRenderTable(columns, rows));
     }
 
     private static BrowserOverlayDisplayRow BrowserPlaceholderRow(int cellCount)
@@ -366,6 +382,13 @@ internal sealed class BrowserOverlayModelFactory
             HeaderTitle: null,
             HeaderDetail: null,
             IsPlaceholder: true);
+    }
+
+    private static bool ShouldRenderTable(
+        IReadOnlyList<OverlayContentBrowserColumn> columns,
+        IReadOnlyList<BrowserOverlayDisplayRow> rows)
+    {
+        return columns.Count > 0 && rows.Count > 0;
     }
 
     private static string RelativeCell(RelativeOverlayRowViewModel row, string dataKey)
@@ -400,7 +423,10 @@ internal sealed class BrowserOverlayModelFactory
                 SourceText(overlay, snapshot, "source: waiting"),
                 [],
                 waitingHeaderItems,
-                shouldRender: false);
+                shouldRender: false) with
+            {
+                FuelStrategyEvidence = new BrowserOverlayFuelStrategyEvidence("unavailable", SuccessCopyRequiresMeasuredNeed: true)
+            };
         }
 
         var viewModel = FuelCalculatorViewModel.From(
@@ -411,7 +437,8 @@ internal sealed class BrowserOverlayModelFactory
                 effectiveOverlay.Height > 0
                     ? effectiveOverlay.Height
                     : FuelCalculatorOverlayDefinition.Definition.DefaultHeight,
-                showFooter));
+                showFooter),
+            contentSettings: effectiveOverlay);
         var metrics = MetricSectionsFrom(viewModel.MetricSections)
             .SelectMany(section => section.Rows)
             .ToArray();
@@ -424,7 +451,11 @@ internal sealed class BrowserOverlayModelFactory
             SourceText(overlay, snapshot, viewModel.Source),
             metrics,
             headerItems,
-            metricSections: MetricSectionsFrom(viewModel.MetricSections));
+            metricSections: MetricSectionsFrom(viewModel.MetricSections),
+            shouldRender: metrics.Length > 0 || viewModel.MetricSections.Any(section => section.Rows.Count > 0)) with
+        {
+            FuelStrategyEvidence = FuelStrategyEvidence(strategyModel.Strategy)
+        };
     }
 
     private static BrowserOverlayDisplayModel BuildFlags(
@@ -484,6 +515,24 @@ internal sealed class BrowserOverlayModelFactory
             shouldRender);
     }
 
+    private static bool HasSimpleTelemetryContent(SimpleTelemetryOverlayViewModel viewModel)
+    {
+        return viewModel.Rows.Count > 0
+            || viewModel.MetricSections.Any(section => section.Rows.Count > 0)
+            || viewModel.Sections.Any(section => section.Rows.Count > 0);
+    }
+
+    private static bool CanRenderGapGraph(BrowserGapGraph? graph)
+    {
+        if (graph is null)
+        {
+            return false;
+        }
+
+        return graph.ShowGraph && graph.Series.Count > 0
+            || graph.ShowTrendMetrics && graph.TrendMetrics.Any(metric => !string.Equals(metric.State, "unavailable", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static IReadOnlyList<BrowserOverlayMetricSection> MetricSectionsFrom(
         IReadOnlyList<SimpleTelemetryMetricSectionViewModel> sections)
     {
@@ -540,17 +589,22 @@ internal sealed class BrowserOverlayModelFactory
         var viewModel = GapToLeaderOverlayViewModel.From(snapshot, now);
         var gap = viewModel.Gap;
         var headerItems = HeaderItems(overlay, snapshot, viewModel.Status, gap.HasData ? "info" : "waiting");
-        var shouldRender = isRace && GapWindowEnabled(overlay);
+        var showGraph = GapGraphEnabled(overlay, sessionKind) && GapWindowEnabled(overlay);
+        var showTrendMetrics = GapAnyTrendMetricEnabled(overlay, sessionKind);
+        var hasLiveGapData = viewModel.IsAvailable && gap.HasData;
+        var canBuildGraph = isRace && hasLiveGapData && GapWindowEnabled(overlay) && (showGraph || showTrendMetrics);
+        var shouldRender = false;
         BrowserGapGraph? graph;
         IReadOnlyList<double> points;
         lock (_gapSync)
         {
-            if (isRace)
+            if (isRace && hasLiveGapData)
             {
                 RecordGapSnapshot(snapshot, gap, settings);
             }
 
             if (isRace
+                && hasLiveGapData
                 && viewModel.FocusedTrendPointSeconds is { } seconds
                 && ShouldAcceptGapPoint(snapshot, seconds))
             {
@@ -561,8 +615,9 @@ internal sealed class BrowserOverlayModelFactory
                 }
             }
 
-            graph = shouldRender ? BuildBrowserGapGraph(settings) : null;
-            points = graph?.SelectedSeriesCount > 0
+            graph = canBuildGraph ? BuildBrowserGapGraph(settings, overlay, sessionKind, showGraph, showTrendMetrics) : null;
+            shouldRender = CanRenderGapGraph(graph);
+            points = graph?.ShowGraph == true && graph.SelectedSeriesCount > 0
                 ? _gapPoints.ToArray()
                 : Array.Empty<double>();
         }
@@ -595,13 +650,28 @@ internal sealed class BrowserOverlayModelFactory
                 OverlayOptionKeys.RadarMulticlassWarning,
                 defaultEnabled: true,
                 OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
+        var multiclassWarningRangeSeconds = overlay?.GetIntegerOption(
+            OverlayOptionKeys.RadarMulticlassWarningSeconds,
+            CarRadarOverlayViewModel.DefaultMulticlassWarningRangeSeconds,
+            CarRadarOverlayViewModel.MinimumMulticlassWarningRangeSeconds,
+            CarRadarOverlayViewModel.MaximumMulticlassWarningRangeSeconds)
+            ?? CarRadarOverlayViewModel.DefaultMulticlassWarningRangeSeconds;
+        var radarVisibilitySeconds = overlay?.GetIntegerOption(
+            OverlayOptionKeys.RadarVisibilitySeconds,
+            CarRadarOverlayViewModel.DefaultRadarVisibilitySeconds,
+            CarRadarOverlayViewModel.MinimumRadarVisibilitySeconds,
+            CarRadarOverlayViewModel.MaximumRadarVisibilitySeconds)
+            ?? CarRadarOverlayViewModel.DefaultRadarVisibilitySeconds;
         var viewModel = CarRadarOverlayViewModel.From(
             snapshot,
             now,
             previewVisible: false,
-            showMulticlassWarning,
-            calibration);
+            showMulticlassWarning: showMulticlassWarning,
+            calibrationProfile: calibration,
+            multiclassWarningRangeSeconds: multiclassWarningRangeSeconds,
+            radarVisibilitySeconds: radarVisibilitySeconds);
         var headerItems = HeaderItems(overlay, snapshot, viewModel.Status, viewModel.IsAvailable ? "info" : "waiting");
+        var renderModel = CarRadarRenderModel.FromViewModel(viewModel, calibration);
         return new BrowserOverlayDisplayModel(
             CarRadarOverlayDefinition.Definition.Id,
             viewModel.Title,
@@ -620,9 +690,12 @@ internal sealed class BrowserOverlayModelFactory
                 viewModel.Cars,
                 viewModel.StrongestMulticlassApproach,
                 viewModel.ShowMulticlassWarning,
+                viewModel.MulticlassWarningRangeSeconds,
+                viewModel.RadarVisibilitySeconds,
                 viewModel.PreviewVisible,
                 viewModel.HasCurrentSignal,
-                CarRadarRenderModel.FromViewModel(viewModel, calibration)));
+                renderModel),
+            ShouldRender: renderModel.ShouldRender);
     }
 
     private BrowserOverlayDisplayModel BuildInputState(
@@ -664,8 +737,9 @@ internal sealed class BrowserOverlayModelFactory
         var trackMap = ReadTrackMap(snapshot.Context.Track, includeUserMaps, now);
         var viewModel = TrackMapOverlayViewModel.From(snapshot, now, overlay, trackMap);
         var renderModel = _trackMapRenderBuilder.Build(viewModel, now);
-        var status = viewModel.IsAvailable ? "live" : viewModel.Status;
+        var status = viewModel.Status;
         var headerItems = HeaderItems(overlay, snapshot, status, viewModel.IsAvailable ? "info" : "waiting");
+        var shouldRender = viewModel.IsAvailable && renderModel.Markers.Count > 0;
         return new BrowserOverlayDisplayModel(
             TrackMapOverlayDefinition.Definition.Id,
             viewModel.Title,
@@ -683,7 +757,8 @@ internal sealed class BrowserOverlayModelFactory
                 viewModel.ShowSectorBoundaries,
                 viewModel.InternalOpacity,
                 viewModel.IncludeUserMaps,
-                renderModel));
+                renderModel),
+            ShouldRender: shouldRender);
     }
 
     private TrackMapDocument? ReadTrackMap(
@@ -733,7 +808,8 @@ internal sealed class BrowserOverlayModelFactory
             GarageCover: new BrowserGarageCoverModel(
                 viewModel.ShouldCover,
                 viewModel.BrowserSettings,
-                viewModel.Detection));
+                viewModel.Detection),
+            ShouldRender: viewModel.ShouldCover);
     }
 
     private BrowserOverlayDisplayModel BuildStreamChat(
@@ -811,31 +887,14 @@ internal sealed class BrowserOverlayModelFactory
             _gapTrendStartAxisSeconds = axisSeconds;
         }
 
+        var lapReferenceSeconds = GapToLeaderLiveModelAdapter.SelectLapReferenceSeconds(modelSnapshot);
         var context = SelectGapReferenceContext(modelSnapshot);
         if (_lastGapReferenceContext is not null && _lastGapReferenceContext != context)
         {
-            foreach (var state in _gapCarRenderStates.Values)
-            {
-                state.IsCurrentlyDesired = false;
-            }
-
-            _lastGapClassLeaderCarIdx = null;
-            _currentGapFuelStintStartAxisSeconds = null;
-            _lastGapFuelLevelLiters = null;
-            if (context?.CarIdx is { } referenceCarIdx)
-            {
-                AddGapDriverChangeMarker(new BrowserGapDriverChangeMarker(
-                    timestamp,
-                    axisSeconds,
-                    referenceCarIdx,
-                    0d,
-                    true,
-                    "REF"));
-            }
+            ResetGapReferenceContext(axisSeconds);
         }
 
         _lastGapReferenceContext = context;
-        var lapReferenceSeconds = GapToLeaderLiveModelAdapter.SelectLapReferenceSeconds(modelSnapshot);
         _lastGapLapReferenceSeconds = lapReferenceSeconds;
         RecordGapFuelStint(modelSnapshot, axisSeconds);
         RecordGapWeather(modelSnapshot, axisSeconds);
@@ -884,6 +943,20 @@ internal sealed class BrowserOverlayModelFactory
 
         UpdateGapCarRenderStates(modelSnapshot, gap, settings, axisSeconds, lapReferenceSeconds);
         PruneGapSeries(axisSeconds);
+    }
+
+    private void ResetGapReferenceContext(double axisSeconds)
+    {
+        _gapPoints.Clear();
+        _gapSeries.Clear();
+        _gapWeather.Clear();
+        _gapDriverChanges.Clear();
+        _gapLeaderChanges.Clear();
+        _gapCarRenderStates.Clear();
+        _gapTrendStartAxisSeconds = axisSeconds;
+        _lastGapClassLeaderCarIdx = null;
+        _currentGapFuelStintStartAxisSeconds = null;
+        _lastGapFuelLevelLiters = null;
     }
 
     private void RecordGapWeather(LiveTelemetrySnapshot snapshot, double axisSeconds)
@@ -1022,6 +1095,12 @@ internal sealed class BrowserOverlayModelFactory
         double? lapReferenceSeconds)
     {
         var desiredCarIds = SelectDesiredGapCarIds(gap.ClassCars, settings, lapReferenceSeconds);
+        foreach (var state in _gapCarRenderStates.Values)
+        {
+            state.IsReference = false;
+            state.IsClassLeader = false;
+        }
+
         foreach (var car in gap.ClassCars)
         {
             if (BrowserGapSeconds(car, lapReferenceSeconds) is not { } gapSeconds)
@@ -1196,9 +1275,14 @@ internal sealed class BrowserOverlayModelFactory
         return selected;
     }
 
-    private BrowserGapGraph? BuildBrowserGapGraph(ApplicationSettings settings)
+    private BrowserGapGraph? BuildBrowserGapGraph(
+        ApplicationSettings settings,
+        OverlaySettings? overlay,
+        OverlaySessionKind? sessionKind,
+        bool showGraph,
+        bool showTrendMetrics)
     {
-        var selectedSeries = SelectGapSeries();
+        var selectedSeries = showGraph ? SelectGapSeries() : [];
         if (!HasGapComparisonSeries(selectedSeries))
         {
             selectedSeries = [];
@@ -1222,19 +1306,30 @@ internal sealed class BrowserOverlayModelFactory
         }
 
         var comparisonLabel = BrowserGapComparisonLabel();
-        var trendMetrics = BuildBrowserGapTrendMetrics();
+        var trendMetrics = showTrendMetrics
+            ? BuildBrowserGapTrendMetrics()
+                .Where(metric => GapTrendMetricEnabled(overlay, metric.Label, sessionKind))
+                .ToArray()
+            : [];
         var activeThreat = ActiveBrowserGapThreat(trendMetrics);
         var threatCarIdx = activeThreat?.Chaser?.CarIdx;
         var series = selectedSeries
-            .Select(selection => new BrowserGapSeries(
-                selection.State.CarIdx,
-                selection.State.IsReference,
-                selection.State.IsClassLeader,
-                selection.State.ClassPosition,
-                selection.Alpha,
-                selection.IsStickyExit,
-                selection.IsStale,
-                PointsForGapCar(selection.State.CarIdx, Math.Max(startSeconds, selection.DrawStartSeconds), endSeconds)))
+            .Select((selection, index) =>
+            {
+                var baseColor = BrowserGapSeriesBaseColor(selection.State, index, threatCarIdx);
+                var renderedColor = BrowserGapRenderedColor(baseColor, selection.Alpha * BrowserGapSeriesAlphaMultiplier(selection.State, threatCarIdx));
+                return new BrowserGapSeries(
+                    selection.State.CarIdx,
+                    selection.State.IsReference,
+                    selection.State.IsClassLeader,
+                    selection.State.ClassPosition,
+                    selection.Alpha,
+                    selection.IsStickyExit,
+                    selection.IsStale,
+                    baseColor,
+                    renderedColor,
+                    PointsForGapCar(selection.State.CarIdx, Math.Max(startSeconds, selection.DrawStartSeconds), endSeconds));
+            })
             .Where(series => series.Points.Count > 0)
             .ToArray();
         var scale = SelectBrowserGapScale(selectedSeries, startSeconds, endSeconds);
@@ -1253,7 +1348,9 @@ internal sealed class BrowserOverlayModelFactory
             threatCarIdx,
             GapMetricDeadbandSeconds(),
             comparisonLabel,
-            scale);
+            scale,
+            showGraph && selectedSeries.Count > 0,
+            showTrendMetrics);
     }
 
     private IReadOnlyList<BrowserGapTrendMetric> BuildBrowserGapTrendMetrics()
@@ -1274,11 +1371,13 @@ internal sealed class BrowserOverlayModelFactory
             tenLapMetric
         };
         var threatCarIdx = ActiveBrowserGapThreat(paceMetrics)?.Chaser?.CarIdx;
-        return paceMetrics
+        var extraMetrics = BuildBrowserGapExtraTrendMetrics(referenceState, threatCarIdx);
+        return extraMetrics.Take(1)
+            .Concat(paceMetrics)
             .Concat(BuildBrowserGapPitTrendMetrics(referenceState, threatCarIdx))
             .Append(BuildBrowserGapStintTrendMetric(referenceState, threatCarIdx))
             .Append(BuildBrowserGapTireTrendMetric(referenceState, threatCarIdx))
-            .Concat(BuildBrowserGapExtraTrendMetrics(referenceState, threatCarIdx))
+            .Concat(extraMetrics.Skip(1))
             .ToArray();
     }
 
@@ -1370,9 +1469,9 @@ internal sealed class BrowserOverlayModelFactory
                 null,
                 "last",
                 null,
-                PrimaryText: BrowserGapLapTimeText(referenceState.LastLapTimeSeconds),
-                ThreatText: BrowserGapLapTimeText(threatState?.LastLapTimeSeconds),
-                ComparisonText: BrowserGapLapTimeText(lastComparisonState?.LastLapTimeSeconds)),
+                PrimaryText: BrowserGapLastLapDeltaText(referenceState, referenceState),
+                ThreatText: BrowserGapLastLapDeltaText(referenceState, threatState),
+                ComparisonText: BrowserGapLastLapDeltaText(referenceState, lastComparisonState)),
             new BrowserGapTrendMetric(
                 "Status",
                 null,
@@ -1392,17 +1491,18 @@ internal sealed class BrowserOverlayModelFactory
         double latest,
         BrowserGapCarRenderState referenceState)
     {
+        var completedReferenceLaps = BrowserGapCompletedLapSpan(referenceState.CarIdx);
         if (!IsFinite(lookbackSeconds)
             || lookbackSeconds <= 0d
             || LatestBrowserGapTrendPoint(referenceState.CarIdx) is not { } referenceCurrent)
         {
-            return new BrowserGapTrendMetric(label, null, null, "unavailable", null);
+            return new BrowserGapTrendMetric(label, null, null, "unavailable", null, CompletedReferenceLaps: completedReferenceLaps);
         }
 
         var targetAxisSeconds = latest - lookbackSeconds;
         if (!HasBrowserGapCompletedLapHistory(referenceState.CarIdx, targetLaps))
         {
-            return new BrowserGapTrendMetric(label, null, null, "unavailable", null);
+            return new BrowserGapTrendMetric(label, null, null, "unavailable", null, CompletedReferenceLaps: completedReferenceLaps);
         }
 
         var chaser = StrongestBrowserGapBehindGain(referenceState, referenceCurrent, targetAxisSeconds, latest, targetLaps);
@@ -1413,18 +1513,19 @@ internal sealed class BrowserOverlayModelFactory
                 null,
                 chaser,
                 "warming",
-                null);
+                null,
+                CompletedReferenceLaps: completedReferenceLaps);
         }
 
         var comparisonState = BrowserGapComparisonCar(referenceState, referenceCurrent);
         if (comparisonState is null || LatestBrowserGapTrendPoint(comparisonState.CarIdx) is not { } comparisonCurrent)
         {
-            return new BrowserGapTrendMetric(label, null, chaser, "ready", "leader");
+            return new BrowserGapTrendMetric(label, null, chaser, "ready", "leader", CompletedReferenceLaps: completedReferenceLaps);
         }
 
         if (!HasBrowserGapCompletedLapHistory(comparisonState.CarIdx, targetLaps))
         {
-            return new BrowserGapTrendMetric(label, null, chaser, "unavailable", null);
+            return new BrowserGapTrendMetric(label, null, chaser, "unavailable", null, CompletedReferenceLaps: completedReferenceLaps);
         }
 
         if (BrowserGapTrendPointNear(comparisonState.CarIdx, targetAxisSeconds) is not { } comparisonPast)
@@ -1434,12 +1535,13 @@ internal sealed class BrowserOverlayModelFactory
                 null,
                 chaser,
                 "warming",
-                null);
+                null,
+                CompletedReferenceLaps: completedReferenceLaps);
         }
 
         var currentDelta = referenceCurrent.GapSeconds - comparisonCurrent.GapSeconds;
         var pastDelta = referencePast.GapSeconds - comparisonPast.GapSeconds;
-        return new BrowserGapTrendMetric(label, currentDelta - pastDelta, chaser, "ready", null);
+        return new BrowserGapTrendMetric(label, currentDelta - pastDelta, chaser, "ready", null, CompletedReferenceLaps: completedReferenceLaps);
     }
 
     private BrowserBehindGainMetric? StrongestBrowserGapBehindGain(
@@ -1621,6 +1723,16 @@ internal sealed class BrowserOverlayModelFactory
             : remainder.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    private static string BrowserGapLastLapDeltaText(
+        BrowserGapCarRenderState referenceState,
+        BrowserGapCarRenderState? comparisonState)
+    {
+        return IsValidLapReference(referenceState.LastLapTimeSeconds)
+            && IsValidLapReference(comparisonState?.LastLapTimeSeconds)
+            ? FormatSignedSeconds(comparisonState!.LastLapTimeSeconds!.Value - referenceState.LastLapTimeSeconds!.Value)
+            : "--";
+    }
+
     private static string BrowserGapStatusText(BrowserGapCarRenderState? state)
     {
         if (state is null)
@@ -1692,20 +1804,25 @@ internal sealed class BrowserOverlayModelFactory
 
     private bool HasBrowserGapCompletedLapHistory(int carIdx, double? targetLaps)
     {
+        return BrowserGapCompletedLapSpan(carIdx) is { } completedLaps
+            && targetLaps is { } laps
+            && completedLaps >= laps;
+    }
+
+    private int? BrowserGapCompletedLapSpan(int carIdx)
+    {
         if (!_gapSeries.TryGetValue(carIdx, out var points) || points.Count == 0)
         {
-            return false;
+            return null;
         }
 
-        var earliest = points
+        var completedLaps = points
             .Where(point => point.CompletedLap is not null)
-            .Select(point => point.CompletedLap)
-            .FirstOrDefault();
-        var latest = points
-            .Where(point => point.CompletedLap is not null)
-            .Select(point => point.CompletedLap)
-            .LastOrDefault();
-        return GapToLeaderPresentationRules.HasCompletedLapHistory(earliest, latest, targetLaps);
+            .Select(point => point.CompletedLap!.Value)
+            .ToArray();
+        return completedLaps.Length == 0
+            ? null
+            : completedLaps[^1] - completedLaps[0];
     }
 
     private BrowserGapTrendPoint? BrowserGapTrendPointNear(int carIdx, double axisSeconds)
@@ -1725,13 +1842,13 @@ internal sealed class BrowserOverlayModelFactory
     {
         return new[]
         {
+            new BrowserGapTrendMetric("Last", null, null, state, null),
             new BrowserGapTrendMetric("5L", null, null, state, null),
             new BrowserGapTrendMetric("10L", null, null, state, null),
             new BrowserGapTrendMetric("Pit", null, null, state, null),
             new BrowserGapTrendMetric("PLap", null, null, state, null),
             new BrowserGapTrendMetric("Stint", null, null, state, null),
             new BrowserGapTrendMetric("Tire", null, null, state, null),
-            new BrowserGapTrendMetric("Last", null, null, state, null),
             new BrowserGapTrendMetric("Status", null, null, state, null)
         };
     }
@@ -1741,6 +1858,51 @@ internal sealed class BrowserOverlayModelFactory
         return _gapSeries.TryGetValue(carIdx, out var points)
             ? points.Where(point => point.AxisSeconds >= startSeconds && point.AxisSeconds <= endSeconds).ToArray()
             : Array.Empty<BrowserGapTrendPoint>();
+    }
+
+    private static string BrowserGapSeriesBaseColor(BrowserGapCarRenderState state, int index, int? threatCarIdx)
+    {
+        if (state.CarIdx == threatCarIdx)
+        {
+            return "#ec7063";
+        }
+
+        if (state.IsReference)
+        {
+            return "#00e8ff";
+        }
+
+        if (state.IsClassLeader)
+        {
+            return "#f7fbff";
+        }
+
+        return (index % 3) switch
+        {
+            0 => "#ffd15b",
+            1 => "#70e092",
+            _ => "#ff62d2"
+        };
+    }
+
+    private static double BrowserGapSeriesAlphaMultiplier(BrowserGapCarRenderState state, int? threatCarIdx)
+    {
+        return state.IsClassLeader || state.IsReference || state.CarIdx == threatCarIdx
+            ? 1d
+            : 0.48d;
+    }
+
+    private static string BrowserGapRenderedColor(string hexColor, double alpha)
+    {
+        if (hexColor.Length != 7 || hexColor[0] != '#')
+        {
+            return hexColor;
+        }
+
+        var red = Convert.ToInt32(hexColor.Substring(1, 2), 16);
+        var green = Convert.ToInt32(hexColor.Substring(3, 2), 16);
+        var blue = Convert.ToInt32(hexColor.Substring(5, 2), 16);
+        return $"rgba({red}, {green}, {blue}, {Math.Clamp(alpha, 0d, 1d).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)})";
     }
 
     private double GapMinimumTrendDomainSecondsForCurrentLap()
@@ -2344,6 +2506,66 @@ internal sealed class BrowserOverlayModelFactory
             || overlay.GetIntegerOption(OverlayOptionKeys.GapCarsBehind, defaultValue: 5, minimum: 0, maximum: 12) > 0;
     }
 
+    private static bool GapGraphEnabled(OverlaySettings? overlay, OverlaySessionKind? sessionKind)
+    {
+        return overlay is null
+            || OverlayContentColumnSettings.ContentEnabledForSession(
+                overlay,
+                OverlayOptionKeys.GapGraphEnabled,
+                defaultEnabled: true,
+                sessionKind);
+    }
+
+    private static bool GapAnyTrendMetricEnabled(OverlaySettings? overlay, OverlaySessionKind? sessionKind)
+    {
+        return overlay is null
+            || GapTrendMetricOptionKeys.Any(key =>
+                OverlayContentColumnSettings.ContentEnabledForSession(
+                    overlay,
+                    key,
+                    defaultEnabled: true,
+                    sessionKind));
+    }
+
+    private static bool GapTrendMetricEnabled(OverlaySettings? overlay, string label, OverlaySessionKind? sessionKind)
+    {
+        return overlay is null
+            || GapTrendMetricOptionKey(label) is not { } key
+            || OverlayContentColumnSettings.ContentEnabledForSession(
+                overlay,
+                key,
+                defaultEnabled: true,
+                sessionKind);
+    }
+
+    private static string? GapTrendMetricOptionKey(string label)
+    {
+        return label.Trim().ToUpperInvariant() switch
+        {
+            "LAST" => OverlayOptionKeys.GapTrendLastEnabled,
+            "5L" => OverlayOptionKeys.GapTrend5LEnabled,
+            "10L" => OverlayOptionKeys.GapTrend10LEnabled,
+            "PIT" => OverlayOptionKeys.GapTrendPitEnabled,
+            "PLAP" => OverlayOptionKeys.GapTrendPitLapEnabled,
+            "STINT" => OverlayOptionKeys.GapTrendStintEnabled,
+            "TIRE" => OverlayOptionKeys.GapTrendTireEnabled,
+            "STATUS" => OverlayOptionKeys.GapTrendStatusEnabled,
+            _ => null
+        };
+    }
+
+    private static readonly string[] GapTrendMetricOptionKeys =
+    [
+        OverlayOptionKeys.GapTrendLastEnabled,
+        OverlayOptionKeys.GapTrend5LEnabled,
+        OverlayOptionKeys.GapTrend10LEnabled,
+        OverlayOptionKeys.GapTrendPitEnabled,
+        OverlayOptionKeys.GapTrendPitLapEnabled,
+        OverlayOptionKeys.GapTrendStintEnabled,
+        OverlayOptionKeys.GapTrendTireEnabled,
+        OverlayOptionKeys.GapTrendStatusEnabled
+    ];
+
     private static OverlaySettings OverlayOrDefault(ApplicationSettings settings, OverlayDefinition definition)
     {
         return FindOverlay(settings, definition.Id) ?? new OverlaySettings
@@ -2393,6 +2615,7 @@ internal sealed class BrowserOverlayModelFactory
             HeaderItems: [],
             ShouldRender: false,
             RootOpacity: BrowserRootOpacity(definition, overlay));
+        model = SuppressUnavailableRenderedContent(WithoutOrdinaryOverlayTitle(model));
         model = model with
         {
             EffectiveSettings = EffectiveSettingsEvidence(model, definition.Id, settings, snapshot, now)
@@ -2416,6 +2639,12 @@ internal sealed class BrowserOverlayModelFactory
         if (!OverlayEnabledForSession(overlay, sessionKind))
         {
             return "hidden | session disabled";
+        }
+
+        if (string.Equals(definition.Id, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) is OverlaySessionKind.Qualifying)
+        {
+            return "hidden | qualifying unsupported";
         }
 
         if (!OverlayContentSizing.HasRenderableContent(definition, overlay, sessionKind)
@@ -2513,14 +2742,22 @@ internal sealed class BrowserOverlayModelFactory
         var overlay = hasDefinition
             ? OverlayOrDefault(settings, definition)
             : FindOverlay(settings, overlayId) ?? new OverlaySettings { Id = overlayId };
+        var clampedScale = Math.Clamp(overlay.Scale, 0.6d, 2d);
+        var clampedOpacity = Math.Clamp(overlay.Opacity, 0d, 1d);
         var browserBaseSize = hasDefinition
             ? BrowserOverlayRecommendedSize.For(definition, overlay, sessionKind)
             : new System.Drawing.Size(Math.Max(0, overlay.Width), Math.Max(0, overlay.Height));
-        var browserScaledSize = hasDefinition
-            ? BrowserOverlayRecommendedSize.ScaledFor(definition, overlay, sessionKind)
-            : browserBaseSize;
-        var clampedScale = Math.Clamp(overlay.Scale, 0.6d, 2d);
-        var clampedOpacity = Math.Clamp(overlay.Opacity, 0d, 1d);
+        if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && model.ShouldRender)
+        {
+            browserBaseSize = new System.Drawing.Size(
+                browserBaseSize.Width,
+                FuelBrowserSourceHeight(model, browserBaseSize.Height));
+        }
+
+        var browserScaledSize = new System.Drawing.Size(
+            Math.Max(1, (int)Math.Round(browserBaseSize.Width * clampedScale)),
+            Math.Max(1, (int)Math.Round(browserBaseSize.Height * clampedScale)));
         var browserRootOpacity = hasDefinition
             ? BrowserRootOpacity(definition, overlay)
             : clampedOpacity;
@@ -2535,14 +2772,39 @@ internal sealed class BrowserOverlayModelFactory
 
         AddContentEffectiveSettings(effectiveSettings, overlay, sessionKind, session);
         AddOverlaySpecificEffectiveSettings(effectiveSettings, overlayId, overlay, settings, sessionKind, session, now);
+        var sharedSettingsHash = StableSettingsHash(effectiveSettings.Where(IsSharedEffectiveSetting));
+        var overlaySettingsHash = StableSettingsHash(effectiveSettings);
+        var browserSource = new BrowserOverlayEffectiveBrowserSource(
+            BaseWidth: browserBaseSize.Width,
+            BaseHeight: browserBaseSize.Height,
+            Width: browserScaledSize.Width,
+            Height: browserScaledSize.Height,
+            Scale: Math.Round(clampedScale, 3),
+            ScalePercent: (int)Math.Round(clampedScale * 100d),
+            Opacity: Math.Round(browserRootOpacity, 3),
+            OpacityPercent: (int)Math.Round(browserRootOpacity * 100d));
 
         return new BrowserOverlayEffectiveSettings(
             OverlayId: model.OverlayId,
             PreviewMode: session,
             Sources: new BrowserOverlayEffectiveSettingSources(
-                BrowserReview: new BrowserOverlayEffectiveSettingSource(true),
-                LocalhostObs: new BrowserOverlayEffectiveSettingSource(true),
-                WindowsNative: new BrowserOverlayEffectiveSettingSource(true)),
+                BrowserReview: new BrowserOverlayEffectiveSettingSource(
+                    Applied: true,
+                    SharedSettingsHash: sharedSettingsHash,
+                    OverlaySettingsHash: overlaySettingsHash,
+                    RoutePath: $"/review/overlays/{overlayId}"),
+                LocalhostObs: new BrowserOverlayEffectiveSettingSource(
+                    Applied: true,
+                    SharedSettingsHash: sharedSettingsHash,
+                    OverlaySettingsHash: overlaySettingsHash,
+                    RoutePath: $"/overlays/{overlayId}"),
+                WindowsNative: new BrowserOverlayEffectiveSettingSource(
+                    Applied: true,
+                    SharedSettingsHash: sharedSettingsHash,
+                    OverlaySettingsHash: overlaySettingsHash,
+                    PixelEvidence: new BrowserOverlayNativePixelEvidence(
+                        Status: "not-applicable",
+                        Reason: "localhost/browser model contract; native pixels are validated by Windows screenshot artifacts"))),
             Rendered: new BrowserOverlayEffectiveRendered(
                 BodyKind: model.BodyKind,
                 ShouldRender: model.ShouldRender,
@@ -2550,16 +2812,584 @@ internal sealed class BrowserOverlayModelFactory
                 HeaderItems: model.HeaderItems
                     .Select(item => new BrowserOverlayEffectiveHeaderItem(item.Key, item.Value, item.Tone))
                     .ToArray(),
-                BrowserSource: new BrowserOverlayEffectiveBrowserSource(
-                    BaseWidth: browserBaseSize.Width,
-                    BaseHeight: browserBaseSize.Height,
-                    Width: browserScaledSize.Width,
-                    Height: browserScaledSize.Height,
-                    Scale: Math.Round(clampedScale, 3),
-                    ScalePercent: (int)Math.Round(clampedScale * 100d),
-                    Opacity: Math.Round(browserRootOpacity, 3),
-                    OpacityPercent: (int)Math.Round(browserRootOpacity * 100d))),
+                BrowserSource: browserSource,
+                ColumnKeys: TableColumnKeys(model),
+                RowIdentities: TableRowIdentities(model),
+                PlaceholderRowCount: PlaceholderRowCount(model),
+                Provenance: RenderedProvenance(model, snapshot),
+                RelativeTimingEvidence: RelativeTimingEvidence(overlayId, session, model),
+                TableStatus: TableStatusEvidence(overlayId, model),
+                TimingSanity: TimingSanityEvidence(overlayId, model),
+                FuelStrategy: EffectiveFuelStrategyEvidence(overlayId, model),
+                Layout: LayoutDensityEvidence(overlayId, model, browserSource),
+                InputAvailability: InputAvailabilityEvidence(overlayId, model),
+                MapFallback: MapFallbackEvidence(overlayId, model, snapshot),
+                UnavailableContentPolicy: UnavailableContentPolicy(model),
+                RoleContext: RoleContextEvidence(snapshot)),
             Settings: effectiveSettings);
+    }
+
+    private static bool IsSharedEffectiveSetting(BrowserOverlayEffectiveSetting setting)
+    {
+        return setting.Key is "general.unitSystem" or "scalePercent" or "opacityPercent";
+    }
+
+    private static string StableSettingsHash(IEnumerable<BrowserOverlayEffectiveSetting> settings)
+    {
+        var payload = string.Join(
+            "\n",
+            settings
+                .OrderBy(setting => setting.Key, StringComparer.Ordinal)
+                .ThenBy(setting => setting.Session, StringComparer.Ordinal)
+                .Select(setting => string.Join(
+                    "\t",
+                    setting.Key,
+                    setting.Session ?? string.Empty,
+                    StableSettingValue(setting.Value))));
+        var bytes = System.Text.Encoding.UTF8.GetBytes(payload);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant()[..16];
+    }
+
+    private static string StableSettingValue(object? value)
+    {
+        return value switch
+        {
+            null => "null",
+            bool boolean => boolean ? "true" : "false",
+            string text => text,
+            IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+            _ => value.ToString() ?? string.Empty
+        };
+    }
+
+    private static IReadOnlyList<string> TableColumnKeys(BrowserOverlayDisplayModel model)
+    {
+        return model.Columns
+            .Select(column => string.IsNullOrWhiteSpace(column.DataKey) ? column.Label : column.DataKey)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> TableRowIdentities(BrowserOverlayDisplayModel model)
+    {
+        return model.Rows.Select(RowIdentity).ToArray();
+    }
+
+    private static string RowIdentity(BrowserOverlayDisplayRow row)
+    {
+        var kind = row.IsClassHeader
+            ? "class-header"
+            : row.IsPlaceholder
+                ? "placeholder"
+                : "row";
+        var primary = row.HeaderTitle ?? string.Join("/", row.Cells.Take(2));
+        return string.Join(
+            "|",
+            kind,
+            primary,
+            VisibleRowDetail(row),
+            row.IsReference ? "reference" : string.Empty);
+    }
+
+    private static string VisibleRowDetail(BrowserOverlayDisplayRow row)
+    {
+        var detail = row.HeaderDetail ?? string.Empty;
+        return row.IsClassHeader
+            ? detail.ToUpperInvariant()
+            : detail;
+    }
+
+    private static int PlaceholderRowCount(BrowserOverlayDisplayModel model)
+    {
+        return model.Rows.Count(row => row.IsPlaceholder || row.Cells.Count == 0 || row.Cells.All(string.IsNullOrWhiteSpace));
+    }
+
+    private static BrowserOverlayRenderedProvenance RenderedProvenance(
+        BrowserOverlayDisplayModel model,
+        LiveTelemetrySnapshot snapshot)
+    {
+        var hasLiveModelData = snapshot.Models.Session.HasData
+            || snapshot.Models.Timing.HasData
+            || snapshot.Models.Scoring.HasData
+            || snapshot.Models.FuelPit.HasData
+            || snapshot.Models.Inputs.HasData
+            || snapshot.Models.Spatial.HasData;
+        return new BrowserOverlayRenderedProvenance(
+            EvidenceClass: IsUnavailableModel(model)
+                ? "unavailable"
+                : hasLiveModelData ? "live-capture" : "synthetic-preview",
+            CaptureSpecific: hasLiveModelData || snapshot.LatestSample is not null,
+            SourceContract: "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs");
+    }
+
+    private static BrowserOverlayRoleContextEvidence RoleContextEvidence(LiveTelemetrySnapshot snapshot)
+    {
+        var directory = snapshot.Models.DriverDirectory;
+        var reference = snapshot.Models.Reference;
+        var playerCarIdx = directory.PlayerCarIdx
+            ?? reference.PlayerCarIdx
+            ?? snapshot.LatestSample?.PlayerCarIdx;
+        var focusCarIdx = directory.FocusCarIdx
+            ?? reference.FocusCarIdx
+            ?? snapshot.LatestSample?.FocusCarIdx;
+        var playerDriver = DriverForCar(directory, playerCarIdx, directory.PlayerDriver);
+        var focusDriver = DriverForCar(directory, focusCarIdx, directory.FocusDriver);
+        var playerIsSpectator = playerDriver?.IsSpectator;
+        var focusIsSpectator = focusDriver?.IsSpectator;
+        var focusIsPlayer = reference.HasData
+            ? reference.FocusIsPlayer
+            : playerCarIdx is not null && focusCarIdx is not null && playerCarIdx == focusCarIdx;
+        var hasExplicitNonPlayerFocus = reference.HasData
+            ? reference.HasExplicitNonPlayerFocus
+            : playerCarIdx is not null && focusCarIdx is not null && playerCarIdx != focusCarIdx;
+
+        return new BrowserOverlayRoleContextEvidence(
+            PlayerCarIdx: playerCarIdx,
+            FocusCarIdx: focusCarIdx,
+            FocusIsPlayer: focusIsPlayer,
+            HasExplicitNonPlayerFocus: hasExplicitNonPlayerFocus,
+            PlayerIsSpectator: playerIsSpectator,
+            FocusIsSpectator: focusIsSpectator,
+            LocalRole: LocalRole(playerIsSpectator),
+            RoleSource: RoleSource(playerCarIdx, playerIsSpectator),
+            IsSpotting: null,
+            SpottingSignalStatus: "not-observed");
+    }
+
+    private static LiveDriverIdentity? DriverForCar(
+        LiveDriverDirectoryModel directory,
+        int? carIdx,
+        LiveDriverIdentity? preferred)
+    {
+        if (preferred is not null && preferred.CarIdx == carIdx)
+        {
+            return preferred;
+        }
+
+        return carIdx is { } value
+            ? directory.Drivers.FirstOrDefault(driver => driver.CarIdx == value)
+            : null;
+    }
+
+    private static string LocalRole(bool? playerIsSpectator)
+    {
+        return playerIsSpectator switch
+        {
+            true => "spectator",
+            false => "driver",
+            _ => "unknown"
+        };
+    }
+
+    private static string RoleSource(int? playerCarIdx, bool? playerIsSpectator)
+    {
+        if (playerIsSpectator is not null)
+        {
+            return "DriverInfo.Drivers[].IsSpectator";
+        }
+
+        return playerCarIdx is null
+            ? "player-car-missing"
+            : "driver-info-missing";
+    }
+
+    private static BrowserOverlayRelativeTimingEvidence? RelativeTimingEvidence(
+        string overlayId,
+        string session,
+        BrowserOverlayDisplayModel model)
+    {
+        if (!string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return new BrowserOverlayRelativeTimingEvidence(
+            SessionKind: session,
+            PhysicalProximityAvailable: string.Equals(session, "practice", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(session, "race", StringComparison.OrdinalIgnoreCase),
+            TimingColumnKeys: TableColumnKeys(model)
+                .Where(key => key.Contains("gap", StringComparison.OrdinalIgnoreCase)
+                    || key.Contains("interval", StringComparison.OrdinalIgnoreCase)
+                    || key.Contains("delta", StringComparison.OrdinalIgnoreCase))
+                .ToArray());
+    }
+
+    private static BrowserOverlayTableStatusEvidence? TableStatusEvidence(string overlayId, BrowserOverlayDisplayModel model)
+    {
+        if (!string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var classHeaderCount = model.Rows.Count(row => row.IsClassHeader);
+        var placeholderRowCount = PlaceholderRowCount(model);
+        var dataRowCount = Math.Max(0, model.Rows.Count - classHeaderCount - placeholderRowCount);
+        return new BrowserOverlayTableStatusEvidence(
+            DataRowCount: dataRowCount,
+            ClassHeaderCount: classHeaderCount,
+            PlaceholderRowCount: placeholderRowCount,
+            ClippedRowCount: 0,
+            StatusCarCount: dataRowCount);
+    }
+
+    private static BrowserOverlayTimingSanityEvidence? TimingSanityEvidence(string overlayId, BrowserOverlayDisplayModel model)
+    {
+        if (!string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var timingValues = model.Rows
+            .SelectMany(row => row.Cells)
+            .Select(TryParseTimingSeconds)
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .ToArray();
+        var maximum = timingValues.Length == 0 ? 0d : timingValues.Max(value => Math.Abs(value));
+        return new BrowserOverlayTimingSanityEvidence(
+            MaxIntervalGapRatio: maximum <= 0d ? 0d : Math.Round(maximum / Math.Max(1d, maximum), 3),
+            AbsurdIntervalCount: timingValues.Count(value => Math.Abs(value) > 600d));
+    }
+
+    private static BrowserOverlayFuelStrategyEvidence FuelStrategyEvidence(FuelStrategySnapshot? strategy)
+    {
+        if (strategy is null || !HasTrustedFuelStrategy(strategy) || strategy.AdditionalFuelNeededLiters is null)
+        {
+            return new BrowserOverlayFuelStrategyEvidence(
+                AdditionalFuelNeedState: "unavailable",
+                SuccessCopyRequiresMeasuredNeed: true);
+        }
+
+        return new BrowserOverlayFuelStrategyEvidence(
+            AdditionalFuelNeedState: strategy.AdditionalFuelNeededLiters > 0.1d ? "measured" : "not-needed",
+            SuccessCopyRequiresMeasuredNeed: true);
+    }
+
+    private static bool HasTrustedFuelStrategy(FuelStrategySnapshot strategy)
+    {
+        return strategy.FuelPerLapLiters is not null
+            && string.Equals(strategy.FuelPerLapSource, "measured green lap", StringComparison.OrdinalIgnoreCase)
+            && strategy.RaceLapsRemaining is not null
+            && strategy.AdditionalFuelNeededLiters is not null;
+    }
+
+    private static int FuelBrowserSourceHeight(BrowserOverlayDisplayModel model, int fallbackHeight)
+    {
+        if (!string.Equals(model.OverlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return fallbackHeight;
+        }
+
+        var sectionCount = (model.MetricSections ?? []).Count(section => section.Rows.Count > 0);
+        var rowCount = (model.MetricSections ?? []).Sum(section => section.Rows.Count);
+        if (rowCount <= 0 || sectionCount <= 0)
+        {
+            return fallbackHeight;
+        }
+
+        var height = OverlayContentSizing.FuelCalculatorHeightForContent(rowCount, sectionCount);
+        var hasVisibleHeader = model.HeaderItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
+        return hasVisibleHeader
+            ? height
+            : Math.Max(OverlayGeometryContracts.MetricRows.MinimumChromeAdjustedHeight, height - OverlayGeometryContracts.MetricRows.HeaderChromeHeight);
+    }
+
+    private static BrowserOverlayFuelStrategyEvidence? EffectiveFuelStrategyEvidence(
+        string overlayId,
+        BrowserOverlayDisplayModel model)
+    {
+        if (!string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return model.FuelStrategyEvidence
+            ?? new BrowserOverlayFuelStrategyEvidence("unavailable", SuccessCopyRequiresMeasuredNeed: true);
+    }
+
+    private static BrowserOverlayLayoutEvidence? LayoutDensityEvidence(
+        string overlayId,
+        BrowserOverlayDisplayModel model,
+        BrowserOverlayEffectiveBrowserSource browserSource)
+    {
+        if (!string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var contentRowCount = SemanticContentRowCount(model);
+        var sectionCount = (model.MetricSections?.Count ?? 0) + (model.GridSections?.Count ?? 0);
+        var geometry = OverlayGeometryContracts.MetricRows;
+        var estimatedContentHeight = Math.Max(
+            0,
+            geometry.HeaderChromeHeight
+            + (int)Math.Round(contentRowCount * geometry.PlainRowHeight)
+            + (int)Math.Round(sectionCount * (geometry.SectionTitleHeight + geometry.SectionTitleBottomGap + geometry.SectionGap)));
+        var unusedHeightRatio = browserSource.Height > 0
+            ? Math.Clamp((browserSource.Height - estimatedContentHeight) / (double)browserSource.Height, 0d, 1d)
+            : 0d;
+        return new BrowserOverlayLayoutEvidence(
+            ContentRowCount: contentRowCount,
+            UnusedHeightRatio: Math.Round(unusedHeightRatio, 3));
+    }
+
+    private static BrowserOverlayInputAvailabilityEvidence? InputAvailabilityEvidence(
+        string overlayId,
+        BrowserOverlayDisplayModel model)
+    {
+        if (!string.Equals(overlayId, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var inputs = model.Inputs;
+        return new BrowserOverlayInputAvailabilityEvidence(
+            FixtureControlsAvailable: true,
+            IsAvailable: inputs?.IsAvailable == true,
+            TracePointCount: inputs?.Trace.Count ?? 0,
+            HasGraph: inputs?.HasGraph == true,
+            HasRail: inputs?.HasRail == true);
+    }
+
+    private static BrowserOverlayMapFallbackEvidence? MapFallbackEvidence(
+        string overlayId,
+        BrowserOverlayDisplayModel model,
+        LiveTelemetrySnapshot snapshot)
+    {
+        if (!string.Equals(overlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || !model.ShouldRender
+            || !string.Equals(model.TrackMap?.RenderModel.MapKind, "circle", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return new BrowserOverlayMapFallbackEvidence(
+            Kind: "circle",
+            Reason: "no-generated-track-map",
+            CurrentTrackKey: snapshot.Models.Session.TrackDisplayName ?? "unknown-track");
+    }
+
+    private static string? UnavailableContentPolicy(BrowserOverlayDisplayModel model)
+    {
+        if (!IsUnavailableModel(model))
+        {
+            return null;
+        }
+
+        if (IsSectionAwareUnavailablePlaceholderModel(model))
+        {
+            return "section-aware-placeholders";
+        }
+
+        return !HasSemanticRenderedContent(model) ? "suppress-rendered-content" : null;
+    }
+
+    private static bool IsSectionAwareUnavailablePlaceholderModel(BrowserOverlayDisplayModel model)
+    {
+        return string.Equals(model.OverlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && model.MetricSections?.Any(section => section.Rows.Count > 0) == true
+            && model.Status.Contains("weather unavailable", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsUnavailableModel(BrowserOverlayDisplayModel model)
+    {
+        return !model.ShouldRender
+            || model.Status.Contains("waiting", StringComparison.OrdinalIgnoreCase)
+            || model.Status.Contains("unavailable", StringComparison.OrdinalIgnoreCase)
+            || model.Status.Contains("hidden", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasSemanticRenderedContent(BrowserOverlayDisplayModel model)
+    {
+        return model.Rows.Count > 0
+            || model.Points.Count > 0
+            || model.Metrics.Count > 0
+            || (model.MetricSections?.Any(section => section.Rows.Count > 0) == true)
+            || (model.GridSections?.Any(section => section.Rows.Count > 0) == true)
+            || model.Graph?.Series.Count > 0
+            || model.Graph?.TrendMetrics.Count > 0
+            || model.Inputs?.HasGraph == true
+            || model.Inputs?.HasRail == true
+            || model.Inputs?.Trace.Count > 0
+            || model.CarRadar?.RenderModel.ShouldRender == true
+            || model.TrackMap?.RenderModel.Markers.Count > 0
+            || model.Flags?.Flags.Count > 0
+            || model.StreamChat?.Rows.Count > 0;
+    }
+
+    private static BrowserOverlayDisplayModel SuppressUnavailableRenderedContent(BrowserOverlayDisplayModel model)
+    {
+        var unavailableContentPolicy = UnavailableContentPolicy(model);
+        if (!IsUnavailableModel(model)
+            || string.Equals(unavailableContentPolicy, "section-aware-placeholders", StringComparison.Ordinal))
+        {
+            return model;
+        }
+
+        return model with
+        {
+            ShouldRender = false,
+            Columns = [],
+            Rows = [],
+            Metrics = [],
+            Points = [],
+            HeaderItems = [],
+            Graph = EmptyGraphModel(model.Graph),
+            CarRadar = EmptyCarRadarModel(model.CarRadar),
+            TrackMap = EmptyTrackMapModel(model.TrackMap),
+            Inputs = EmptyInputModel(model.Inputs),
+            Flags = EmptyFlagsModel(model.Flags),
+            StreamChat = EmptyStreamChatModel(model.StreamChat),
+            GridSections = [],
+            MetricSections = []
+        };
+    }
+
+    private static BrowserGapGraph? EmptyGraphModel(BrowserGapGraph? graph)
+    {
+        return graph is null
+            ? null
+            : graph with
+            {
+                Series = [],
+                Weather = [],
+                LeaderChanges = [],
+                DriverChanges = [],
+                SelectedSeriesCount = 0,
+                TrendMetrics = [],
+                ActiveThreat = null,
+                ThreatCarIdx = null,
+                Scale = null
+            };
+    }
+
+    private static BrowserCarRadarModel? EmptyCarRadarModel(BrowserCarRadarModel? carRadar)
+    {
+        return carRadar is null
+            ? null
+            : carRadar with
+            {
+                IsAvailable = false,
+                HasCarLeft = false,
+                HasCarRight = false,
+                Cars = [],
+                StrongestMulticlassApproach = null,
+                HasCurrentSignal = false,
+                RenderModel = CarRadarRenderModel.Empty
+            };
+    }
+
+    private static BrowserTrackMapModel? EmptyTrackMapModel(BrowserTrackMapModel? trackMap)
+    {
+        return trackMap is null
+            ? null
+            : trackMap with
+            {
+                Markers = [],
+                Sectors = [],
+                RenderModel = trackMap.RenderModel with
+                {
+                    IsAvailable = false,
+                    Primitives = [],
+                    Markers = []
+                }
+            };
+    }
+
+    private static InputStateRenderModel? EmptyInputModel(InputStateRenderModel? inputs)
+    {
+        return inputs is null
+            ? null
+            : inputs with
+            {
+                HasGraph = false,
+                HasRail = false,
+                HasContent = false,
+                Trace = []
+            };
+    }
+
+    private static BrowserFlagsModel? EmptyFlagsModel(BrowserFlagsModel? flags)
+    {
+        return flags is null
+            ? null
+            : flags with { Flags = [] };
+    }
+
+    private static BrowserStreamChatModel? EmptyStreamChatModel(BrowserStreamChatModel? streamChat)
+    {
+        return streamChat is null
+            ? null
+            : streamChat with { Rows = [] };
+    }
+
+    private static BrowserOverlayDisplayModel WithoutOrdinaryOverlayTitle(BrowserOverlayDisplayModel model)
+    {
+        if (string.Equals(model.OverlayId, GarageCoverOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(model.Title))
+        {
+            return model;
+        }
+
+        return model with { Title = string.Empty };
+    }
+
+    private static int SemanticContentRowCount(BrowserOverlayDisplayModel model)
+    {
+        return model.Rows.Count
+            + model.Metrics.Count
+            + (model.MetricSections?.Sum(section => section.Rows.Count) ?? 0)
+            + (model.GridSections?.Sum(section => section.Rows.Count) ?? 0)
+            + (model.StreamChat?.Rows.Count ?? 0);
+    }
+
+    private static double? TryParseTimingSeconds(string? value)
+    {
+        var text = value?.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var sign = 1d;
+        if (text[0] == '+' || text[0] == '-')
+        {
+            sign = text[0] == '-' ? -1d : 1d;
+            text = text[1..];
+        }
+
+        if (text.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+        {
+            text = text[..^1];
+        }
+
+        var parts = text.Split(':', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length > 2)
+        {
+            return null;
+        }
+
+        if (!double.TryParse(
+                parts[^1],
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var seconds))
+        {
+            return null;
+        }
+
+        var minutes = 0d;
+        if (parts.Length == 2
+            && !double.TryParse(
+                parts[0],
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out minutes))
+        {
+            return null;
+        }
+
+        return sign * (minutes * 60d + seconds);
     }
 
     private static void AddOverlaySpecificEffectiveSettings(
@@ -2573,6 +3403,13 @@ internal sealed class BrowserOverlayModelFactory
     {
         if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
+            settings.Add(new(
+                "carsInClass",
+                overlay.GetIntegerOption(
+                    OverlayOptionKeys.StandingsCarsInClass,
+                    defaultValue: StandingsBrowserSettings.Default.MaximumRows,
+                    minimum: StandingsBrowserSettings.MinimumCarsInClass,
+                    maximum: StandingsBrowserSettings.MaximumCarsInClass)));
             settings.Add(new(
                 "otherClassRows",
                 overlay.GetIntegerOption(
@@ -2591,6 +3428,17 @@ internal sealed class BrowserOverlayModelFactory
             var carsBehind = overlay.GetIntegerOption(OverlayOptionKeys.GapCarsBehind, defaultValue: 5, minimum: 0, maximum: 12);
             settings.Add(new("carsAhead", carsAhead));
             settings.Add(new("carsBehind", carsBehind));
+            foreach (var block in OverlayContentColumnSettings.GapToLeader.Blocks ?? [])
+            {
+                settings.Add(new(
+                    block.EnabledOptionKey,
+                    OverlayContentColumnSettings.ContentEnabledForSession(
+                        overlay,
+                        block.EnabledOptionKey,
+                        block.DefaultEnabled,
+                        sessionKind),
+                    session));
+            }
             settings.Add(new("gap.cars-window", new Dictionary<string, int>
             {
                 ["carsAhead"] = carsAhead,
@@ -2607,6 +3455,20 @@ internal sealed class BrowserOverlayModelFactory
                     defaultEnabled: true,
                     sessionKind),
                 session));
+            settings.Add(new(
+                OverlayOptionKeys.RadarMulticlassWarningSeconds,
+                overlay.GetIntegerOption(
+                    OverlayOptionKeys.RadarMulticlassWarningSeconds,
+                    CarRadarOverlayViewModel.DefaultMulticlassWarningRangeSeconds,
+                    CarRadarOverlayViewModel.MinimumMulticlassWarningRangeSeconds,
+                    CarRadarOverlayViewModel.MaximumMulticlassWarningRangeSeconds)));
+            settings.Add(new(
+                OverlayOptionKeys.RadarVisibilitySeconds,
+                overlay.GetIntegerOption(
+                    OverlayOptionKeys.RadarVisibilitySeconds,
+                    CarRadarOverlayViewModel.DefaultRadarVisibilitySeconds,
+                    CarRadarOverlayViewModel.MinimumRadarVisibilitySeconds,
+                    CarRadarOverlayViewModel.MaximumRadarVisibilitySeconds)));
         }
         else if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
@@ -2811,11 +3673,18 @@ internal sealed class BrowserOverlayModelFactory
             var timeRemaining = OverlayHeaderTimeFormatter.FormatTimeRemaining(snapshot);
             if (!string.IsNullOrWhiteSpace(timeRemaining))
             {
-                items.Add(new BrowserOverlayHeaderItem("timeRemaining", timeRemaining, NormalizeHeaderTone(tone)));
+                items.Add(new BrowserOverlayHeaderItem("timeRemaining", timeRemaining, HeaderToneFor("timeRemaining")));
             }
         }
 
         return items;
+    }
+
+    private static string HeaderToneFor(string key)
+    {
+        return string.Equals(key, "timeRemaining", StringComparison.OrdinalIgnoreCase)
+            ? "normal"
+            : "normal";
     }
 
     private static string SourceText(OverlaySettings? overlay, LiveTelemetrySnapshot snapshot, string source)
@@ -2838,8 +3707,13 @@ internal sealed class BrowserOverlayModelFactory
 
     private static int FuelVisibleRowsForHeight(int height, bool showFooter)
     {
-        var bodyHeight = height - FuelHeaderHeight - (showFooter ? FuelFooterHeight : 8) - FuelBodyGap - 34;
-        return Math.Max(1, bodyHeight / (FuelRowHeight + FuelRowGap));
+        var geometry = OverlayGeometryContracts.MetricRows;
+        var bodyHeight = height
+            - geometry.HeaderChromeHeight
+            - (showFooter ? geometry.FooterChromeHeight : geometry.CollapsedFooterReserveHeight)
+            - geometry.BodyGap
+            - 34;
+        return Math.Max(1, (int)Math.Floor(bodyHeight / (geometry.PlainRowHeight + geometry.RowGap)));
     }
 
     private static string BrowserStatus(IReadOnlyList<BrowserOverlayHeaderItem> headerItems, string fallback)
@@ -2912,7 +3786,7 @@ internal sealed class BrowserOverlayModelFactory
 
     private static string FuelChromeTone(FuelStrategySnapshot? strategy)
     {
-        if (strategy is null || !strategy.HasData || strategy.FuelPerLapLiters is null)
+        if (strategy is null || !strategy.HasData || !HasTrustedFuelStrategy(strategy))
         {
             return "waiting";
         }
@@ -2972,7 +3846,8 @@ internal sealed record BrowserOverlayDisplayModel(
     IReadOnlyList<BrowserOverlayMetricSection>? MetricSections = null,
     bool ShouldRender = true,
     double RootOpacity = 1d,
-    BrowserOverlayEffectiveSettings? EffectiveSettings = null)
+    BrowserOverlayEffectiveSettings? EffectiveSettings = null,
+    BrowserOverlayFuelStrategyEvidence? FuelStrategyEvidence = null)
 {
     public static BrowserOverlayDisplayModel Table(
         string overlayId,
@@ -2981,7 +3856,8 @@ internal sealed record BrowserOverlayDisplayModel(
         string source,
         IReadOnlyList<OverlayContentBrowserColumn> columns,
         IReadOnlyList<BrowserOverlayDisplayRow> rows,
-        IReadOnlyList<BrowserOverlayHeaderItem>? headerItems = null)
+        IReadOnlyList<BrowserOverlayHeaderItem>? headerItems = null,
+        bool shouldRender = true)
     {
         return new BrowserOverlayDisplayModel(
             overlayId,
@@ -2993,7 +3869,8 @@ internal sealed record BrowserOverlayDisplayModel(
             rows,
             [],
             [],
-            headerItems ?? []);
+            headerItems ?? [],
+            ShouldRender: shouldRender);
     }
 
     public static BrowserOverlayDisplayModel MetricRows(
@@ -3036,14 +3913,91 @@ internal sealed record BrowserOverlayEffectiveSettingSources(
     BrowserOverlayEffectiveSettingSource LocalhostObs,
     BrowserOverlayEffectiveSettingSource WindowsNative);
 
-internal sealed record BrowserOverlayEffectiveSettingSource(bool Applied);
+internal sealed record BrowserOverlayEffectiveSettingSource(
+    bool Applied,
+    string? FixtureVariant = null,
+    string? SharedSettingsHash = null,
+    string? OverlaySettingsHash = null,
+    string? RoutePath = null,
+    BrowserOverlayNativePixelEvidence? PixelEvidence = null);
+
+internal sealed record BrowserOverlayNativePixelEvidence(
+    string Status,
+    string Reason);
 
 internal sealed record BrowserOverlayEffectiveRendered(
     string BodyKind,
     bool ShouldRender,
     int RowCount,
     IReadOnlyList<BrowserOverlayEffectiveHeaderItem> HeaderItems,
-    BrowserOverlayEffectiveBrowserSource BrowserSource);
+    BrowserOverlayEffectiveBrowserSource BrowserSource,
+    IReadOnlyList<string>? ColumnKeys = null,
+    IReadOnlyList<string>? RowIdentities = null,
+    int? PlaceholderRowCount = null,
+    BrowserOverlayRenderedProvenance? Provenance = null,
+    BrowserOverlayRelativeTimingEvidence? RelativeTimingEvidence = null,
+    BrowserOverlayTableStatusEvidence? TableStatus = null,
+    BrowserOverlayTimingSanityEvidence? TimingSanity = null,
+    BrowserOverlayFuelStrategyEvidence? FuelStrategy = null,
+    BrowserOverlayLayoutEvidence? Layout = null,
+    BrowserOverlayInputAvailabilityEvidence? InputAvailability = null,
+    BrowserOverlayMapFallbackEvidence? MapFallback = null,
+    string? UnavailableContentPolicy = null,
+    BrowserOverlayRoleContextEvidence? RoleContext = null);
+
+internal sealed record BrowserOverlayRenderedProvenance(
+    string EvidenceClass,
+    bool CaptureSpecific,
+    string SourceContract,
+    string? SyntheticStateKind = null);
+
+internal sealed record BrowserOverlayRelativeTimingEvidence(
+    string SessionKind,
+    bool PhysicalProximityAvailable,
+    IReadOnlyList<string> TimingColumnKeys);
+
+internal sealed record BrowserOverlayTableStatusEvidence(
+    int DataRowCount,
+    int ClassHeaderCount,
+    int PlaceholderRowCount,
+    int ClippedRowCount,
+    int StatusCarCount);
+
+internal sealed record BrowserOverlayTimingSanityEvidence(
+    double MaxIntervalGapRatio,
+    int AbsurdIntervalCount);
+
+internal sealed record BrowserOverlayFuelStrategyEvidence(
+    string AdditionalFuelNeedState,
+    bool SuccessCopyRequiresMeasuredNeed);
+
+internal sealed record BrowserOverlayLayoutEvidence(
+    int ContentRowCount,
+    double UnusedHeightRatio);
+
+internal sealed record BrowserOverlayInputAvailabilityEvidence(
+    bool FixtureControlsAvailable,
+    bool IsAvailable,
+    int TracePointCount,
+    bool HasGraph,
+    bool HasRail);
+
+internal sealed record BrowserOverlayMapFallbackEvidence(
+    string Kind,
+    string Reason,
+    string CurrentTrackKey);
+
+internal sealed record BrowserOverlayRoleContextEvidence(
+    int? PlayerCarIdx,
+    int? FocusCarIdx,
+    bool FocusIsPlayer,
+    bool HasExplicitNonPlayerFocus,
+    bool? PlayerIsSpectator,
+    bool? FocusIsSpectator,
+    string LocalRole,
+    string RoleSource,
+    bool? IsSpotting,
+    string SpottingSignalStatus);
 
 internal sealed record BrowserOverlayEffectiveBrowserSource(
     int BaseWidth,
@@ -3072,6 +4026,8 @@ internal sealed record BrowserCarRadarModel(
     IReadOnlyList<LiveSpatialCar> Cars,
     LiveMulticlassApproach? StrongestMulticlassApproach,
     bool ShowMulticlassWarning,
+    int MulticlassWarningRangeSeconds,
+    int RadarVisibilitySeconds,
     bool PreviewVisible,
     bool HasCurrentSignal,
     CarRadarRenderModel RenderModel);
@@ -3178,7 +4134,9 @@ internal sealed record BrowserGapGraph(
     int? ThreatCarIdx,
     double MetricDeadbandSeconds,
     string ComparisonLabel = "--",
-    BrowserGapScale? Scale = null);
+    BrowserGapScale? Scale = null,
+    bool ShowGraph = true,
+    bool ShowTrendMetrics = true);
 
 internal sealed record BrowserGapTrendMetric(
     string Label,
@@ -3194,7 +4152,8 @@ internal sealed record BrowserGapTrendMetric(
     BrowserTireMetricValue? ComparisonTire = null,
     string? PrimaryText = null,
     string? ThreatText = null,
-    string? ComparisonText = null);
+    string? ComparisonText = null,
+    int? CompletedReferenceLaps = null);
 
 internal sealed record BrowserBehindGainMetric(
     int CarIdx,
@@ -3255,6 +4214,8 @@ internal sealed record BrowserGapSeries(
     double Alpha,
     bool IsStickyExit,
     bool IsStale,
+    string? BaseColor,
+    string? RenderedColor,
     IReadOnlyList<BrowserGapTrendPoint> Points);
 
 internal sealed record BrowserGapTrendPoint(

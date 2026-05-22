@@ -25,7 +25,7 @@ npm run media:packet
 | Settings - Flags | [app/11-settings-flags.png](app/11-settings-flags.png) | Flags overlay visibility, sizing, browser source, and preview controls. |
 | Settings - Session / Weather | [app/12-settings-session-weather.png](app/12-settings-session-weather.png) | Session and weather overlay visibility, content, sizing, browser source, and preview controls. |
 | Settings - Pit Service | [app/13-settings-pit-service.png](app/13-settings-pit-service.png) | Pit service overlay visibility, tire grid content, sizing, browser source, and preview controls. |
-| Settings - Diagnostics | [app/14-settings-diagnostics.png](app/14-settings-diagnostics.png) | Diagnostic telemetry, local map building, support bundle, and support folder controls. |
+| Settings - Diagnostics | [app/14-settings-diagnostics.png](app/14-settings-diagnostics.png) | Enhanced iRacing telemetry capture, bundle actions, and data analysis opt-out controls. |
 | Standings | [overlays/01-standings-race.png](overlays/01-standings-race.png) | Multi-class race standings with class headers, focus row, gaps, laps, and pit state. |
 | Relative | [overlays/02-relative-race.png](overlays/02-relative-race.png) | Nearby cars around the focus driver with lap relationship coloring and compact empty-row spacing. |
 | Fuel Calculator | [overlays/03-fuel-calculator-race.png](overlays/03-fuel-calculator-race.png) | Race stint plan, current fuel, stop count, and measured/history-backed burn evidence. |

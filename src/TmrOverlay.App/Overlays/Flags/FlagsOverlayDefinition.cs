@@ -1,22 +1,24 @@
 using System.Drawing;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
+using FlagsGeometry = TmrOverlay.App.Overlays.OverlayGeometryContractValues.Flags;
+using OverlaySizes = TmrOverlay.App.Overlays.OverlayGeometryContractValues.OverlaySizes;
 
 namespace TmrOverlay.App.Overlays.Flags;
 
 internal static class FlagsOverlayDefinition
 {
     public const string PrimaryScreenDefaultId = "primary-screen-default";
-    public const int MinimumWidth = 180;
-    public const int MaximumWidth = 960;
-    public const int MinimumHeight = 96;
-    public const int MaximumHeight = 420;
+    public const int MinimumWidth = FlagsGeometry.MinimumWidth;
+    public const int MaximumWidth = FlagsGeometry.MaximumWidth;
+    public const int MinimumHeight = FlagsGeometry.MinimumHeight;
+    public const int MaximumHeight = FlagsGeometry.MaximumHeight;
 
     public static OverlayDefinition Definition { get; } = new(
         Id: "flags",
         DisplayName: "Flags",
-        DefaultWidth: 360,
-        DefaultHeight: 170,
+        DefaultWidth: OverlaySizes.FlagsWidth,
+        DefaultHeight: OverlaySizes.FlagsHeight,
         ShowSessionFilters: false,
         ShowScaleControl: true,
         ShowOpacityControl: false,

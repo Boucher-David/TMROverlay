@@ -50,6 +50,7 @@ async function pollStreamChatModel() {
     const model = await fetchOverlayModel('stream-chat');
     renderStreamChatModel(model);
   } catch (error) {
+    postBrowserSourceEvent('model-error', null, error);
     renderStreamChatLines([
       { name: 'TMR', text: `Chat model unavailable: ${error.message}`, kind: 'error' }
     ]);
@@ -62,6 +63,7 @@ async function pollStreamChatModel() {
 function renderStreamChatModel(model) {
   streamChatState.lastModel = model;
   if (model?.shouldRender === false) {
+    postBrowserSourceEvent('model-hidden', model);
     modelRootOpacity = rootOpacityFromModel(model);
     applyOverlayOpacity(0);
     contentEl.innerHTML = '';
@@ -69,6 +71,7 @@ function renderStreamChatModel(model) {
     return;
   }
 
+  postBrowserSourceEvent(model ? 'model-render' : 'model-null', model);
   modelRootOpacity = rootOpacityFromModel(model);
   applyOverlayOpacity(1);
   const rows = model?.streamChat?.rows || [];
@@ -98,8 +101,14 @@ function renderStreamChatLines(lines) {
 
 function latestVisibleChatLines(lines) {
   const rows = Array.isArray(lines) ? lines : [];
-  const availableHeight = Math.max(48, contentEl?.clientHeight || window.innerHeight - 42);
-  const budget = Math.max(1, Math.min(36, Math.floor((availableHeight + 8) / 52)));
+  const minimumHeight = numberOr(streamChatGeometry?.minimumAvailableHeight, 48);
+  const rowGap = numberOr(streamChatGeometry?.rowGap, 8);
+  const rowBudget = numberOr(streamChatGeometry?.rowBudget, 52);
+  const maxRows = Math.max(1, Math.round(numberOr(streamChatGeometry?.maxRows, 36)));
+  const availableHeight = Math.max(
+    minimumHeight,
+    contentEl?.clientHeight || window.innerHeight - numberOr(streamChatGeometry?.availableHeightFallbackOffset, 42));
+  const budget = Math.max(1, Math.min(maxRows, Math.floor((availableHeight + rowGap) / rowBudget)));
   return rows.slice(-budget);
 }
 

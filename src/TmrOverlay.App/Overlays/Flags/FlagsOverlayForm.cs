@@ -9,6 +9,7 @@ using TmrOverlay.App.Performance;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
 using TmrOverlay.Core.Telemetry.Live;
+using FlagsGeometry = TmrOverlay.App.Overlays.OverlayGeometryContractValues.Flags;
 
 namespace TmrOverlay.App.Overlays.Flags;
 
@@ -24,9 +25,9 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
         "error",
         SimpleTelemetryTone.Error);
 
-    private const int RefreshIntervalMilliseconds = 250;
-    private const float OuterPadding = 8f;
-    private const float CellGap = 8f;
+    private const int RefreshIntervalMilliseconds = FlagsGeometry.RefreshIntervalMilliseconds;
+    private const float OuterPadding = FlagsGeometry.OuterPadding;
+    private const float CellGap = FlagsGeometry.CellGap;
 
     private readonly ILiveTelemetrySource _liveTelemetrySource;
     private readonly ILogger _logger;
@@ -289,22 +290,27 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
         FlagOverlayDisplayItem flag,
         int index)
     {
-        var compact = cell.Height < 92f || cell.Width < 132f;
-        var labelHeight = compact ? 16f : 18f;
+        var compact = cell.Height < FlagsGeometry.CompactCellHeightThreshold || cell.Width < FlagsGeometry.CompactCellWidthThreshold;
+        var labelHeight = compact ? FlagsGeometry.CompactLabelHeight : FlagsGeometry.LabelHeight;
         var flagArea = new RectangleF(
             cell.Left,
             cell.Top,
             cell.Width,
-            Math.Max(32f, cell.Height - labelHeight));
-        var poleX = flagArea.Left + Math.Max(12f, flagArea.Width * 0.16f);
-        var poleTop = flagArea.Top + 4f;
-        var poleBottom = flagArea.Bottom - 2f;
-        using (var shadowPen = new Pen(PoleShadowColor, compact ? 2f : 3f))
+            Math.Max(FlagsGeometry.FlagAreaMinimumHeight, cell.Height - labelHeight));
+        var poleX = flagArea.Left + Math.Max(FlagsGeometry.PoleMinimumInsetX, flagArea.Width * FlagsGeometry.PoleInsetFractionX);
+        var poleTop = flagArea.Top + FlagsGeometry.PoleTopOffset;
+        var poleBottom = flagArea.Bottom - FlagsGeometry.PoleBottomInset;
+        using (var shadowPen = new Pen(PoleShadowColor, compact ? FlagsGeometry.PoleCompactStrokeWidth : FlagsGeometry.PoleStrokeWidth))
         {
-            graphics.DrawLine(shadowPen, poleX + 1f, poleTop + 1f, poleX + 1f, poleBottom + 1f);
+            graphics.DrawLine(
+                shadowPen,
+                poleX + FlagsGeometry.PoleShadowOffset,
+                poleTop + FlagsGeometry.PoleShadowOffset,
+                poleX + FlagsGeometry.PoleShadowOffset,
+                poleBottom + FlagsGeometry.PoleShadowOffset);
         }
 
-        using (var polePen = new Pen(PoleColor, compact ? 2f : 3f)
+        using (var polePen = new Pen(PoleColor, compact ? FlagsGeometry.PoleCompactStrokeWidth : FlagsGeometry.PoleStrokeWidth)
         {
             StartCap = LineCap.Round,
             EndCap = LineCap.Round
@@ -313,12 +319,14 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
             graphics.DrawLine(polePen, poleX, poleTop, poleX, poleBottom);
         }
 
-        var clothLeft = poleX + 1f;
-        var clothWidth = Math.Max(48f, flagArea.Right - clothLeft - 8f);
-        var clothHeight = Math.Max(24f, Math.Min(flagArea.Height * 0.7f, clothWidth * 0.58f));
-        var clothTop = flagArea.Top + Math.Max(4f, (flagArea.Height - clothHeight) * 0.32f);
+        var clothLeft = poleX + FlagsGeometry.ClothLeftOffset;
+        var clothWidth = Math.Max(FlagsGeometry.ClothMinimumWidth, flagArea.Right - clothLeft - FlagsGeometry.ClothRightInset);
+        var clothHeight = Math.Max(
+            FlagsGeometry.ClothMinimumHeight,
+            Math.Min(flagArea.Height * FlagsGeometry.ClothAreaHeightFraction, clothWidth * FlagsGeometry.ClothWidthHeightFraction));
+        var clothTop = flagArea.Top + Math.Max(FlagsGeometry.ClothTopMinimum, (flagArea.Height - clothHeight) * FlagsGeometry.ClothTopFraction);
         var clothBounds = new RectangleF(clothLeft, clothTop, clothWidth, clothHeight);
-        using var path = CreateFlagPath(clothBounds, compact ? 3.5f : 5.5f, index);
+        using var path = CreateFlagPath(clothBounds, compact ? FlagsGeometry.CompactWave : FlagsGeometry.Wave, index);
         DrawFlagCloth(graphics, path, flag, clothBounds);
         DrawFlagLabel(graphics, cell, flag, compact);
     }
@@ -343,7 +351,7 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
 
         if (flag.Kind == FlagDisplayKind.Meatball)
         {
-            var diameter = Math.Min(clothBounds.Width, clothBounds.Height) * 0.44f;
+            var diameter = Math.Min(clothBounds.Width, clothBounds.Height) * FlagsGeometry.MeatballDiameterFraction;
             var disc = new RectangleF(
                 clothBounds.Left + (clothBounds.Width - diameter) / 2f,
                 clothBounds.Top + (clothBounds.Height - diameter) / 2f,
@@ -357,12 +365,15 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
             using var stripeBrush = new SolidBrush(flag.Kind == FlagDisplayKind.Debris
                 ? Color.FromArgb(208, 245, 124, 38)
                 : Color.FromArgb(72, 0, 0, 0));
-            var stripeWidth = Math.Max(8f, clothBounds.Width * 0.12f);
+            var stripeWidth = Math.Max(FlagsGeometry.StripeMinimumWidth, clothBounds.Width * FlagsGeometry.StripeWidthFraction);
             var oldClip = graphics.Clip;
             try
             {
                 graphics.SetClip(path, CombineMode.Intersect);
-                for (var x = clothBounds.Left - clothBounds.Height; x < clothBounds.Right; x += stripeWidth * 2.5f)
+                var stride = stripeWidth * (flag.Kind == FlagDisplayKind.Debris
+                    ? FlagsGeometry.DebrisStripeStrideMultiplier
+                    : FlagsGeometry.CautionStripeStrideMultiplier);
+                for (var x = clothBounds.Left - clothBounds.Height; x < clothBounds.Right; x += stride)
                 {
                     var points = new[]
                     {
@@ -393,7 +404,11 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
         var label = string.IsNullOrWhiteSpace(flag.Detail)
             ? flag.Label
             : $"{flag.Label} {flag.Detail}";
-        using var font = new Font("Segoe UI", compact ? 7.5f : 8.5f, FontStyle.Bold, GraphicsUnit.Point);
+        using var font = new Font(
+            "Segoe UI",
+            compact ? FlagsGeometry.NativeCompactLabelPointSize : FlagsGeometry.NativeLabelPointSize,
+            FontStyle.Bold,
+            GraphicsUnit.Point);
         using var brush = new SolidBrush(Color.FromArgb(235, 247, 251, 255));
         using var format = new StringFormat
         {
@@ -402,7 +417,11 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
             Trimming = StringTrimming.EllipsisCharacter,
             FormatFlags = StringFormatFlags.NoWrap
         };
-        var labelRect = new RectangleF(cell.Left + 2f, cell.Top, Math.Max(1f, cell.Width - 4f), Math.Max(1f, cell.Height - 1f));
+        var labelRect = new RectangleF(
+            cell.Left + FlagsGeometry.LabelInsetX,
+            cell.Top,
+            Math.Max(1f, cell.Width - FlagsGeometry.LabelInsetX * 2f),
+            Math.Max(1f, cell.Height - FlagsGeometry.LabelBottomInset));
         graphics.DrawString(label, font, brush, labelRect, format);
     }
 
@@ -418,13 +437,11 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
             using var whiteBrush = new SolidBrush(Color.FromArgb(245, 247, 250));
             using var blackBrush = new SolidBrush(Color.FromArgb(8, 10, 12));
             graphics.FillRectangle(whiteBrush, clothBounds);
-            const int columns = 6;
-            const int rows = 4;
-            var squareWidth = clothBounds.Width / columns;
-            var squareHeight = clothBounds.Height / rows;
-            for (var row = 0; row < rows; row++)
+            var squareWidth = clothBounds.Width / FlagsGeometry.CheckeredColumns;
+            var squareHeight = clothBounds.Height / FlagsGeometry.CheckeredRows;
+            for (var row = 0; row < FlagsGeometry.CheckeredRows; row++)
             {
-                for (var column = 0; column < columns; column++)
+                for (var column = 0; column < FlagsGeometry.CheckeredColumns; column++)
                 {
                     if ((row + column) % 2 == 0)
                     {
@@ -467,19 +484,19 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
         var path = new GraphicsPath();
         var leftTop = new PointF(bounds.Left, bounds.Top);
         var rightTop = new PointF(bounds.Right, bounds.Top + wave * phase);
-        var rightBottom = new PointF(bounds.Right, bounds.Bottom + wave * 0.4f * phase);
+        var rightBottom = new PointF(bounds.Right, bounds.Bottom + wave * FlagsGeometry.PathBottomWaveFraction * phase);
         var leftBottom = new PointF(bounds.Left, bounds.Bottom);
         path.StartFigure();
         path.AddBezier(
             leftTop,
-            new PointF(bounds.Left + bounds.Width * 0.28f, bounds.Top - wave * phase),
-            new PointF(bounds.Left + bounds.Width * 0.62f, bounds.Top + wave * phase),
+            new PointF(bounds.Left + bounds.Width * FlagsGeometry.PathControlOneFraction, bounds.Top - wave * phase),
+            new PointF(bounds.Left + bounds.Width * FlagsGeometry.PathControlTwoFraction, bounds.Top + wave * phase),
             rightTop);
         path.AddLine(rightTop, rightBottom);
         path.AddBezier(
             rightBottom,
-            new PointF(bounds.Left + bounds.Width * 0.62f, bounds.Bottom - wave * phase),
-            new PointF(bounds.Left + bounds.Width * 0.28f, bounds.Bottom + wave * phase),
+            new PointF(bounds.Left + bounds.Width * FlagsGeometry.PathControlTwoFraction, bounds.Bottom - wave * phase),
+            new PointF(bounds.Left + bounds.Width * FlagsGeometry.PathControlOneFraction, bounds.Bottom + wave * phase),
             leftBottom);
         path.CloseFigure();
         return path;
@@ -505,10 +522,10 @@ internal sealed class FlagsOverlayForm : PersistentOverlayForm
         return count switch
         {
             <= 1 => (1, 1),
-            2 => (2, 1),
-            <= 4 => (2, 2),
-            <= 6 => (3, 2),
-            _ => (4, 2)
+            var value when value <= FlagsGeometry.GridTwoCountMaximum => (2, 1),
+            var value when value <= FlagsGeometry.GridFourCountMaximum => (2, 2),
+            var value when value <= FlagsGeometry.GridSixCountMaximum => (3, 2),
+            _ => (FlagsGeometry.GridMaximumColumns, (int)Math.Ceiling(count / (double)FlagsGeometry.GridMaximumColumns))
         };
     }
 

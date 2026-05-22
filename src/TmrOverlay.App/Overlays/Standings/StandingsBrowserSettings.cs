@@ -11,6 +11,8 @@ internal sealed record StandingsBrowserSettings(
     IReadOnlyList<OverlayContentBrowserColumn> Columns)
 {
     private const int DefaultMaximumRows = StandingsOverlayViewModel.DefaultMaximumRows;
+    public const int MinimumCarsInClass = 1;
+    public const int MaximumCarsInClass = StandingsOverlayViewModel.MaximumRenderedRows;
 
     public static StandingsBrowserSettings Default { get; } = new(
         MaximumRows: DefaultMaximumRows,
@@ -30,7 +32,11 @@ internal sealed record StandingsBrowserSettings(
             || classSeparatorBlock is null
             || OverlayContentColumnSettings.BlockEnabled(standings, classSeparatorBlock, sessionKind);
         return new StandingsBrowserSettings(
-            MaximumRows: DefaultMaximumRows,
+            MaximumRows: standings?.GetIntegerOption(
+                OverlayOptionKeys.StandingsCarsInClass,
+                defaultValue: Default.MaximumRows,
+                minimum: MinimumCarsInClass,
+                maximum: MaximumCarsInClass) ?? Default.MaximumRows,
             ClassSeparatorsEnabled: classSeparatorsEnabled,
             OtherClassRowsPerClass: classSeparatorsEnabled
                 ? standings?.GetIntegerOption(

@@ -72,6 +72,44 @@ internal sealed class BrowserOverlayPage
         var normalized = string.IsNullOrWhiteSpace(route)
             ? "/"
             : route.Trim().TrimEnd('/').ToLowerInvariant();
+        normalized = StripRouteSuffix(normalized);
         return normalized.Length == 0 ? "/" : normalized;
     }
+
+    private static string StripRouteSuffix(string route)
+    {
+        var suffixIndex = route.IndexOfAny(new[] { '?', '#' });
+        if (suffixIndex >= 0)
+        {
+            route = route[..suffixIndex].TrimEnd('/');
+        }
+
+        if (!route.StartsWith("/overlays/", StringComparison.Ordinal))
+        {
+            return route;
+        }
+
+        foreach (var marker in QueryLikeRouteSuffixMarkers)
+        {
+            var markerIndex = route.IndexOf(marker, StringComparison.Ordinal);
+            if (markerIndex > "/overlays/".Length)
+            {
+                return route[..markerIndex].TrimEnd('/', '&', '?');
+            }
+        }
+
+        return route;
+    }
+
+    private static readonly string[] QueryLikeRouteSuffixMarkers =
+    [
+        "&client=",
+        "&clientkind=",
+        "&tmrclient=",
+        "&tmrclientkind=",
+        "client=",
+        "clientkind=",
+        "tmrclient=",
+        "tmrclientkind="
+    ];
 }

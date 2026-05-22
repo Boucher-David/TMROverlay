@@ -1,11 +1,14 @@
 using TmrOverlay.App.Overlays.Relative;
 using TmrOverlay.App.Overlays.Standings;
+using TmrOverlay.App.Overlays.FuelCalculator;
+using TmrOverlay.App.Overlays.GapToLeader;
 using TmrOverlay.App.Overlays.InputState;
 using TmrOverlay.App.Overlays.PitService;
 using TmrOverlay.App.Overlays.SessionWeather;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
+using TableGeometry = TmrOverlay.App.Overlays.OverlayGeometryContractValues.TableGeometry;
 
 namespace TmrOverlay.App.Overlays.Content;
 
@@ -109,6 +112,11 @@ internal static class OverlayContentColumnSettings
     public const string RelativeGapColumnId = "relative.gap";
     public const string RelativePitColumnId = "relative.pit";
     public const string StandingsClassSeparatorBlockId = "standings.class-separators";
+    public const string FuelCalculatorRacePlanBlockId = "fuel-calculator.race.plan";
+    public const string FuelCalculatorRaceFuelBlockId = "fuel-calculator.race.fuel";
+    public const string FuelCalculatorStintTargetsBlockId = "fuel-calculator.race.stint-targets";
+    public const string FuelCalculatorRangeBlockId = "fuel-calculator.range.fuel";
+    public const string FuelCalculatorUsageBlockId = "fuel-calculator.usage";
     public const string InputThrottleTraceBlockId = "input-state.trace-throttle";
     public const string InputBrakeTraceBlockId = "input-state.trace-brake";
     public const string InputClutchTraceBlockId = "input-state.trace-clutch";
@@ -118,6 +126,15 @@ internal static class OverlayContentColumnSettings
     public const string InputSteeringBlockId = "input-state.steering";
     public const string InputGearBlockId = "input-state.gear";
     public const string InputSpeedBlockId = "input-state.speed";
+    public const string GapGraphBlockId = "gap-to-leader.graph";
+    public const string GapTrendLastBlockId = "gap-to-leader.trend.last";
+    public const string GapTrend5LBlockId = "gap-to-leader.trend.5l";
+    public const string GapTrend10LBlockId = "gap-to-leader.trend.10l";
+    public const string GapTrendPitBlockId = "gap-to-leader.trend.pit";
+    public const string GapTrendPitLapBlockId = "gap-to-leader.trend.pit-lap";
+    public const string GapTrendStintBlockId = "gap-to-leader.trend.stint";
+    public const string GapTrendTireBlockId = "gap-to-leader.trend.tire";
+    public const string GapTrendStatusBlockId = "gap-to-leader.trend.status";
     public const string PitServiceTireCompoundBlockId = "pit-service.tire-compound";
     public const string PitServiceTireChangeBlockId = "pit-service.tire-change";
     public const string PitServiceTireSetLimitBlockId = "pit-service.tire-set-limit";
@@ -176,20 +193,20 @@ internal static class OverlayContentColumnSettings
 
     public static OverlayContentDefinition Standings { get; } = new(
         OverlayId: StandingsOverlayDefinition.Definition.Id,
-        BrowserWidthPadding: 34,
+        BrowserWidthPadding: TableGeometry.BrowserWidthPadding,
         BrowserMinimumHeight: 313,
         NativeMinimumTableHeight: 257,
         FallbackColumnId: StandingsDriverColumnId,
         Columns:
     [
-        new(StandingsClassPositionColumnId, "CLS", DataClassPosition, true, 1, 35, 30, 110, OverlayOptionKeys.StandingsColumnClassWidth, SettingsLabel: "Class position"),
-        new(StandingsCarNumberColumnId, "CAR", DataCarNumber, true, 2, 50, 42, 130, OverlayOptionKeys.StandingsColumnCarWidth, SettingsLabel: "Car number"),
-        new(StandingsDriverColumnId, "Driver", DataDriver, true, 3, 250, 180, 520, OverlayOptionKeys.StandingsColumnDriverWidth, Alignment: OverlayContentColumnAlignment.Left),
-        new(StandingsGapColumnId, "GAP", DataGap, true, 4, 60, 50, 160, OverlayOptionKeys.StandingsColumnGapWidth, SettingsLabel: "Class gap"),
-        new(StandingsIntervalColumnId, "INT", DataInterval, true, 5, 60, 50, 160, OverlayOptionKeys.StandingsColumnIntervalWidth, SettingsLabel: "Previous interval"),
-        new(StandingsFastestLapColumnId, "FAST", DataFastestLap, true, 6, 70, 56, 150, OverlayOptionKeys.StandingsColumnFastestLapWidth, SettingsLabel: "Fastest lap"),
-        new(StandingsLastLapColumnId, "LAST", DataLastLap, true, 7, 70, 56, 150, OverlayOptionKeys.StandingsColumnLastLapWidth, SettingsLabel: "Last lap"),
-        new(StandingsPitColumnId, "PIT", DataPit, true, 8, 48, 44, 90, OverlayOptionKeys.StandingsColumnPitWidth, SettingsLabel: "Pit status")
+        new(StandingsClassPositionColumnId, "Pos", DataClassPosition, true, 1, TableGeometry.StandingsClassPositionWidth, 30, 110, OverlayOptionKeys.StandingsColumnClassWidth, SettingsLabel: "Class position"),
+        new(StandingsCarNumberColumnId, "CAR", DataCarNumber, true, 2, TableGeometry.StandingsCarNumberWidth, 42, 130, OverlayOptionKeys.StandingsColumnCarWidth, SettingsLabel: "Car number"),
+        new(StandingsDriverColumnId, "Driver", DataDriver, true, 3, TableGeometry.StandingsDriverWidth, 180, 520, OverlayOptionKeys.StandingsColumnDriverWidth, Alignment: OverlayContentColumnAlignment.Left),
+        new(StandingsGapColumnId, "GAP", DataGap, true, 4, TableGeometry.StandingsClassGapWidth, 50, 160, OverlayOptionKeys.StandingsColumnGapWidth, SettingsLabel: "Class gap"),
+        new(StandingsIntervalColumnId, "INT", DataInterval, true, 5, TableGeometry.StandingsPreviousIntervalWidth, 50, 160, OverlayOptionKeys.StandingsColumnIntervalWidth, SettingsLabel: "Previous interval"),
+        new(StandingsFastestLapColumnId, "FAST", DataFastestLap, true, 6, TableGeometry.StandingsFastestLapWidth, 56, 150, OverlayOptionKeys.StandingsColumnFastestLapWidth, SettingsLabel: "Fastest lap"),
+        new(StandingsLastLapColumnId, "LAST", DataLastLap, true, 7, TableGeometry.StandingsLastLapWidth, 56, 150, OverlayOptionKeys.StandingsColumnLastLapWidth, SettingsLabel: "Last lap"),
+        new(StandingsPitColumnId, "PIT", DataPit, true, 8, TableGeometry.StandingsPitStatusWidth, 44, 90, OverlayOptionKeys.StandingsColumnPitWidth, SettingsLabel: "Pit status")
     ],
         Blocks:
     [
@@ -208,16 +225,32 @@ internal static class OverlayContentColumnSettings
 
     public static OverlayContentDefinition Relative { get; } = new(
         OverlayId: RelativeOverlayDefinition.Definition.Id,
-        BrowserWidthPadding: 34,
+        BrowserWidthPadding: TableGeometry.BrowserWidthPadding,
         BrowserMinimumHeight: 352,
         NativeMinimumTableHeight: 180,
-        FallbackColumnId: RelativeDriverColumnId,
+        FallbackColumnId: string.Empty,
         Columns:
     [
-        new(RelativePositionColumnId, "Pos", DataRelativePosition, true, 1, 38, 32, 100, SettingsLabel: "Relative position"),
-        new(RelativeDriverColumnId, "Driver", DataDriver, true, 2, 250, 180, 520, Alignment: OverlayContentColumnAlignment.Left),
-        new(RelativeGapColumnId, "Delta", DataGap, true, 3, 70, 60, 160, SettingsLabel: "Relative delta"),
-        new(RelativePitColumnId, "Pit", DataPit, false, 4, 48, 44, 90, SettingsLabel: "Pit status")
+        new(RelativePositionColumnId, "Pos", DataRelativePosition, true, 1, TableGeometry.RelativePositionWidth, 40, 100, SettingsLabel: "Relative position"),
+        new(RelativeDriverColumnId, "Driver", DataDriver, true, 2, TableGeometry.RelativeDriverWidth, 180, 520, Alignment: OverlayContentColumnAlignment.Left),
+        new(RelativeGapColumnId, "Delta", DataGap, true, 3, TableGeometry.RelativeDeltaWidth, 60, 160, SettingsLabel: "Relative delta"),
+        new(RelativePitColumnId, "Pit", DataPit, false, 4, TableGeometry.RelativePitStatusWidth, 44, 90, SettingsLabel: "Pit status")
+    ]);
+
+    public static OverlayContentDefinition FuelCalculator { get; } = new(
+        OverlayId: FuelCalculatorOverlayDefinition.Definition.Id,
+        BrowserWidthPadding: 42,
+        BrowserMinimumHeight: 184,
+        NativeMinimumTableHeight: 150,
+        FallbackColumnId: string.Empty,
+        Columns: [],
+        Blocks:
+    [
+        CellBlock(FuelCalculatorRacePlanBlockId, "Plan", "Show race lap, stint, stop, and save strategy fields."),
+        CellBlock(FuelCalculatorRaceFuelBlockId, "Fuel", "Show current fuel, burn, tank range, and fuel need fields."),
+        CellBlock(FuelCalculatorStintTargetsBlockId, "Stint targets", "Show generated stint target rows when the strategy is trusted."),
+        CellBlock(FuelCalculatorRangeBlockId, "Fuel range", "Show fuel range fields in practice and qualifying."),
+        CellBlock(FuelCalculatorUsageBlockId, "Fuel usage", "Show measured usage rows in practice and qualifying.")
     ]);
 
     public static OverlayContentDefinition InputState { get; } = new(
@@ -282,6 +315,71 @@ internal static class OverlayContentColumnSettings
             "Speed",
             "Show the live speed readout in the right-side input rail.",
             OverlayOptionKeys.InputShowSpeed,
+            DefaultEnabled: true)
+    ]);
+
+    public static OverlayContentDefinition GapToLeader { get; } = new(
+        OverlayId: GapToLeaderOverlayDefinition.Definition.Id,
+        BrowserWidthPadding: 42,
+        BrowserMinimumHeight: 196,
+        NativeMinimumTableHeight: 172,
+        FallbackColumnId: string.Empty,
+        Columns: [],
+        Blocks:
+    [
+        new(
+            GapGraphBlockId,
+            "Graph",
+            "Show the left-side class gap trend graph.",
+            OverlayOptionKeys.GapGraphEnabled,
+            DefaultEnabled: true),
+        new(
+            GapTrendLastBlockId,
+            "Last",
+            "Show the latest-lap delta signal.",
+            OverlayOptionKeys.GapTrendLastEnabled,
+            DefaultEnabled: true),
+        new(
+            GapTrend5LBlockId,
+            "5L",
+            "Show the five-lap gap trend signal once enough completed laps are available.",
+            OverlayOptionKeys.GapTrend5LEnabled,
+            DefaultEnabled: true),
+        new(
+            GapTrend10LBlockId,
+            "10L",
+            "Show the ten-lap gap trend signal once enough completed laps are available.",
+            OverlayOptionKeys.GapTrend10LEnabled,
+            DefaultEnabled: true),
+        new(
+            GapTrendPitBlockId,
+            "Pit",
+            "Show pit-service time comparison.",
+            OverlayOptionKeys.GapTrendPitEnabled,
+            DefaultEnabled: true),
+        new(
+            GapTrendPitLapBlockId,
+            "PLap",
+            "Show expected pit-lap comparison.",
+            OverlayOptionKeys.GapTrendPitLapEnabled,
+            DefaultEnabled: true),
+        new(
+            GapTrendStintBlockId,
+            "Stint",
+            "Show stint-lap comparison.",
+            OverlayOptionKeys.GapTrendStintEnabled,
+            DefaultEnabled: true),
+        new(
+            GapTrendTireBlockId,
+            "Tire",
+            "Show tire-compound comparison.",
+            OverlayOptionKeys.GapTrendTireEnabled,
+            DefaultEnabled: true),
+        new(
+            GapTrendStatusBlockId,
+            "Status",
+            "Show on-track/pit-road status comparison.",
+            OverlayOptionKeys.GapTrendStatusEnabled,
             DefaultEnabled: true)
     ]);
 
@@ -467,7 +565,7 @@ internal static class OverlayContentColumnSettings
 
     public static IReadOnlyList<OverlayContentColumnDefinition> RelativeColumns => Relative.Columns;
 
-    public static IReadOnlyList<OverlayContentDefinition> All { get; } = [Standings, Relative, InputState, SessionWeather, PitService, StreamChat];
+    public static IReadOnlyList<OverlayContentDefinition> All { get; } = [Standings, Relative, FuelCalculator, InputState, GapToLeader, SessionWeather, PitService, StreamChat];
 
     private static OverlayContentBlockDefinition CellBlock(
         string id,
@@ -532,10 +630,11 @@ internal static class OverlayContentColumnSettings
         IReadOnlyList<OverlayContentColumnDefinition> definitions,
         OverlaySessionKind? sessionKind)
     {
-        return definitions
+        var relevantDefinitions = ColumnsRelevantForSession(definitions, sessionKind);
+        return relevantDefinitions
             .Select(definition => ToState(settings, definition, definitions.Count, sessionKind))
             .OrderBy(column => column.Order)
-            .ThenBy(column => definitions.First(definition => string.Equals(definition.Id, column.Id, StringComparison.Ordinal)).DefaultOrder)
+            .ThenBy(column => relevantDefinitions.First(definition => string.Equals(definition.Id, column.Id, StringComparison.Ordinal)).DefaultOrder)
             .ToArray();
     }
 
@@ -607,8 +706,9 @@ internal static class OverlayContentColumnSettings
         OverlayContentDefinition definition,
         OverlaySessionKind? sessionKind)
     {
+        var definitions = ColumnsRelevantForSession(definition.Columns, sessionKind);
         var columns = settings is null
-            ? DefaultVisibleColumnsFor(definition.Columns)
+            ? DefaultVisibleColumnsFor(definitions, sessionKind)
             : VisibleColumnsFor(settings, definition, sessionKind);
         return columns
             .Select(column => new OverlayContentBrowserColumn(
@@ -618,6 +718,15 @@ internal static class OverlayContentColumnSettings
                 column.Width,
                 BrowserAlignment(column.Alignment)))
             .ToArray();
+    }
+
+    public static IReadOnlyList<OverlayContentColumnState> DefaultVisibleColumnsFor(
+        OverlayContentDefinition definition,
+        OverlaySessionKind? sessionKind)
+    {
+        return DefaultVisibleColumnsFor(
+            ColumnsRelevantForSession(definition.Columns, sessionKind),
+            sessionKind);
     }
 
     public static int TotalVisibleWidth(
@@ -718,7 +827,7 @@ internal static class OverlayContentColumnSettings
         var enabledKey = definition.EnabledKey(settings.Id);
         return new OverlayContentColumnState(
             Id: definition.Id,
-            Label: definition.Label,
+            Label: ColumnLabelForSession(definition, sessionKind),
             SettingsLabel: HumanLabel(definition),
             DataKey: definition.DataKey,
             Enabled: ContentEnabledForSession(settings, enabledKey, definition.DefaultEnabled, sessionKind),
@@ -747,6 +856,17 @@ internal static class OverlayContentColumnSettings
             .ToArray();
     }
 
+    private static IReadOnlyList<OverlayContentColumnState> DefaultVisibleColumnsFor(
+        IReadOnlyList<OverlayContentColumnDefinition> definitions,
+        OverlaySessionKind? sessionKind)
+    {
+        return definitions
+            .Where(definition => definition.DefaultEnabled)
+            .OrderBy(definition => definition.DefaultOrder)
+            .Select(definition => ToDefaultState(definition, sessionKind))
+            .ToArray();
+    }
+
     private static OverlayContentColumnState ToDefaultState(OverlayContentColumnDefinition definition)
     {
         return new OverlayContentColumnState(
@@ -760,6 +880,59 @@ internal static class OverlayContentColumnSettings
             MinimumWidth: definition.MinimumWidth,
             MaximumWidth: definition.MaximumWidth,
             Alignment: definition.Alignment);
+    }
+
+    private static OverlayContentColumnState ToDefaultState(
+        OverlayContentColumnDefinition definition,
+        OverlaySessionKind? sessionKind)
+    {
+        return new OverlayContentColumnState(
+            Id: definition.Id,
+            Label: ColumnLabelForSession(definition, sessionKind),
+            SettingsLabel: HumanLabel(definition),
+            DataKey: definition.DataKey,
+            Enabled: definition.DefaultEnabled,
+            Order: definition.DefaultOrder,
+            Width: definition.DefaultWidth,
+            MinimumWidth: definition.MinimumWidth,
+            MaximumWidth: definition.MaximumWidth,
+            Alignment: definition.Alignment);
+    }
+
+    private static IReadOnlyList<OverlayContentColumnDefinition> ColumnsRelevantForSession(
+        IReadOnlyList<OverlayContentColumnDefinition> definitions,
+        OverlaySessionKind? sessionKind)
+    {
+        return definitions
+            .Where(definition => ColumnRelevantForSession(definition, sessionKind))
+            .ToArray();
+    }
+
+    private static bool ColumnRelevantForSession(
+        OverlayContentColumnDefinition definition,
+        OverlaySessionKind? sessionKind)
+    {
+        if (OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) is OverlaySessionKind.Practice or OverlaySessionKind.Qualifying
+            && (string.Equals(definition.Id, StandingsGapColumnId, StringComparison.Ordinal)
+                || string.Equals(definition.Id, StandingsIntervalColumnId, StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string ColumnLabelForSession(
+        OverlayContentColumnDefinition definition,
+        OverlaySessionKind? sessionKind)
+    {
+        if (string.Equals(definition.Id, RelativeGapColumnId, StringComparison.Ordinal)
+            && OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) is OverlaySessionKind.Practice or OverlaySessionKind.Qualifying)
+        {
+            return "Est";
+        }
+
+        return definition.Label;
     }
 
     private static string HumanLabel(OverlayContentColumnDefinition definition)

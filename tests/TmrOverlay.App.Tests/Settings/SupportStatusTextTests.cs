@@ -56,8 +56,21 @@ public sealed class SupportStatusTextTests
         var snapshot = Snapshot(rawCaptureEnabled: true);
 
         Assert.Equal(
-            "Diagnostic telemetry requested; starts with live data",
+            "Enhanced iRacing telemetry capture requested; starts with live data",
             SupportStatusText.SessionStateText(snapshot));
+    }
+
+    [Fact]
+    public void LatestBundleText_CompactsLongFileNamesForSettingsUi()
+    {
+        const string path = @"C:\Users\driver\AppData\Local\TMR Overlay\diagnostics\bmw-m4-gt3-evo-gesamtstrecke-vln-history-analysis-20260520-142233-123.zip";
+
+        Assert.Equal(
+            "bmw-m4-gt3-e...-142233-123.zip",
+            SupportStatusText.LatestBundleValueText(path));
+        Assert.Equal(
+            "Latest bundle: bmw-m4-gt3-e...-142233-123.zip",
+            SupportStatusText.LatestBundleDisplayText(path));
     }
 
     [Fact]

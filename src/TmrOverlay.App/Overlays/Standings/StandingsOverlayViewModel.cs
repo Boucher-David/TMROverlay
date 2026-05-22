@@ -1,3 +1,4 @@
+using System.Globalization;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Telemetry.Live;
 
@@ -197,7 +198,7 @@ internal sealed record StandingsOverlayViewModel(
             group => group,
             group => ClassFastestLapSeconds(group.Rows.Select(row => BestLapTimeSeconds(row, timingByCarIdx))));
         var rows = new List<StandingsOverlayRowViewModel>();
-        var includeHeaders = showClassSeparators && visibleGroups.Length > 1;
+        var includeHeaders = showClassSeparators && visibleGroups.Length > 0;
 
         foreach (var group in visibleGroups)
         {
@@ -211,7 +212,7 @@ internal sealed record StandingsOverlayViewModel(
                 group,
                 timingByCarIdx,
                 referenceCarIdx,
-                ClassEstimatedLaps(group, snapshot),
+                ClassEstimatedLaps(group, snapshot, timingByCarIdx),
                 rowBudget,
                 Math.Min(rowBudget - rows.Count, groupLimits[group]),
                 ReferenceEquals(group, primaryGroup),
@@ -257,14 +258,22 @@ internal sealed record StandingsOverlayViewModel(
     {
         var baseRows = Math.Clamp(requestedMaximumRows, 1, MaximumRenderedRows);
         var visibleOtherClassRows = Math.Clamp(otherClassRowsPerClass, 0, 6);
-        if (!showClassSeparators || orderedGroups.Count <= 1 || visibleOtherClassRows == 0)
+        if (!showClassSeparators)
         {
             return baseRows;
         }
 
-        var otherGroupCount = Math.Max(0, orderedGroups.Count - 1);
+        var visibleGroupCount = visibleOtherClassRows > 0
+            ? orderedGroups.Count
+            : Math.Min(orderedGroups.Count, 1);
+        if (visibleGroupCount <= 0)
+        {
+            return baseRows;
+        }
+
+        var otherGroupCount = Math.Max(0, visibleGroupCount - 1);
         var otherGroupRows = otherGroupCount * visibleOtherClassRows;
-        var classHeaderRows = orderedGroups.Count;
+        var classHeaderRows = visibleGroupCount;
         return Math.Clamp(baseRows + classHeaderRows + otherGroupRows, 1, MaximumRenderedRows);
     }
 
@@ -277,10 +286,10 @@ internal sealed record StandingsOverlayViewModel(
     {
         var limits = new Dictionary<LiveScoringClassGroup, int>();
         var visibleOtherClassRows = Math.Clamp(otherClassRowsPerClass, 0, 6);
+        var includeHeaders = showClassSeparators;
         var otherGroups = orderedGroups
-            .Where(group => showClassSeparators && visibleOtherClassRows > 0 && !ReferenceEquals(group, primaryGroup))
+            .Where(group => includeHeaders && visibleOtherClassRows > 0 && !ReferenceEquals(group, primaryGroup))
             .ToArray();
-        var includeHeaders = showClassSeparators && otherGroups.Length > 0;
         var reservedOtherRows = otherGroups.Sum(_ => includeHeaders ? 1 + visibleOtherClassRows : visibleOtherClassRows);
         var minimumPrimaryRows = Math.Min(maximumRows, includeHeaders ? 2 : 1);
         limits[primaryGroup] = Math.Clamp(maximumRows - reservedOtherRows, minimumPrimaryRows, maximumRows);
@@ -388,7 +397,7 @@ internal sealed record StandingsOverlayViewModel(
             ClassPosition: string.Empty,
             CarNumber: string.Empty,
             Driver: group.ClassName,
-            Gap: $"{group.RowCount} cars",
+            Gap: FormatCarCount(group.RowCount),
             Interval: classEstimatedLaps,
             Pit: string.Empty,
             IsReference: false,
@@ -398,7 +407,17 @@ internal sealed record StandingsOverlayViewModel(
             CarClassColorHex: group.CarClassColorHex);
     }
 
-    private static string ClassEstimatedLaps(LiveScoringClassGroup group, LiveTelemetrySnapshot snapshot)
+    private static string FormatCarCount(int count)
+    {
+        return count == 1
+            ? "1 car"
+            : $"{count.ToString(CultureInfo.InvariantCulture)} cars";
+    }
+
+    private static string ClassEstimatedLaps(
+        LiveScoringClassGroup group,
+        LiveTelemetrySnapshot snapshot,
+        IReadOnlyDictionary<int, LiveTimingRow> timingByCarIdx)
     {
         if (!IsRaceSession(snapshot))
         {
@@ -407,29 +426,72 @@ internal sealed record StandingsOverlayViewModel(
 
         var projection = snapshot.Models.RaceProjection.ClassProjections
             .FirstOrDefault(candidate => candidate.CarClass == group.CarClass);
+
+        var classLeader = OrderedClassRows(group.Rows).FirstOrDefault(row => row.ClassPosition == 1)
+            ?? OrderedClassRows(group.Rows).FirstOrDefault();
+        LiveTimingRow? classLeaderTiming = null;
+        if (classLeader is not null)
+        {
+            timingByCarIdx.TryGetValue(classLeader.CarIdx, out classLeaderTiming);
+        }
+
+        var classProgress = LeaderProgressLaps(classLeader, classLeaderTiming)
+            ?? (group.IsReferenceClass ? snapshot.Models.RaceProgress.ClassLeaderProgressLaps : null);
+        var classPace = ValidLapTimeSeconds(projection?.PaceSeconds)
+            ?? ValidLapTimeSeconds(classLeader is not null ? LastLapTimeSeconds(classLeader, classLeaderTiming) : null)
+            ?? ValidLapTimeSeconds(classLeader is not null ? BestLapTimeSeconds(classLeader, classLeaderTiming) : null);
+        var overallProgress = snapshot.Models.RaceProgress.OverallLeaderProgressLaps
+            ?? OverallLeaderProgressLaps(snapshot);
+        var overallPace = ValidLapTimeSeconds(snapshot.Models.RaceProjection.OverallLeaderPaceSeconds)
+            ?? ValidLapTimeSeconds(snapshot.Models.RaceProgress.RacePaceSeconds)
+            ?? OverallLeaderPaceSeconds(snapshot);
+        var raceLapsRemaining = snapshot.Models.RaceProgress.RaceLapsRemaining;
+        double? finishLap = snapshot.Models.RaceProjection.EstimatedFinishLap;
+        if (finishLap is null
+            && overallProgress is { } progress
+            && raceLapsRemaining is { } lapsRemaining
+            && IsFinite(lapsRemaining)
+            && lapsRemaining >= 0d)
+        {
+            finishLap = progress + lapsRemaining;
+        }
+
+        if (classProgress is { } classProgressLaps
+            && classPace is { } classPaceSeconds
+            && overallProgress is { } overallProgressLaps
+            && overallPace is { } overallPaceSeconds
+            && finishLap is { } projectedFinishLap
+            && IsFinite(classProgressLaps)
+            && IsFinite(overallProgressLaps)
+            && IsFinite(projectedFinishLap)
+            && projectedFinishLap >= overallProgressLaps)
+        {
+            var secondsToOverallFinish = Math.Max(0d, projectedFinishLap - overallProgressLaps) * overallPaceSeconds;
+            var projectedClassProgressAtOverallFinish = classProgressLaps + secondsToOverallFinish / classPaceSeconds;
+            var classFinishLap = Math.Ceiling(projectedClassProgressAtOverallFinish - 0.000001d);
+            return FormatClassLaps(Math.Max(0d, classFinishLap - classProgressLaps));
+        }
+
         if (projection?.EstimatedLapsRemaining is { } projectedLaps
             && IsFinite(projectedLaps)
             && projectedLaps >= 0d
             && projectedLaps < 1000d)
         {
-            return $"~{projectedLaps:0.#} laps";
+            return FormatClassLaps(projectedLaps);
         }
 
-        var pace = group.Rows
-            .Select(row => row.LastLapTimeSeconds ?? row.BestLapTimeSeconds)
-            .FirstOrDefault(IsUsableLapTime);
-        if (pace is null)
-        {
-            pace = snapshot.Models.RaceProgress.RacePaceSeconds;
-        }
+        var pace = classPace
+            ?? group.Rows
+                .Select(row => row.LastLapTimeSeconds ?? row.BestLapTimeSeconds)
+                .FirstOrDefault(IsUsableLapTime)
+            ?? ValidLapTimeSeconds(snapshot.Models.RaceProgress.RacePaceSeconds);
 
         if (!IsRacePreGreen(snapshot)
-            && snapshot.Models.Session.SessionTimeRemainSeconds is { } remaining
-            && remaining > 0d
-            && pace is { } paceSeconds
-            && IsUsableLapTime(paceSeconds))
+            && snapshot.Models.Session.SessionTimeRemainSeconds is { } sessionTimeRemaining
+            && sessionTimeRemaining > 0d
+            && pace is { } paceSeconds)
         {
-            return $"~{Math.Ceiling(remaining / paceSeconds + 1d):0} laps";
+            return FormatClassLaps(sessionTimeRemaining / paceSeconds + 1d);
         }
 
         if (snapshot.Models.RaceProgress.RaceLapsRemaining is { } laps
@@ -437,10 +499,86 @@ internal sealed record StandingsOverlayViewModel(
             && laps >= 0d
             && laps < 1000d)
         {
-            return $"~{laps:0.#} laps";
+            return FormatClassLaps(laps);
         }
 
         return string.Empty;
+    }
+
+    private static double? LeaderProgressLaps(LiveScoringRow? scoringRow, LiveTimingRow? timingRow)
+    {
+        if (timingRow?.ProgressLaps is { } timingProgress
+            && IsFinite(timingProgress)
+            && timingProgress >= 0d)
+        {
+            return timingProgress;
+        }
+
+        if (timingRow?.LapCompleted is { } completed
+            && completed >= 0
+            && timingRow.LapDistPct is { } lapDistPct
+            && IsFinite(lapDistPct)
+            && lapDistPct >= 0d
+            && lapDistPct < 1d)
+        {
+            return completed + lapDistPct;
+        }
+
+        if (scoringRow?.Lap is { } lap && lap >= 0)
+        {
+            return lap;
+        }
+
+        return scoringRow?.LapsComplete is { } lapsComplete && lapsComplete >= 0
+            ? lapsComplete
+            : null;
+    }
+
+    private static double? OverallLeaderProgressLaps(LiveTelemetrySnapshot snapshot)
+    {
+        var overallLeaderRow = snapshot.Models.Timing.OverallRows
+            .Where(row => row.IsOverallLeader || row.OverallPosition == 1)
+            .OrderByDescending(row => row.IsOverallLeader)
+            .ThenBy(row => row.OverallPosition ?? int.MaxValue)
+            .ThenBy(row => row.CarIdx)
+            .FirstOrDefault();
+        if (overallLeaderRow is not null)
+        {
+            return LeaderProgressLaps(null, overallLeaderRow);
+        }
+
+        var scoringLeader = snapshot.Models.Scoring.Rows
+            .Where(row => row.OverallPosition == 1)
+            .OrderBy(row => row.CarIdx)
+            .FirstOrDefault();
+        return LeaderProgressLaps(scoringLeader, null);
+    }
+
+    private static double? OverallLeaderPaceSeconds(LiveTelemetrySnapshot snapshot)
+    {
+        var overallLeaderRow = snapshot.Models.Timing.OverallRows
+            .Where(row => row.IsOverallLeader || row.OverallPosition == 1)
+            .OrderByDescending(row => row.IsOverallLeader)
+            .ThenBy(row => row.OverallPosition ?? int.MaxValue)
+            .ThenBy(row => row.CarIdx)
+            .FirstOrDefault();
+        if (overallLeaderRow is not null)
+        {
+            return LastLapTimeSeconds(overallLeaderRow) ?? BestLapTimeSeconds(overallLeaderRow);
+        }
+
+        var scoringLeader = snapshot.Models.Scoring.Rows
+            .Where(row => row.OverallPosition == 1)
+            .OrderBy(row => row.CarIdx)
+            .FirstOrDefault();
+        return scoringLeader is not null
+            ? LastLapTimeSeconds(scoringLeader, null) ?? BestLapTimeSeconds(scoringLeader, timingRow: null)
+            : null;
+    }
+
+    private static string FormatClassLaps(double laps)
+    {
+        return Math.Clamp(laps, 0d, 999.99d).ToString("0.00", CultureInfo.InvariantCulture) + " laps";
     }
 
     private static bool IsUsableLapTime(double? seconds)

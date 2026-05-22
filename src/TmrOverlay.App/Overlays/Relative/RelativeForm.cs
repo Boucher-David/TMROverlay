@@ -58,7 +58,7 @@ internal sealed class RelativeForm : PersistentOverlayForm
             {
                 return _settings.GetIntegerOption(
                     OverlayOptionKeys.RelativeCarsEachSide,
-                    defaultValue: 5,
+                    defaultValue: 3,
                     minimum: 0,
                     maximum: 8);
             }
@@ -66,12 +66,12 @@ internal sealed class RelativeForm : PersistentOverlayForm
             return Math.Max(
                 _settings.GetIntegerOption(
                     OverlayOptionKeys.RelativeCarsAhead,
-                    defaultValue: 5,
+                    defaultValue: 3,
                     minimum: 0,
                     maximum: 8),
                 _settings.GetIntegerOption(
                     OverlayOptionKeys.RelativeCarsBehind,
-                    defaultValue: 5,
+                    defaultValue: 3,
                     minimum: 0,
                     maximum: 8));
         }

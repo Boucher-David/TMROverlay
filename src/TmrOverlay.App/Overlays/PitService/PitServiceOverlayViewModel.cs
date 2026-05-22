@@ -366,10 +366,7 @@ internal static class PitServiceOverlayViewModel
         }
 
         var session = snapshot.Models.Session;
-        var timeRemaining = OverlayHeaderTimeFormatter.FormatCompactTimeRemaining(
-            session.SessionTimeRemainSeconds,
-            session.SessionState,
-            OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
+        var timeRemaining = OverlayHeaderTimeFormatter.FormatCompactTimeRemaining(snapshot);
         var time = string.IsNullOrWhiteSpace(timeRemaining)
             ? null
             : timeRemaining;

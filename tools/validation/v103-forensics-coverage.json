@@ -1,0 +1,139 @@
+{
+  "contract": "v103-forensics-validation-coverage/v1",
+  "tracker": "docs/v1.0.3.md",
+  "evidenceContractLane": {
+    "command": "npm run test:evidence-contract",
+    "sources": [
+      "docs/overlay-evidence-contract-testing.md",
+      ".github/workflows/windows-dotnet.yml",
+      "tests/browser-overlays/overlayEvidenceContract.test.js",
+      "tests/TmrOverlay.App.Tests/Overlays/BrowserOverlayModelFactoryTests.cs",
+      "tools/browser-review/server.mjs",
+      "tools/validation/overlay-evidence-contract.mjs",
+      "tools/validation/overlay-evidence-framework-comparison.json",
+      "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs"
+    ]
+  },
+  "items": [
+    {
+      "id": "V103-001",
+      "classification": "diagnostics-evidence-gap",
+      "surface": "Live overlay screenshot evidence",
+      "finding": "desired-visible and actual-visible overlays can lack current pixel evidence when live screenshot capture is disabled",
+      "validation": "bundle and screenshot validators must fail or explicitly downgrade evidence when visible overlays lack current pixel screenshots",
+      "sources": ["tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V103-002",
+      "classification": "diagnostics-evidence-gap",
+      "surface": "Preview screenshot provenance",
+      "finding": "deterministic preview PNGs can look capture-derived while using SessionPreviewTelemetryFixtures",
+      "validation": "preview artifacts must carry explicit fixture provenance and cannot be treated as live/capture-specific evidence",
+      "sources": ["tests/browser-overlays/v103ForensicsValidation.test.js", "tools/validate_overlay_screenshots.py", "src/TmrOverlay.App/Diagnostics/LiveOverlayPreviewScreenshotCapture.cs"]
+    },
+    {
+      "id": "V103-003",
+      "classification": "product-bug",
+      "surface": "Localhost/browser overlay chrome",
+      "finding": "localhost overlays can still expose redundant overlay titles after title chrome was supposed to be removed",
+      "validation": "localhost/browser models and screenshot manifests reject rendered-title fields for ordinary product overlays",
+      "sources": ["tests/browser-overlays/v103ForensicsValidation.test.js", "tests/TmrOverlay.App.Tests/DataContracts/DataContractSnapshotOverlayMappingTests.cs", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V103-004",
+      "classification": "data-contract-parity",
+      "surface": "Shared settings parity",
+      "finding": "browser, localhost, and native surfaces can drift because settings application is not proven by a shared settings fingerprint",
+      "validation": "effective settings must expose per-surface shared-settings fingerprints and parity validators must compare them",
+      "sources": ["tests/browser-overlays/v103ForensicsValidation.test.js", "tests/TmrOverlay.App.Tests/DataContracts/DataContractSnapshotOverlayMappingTests.cs", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V103-005",
+      "classification": "data-contract-parity",
+      "surface": "Standings/Relative row contracts",
+      "finding": "row counts can match while rendered row identities, placeholders, or clipped rows differ across surfaces",
+      "validation": "table overlays must expose row identity, placeholder, and column-key evidence that parity checks compare",
+      "sources": ["tests/browser-overlays/v103ForensicsValidation.test.js", "tools/validate_overlay_screenshots.py", "tools/compare_screenshot_manifests.py"]
+    },
+    {
+      "id": "V103-006",
+      "classification": "product-bug",
+      "surface": "Standings",
+      "finding": "Standings status can claim more rows than are actually rendered, and race intervals can contain impossible timing values",
+      "validation": "standings validators reject visible-row/status mismatches and absurd interval values relative to displayed gap scale",
+      "sources": ["tools/validate_overlay_screenshots.py", "tests/browser-overlays/v103ForensicsValidation.test.js"]
+    },
+    {
+      "id": "V103-007",
+      "classification": "product-bug",
+      "surface": "Fuel Calculator / Pit Service layout",
+      "finding": "collapsed or unavailable content can leave oversized shells, and null fuel need can render as covered",
+      "validation": "metric overlays must expose rendered row density and unavailable fuel strategy states must not render success copy",
+      "sources": ["tools/validate_overlay_screenshots.py", "tests/browser-overlays/v103ForensicsValidation.test.js"]
+    },
+    {
+      "id": "V103-008",
+      "classification": "product-bug",
+      "surface": "Input State",
+      "finding": "Input State preview can render unavailable despite fixture controls and trace data being present",
+      "validation": "input-state preview contracts require available fixture inputs, non-empty trace evidence, and rail/graph parity",
+      "sources": ["tests/browser-overlays/v103ForensicsValidation.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V103-009",
+      "classification": "diagnostics-evidence-gap",
+      "surface": "Gap To Leader",
+      "finding": "Gap preview can show graph content while marked unavailable or waiting for fresh telemetry",
+      "validation": "graph overlays cannot expose rendered series/trend content in unavailable states unless explicitly marked stale-history evidence",
+      "sources": ["tools/validate_overlay_screenshots.py", "tests/browser-overlays/v103ForensicsValidation.test.js"]
+    },
+    {
+      "id": "V103-010",
+      "classification": "diagnostics-evidence-gap",
+      "surface": "Track Map",
+      "finding": "circle fallback maps can be marked live even when the current track has no readable map",
+      "validation": "track-map validators distinguish generated maps from circle fallback and require current-track provenance",
+      "sources": ["tools/validate_overlay_screenshots.py", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V103-011",
+      "classification": "diagnostics-evidence-gap",
+      "surface": "IBT sidecar selection",
+      "finding": "IBT analysis can succeed against a different car/track/day and hide the selected source path in summary metadata",
+      "validation": "IBT diagnostics must expose selected source identity and downgrade mismatched sidecars instead of reporting clean success",
+      "sources": ["tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs", "tests/TmrOverlay.App.Tests/Telemetry/IbtAnalysisServiceTests.cs"]
+    },
+    {
+      "id": "V103-012",
+      "classification": "diagnostics-evidence-gap",
+      "surface": "Localhost route evidence",
+      "finding": "localhost diagnostics can prove request stats without proving every overlay route rendered",
+      "validation": "localhost screenshot and diagnostics validation require per-overlay route/model/screenshot coverage, not just last-request evidence",
+      "sources": ["tools/validate_overlay_screenshots.py", "tools/compare_screenshot_manifests.py", "tests/browser-overlays/v103ForensicsValidation.test.js"]
+    },
+    {
+      "id": "V103-013",
+      "classification": "diagnostics-evidence-gap",
+      "surface": "Garage Cover",
+      "finding": "Garage Cover can appear in browser metadata while missing from live and preview evidence manifests",
+      "validation": "coverage validators require every supported overlay to declare native/browser/localhost support or an explicit unsupported reason",
+      "sources": ["tools/validate_overlay_screenshots.py", "tests/browser-overlays/v103ForensicsValidation.test.js"]
+    },
+    {
+      "id": "V103-014",
+      "classification": "capture-data-limitation",
+      "surface": "Diagnostics sample frames",
+      "finding": "race captures can have aggregate race data while sampled frame examples are exhausted by Warmup",
+      "validation": "diagnostic sample validation requires per-session sample coverage or an explicit per-session omission reason",
+      "sources": ["tests/TmrOverlay.App.Tests/Telemetry/LiveOverlayDiagnosticsRecorderTests.cs", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V103-015",
+      "classification": "diagnostics-evidence-gap",
+      "surface": "Flags / Radar / Stream Chat provenance",
+      "finding": "fixture flags, forced radar states, and suppressed chat sources can be mistaken for captured live evidence",
+      "validation": "overlay manifests must classify synthetic mixed states, suppressed external sources, and capture-data limitations distinctly",
+      "sources": ["tools/validate_overlay_screenshots.py", "tests/browser-overlays/v103ForensicsValidation.test.js"]
+    }
+  ]
+}

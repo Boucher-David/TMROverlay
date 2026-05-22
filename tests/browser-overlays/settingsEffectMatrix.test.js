@@ -128,6 +128,20 @@ function happyPathCases() {
       }
     },
     {
+      id: 'standings cars in class caps the reference class window',
+      overlayId: 'standings',
+      settingKey: 'carsInClass',
+      expectedValue: 1,
+      patches: [numberPatch('standings', 'carsInClass', 1)],
+      assertSettings: (overlay) => {
+        expect.soft(overlay.carsInClass).toBe(1);
+      },
+      assertModel: (model) => {
+        expect.soft((model.rows || []).filter((row) => row.isReference)).toHaveLength(1);
+        expect.soft(rowText(model)).not.toContain('Kauan Vigliazzi Teixeira Lemos');
+      }
+    },
+    {
       id: 'standings other class rows zero hides non-reference classes',
       overlayId: 'standings',
       settingKey: 'otherClassRows',
@@ -167,6 +181,7 @@ function happyPathCases() {
       assertModel: (model) => {
         expect.soft((model.columns || []).some((column) => column.dataKey === 'pit')).toBe(true);
         expect.soft(rowText(model)).toContain('IN');
+        expect.soft(model.effectiveSettings?.rendered?.browserSource?.baseWidth).toBe(440);
       }
     },
     {
@@ -261,11 +276,38 @@ function happyPathCases() {
       expectedValue: false,
       patches: [contentPatch('car-radar', 'radar.multiclass-warning', 'Faster-class warning', false)],
       assertSettings: (overlay) => {
-        expect.soft(contentRow(overlay, 'Faster-class warning').enabled).toBe(false);
+        expect.soft(overlay.contentRows).toEqual([]);
+        expect.soft(overlay.showMulticlassWarning).toBe(false);
       },
       assertModel: (model) => {
         expect.soft(model.carRadar?.showMulticlassWarning).toBe(false);
         expect.soft(model.carRadar?.strongestMulticlassApproach).toBeNull();
+      }
+    },
+    {
+      id: 'car radar multiclass window controls multiclass approach range',
+      overlayId: 'car-radar',
+      settingKey: 'radar.multiclass-warning-seconds',
+      expectedValue: 3,
+      patches: [numberPatch('car-radar', 'multiclassWarningSeconds', 3)],
+      assertSettings: (overlay) => {
+        expect.soft(overlay.multiclassWarningSeconds).toBe(3);
+      },
+      assertModel: (model) => {
+        expect.soft(model.carRadar?.multiclassWarningRangeSeconds).toBe(3);
+      }
+    },
+    {
+      id: 'car radar range controls timing-aware visibility window',
+      overlayId: 'car-radar',
+      settingKey: 'radar.visibility-seconds',
+      expectedValue: 5,
+      patches: [numberPatch('car-radar', 'radarVisibilitySeconds', 5)],
+      assertSettings: (overlay) => {
+        expect.soft(overlay.radarVisibilitySeconds).toBe(5);
+      },
+      assertModel: (model) => {
+        expect.soft(model.carRadar?.radarVisibilitySeconds).toBe(5);
       }
     },
     {
@@ -322,6 +364,24 @@ function happyPathCases() {
           provider: 'twitch',
           isConfigured: true,
           twitchChannel: 'techmatesracing'
+        });
+      }
+    },
+    {
+      id: 'stream chat opacity controls root opacity',
+      overlayId: 'stream-chat',
+      settingKey: 'opacityPercent',
+      expectedValue: 70,
+      query: { fixture: 'stream-chat-twitch-rich' },
+      patches: [numberPatch('stream-chat', 'opacityPercent', 70)],
+      assertSettings: (overlay) => {
+        expect.soft(overlay.opacityPercent).toBe(70);
+      },
+      assertModel: (model) => {
+        expect.soft(model.rootOpacity).toBeCloseTo(0.7, 5);
+        expect.soft(model.effectiveSettings?.rendered?.browserSource).toMatchObject({
+          opacity: 0.7,
+          opacityPercent: 70
         });
       }
     },

@@ -73,7 +73,7 @@ internal sealed record StreamChatOverlayViewModel(
     {
         if (!settings.IsConfigured)
         {
-            return "waiting for chat source";
+            return "chat source not configured";
         }
 
         if (string.Equals(settings.Provider, StreamChatOverlaySettings.ProviderTwitch, StringComparison.Ordinal)
@@ -84,10 +84,10 @@ internal sealed record StreamChatOverlayViewModel(
 
         if (string.Equals(settings.Provider, StreamChatOverlaySettings.ProviderStreamlabs, StringComparison.Ordinal))
         {
-            return "streamlabs unavailable";
+            return "streamlabs browser-source only";
         }
 
-        return "chat provider unavailable";
+        return "chat provider not configured";
     }
 
     public static string StatusText(string status)

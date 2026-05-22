@@ -128,6 +128,89 @@ public sealed class TrackMapMarkerPolicyTests
     }
 
     [Fact]
+    public void TrackMapMarkers_PreserveSpectatedFocusClassColorAndPosition()
+    {
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            Models = LiveRaceModels.Empty with
+            {
+                Reference = LiveReferenceModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    PlayerCarIdx = 10,
+                    FocusCarIdx = 12,
+                    FocusIsPlayer = false,
+                    HasExplicitNonPlayerFocus = true,
+                    LapDistPct = 0.58d,
+                    TrackSurface = 3
+                },
+                Timing = LiveTimingModel.Empty with
+                {
+                    FocusCarIdx = 12,
+                    FocusRow = Row(carIdx: 12, hasTakenGrid: false) with
+                    {
+                        IsPlayer = false,
+                        IsFocus = true,
+                        LapDistPct = 0.58d,
+                        CarClassColorHex = "#FFDA59",
+                        ClassPosition = 7,
+                        OverallPosition = 13,
+                        TrackSurface = 3
+                    },
+                    OverallRows =
+                    [
+                        Row(carIdx: 12, hasTakenGrid: false) with
+                        {
+                            IsPlayer = false,
+                            IsFocus = true,
+                            LapDistPct = 0.58d,
+                            CarClassColorHex = "#FFDA59",
+                            ClassPosition = 7,
+                            OverallPosition = 13,
+                            TrackSurface = 3
+                        }
+                    ]
+                }
+            }
+        };
+
+        var marker = Assert.Single(TrackMapOverlayViewModel.BuildMarkers(snapshot));
+
+        Assert.True(marker.IsFocus);
+        Assert.False(marker.IsPlayerFocus);
+        Assert.Equal("#FFDA59", marker.ClassColorHex);
+        Assert.Equal(7, marker.Position);
+        Assert.Equal(0.58d, marker.LapDistPct, precision: 6);
+    }
+
+    [Fact]
+    public void TrackMapRenderModel_UsesClassColorForSpectatedFocus()
+    {
+        var viewModel = ViewModel(
+            Markers:
+            [
+                new TrackMapOverlayMarker(
+                    12,
+                    0.58d,
+                    IsFocus: true,
+                    ClassColorHex: "#FFDA59",
+                    Position: 7,
+                    TrackSurface: 3,
+                    IsPlayerFocus: false)
+            ],
+            Sectors: []);
+
+        var marker = Assert.Single(TrackMapRenderModel.FromViewModel(viewModel).Markers);
+
+        Assert.True(marker.IsFocus);
+        Assert.False(marker.IsPlayerFocus);
+        Assert.Equal("7", marker.Label);
+        Assert.True(IsColor(marker.Fill, red: 255, green: 218, blue: 89));
+        Assert.Equal(245, marker.Fill.Alpha);
+    }
+
+    [Fact]
     public void TrackMapRenderModel_UsesUniformNonFocusLabelRadius()
     {
         var viewModel = ViewModel(

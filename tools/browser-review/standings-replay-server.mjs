@@ -35,6 +35,8 @@ const sessionWeatherShowHeaderTimeRemaining = parseBoolean(process.env.TMR_SESSI
 const sessionWeatherDisabledContent = csvSet(process.env.TMR_SESSION_WEATHER_DISABLED_CELLS || '');
 const pitServiceShowHeaderTimeRemaining = parseBoolean(process.env.TMR_PIT_SERVICE_SHOW_TIME_REMAINING, true);
 const pitServiceDisabledContent = csvSet(process.env.TMR_PIT_SERVICE_DISABLED_CELLS || '');
+const carRadarMulticlassWarningSeconds = clampInteger(process.env.TMR_CAR_RADAR_MULTICLASS_WARNING_SECONDS, 5, 3, 10);
+const carRadarVisibilitySeconds = clampInteger(process.env.TMR_CAR_RADAR_VISIBILITY_SECONDS, 2, 2, 5);
 const streamChatProvider = normalizeStreamChatProvider(process.env.TMR_STREAM_CHAT_PROVIDER || process.env.TMR_REVIEW_STREAM_CHAT_PROVIDER || 'live-review');
 const streamChatTwitchChannel = normalizeTwitchChannel(process.env.TMR_STREAM_CHAT_TWITCH_CHANNEL || process.env.TMR_STREAM_CHAT_CHANNEL || 'techmatesracing');
 const streamChatStreamlabsUrl = normalizeStreamlabsUrl(process.env.TMR_STREAM_CHAT_STREAMLABS_URL || '');
@@ -1628,6 +1630,7 @@ function displayModel(overlayId, frame, index, searchParams = null) {
 
   if (overlayId === 'gap-to-leader') {
     const gapSettings = gapSettingsModel();
+    const shouldRender = !isPreGreen;
     return {
       overlayId,
       title: 'Gap To Leader',
@@ -1637,8 +1640,9 @@ function displayModel(overlayId, frame, index, searchParams = null) {
       columns: [],
       rows: [],
       metrics: [],
-      points: isPreGreen ? [] : Array.from({ length: 24 }, (_, point) => 30 - point * 0.7 + Math.sin(point / 2) * 1.4),
-      headerItems: replayHeaderItems(frame, isPreGreen ? 'waiting for timing' : 'live | race gap', gapSettings)
+      points: shouldRender ? Array.from({ length: 24 }, (_, point) => 30 - point * 0.7 + Math.sin(point / 2) * 1.4) : [],
+      headerItems: shouldRender ? replayHeaderItems(frame, 'live | race gap', gapSettings) : [],
+      shouldRender
     };
   }
 
@@ -1686,8 +1690,6 @@ function captureDisplayModel(overlayId, frame, index, searchParams = null) {
       relative.columns);
   }
 
-  const headerItems = captureHeaderItems(models, status);
-
   if (overlayId === 'session-weather') {
     const sessionWeatherSettings = sessionWeatherSettingsModel();
     return captureSessionWeatherModel(models, status, sessionWeatherSettings);
@@ -1710,8 +1712,11 @@ function captureDisplayModel(overlayId, frame, index, searchParams = null) {
   }
 
   if (overlayId === 'car-radar') {
-    return captureCarRadarModel(models, status, headerItems);
+    const carRadarSettings = carRadarSettingsModel(searchParams);
+    return captureCarRadarModel(models, status, captureHeaderItems(models, status, carRadarSettings), carRadarSettings);
   }
+
+  const headerItems = captureHeaderItems(models, status);
 
   if (overlayId === 'gap-to-leader') {
     return captureGapToLeaderModel(models, frame, index, searchParams);
@@ -1830,23 +1835,31 @@ function replayAssetBackedDisplayModel(overlayId, frame, index, searchParams = n
   }).model;
 }
 
-function captureCarRadarModel(models, fallbackStatus, headerItems) {
+function captureCarRadarModel(models, fallbackStatus, headerItems, radarSettings = carRadarSettingsModel()) {
   const spatial = models.spatial || {};
   const inCar = isPlayerInCar(models);
+  const showMulticlassWarning = radarSettings.showMulticlassWarning !== false;
+  const multiclassWarningSeconds = clampInteger(radarSettings.multiclassWarningSeconds, 5, 3, 10);
+  const radarVisibilitySeconds = clampInteger(radarSettings.radarVisibilitySeconds, 2, 2, 5);
   const cars = Array.isArray(spatial.cars) ? spatial.cars : [];
-  const strongestMulticlassApproach = carRadarMulticlassApproach(spatial);
+  const strongestMulticlassApproach = showMulticlassWarning
+    ? carRadarMulticlassApproach(spatial, multiclassWarningSeconds)
+    : null;
   const hasCurrentSignal = Boolean(
     spatial.hasCarLeft === true
     || spatial.hasCarRight === true
-    || strongestMulticlassApproach
-    || cars.length > 0);
+    || (showMulticlassWarning && strongestMulticlassApproach)
+    || cars.some((car) => isInCarRadarRange(car, radarVisibilitySeconds)));
   const carRadar = {
     isAvailable: inCar,
     hasCarLeft: spatial.hasCarLeft === true,
     hasCarRight: spatial.hasCarRight === true,
     cars,
     strongestMulticlassApproach,
-    showMulticlassWarning: true,
+    showMulticlassWarning,
+    multiclassWarningSeconds,
+    multiclassWarningRangeSeconds: multiclassWarningSeconds,
+    radarVisibilitySeconds,
     previewVisible: false,
     hasCurrentSignal,
     referenceCarClassColorHex: spatial.referenceCarClassColorHex
@@ -1861,7 +1874,7 @@ function captureCarRadarModel(models, fallbackStatus, headerItems) {
           ? 'car left'
           : spatial.hasCarRight
             ? 'car right'
-            : strongestMulticlassApproach
+            : showMulticlassWarning && strongestMulticlassApproach
               ? 'faster class'
               : fallbackStatus || 'clear';
 
@@ -1875,23 +1888,58 @@ function captureCarRadarModel(models, fallbackStatus, headerItems) {
   };
 }
 
-function carRadarMulticlassApproach(spatial) {
+function carRadarMulticlassApproach(spatial, multiclassWarningSeconds = 5) {
   const approaches = Array.isArray(spatial?.multiclassApproaches)
     ? spatial.multiclassApproaches
     : spatial?.strongestMulticlassApproach
       ? [spatial.strongestMulticlassApproach]
       : [];
   return approaches
-    .filter(isInCarRadarMulticlassWarningRange)
+    .filter((approach) => isInCarRadarMulticlassWarningRange(approach, multiclassWarningSeconds))
     .sort((left, right) =>
       Math.abs(left?.relativeSeconds ?? Number.POSITIVE_INFINITY)
         - Math.abs(right?.relativeSeconds ?? Number.POSITIVE_INFINITY)
       || Number(right?.urgency || 0) - Number(left?.urgency || 0))[0] || null;
 }
 
-function isInCarRadarMulticlassWarningRange(approach) {
+function isInCarRadarMulticlassWarningRange(approach, multiclassWarningSeconds = 5) {
   const seconds = approach?.relativeSeconds;
-  return Number.isFinite(seconds) && seconds < -2 && seconds >= -5;
+  const warningSeconds = clampInteger(multiclassWarningSeconds, 5, 3, 10);
+  return Number.isFinite(seconds) && seconds < -2 && seconds >= -warningSeconds;
+}
+
+function isInCarRadarRange(car, radarVisibilitySeconds = 2) {
+  const meters = Number(car?.relativeMeters);
+  if (!Number.isFinite(meters)) {
+    return false;
+  }
+
+  return Math.abs(meters) <= carRadarVisualRangeMeters(car, radarVisibilitySeconds);
+}
+
+function carRadarVisualRangeMeters(car, radarVisibilitySeconds = 2) {
+  const bodyLengthMeters = 4.746;
+  const physicalRangeMeters = bodyLengthMeters * 6;
+  const maximumTimingAwareRangeMeters = bodyLengthMeters * 15;
+  const meters = Number(car?.relativeMeters);
+  const seconds = Number(car?.relativeSeconds);
+  if (!Number.isFinite(meters) || !Number.isFinite(seconds)) {
+    return physicalRangeMeters;
+  }
+
+  const absoluteMeters = Math.abs(meters);
+  const absoluteSeconds = Math.abs(seconds);
+  if (absoluteMeters <= physicalRangeMeters || absoluteSeconds <= 0.05) {
+    return physicalRangeMeters;
+  }
+
+  const inferredMetersPerSecond = absoluteMeters / absoluteSeconds;
+  if (!Number.isFinite(inferredMetersPerSecond) || inferredMetersPerSecond <= 0) {
+    return physicalRangeMeters;
+  }
+
+  const timingAwareRangeMeters = inferredMetersPerSecond * clampInteger(radarVisibilitySeconds, 2, 2, 5);
+  return Math.max(physicalRangeMeters, Math.min(maximumTimingAwareRangeMeters, timingAwareRangeMeters));
 }
 
 function isPlayerInCar(models) {
@@ -2510,15 +2558,17 @@ function captureInputStateModel(models, fallbackStatus, index, searchParams = nu
 
 function inputStateModel(status, headerItems, source, isAvailable, inputs, trace = null) {
   const displayInputs = isAvailable && inputs ? inputs : {};
-  const hasGraph = inputStateReviewSettings.showThrottleTrace
+  const configuredGraph = inputStateReviewSettings.showThrottleTrace
     || inputStateReviewSettings.showBrakeTrace
     || inputStateReviewSettings.showClutchTrace;
-  const hasRail = inputStateReviewSettings.showThrottle
+  const configuredRail = inputStateReviewSettings.showThrottle
     || inputStateReviewSettings.showBrake
     || inputStateReviewSettings.showClutch
     || inputStateReviewSettings.showSteering
     || inputStateReviewSettings.showGear
     || inputStateReviewSettings.showSpeed;
+  const hasGraph = isAvailable && configuredGraph;
+  const hasRail = isAvailable && configuredRail;
   const hasContent = hasGraph || hasRail;
   return {
     overlayId: 'input-state',
@@ -2530,7 +2580,8 @@ function inputStateModel(status, headerItems, source, isAvailable, inputs, trace
     rows: [],
     metrics: [],
     points: [],
-    headerItems,
+    headerItems: hasContent ? headerItems : [],
+    shouldRender: hasContent,
     inputs: {
       isAvailable,
       throttle: displayInputs.throttle,
@@ -2590,9 +2641,9 @@ function inputTracePoint(inputs) {
 
 function captureHeaderItems(models, status, overlaySettings = null) {
   const items = [];
-  const seconds = models.session?.sessionTimeRemainSeconds;
-  if (overlaySettings?.showHeaderTimeRemaining !== false && Number.isFinite(seconds) && seconds >= 0) {
-    items.push({ key: 'timeRemaining', value: formatDuration(seconds, models.session?.sessionPhase) });
+  const timeRemaining = formatHeaderSessionTimeRemaining(models.session);
+  if (overlaySettings?.showHeaderTimeRemaining !== false && timeRemaining) {
+    items.push({ key: 'timeRemaining', value: timeRemaining });
   }
   return items;
 }
@@ -2808,7 +2859,8 @@ function captureGapToLeaderModel(models, frame, index, searchParams = null) {
   const currentGap = focusedClassLeaderGap(models);
   const graph = captureGapGraph(index, searchParams);
   const hasGraphData = graph?.series?.some((series) => Array.isArray(series?.points) && series.points.length > 0) === true;
-  const status = currentGap?.hasData || hasGraphData ? 'live | race gap' : 'waiting for timing';
+  const shouldRender = currentGap?.hasData === true || hasGraphData;
+  const status = shouldRender ? 'live | race gap' : 'waiting for timing';
   return {
     overlayId: 'gap-to-leader',
     title: 'Gap To Leader',
@@ -2822,9 +2874,10 @@ function captureGapToLeaderModel(models, frame, index, searchParams = null) {
     columns: [],
     rows: [],
     metrics: [],
-    points: gapTrendPoints(index),
+    points: shouldRender ? gapTrendPoints(index) : [],
     graph,
-    headerItems: captureHeaderItems(models, status, gapSettings)
+    headerItems: shouldRender ? captureHeaderItems(models, status, gapSettings) : [],
+    shouldRender
   };
 }
 
@@ -2969,18 +3022,30 @@ function demoGapTrendMetrics(series, lapReferenceSeconds) {
   const lap = Math.max(1, Math.round(chartLapReferenceSeconds(lapReferenceSeconds) / 10));
   return [
     {
+      label: 'Last',
+      focusGapChangeSeconds: null,
+      chaser: null,
+      state: 'last',
+      stateLabel: null,
+      primaryText: '0.0',
+      threatText: '-0.9',
+      comparisonText: '+0.3'
+    },
+    {
       label: '5L',
       focusGapChangeSeconds: -0.8,
       chaser,
       state: 'ready',
-      stateLabel: null
+      stateLabel: null,
+      completedReferenceLaps: 10
     },
     {
       label: '10L',
       focusGapChangeSeconds: 1.2,
       chaser: chaser ? { ...chaser, gainSeconds: 2.1 } : null,
       state: 'ready',
-      stateLabel: null
+      stateLabel: null,
+      completedReferenceLaps: 10
     },
     {
       label: 'Pit',
@@ -3021,16 +3086,6 @@ function demoGapTrendMetrics(series, lapReferenceSeconds) {
       primaryTire: { label: 'Hard', shortLabel: 'H', isWet: false },
       threatTire: { label: 'Wet', shortLabel: 'W', isWet: true },
       comparisonTire: { label: 'Hard', shortLabel: 'H', isWet: false }
-    },
-    {
-      label: 'Last',
-      focusGapChangeSeconds: null,
-      chaser: null,
-      state: 'last',
-      stateLabel: null,
-      primaryText: '1:31.842',
-      threatText: '1:30.913',
-      comparisonText: '1:32.104'
     },
     {
       label: 'Status',
@@ -4049,8 +4104,10 @@ function formatSessionClock(session) {
 
 function sessionClockParts(session) {
   const elapsed = formatDurationCompact(session?.sessionTimeSeconds);
-  const remain = formatDurationCompact(session?.sessionTimeRemainSeconds);
-  const total = formatDurationCompact(session?.sessionTimeTotalSeconds);
+  const remain = formatPitTimeRemaining(session) || '--';
+  const total = sessionTimeIsUnlimited(session)
+    ? '--'
+    : formatDurationCompact(session?.sessionTimeTotalSeconds);
   return {
     elapsed,
     remaining: remain,
@@ -4142,6 +4199,12 @@ function pitCompactLaps(session, raceProgress = {}, raceProjection = {}) {
 function formatPitTimeRemaining(session) {
   const seconds = session?.sessionTimeRemainSeconds;
   if (!Number.isFinite(seconds) || seconds < 0) return null;
+  if (isRacePreGreenSession(session)) {
+    if (looksLikeUnlimitedSessionTime(seconds)) return null;
+  } else if (sessionTimeIsUnlimited(session)) {
+    return null;
+  }
+
   const totalSeconds = Math.ceil(Math.max(0, seconds));
   if (isRacePreGreenSession(session)) {
     return `${String(Math.floor(totalSeconds / 60)).padStart(2, '0')}:${String(totalSeconds % 60).padStart(2, '0')}`;
@@ -4153,7 +4216,23 @@ function formatPitTimeRemaining(session) {
 function formatHeaderSessionTimeRemaining(session) {
   const seconds = session?.sessionTimeRemainSeconds;
   if (!Number.isFinite(seconds) || seconds < 0) return null;
+  if (isRacePreGreenSession(session)) {
+    if (looksLikeUnlimitedSessionTime(seconds)) return null;
+  } else if (sessionTimeIsUnlimited(session)) {
+    return null;
+  }
+
   return formatDuration(seconds);
+}
+
+function sessionTimeIsUnlimited(session) {
+  return String(session?.sessionTime || '').toLowerCase().includes('unlimited')
+    || looksLikeUnlimitedSessionTime(session?.sessionTimeTotalSeconds)
+    || looksLikeUnlimitedSessionTime(session?.sessionTimeRemainSeconds);
+}
+
+function looksLikeUnlimitedSessionTime(seconds) {
+  return Number.isFinite(seconds) && Math.abs(seconds - 604800) <= 1;
 }
 
 function formatWeatherTemps(weather) {
@@ -4829,6 +4908,10 @@ function settings(overlayId, frame, searchParams = null) {
     return { ...inputStateReviewSettings };
   }
 
+  if (overlayId === 'car-radar') {
+    return carRadarSettingsModel(searchParams);
+  }
+
   return {};
 }
 
@@ -4846,6 +4929,24 @@ function gapSettingsModel() {
     carsAhead: gapCarsAhead,
     carsBehind: gapCarsBehind,
     showHeaderTimeRemaining: gapShowHeaderTimeRemaining
+  };
+}
+
+function carRadarSettingsModel(searchParams = null) {
+  return {
+    showMulticlassWarning: parseBoolean(
+      searchParams?.get('showMulticlassWarning') ?? process.env.TMR_CAR_RADAR_SHOW_MULTICLASS_WARNING,
+      true),
+    multiclassWarningSeconds: clampInteger(
+      searchParams?.get('multiclassWarningSeconds') ?? searchParams?.get('radar.multiclass-warning-seconds') ?? carRadarMulticlassWarningSeconds,
+      5,
+      3,
+      10),
+    radarVisibilitySeconds: clampInteger(
+      searchParams?.get('radarVisibilitySeconds') ?? searchParams?.get('radar.visibility-seconds') ?? carRadarVisibilitySeconds,
+      2,
+      2,
+      5)
   };
 }
 
@@ -5736,8 +5837,8 @@ function confirmStreamChatLiveRow(name, text, kind) {
 
 function relativeColumns() {
   return [
-    { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 38, alignment: 'right' },
-    { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
+    { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 48, alignment: 'right' },
+    { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 240, alignment: 'left' },
     { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
     ...(relativeShowPitColumn
       ? [{ id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 48, alignment: 'right' }]

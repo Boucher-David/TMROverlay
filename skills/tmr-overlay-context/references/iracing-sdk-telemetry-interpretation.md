@@ -1,6 +1,6 @@
 # iRacing SDK Telemetry Interpretation
 
-Last updated: 2026-05-12
+Last updated: 2026-05-21
 
 Use this reference before changing telemetry-backed overlay behavior, especially
 source selection for Standings, Relative, Gap To Leader, Track Map, Radar, Fuel,
@@ -9,6 +9,8 @@ Pit Service, Flags, or session timer/header fields.
 ## Source Material
 
 - `https://github.com/apihlaja/node-irsdk`
+- `https://sajax.github.io/irsdkdocs/yaml/driverinfo.html`
+- `https://irsdk-node.bengsfort.dev/API-Reference/irsdk-node-types/interfaces/DriverInfo/`
 - Inspected commit: `986a9e079cb8b8b780f8d55f1f0988c85596857a`
 - Inspected files: `README.md`, `src/cpp/irsdk/irsdk_defines.h`,
   `src/cpp/IRSDKWrapper.*`, `src/cpp/IrSdkBindingHelpers.*`,
@@ -40,6 +42,33 @@ meaningful in a specific modern session.
 TmrOverlay captures raw numeric values from the C# SDK pipeline. `node-irsdk`
 converts several enum and bitfield units to strings or arrays for JavaScript,
 so examples from that repo may not match our raw representation exactly.
+
+## Driver Role / Spotting Signals
+
+The SDK/reference material and current local captures do not expose a named raw
+telemetry variable such as `IsSpotting`, `Spotter`, or `IsSpectating`. Keep
+future schema scans open to a true role field, but do not assume one exists.
+
+The strongest documented role signal today is session info:
+
+- `DriverInfo.DriverCarIdx` points at the client entry in
+  `DriverInfo.Drivers[]`.
+- Each `DriverInfo.Drivers[]` row can include `IsSpectator`.
+- A spectator/spotter local user should therefore be detected by resolving
+  `DriverInfo.DriverCarIdx` to the matching `Drivers[]` row and checking
+  `IsSpectator == 1`.
+
+Local proof from the GR86 Nordschleife Industriefahrten spotter-only capture:
+`DriverInfo.DriverCarIdx` resolves to the `CarIdx = 63` driver row with
+`IsSpectator = 1`. Raw telemetry still reports `PlayerCarIdx = 63` for that
+spectator entry, while `CamCarIdx` usually follows race cars. This makes the
+session-info row identity a better local-role signal than camera focus alone.
+
+`IsReplayPlaying` can be true during active spotting/watch contexts. Treat it
+as camera/replay plumbing unless paired with stronger context; do not suppress
+live race overlays from `IsReplayPlaying` alone. Future v1.x role gating should
+preserve both the derived session-info role and any newly discovered raw role
+field so replay fixtures can compare them directly.
 
 ## Core SDK Enums
 

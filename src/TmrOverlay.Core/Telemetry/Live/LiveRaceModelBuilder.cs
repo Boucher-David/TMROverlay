@@ -801,9 +801,22 @@ internal static class LiveRaceModelBuilder
             || ContainsRace(context.Session.EventType);
     }
 
+    private static bool IsRaceOrPracticeSession(HistoricalSessionContext context)
+    {
+        return IsRaceSession(context)
+            || ContainsPractice(context.Session.SessionType)
+            || ContainsPractice(context.Session.SessionName)
+            || ContainsPractice(context.Session.EventType);
+    }
+
     private static bool ContainsRace(string? value)
     {
         return value?.IndexOf("race", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool ContainsPractice(string? value)
+    {
+        return value?.IndexOf("practice", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static bool AllowsLiveRaceGaps(HistoricalTelemetrySample sample)
@@ -815,7 +828,7 @@ internal static class LiveRaceModelBuilder
         HistoricalSessionContext context,
         HistoricalTelemetrySample sample)
     {
-        if (!IsRaceSession(context))
+        if (!IsRaceOrPracticeSession(context))
         {
             return false;
         }
@@ -1272,7 +1285,7 @@ internal static class LiveRaceModelBuilder
         var referenceClass = reference.ReferenceCarClass;
         var nonCompetitorCarIdxs = LiveCompetitionFilters.NonCompetitorCarIdxs(context);
         var timingByCarIdx = timing.OverallRows.ToDictionary(row => row.CarIdx);
-        var allowWeakTimingFallbacks = IsRaceSession(context);
+        var allowWeakTimingFallbacks = IsRaceOrPracticeSession(context);
         var rows = new List<LiveRelativeRow>();
 
         foreach (var car in proximity.NearbyCars)
@@ -1354,7 +1367,7 @@ internal static class LiveRaceModelBuilder
                 LapDeltaToReference: LapDeltaToReference(car.LapCompleted, timingRow.ProgressLaps, reference)));
         }
 
-        if (IsRaceSession(context))
+        if (IsRaceOrPracticeSession(context))
         {
             rows.AddRange(timing.OverallRows
                 .Where(row => !row.IsFocus

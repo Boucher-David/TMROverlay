@@ -9,5 +9,6 @@ internal static class PitServiceBrowserSource
         title: PitServiceOverlayDefinition.Definition.DisplayName,
         canonicalRoute: "/overlays/pit-service",
         fadeWhenTelemetryUnavailable: PitServiceOverlayDefinition.Definition.FadeWhenLiveTelemetryUnavailable,
-        moduleAssetName: "pit-service");
+        moduleAssetName: "pit-service",
+        bodyClass: "pit-service-page metric-telemetry-page");
 }

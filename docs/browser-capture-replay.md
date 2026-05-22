@@ -56,6 +56,31 @@ frame contains:
   deltas, captured-time deltas, and whether the selection is dense enough for
   Gap To Leader graph validation
 
+## Local v1.1 Candidate Streams
+
+Keep raw captures local or external; committed replay evidence should be
+redacted/minimized slices or normalized replay windows with explicit provenance.
+The current local ranking for v1.1 replay work is:
+
+- `capture-20260520-180306-881`: Toyota GR86 Nordschleife Industriefahrten
+  race-start stream collected while the local user was spotting. Use this first
+  for spectator/local-role contracts. Spotting is not exposed as a new raw SDK
+  field; derive it from session info where `DriverInfo.DriverCarIdx` resolves to
+  an `IsSpectator = 1` driver row. Do not treat `IsReplayPlaying` alone as a
+  non-live signal in this context.
+- `capture-20260426-130334-932`: four-hour VLN endurance stream with clean
+  60 Hz cadence, active local driving/fuel/input/pit signals, multiclass
+  context, and practice/qualifying/race transitions. Use it for long-run local
+  driving validation after minimizing/redacting fixture slices.
+- `capture-20260502-143722-571`: 24h mid-session rejoin stream with useful
+  `CarIdx*` race arrays and no-history sustained-race behavior. Use it for
+  Standings, Relative, Track Map, Gap To Leader, and focus/reference behavior,
+  not local Fuel/Input validation.
+
+Keep `capture-20260502-155431-647` for truncated-capture recovery tests only,
+and keep the tiny May 2 captures as minimal/disconnect edge cases rather than
+ordinary replay streams.
+
 ## Serve
 
 ```bash

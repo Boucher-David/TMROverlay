@@ -2,7 +2,7 @@
 
 This file is the durable handoff record for model-v2 app theory, telemetry-source decisions, and future product branches. Read the current-state sections first. Older roadmap sections below are preserved as planning history and should not be treated as open work unless the current-state notes still call them out.
 
-## Current State As Of 2026-05-19
+## Current State As Of 2026-05-22
 
 The model-v2 layer is no longer just passive evidence. Core overlays are already normalized live-model consumers across Standings, Relative, local Radar, Flags, Session / Weather, Pit Service, Input / Car State, Fuel, Gap To Leader, and Track Map. Some overlays still use adapter or compatibility slices where that keeps behavior stable, but new reusable telemetry fields should land in Core/live models first, then map into overlay view models.
 
@@ -43,11 +43,13 @@ Current evidence/tooling shape:
 - 2026-05-15: The model-completeness branch makes completed `LiveTelemetrySnapshot.Models` the active overlay runtime contract for native, localhost, and browser surfaces. `LatestSample` remains collector/diagnostic/compatibility evidence, and `LiveTelemetrySnapshot.CompleteModels()` is the bridge for older or partial live snapshots before model builders/renderers run.
 - 2026-05-17: v0.20.1 is tagged as the Windows/native, browser review, and localhost parity baseline. The `v1.0.0-fuel-and-release-handoff` branch became the private-team V1 candidate: keep the parity baseline stable, narrow Fuel Calculator behavior to trustworthy V1 evidence, add teammate release handoff docs, and avoid durable schema changes unless a Windows-tested compatibility issue requires them.
 - 2026-05-17: Version hygiene should stay explicit. `VERSION.md` owns current branch target and branch-complete release text, `Directory.Build.props` version metadata moves only when a branch is deliberately promoted as the next product build, and annotated tags should be created only after the release commit is on `main` or explicitly designated as the release point.
-- 2026-05-19: The active branch is `v1.0.2-feedback`. It hardens teammate-reported overlay semantics, shared sizing/chrome, Gap To Leader, localhost hidden-product behavior, diagnostics, and validation gates. Capture-only follow-ups and real-run validation questions now live in `docs/v1.0.3.md`.
+- 2026-05-19: `v1.0.2-feedback` hardened teammate-reported overlay semantics, shared sizing/chrome, Gap To Leader, localhost hidden-product behavior, diagnostics, and validation gates. Capture-only follow-ups and real-run validation questions moved into the V1.0.3 planning notes.
+- 2026-05-22: The active branch is `v1.0.3-feedback`. It carries the feedback-hardening follow-up into shared geometry/evidence contracts for native Windows, browser review, localhost, settings UI, diagnostics bundles, screenshot manifests, and CI lane separation. Keep capture-replay work as v1.1 planning unless minimized replay fixtures are deliberately added.
+- 2026-05-21: Local v1.1 replay-candidate review ranked three real-stream seeds: the GR86 Nordschleife Industriefahrten spotter-only race for race-start and spectator/local-role contracts, the April VLN four-hour endurance capture for local driving/fuel/input and multiclass long-run behavior, and the May 2 24h capture `capture-20260502-143722-571` for mid-session rejoin/no-history race behavior. The GR86 capture did not expose a new named `IsSpotting` SDK variable; spotting is proven through session-info identity, where `DriverInfo.DriverCarIdx` points at a driver row with `IsSpectator = 1`, while raw telemetry still reports `PlayerCarIdx` for that spectator row and `CamCarIdx` usually follows another race car. Do not use `IsReplayPlaying` alone to suppress live race overlays in spotting/watch contexts.
 
-## Current v1.0.2 Branch Focus
+## Current v1.0.3 Branch Focus
 
-The current branch is `v1.0.2-feedback`, a teammate-feedback hardening branch after the V1.0.1 diagnostic run. Treat the branch as a patch release: fix proven overlay behavior, improve diagnostics and validation evidence, and defer capture-only or larger product decisions into `docs/v1.0.3.md`.
+The current branch is `v1.0.3-feedback`, a feedback-hardening follow-up after the V1.0.2 validation and CI artifact review work. Treat the branch as a patch release: keep proven overlay behavior stable, centralize measured geometry/evidence contracts, improve diagnostics and CI artifact comparability, and defer capture-only or larger product decisions into v1.1 replay planning.
 
 Current branch focus:
 
@@ -57,9 +59,9 @@ Current branch focus:
 - Keep the v0.19.0 data-contract snapshot as the previous durable-release baseline unless a durable schema change is deliberately introduced. Any schema change needs the workflow in `docs/data-contracts.md`.
 - If overlay/settings/renderer/browser/localhost behavior changes, update screenshot generators and validation profiles in the same pass so native Windows, browser review, and localhost coverage are represented.
 - Keep the deprecated mac harness out of the V1 parity/release gate.
-- Keep V1.0.2 local in scope: non-race overlay semantics, shared chrome/content sizing, settings-faithful previews, Stream Chat opacity, hidden localhost models, Gap To Leader correctness, and diagnostic evidence quality.
-- Do not treat capture-only questions as unresolved V1.0.2 implementation work. Flags yellow-family accuracy, Car Radar side flips, Track Map live replacement, update-close reproduction, setup-change detection, and long-run performance optimization need fresh captures or real validation and are tracked for v1.0.3.
-- Keep `docs/v1.0.2-feedback.md`, `docs/v1.0.3.md`, and `VERSION.md` aligned before tagging.
+- Keep V1.0.3 local in scope: shared overlay/settings geometry contracts, settings parity evidence, browser/localhost/native screenshot manifests, diagnostics metadata, CI screenshot lane hygiene, and validation gates around the existing product surface.
+- Do not treat capture-only questions as unresolved V1.0.3 implementation work. Flags yellow-family accuracy, Car Radar side flips, live replay/capture validation, setup-change detection, spectator/local-role replay, and long-run performance optimization need fresh captures, minimized replay fixtures, or real validation and are tracked for v1.1-style replay work.
+- Keep `docs/v1.0.3.md`, `VERSION.md`, README/current-state docs, repo skills, and media packet notes aligned before tagging.
 
 Ongoing telemetry/model-v2 guardrails from v0.19.0 through v0.20.1 still apply:
 
@@ -326,15 +328,57 @@ Initial product signals:
 
 ### v1.1 - Analysis Evidence Loop And Capture Replay
 
-Goal: make real race evidence easier to replay through overlays without manually driving the app.
+Goal: make real race evidence replayable through overlays without manually driving the app, so live-session bugs become deterministic CI evidence instead of one-off support-bundle investigations.
+
+Core problem:
+
+- Current feedback loops depend on fresh live captures, Windows screenshots, OBS/browser checks, and manual artifact comparison.
+- Teammate-reported issues such as pre-green hidden overlays, focus-switch graph history, lap-limited race clocks, OBS-vs-Chrome localhost divergence, track-map fallback labelling, and spectator/focus/local-player confusion should be reproducible from saved captures.
+- Synthetic preview fixtures remain useful for fixed layout states, but they cannot prove real race timing, session transitions, focus context, or capture-specific model provenance.
+
+Replay shape:
+
+```text
+capture-manifest.json + telemetry.bin + session-info/
+  -> replay telemetry provider
+  -> normalized LiveTelemetrySnapshot models
+  -> browser review / localhost / native screenshot evidence
+  -> manifests, contact sheets, validators, and CI reports
+```
 
 Likely scope:
 
-- Add a development-only raw-capture replay provider for browser review or a separate tooling path.
-- Decode selected four-hour/twenty-four-hour captures into normalized live snapshots at controllable playback speed.
-- Drive one browser/localhost route for each overlay from replayed snapshots, generate screenshots/contact sheets, and emit replay-side validation diagnostics.
-- Keep replay isolated from the Windows runtime collector and private capture folders.
-- Use replay artifacts to decide model-v2 promotions, overlay simplifications, and edge-case UI behavior.
+- Add a development-only raw-capture replay provider that reads explicit capture fixtures and emits normalized live snapshots at controllable playback speed.
+- Support frame/time seeking, playback speed, session filtering, warmup/race boundaries, focused-car changes, and local/player/reference context inspection.
+- Drive browser review and localhost overlay routes from replayed snapshots first, then add Windows native replay screenshot coverage once the model replay path is stable.
+- Generate screenshots, contact sheets, and manifest evidence at selected timestamps, transition markers, and event windows.
+- Emit replay provenance in every artifact: capture id, frame index, session time, session type, focused car, local/player/reference context, source files, model sequence, and fixture privacy class.
+- Keep replay isolated from the production Windows collector and from arbitrary private capture directories. CI should use committed redacted/minimized fixtures or extracted replay slices, not scan local user data.
+- Use replay artifacts to decide model-v2 promotions, overlay simplifications, and edge-case UI behavior before adding heavier analysis or strategy products.
+
+Initial capture seed set:
+
+- GR86 spotter-only race-start capture (`capture-20260520-180306-881`, local `tests/` upload): first v1.1 real-stream seed. Proves race-start/grid progression and spectator/local-role behavior where `DriverInfo.DriverCarIdx` is a spectator row, `PlayerCarIdx` points at that spectator entry, and `CamCarIdx` follows race cars. Standings, Relative, Track Map, Session / Weather, Flags, and Gap To Leader should use focus/race arrays; local-only overlays such as Fuel, Inputs, Pit Service, and Radar should remain hidden, unavailable, or explicitly degraded rather than inventing local-driver data.
+- April VLN four-hour endurance capture (`capture-20260426-130334-932`, local `captures/`): primary local driving and long-run stream. It has clean 60 Hz cadence, over one million frames, active local lap/speed/fuel/throttle/brake/steering/pit signals, multiclass team-race context, and practice/qualifying/race transitions. It carries the highest redaction and fixture-minimization burden, so commit only compact slices or normalized replay windows.
+- May 2 24h mid-session rejoin capture (`capture-20260502-143722-571`, local `captures/`): no-history/sustained-race seed. It has good 60 Hz cadence and active `CarIdx*` race data over about 77 minutes, but local fuel/input/lap scalars are mostly zero, so it should validate non-local race overlays rather than local strategy/input overlays.
+- Truncated/recovery capture (`capture-20260502-155431-647`): keep as a raw-capture repair or truncated-file test only. The binary contains readable frames while the manifest says zero frames and lacks finalization metadata; do not promote it as a normal product replay fixture until repaired and explicitly labeled.
+- Tiny May 2 24h captures (`capture-20260502-141919-875`, `capture-20260502-141936-220`, `capture-20260502-141939-725`): useful only as disconnect/minimal-frame edge cases; do not spend v1.1 fixture budget on them for ordinary stream validation.
+- OBS/localhost diagnostic captures: prove route visibility, hidden/no-shell behavior, browser-vs-OBS divergence, and request/polling behavior.
+- Pit/setup/service capture, when available: prove Pit Service and strategy inputs from real pit-service/setup-change evidence.
+
+CI plan:
+
+- Fast replay contract job on every PR: use tiny redacted replay slices, replay selected frame windows into normalized models, and assert semantic contracts without screenshots.
+- Replay screenshot job on overlay/model/rendering PRs and main: generate browser/localhost screenshots and manifests from curated replay frames, then run the existing screenshot/manifest validators.
+- Windows native replay screenshot job on main or manually at first: feed replay snapshots into the Windows screenshot tool and compare native evidence against browser/localhost.
+- Full capture replay audit as a manual or nightly workflow: process larger private/support captures, upload contact sheets and reports, and keep those artifacts out of normal source control.
+
+Success criteria:
+
+- A bug can be described as "capture X, session time Y, focused car Z" and reproduced by a replay validator.
+- Fixes move a named replay contract or screenshot failure from red to green across browser review, localhost, and native evidence where that surface exists.
+- Large raw captures are not committed to git; durable CI fixtures are redacted/minimized capture slices or explicit normalized replay windows.
+- Replay evidence does not replace real Windows/OBS validation, but it makes the next live validation targeted instead of exploratory.
 
 ### v1.2 - Fuel And Strategy V2
 

@@ -19,7 +19,10 @@ internal static class OverlayOptionKeys
     public const string ChromeFooterSourceQualifying = "chrome.footer.source.qualifying";
     public const string ChromeFooterSourceRace = "chrome.footer.source.race";
     public const string RadarMulticlassWarning = "radar.multiclass-warning";
+    public const string RadarMulticlassWarningSeconds = "radar.multiclass-warning-seconds";
+    public const string RadarVisibilitySeconds = "radar.visibility-seconds";
     public const string StandingsClassSeparatorsEnabled = "standings.class-separators.enabled";
+    public const string StandingsCarsInClass = "standings.cars-in-class";
     public const string StandingsOtherClassRows = "standings.other-class-rows";
     public const string StandingsColumnClassWidth = "standings.column.cls-width";
     public const string StandingsColumnCarWidth = "standings.column.car-width";
@@ -52,6 +55,15 @@ internal static class OverlayOptionKeys
     public const string PitServiceShowTireDistance = "pit-service.tire-analysis.distance";
     public const string GapCarsAhead = "gap.cars-ahead";
     public const string GapCarsBehind = "gap.cars-behind";
+    public const string GapGraphEnabled = "gap.graph.enabled";
+    public const string GapTrendLastEnabled = "gap.trend.last.enabled";
+    public const string GapTrend5LEnabled = "gap.trend.5l.enabled";
+    public const string GapTrend10LEnabled = "gap.trend.10l.enabled";
+    public const string GapTrendPitEnabled = "gap.trend.pit.enabled";
+    public const string GapTrendPitLapEnabled = "gap.trend.pit-lap.enabled";
+    public const string GapTrendStintEnabled = "gap.trend.stint.enabled";
+    public const string GapTrendTireEnabled = "gap.trend.tire.enabled";
+    public const string GapTrendStatusEnabled = "gap.trend.status.enabled";
     public const string GapRaceOnlyDefaultApplied = "gap.race-only-default-applied";
     public const string TrackMapBuildFromTelemetry = "track-map.build-from-telemetry";
     public const string TrackMapSectorBoundariesEnabled = "track-map.sector-boundaries.enabled";

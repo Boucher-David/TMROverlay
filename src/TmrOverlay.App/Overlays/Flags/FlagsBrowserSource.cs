@@ -1,4 +1,5 @@
 using TmrOverlay.App.Overlays.BrowserSources;
+using FlagsGeometry = TmrOverlay.App.Overlays.OverlayGeometryContractValues.Flags;
 
 namespace TmrOverlay.App.Overlays.Flags;
 
@@ -12,5 +13,5 @@ internal static class FlagsBrowserSource
         fadeWhenTelemetryUnavailable: FlagsOverlayDefinition.Definition.FadeWhenLiveTelemetryUnavailable,
         bodyClass: "flags-page",
         moduleAssetName: "flags",
-        refreshIntervalMilliseconds: 250);
+        refreshIntervalMilliseconds: FlagsGeometry.RefreshIntervalMilliseconds);
 }

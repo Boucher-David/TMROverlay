@@ -1,0 +1,336 @@
+{
+  "contract": "v102-confirmed-fix-validation-coverage/v1",
+  "tracker": "docs/v1.0.2-feedback.md",
+  "deferredIds": ["V102-003", "V102-028", "V102-030"],
+  "items": [
+    {
+      "id": "V102-001",
+      "status": "Implemented",
+      "surface": "Settings/main window interaction",
+      "validation": "settings screenshot manifests must expose semantic cursor evidence for passive chrome and interactive controls",
+      "sources": ["tools/validate_overlay_screenshots.py", "tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs"]
+    },
+    {
+      "id": "V102-002",
+      "status": "Implemented",
+      "surface": "Settings/main window interaction",
+      "validation": "settings screenshot manifests must mark settings chrome as non-draggable while keeping overlay drag behavior out of the settings contract",
+      "sources": ["tools/validate_overlay_screenshots.py", "tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs"]
+    },
+    {
+      "id": "V102-004",
+      "status": "Implemented",
+      "surface": "Standings overlay",
+      "validation": "browser contracts and screenshot manifests reject race GAP/INT/leader wording in non-race previews",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-005",
+      "status": "Implemented",
+      "surface": "Relative overlay",
+      "validation": "browser contracts require non-race relative timing to be explicitly evidenced and not masquerade weak F2 timing as physical proximity",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/TmrOverlay.App.Tests/Telemetry/LiveTelemetryStoreTests.cs"]
+    },
+    {
+      "id": "V102-006",
+      "status": "Implemented",
+      "surface": "Fuel Calculator overlay",
+      "validation": "browser contracts reject race plan/stint language from practice and qualifying fuel previews",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-007",
+      "status": "Implemented",
+      "surface": "Session / Weather overlay",
+      "validation": "browser contracts and missing-weather variants prove unavailable weather and hide noisy lap estimates outside race sessions",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-008",
+      "status": "Implemented",
+      "surface": "Overlay settings / browser / native sizing / chrome / preview",
+      "validation": "effective settings, chrome-off, no-content, preview-faithfulness, and browser-source sizing contracts are required across manifests",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/settingsEffectMatrix.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-009",
+      "status": "Implemented",
+      "surface": "Pit Service overlay",
+      "validation": "browser contracts reject race lap context from practice and qualifying Pit Service previews",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-010",
+      "status": "Diagnostics added; needs capture validation",
+      "surface": "Diagnostics / validation evidence",
+      "validation": "diagnostic bundle tests distinguish visible overlay metadata from current pixel/screenshot proof",
+      "sources": ["tests/TmrOverlay.App.Tests/Diagnostics/LiveOverlayWindowCaptureStoreTests.cs", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V102-011",
+      "status": "Diagnostics added; needs capture validation",
+      "surface": "Raw capture / Pit Service / setup-change evidence",
+      "validation": "diagnostic bundle tests separate static setup snapshots from missing live wing/ARB adjustment evidence",
+      "sources": ["tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs", "tests/TmrOverlay.App.Tests/Telemetry/LiveOverlayDiagnosticsRecorderTests.cs"]
+    },
+    {
+      "id": "V102-012",
+      "status": "Diagnostics added; needs real validation",
+      "surface": "Track Map / IBT sidecar recovery",
+      "validation": "track-map diagnostics and screenshot variants expose generated-vs-fallback provenance instead of silent circle fallback",
+      "sources": ["tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-013",
+      "status": "Implemented",
+      "surface": "Relative / overlay chrome / native / localhost",
+      "validation": "screenshot manifest parity compares header item value and tone across browser, localhost, and native surfaces",
+      "sources": ["tools/validate_overlay_screenshots.py", "tools/compare_screenshot_manifests.py"]
+    },
+    {
+      "id": "V102-014",
+      "status": "Implemented",
+      "surface": "Relative / localhost / native parity",
+      "validation": "relative row-count/settings contracts require the same row window and explicit fixture source evidence",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/settingsEffectMatrix.test.js", "tools/compare_screenshot_manifests.py"]
+    },
+    {
+      "id": "V102-015",
+      "status": "Implemented",
+      "surface": "Localhost / browser source visibility",
+      "validation": "browser contracts require hidden-product localhost models to return shouldRender=false with empty body evidence",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/settingsEffectMatrix.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-016",
+      "status": "Implemented",
+      "surface": "Standings / Relative / row sizing",
+      "validation": "settings matrix and screenshot manifests require deterministic row count, order, and browser-source sizes",
+      "sources": ["tests/browser-overlays/settingsEffectMatrix.test.js", "tools/validate_overlay_screenshots.py", "tools/compare_screenshot_manifests.py"]
+    },
+    {
+      "id": "V102-017",
+      "status": "Implemented",
+      "surface": "Gap To Leader / native / localhost / design V2",
+      "validation": "Gap contracts require V2 trend evidence, rendered metric rows, focus-relative scale, and parity manifests",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py", "tools/compare_screenshot_manifests.py"]
+    },
+    {
+      "id": "V102-018",
+      "status": "Implemented",
+      "surface": "Gap To Leader / trend metrics",
+      "validation": "Gap contracts require 5L/10L time semantics and completed-lap readiness evidence instead of lap-count text",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py", "tests/TmrOverlay.App.Tests/Overlays/BrowserOverlayModelFactoryTests.cs"]
+    },
+    {
+      "id": "V102-019",
+      "status": "Implemented",
+      "surface": "Relative / live model filtering",
+      "validation": "live telemetry tests require pace-car/non-competitor rows to be excluded without hiding normal competitors",
+      "sources": ["tests/TmrOverlay.App.Tests/Telemetry/LiveTelemetryStoreTests.cs"]
+    },
+    {
+      "id": "V102-020",
+      "status": "Implemented",
+      "surface": "Relative / Standings / layout",
+      "validation": "screenshot manifests require rightmost column geometry, configured width, and text-fit metrics",
+      "sources": ["tools/validate_overlay_screenshots.py", "tools/compare_screenshot_manifests.py"]
+    },
+    {
+      "id": "V102-021",
+      "status": "Implemented",
+      "surface": "Gap To Leader / focused chart window",
+      "validation": "Gap contracts require focus-relative clipping and reject far-behind series scaling that dominates the graph",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-022",
+      "status": "Diagnostics added; needs real validation",
+      "surface": "Overlay manager / z-order / input transparency",
+      "validation": "performance and diagnostics tests record settings-window overlap, topmost/no-activate, input protection, and transition breadcrumbs",
+      "sources": ["tests/TmrOverlay.App.Tests/Performance/AppPerformanceStateTests.cs", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V102-023",
+      "status": "Implemented; CI artifact review pending",
+      "surface": "Standings / lap tone precedence",
+      "validation": "model and screenshot validators require fastest-lap tone to outrank personal-best green in model and render paths",
+      "sources": ["tests/TmrOverlay.App.Tests/Overlays/StandingsOverlayViewModelTests.cs", "tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-024",
+      "status": "Implemented",
+      "surface": "Gap To Leader / metric comparison",
+      "validation": "Gap contracts require Last/comparison evidence to use nearest eligible same-lap car ahead, not just the leader",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-025",
+      "status": "Implemented",
+      "surface": "Gap To Leader / threat box",
+      "validation": "Gap contracts require active threat labels to be same-lap position labels, never car numbers",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-026",
+      "status": "Implemented",
+      "surface": "Gap To Leader / graph colour semantics",
+      "validation": "Gap contracts reserve red exclusively for the active threat series across manifest-rendered series",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-027",
+      "status": "Implemented",
+      "surface": "Localhost / browser header parity",
+      "validation": "header tone evidence is carried through model, effective settings, DOM manifest, and cross-surface parity comparison",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tools/validate_overlay_screenshots.py", "tools/compare_screenshot_manifests.py"]
+    },
+    {
+      "id": "V102-029",
+      "status": "Implemented",
+      "surface": "Gap To Leader / metrics layout",
+      "validation": "Gap rendered metric cells must include text-fit evidence for signed Last-lap delta values",
+      "sources": ["tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-031",
+      "status": "Validation added",
+      "surface": "Screenshot validation / fixtures / CI evidence",
+      "validation": "validator mutation tests and this coverage manifest require semantic evidence instead of screenshot existence only",
+      "sources": ["tests/browser-overlays/v102ValidationCoverage.test.js", "tools/validate_overlay_screenshots.py", "tools/validation/v102-confirmed-fix-coverage.json"]
+    },
+    {
+      "id": "V102-032",
+      "status": "Diagnostics added; needs real validation",
+      "surface": "Update flow / diagnostics",
+      "validation": "update and diagnostics bundle tests preserve transient failed update checks beside final update state",
+      "sources": ["tests/TmrOverlay.App.Tests/Updates/ReleaseUpdateServiceTests.cs", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V102-033",
+      "status": "Implemented",
+      "surface": "Runtime diagnostics / shutdown health",
+      "validation": "runtime-state tests require live running-process identity evidence before dirty-shutdown conclusions",
+      "sources": ["tests/TmrOverlay.App.Tests/Runtime/RuntimeStateServiceTests.cs"]
+    },
+    {
+      "id": "V102-034",
+      "status": "Diagnostics added",
+      "surface": "Race projection / session gates / diagnostics",
+      "validation": "diagnostics tests separate non-race race-projection signal presence from product renderability",
+      "sources": ["tests/TmrOverlay.App.Tests/Telemetry/LiveOverlayDiagnosticsRecorderTests.cs", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V102-035",
+      "status": "Diagnostics added; needs capture validation",
+      "surface": "Post-race analysis / fuel evidence",
+      "validation": "post-race and diagnostics tests classify missing local-player/team fuel evidence explicitly",
+      "sources": ["tests/TmrOverlay.App.Tests/Analysis/PostRaceAnalysisBuilderTests.cs", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V102-036",
+      "status": "Diagnostics added; needs capture validation",
+      "surface": "Live race model / focus vs local context",
+      "validation": "diagnostics tests separate focus/reference progress from local-player/team strategy context",
+      "sources": ["tests/TmrOverlay.App.Tests/Telemetry/LiveOverlayDiagnosticsRecorderTests.cs", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V102-037",
+      "status": "Implemented",
+      "surface": "Race projection / class projection / single-class sessions",
+      "validation": "live telemetry tests require published session laps remaining to outrank timed estimates, including class zero",
+      "sources": ["tests/TmrOverlay.App.Tests/Telemetry/LiveTelemetryStoreTests.cs"]
+    },
+    {
+      "id": "V102-038",
+      "status": "Diagnostics added; needs capture validation",
+      "surface": "Lap delta / telemetry quality / overlay gating",
+      "validation": "diagnostics recorder tests classify all-zero lap-delta placeholders as unusable until quality evidence exists",
+      "sources": ["tests/TmrOverlay.App.Tests/Telemetry/LiveOverlayDiagnosticsRecorderTests.cs", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V102-039",
+      "status": "Implemented",
+      "surface": "Diagnostics / capture synthesis semantics",
+      "validation": "unit tests require valid CarClass=0 coverage and non-competitor slot counts not to masquerade as tracked competitors",
+      "sources": ["tests/TmrOverlay.App.Tests/Telemetry/LiveTelemetryStoreTests.cs", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V102-040",
+      "status": "Diagnostics added; needs real-run evidence",
+      "surface": "Performance / overlay timers / settings manager",
+      "validation": "performance and browser contracts classify timer lateness, settings apply churn, localhost polling, and bounded Gap payloads",
+      "sources": ["tests/TmrOverlay.App.Tests/Performance/AppPerformanceStateTests.cs", "tests/browser-overlays/reviewServerContracts.test.js", "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs"]
+    },
+    {
+      "id": "V102-041",
+      "status": "Implemented",
+      "surface": "UI freeze watch / overlay input diagnostics",
+      "validation": "performance and live-window capture tests require meaningful overlap or input impact before flagging intercept risk",
+      "sources": ["tests/TmrOverlay.App.Tests/Performance/AppPerformanceStateTests.cs", "tests/TmrOverlay.App.Tests/Diagnostics/LiveOverlayWindowCaptureStoreTests.cs"]
+    },
+    {
+      "id": "V102-042",
+      "status": "Diagnostics added; needs capture validation",
+      "surface": "Flags overlay / session flag filtering",
+      "validation": "flag lifecycle diagnostics and screenshot variants track raw-to-display transitions, latching duration, and cleared states",
+      "sources": ["tests/TmrOverlay.App.Tests/Telemetry/LiveOverlayDiagnosticsRecorderTests.cs", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-043",
+      "status": "Implemented",
+      "surface": "Input State overlay / scaling / recommended size",
+      "validation": "input minimum-scale screenshot variants require graph, rail, text, and canvas bounds to stay inside configured size",
+      "sources": ["tests/browser-overlays/settingsEffectMatrix.test.js", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-044",
+      "status": "Diagnostics added; needs capture validation",
+      "surface": "Track Map / local map building / map refresh",
+      "validation": "track-map diagnostics and variants require provenance, fallback-vs-generated evidence, and route visibility",
+      "sources": ["tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-045",
+      "status": "Validation added",
+      "surface": "Overlay chrome / settings chrome / theme tokens",
+      "validation": "screenshot manifests require rounded radius and non-transparent backing evidence, with mutation tests for flattened corners",
+      "sources": ["tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-046",
+      "status": "Diagnostics added; needs reproduction validation",
+      "surface": "Settings/main menu / update flow / window lifecycle",
+      "validation": "diagnostics bundle and update-flow tests preserve menu close/update state breadcrumbs for reproduction validation",
+      "sources": ["tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs", "tests/TmrOverlay.App.Tests/Updates/ReleaseUpdateServiceTests.cs"]
+    },
+    {
+      "id": "V102-047",
+      "status": "Diagnostics added; needs capture validation",
+      "surface": "Car Radar / spatial model / smoothing",
+      "validation": "radar diagnostics record side transitions, opposite flips, no-placement frames, and screenshot variants for left/right/both/clear states",
+      "sources": ["tests/TmrOverlay.App.Tests/Telemetry/LiveOverlayDiagnosticsRecorderTests.cs", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-048",
+      "status": "Diagnostics/validation added; needs capture validation",
+      "surface": "Flags overlay / flag category mapping",
+      "validation": "flag diagnostics and all-kinds variants require debris/caution/one-to-green categories, labels, and non-yellow fallback semantics",
+      "sources": ["tests/TmrOverlay.App.Tests/Telemetry/LiveOverlayDiagnosticsRecorderTests.cs", "tools/validate_overlay_screenshots.py"]
+    },
+    {
+      "id": "V102-049",
+      "status": "Implemented",
+      "surface": "Standings / row cap / native and browser sizing",
+      "validation": "Standings screenshot manifests require bounded table height and row cap across browser, localhost, and native surfaces",
+      "sources": ["tools/validate_overlay_screenshots.py", "tools/compare_screenshot_manifests.py"]
+    },
+    {
+      "id": "V102-050",
+      "status": "Implemented",
+      "surface": "Stream Chat overlay / settings / opacity",
+      "validation": "settings/browser contracts and manifests require Stream Chat opacity controls to reach effective settings and root opacity",
+      "sources": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/settingsEffectMatrix.test.js", "tools/validate_overlay_screenshots.py"]
+    }
+  ]
+}

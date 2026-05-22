@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using TmrOverlay.App.Overlays;
 
 namespace TmrOverlay.App.Overlays.StreamChat;
 
@@ -93,21 +94,29 @@ internal static class StreamChatGdiRenderer
             FormatFlags = StringFormatFlags.NoWrap
         };
 
+        var geometry = OverlayGeometryContracts.StreamChat;
         var x = bounds.Right;
         foreach (var item in metadata.Where(item => !string.IsNullOrWhiteSpace(item)).Reverse().Take(4))
         {
             var label = item.Trim();
-            var width = Math.Clamp(graphics.MeasureString(label, font).Width + 10f, 24f, 78f);
+            var width = Math.Clamp(
+                graphics.MeasureString(label, font).Width + geometry.ChipPaddingX * 2f,
+                geometry.BadgeMinWidth,
+                geometry.ChipMaxWidth);
             x -= width;
             if (x < bounds.Left)
             {
                 break;
             }
 
-            var chipRect = new RectangleF(x, bounds.Top + 1f, width, Math.Max(1f, Math.Min(14f, bounds.Height - 2f)));
-            FillRounded(graphics, chipRect, 3f, fillBrush, borderPen);
+            var chipRect = new RectangleF(
+                x,
+                bounds.Top + Math.Max(0f, (bounds.Height - geometry.ChipHeight) / 2f),
+                width,
+                Math.Max(1f, Math.Min(geometry.ChipHeight, bounds.Height)));
+            FillRounded(graphics, chipRect, geometry.ChipRadius, fillBrush, borderPen);
             graphics.DrawString(label, font, textBrush, chipRect, format);
-            x -= 4f;
+            x -= geometry.ChipGap;
         }
     }
 
@@ -123,7 +132,8 @@ internal static class StreamChatGdiRenderer
         Pen? emoteBorderPen,
         bool draw)
     {
-        var lineHeight = Math.Max(18f, textFont.GetHeight(graphics) + 3f);
+        var geometry = OverlayGeometryContracts.StreamChat;
+        var lineHeight = geometry.TextLineHeight;
         var x = bounds.Left;
         var y = bounds.Top;
         var hasContent = false;
@@ -226,8 +236,12 @@ internal static class StreamChatGdiRenderer
         bool draw)
     {
         var label = string.IsNullOrWhiteSpace(text) ? "emote" : text.Trim();
-        var width = Math.Clamp(graphics.MeasureString(label, font).Width + 12f, 28f, 72f);
-        const float height = 18f;
+        var geometry = OverlayGeometryContracts.StreamChat;
+        var width = Math.Clamp(
+            graphics.MeasureString(label, font).Width + geometry.EmoteSize * 0.55f,
+            geometry.EmoteSize + 7f,
+            geometry.EmoteSize * 3.4f);
+        var height = geometry.EmoteSize;
         if (x > bounds.Left && x + width > bounds.Right && !MoveToNextLine(bounds, lineHeight, ref x, ref y, draw))
         {
             return false;

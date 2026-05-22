@@ -234,12 +234,12 @@ internal sealed record AppDiagnosticsStatusModel(
     {
         if (snapshot.RawCaptureActive)
         {
-            return $"Diagnostic telemetry active ({FormatCount(snapshot.WrittenFrameCount)} frames written)";
+            return $"Enhanced iRacing telemetry capture active ({FormatCount(snapshot.WrittenFrameCount)} frames written)";
         }
 
         if (snapshot.RawCaptureEnabled)
         {
-            return "Diagnostic telemetry requested; starts with live data";
+            return "Enhanced iRacing telemetry capture requested; starts with live data";
         }
 
         if (snapshot.IsCapturing)

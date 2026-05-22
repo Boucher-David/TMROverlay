@@ -20,7 +20,7 @@ internal static class BrowserOverlayRecommendedSize
         }
 
         return new Size(
-            BrowserTableWidth(definition, settings, contentDefinition, sessionKind, baseSize.Width),
+            BrowserTableWidth(settings, contentDefinition, sessionKind, baseSize.Width),
             baseSize.Height);
     }
 
@@ -41,7 +41,6 @@ internal static class BrowserOverlayRecommendedSize
     }
 
     private static int BrowserTableWidth(
-        OverlayDefinition definition,
         OverlaySettings settings,
         OverlayContentDefinition contentDefinition,
         OverlaySessionKind? sessionKind,
@@ -50,41 +49,11 @@ internal static class BrowserOverlayRecommendedSize
         var visibleWidth = OverlayContentColumnSettings
             .VisibleColumnsFor(settings, contentDefinition, sessionKind)
             .Sum(column => column.Width);
-        var defaultWidth = DefaultVisibleTableWidth(contentDefinition);
-        if (visibleWidth <= 0 || defaultWidth <= 0)
+        if (visibleWidth <= 0)
         {
             return fallbackWidth;
         }
 
-        var browserDefaultWidth = BrowserDefaultTableWidth(definition, contentDefinition);
-        if (visibleWidth <= defaultWidth)
-        {
-            var proportionalWidth = (int)Math.Round(browserDefaultWidth * (visibleWidth / (double)defaultWidth));
-            return Math.Max(360, proportionalWidth);
-        }
-
-        return Math.Max(browserDefaultWidth, visibleWidth + contentDefinition.BrowserWidthPadding);
-    }
-
-    private static int BrowserDefaultTableWidth(
-        OverlayDefinition definition,
-        OverlayContentDefinition contentDefinition)
-    {
-        var defaultWidth = definition.DefaultWidth;
-        if (string.Equals(contentDefinition.OverlayId, "standings", StringComparison.Ordinal))
-        {
-            defaultWidth = Math.Max(
-                defaultWidth,
-                DefaultVisibleTableWidth(contentDefinition) + contentDefinition.BrowserWidthPadding);
-        }
-
-        return defaultWidth;
-    }
-
-    private static int DefaultVisibleTableWidth(OverlayContentDefinition definition)
-    {
-        return definition.Columns
-            .Where(column => column.DefaultEnabled)
-            .Sum(column => column.DefaultWidth);
+        return visibleWidth + contentDefinition.BrowserWidthPadding;
     }
 }

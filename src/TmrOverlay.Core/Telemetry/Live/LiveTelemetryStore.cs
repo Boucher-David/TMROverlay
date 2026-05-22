@@ -5,7 +5,8 @@ namespace TmrOverlay.Core.Telemetry.Live;
 internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetrySink
 {
     private const double CloseRadarRangeSeconds = 2d;
-    private const double MulticlassWarningRangeSeconds = 5d;
+    private const double MulticlassWarningDefaultRangeSeconds = 5d;
+    private const double MulticlassWarningMaximumRangeSeconds = 10d;
     private const double MinimumClosingRateSecondsPerSecond = 0.15d;
     private const int OnTrackSurface = 3;
 
@@ -421,7 +422,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
     {
         return car.HasReliableRelativeSeconds
             && car.RelativeSeconds!.Value < -CloseRadarRangeSeconds
-            && car.RelativeSeconds!.Value >= -MulticlassWarningRangeSeconds;
+            && car.RelativeSeconds!.Value >= -MulticlassWarningMaximumRangeSeconds;
     }
 
     private static bool IsCloseEnoughForEarlyWarning(LiveProximityCar car)
@@ -431,8 +432,8 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
 
     private static double CalculateUrgency(LiveProximityCar car, double? closingRate)
     {
-        var seconds = car.HasReliableRelativeSeconds ? car.RelativeSeconds!.Value : MulticlassWarningRangeSeconds;
-        var ratio = RangeUrgency(Math.Abs(seconds), CloseRadarRangeSeconds, MulticlassWarningRangeSeconds);
+        var seconds = car.HasReliableRelativeSeconds ? car.RelativeSeconds!.Value : MulticlassWarningDefaultRangeSeconds;
+        var ratio = RangeUrgency(Math.Abs(seconds), CloseRadarRangeSeconds, MulticlassWarningDefaultRangeSeconds);
 
         var closingBoost = closingRate is { } rate
             ? Math.Clamp(rate / 1.5d, 0d, 0.25d)

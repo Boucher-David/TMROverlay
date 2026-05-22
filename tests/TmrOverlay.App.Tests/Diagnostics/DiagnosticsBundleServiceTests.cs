@@ -1,10 +1,12 @@
 using System.IO.Compression;
 using System.Text.Json.Nodes;
 using TmrOverlay.App.Events;
+using TmrOverlay.App.History;
 using TmrOverlay.App.Installation;
 using TmrOverlay.App.Localhost;
 using Microsoft.Extensions.Logging.Abstractions;
 using TmrOverlay.App.Diagnostics;
+using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Settings;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Performance;
@@ -457,7 +459,31 @@ public sealed class DiagnosticsBundleServiceTests
                 "GET",
                 "/api/track-map",
                 200,
-                TimeSpan.FromMilliseconds(4));
+                TimeSpan.FromMilliseconds(4),
+                "Mozilla/5.0 Chrome/124.0.0.0 Safari/537.36");
+            localhostState.RecordRequest(
+                "overlay_model",
+                "GET",
+                "/api/overlay-model/standings",
+                200,
+                TimeSpan.FromMilliseconds(3),
+                "Mozilla/5.0 OBS Studio/32.1.2");
+            localhostState.RecordPageEvent(new LocalhostOverlayPageEvent(
+                Event: "page-loaded",
+                OverlayId: "standings",
+                ClientId: "obs-test",
+                ClientKind: "obs",
+                ShouldRender: null,
+                Status: null,
+                Error: null));
+            localhostState.RecordPageEvent(new LocalhostOverlayPageEvent(
+                Event: "model-render",
+                OverlayId: "standings",
+                ClientId: "obs-test",
+                ClientKind: "obs",
+                ShouldRender: true,
+                Status: "scoring | race",
+                Error: null));
             var performance = new AppPerformanceState();
             performance.RecordOperation("test.operation", TimeSpan.FromMilliseconds(3));
             var performanceRecorder = new AppPerformanceSnapshotRecorder(storage);
@@ -990,6 +1016,7 @@ public sealed class DiagnosticsBundleServiceTests
                 trackMapStore,
                 settingsStore,
                 liveTelemetry,
+                CreateBrowserModelFactory(storage, trackMapStore, streamChatSource),
                 sessionPreview,
                 performance,
                 performanceRecorder,
@@ -1012,8 +1039,10 @@ public sealed class DiagnosticsBundleServiceTests
             Assert.Contains("metadata/telemetry-state.json", entryNames);
             Assert.Contains("metadata/localhost-overlays.json", entryNames);
             Assert.Contains("metadata/browser-overlays.json", entryNames);
+            Assert.Contains("metadata/localhost-overlay-models.json", entryNames);
             Assert.Contains("metadata/session-preview.json", entryNames);
             Assert.Contains("metadata/shared-settings-contract.json", entryNames);
+            Assert.Contains("metadata/overlay-geometry-contract.json", entryNames);
             Assert.Contains("metadata/release-updates.json", entryNames);
             Assert.Contains("metadata/installer-cleanup.json", entryNames);
             Assert.Contains("metadata/evidence-quality.json", entryNames);
@@ -1099,10 +1128,14 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(
                     "deterministic-session-preview-native-renders",
                     (string?)previewManifestJson?["captureKind"]);
-                Assert.True(((bool?)previewManifestJson?["capturePreviewScreenshotsEnabled"]) == true);
+                Assert.False(((bool?)previewManifestJson?["capturePreviewScreenshotsEnabled"]) ?? true);
                 Assert.Equal(32, ((int?)previewManifestJson?["maxPreviewScreenshots"]) ?? -1);
                 Assert.Equal(31, ((int?)previewManifestJson?["coverage"]?["requestedScreenshotCount"]) ?? -1);
+                Assert.Equal(0, ((int?)previewManifestJson?["coverage"]?["capturedScreenshotCount"]) ?? -1);
                 Assert.Equal(0, ((int?)previewManifestJson?["coverage"]?["omittedByCapCount"]) ?? -1);
+                var previewEvidenceWarnings = Assert.IsType<JsonArray>(previewManifestJson?["evidenceWarnings"]);
+                Assert.Contains(previewEvidenceWarnings, warning =>
+                    string.Equals((string?)warning, "preview_screenshot_capture_disabled", StringComparison.Ordinal));
             }
 
             var evidenceQualityEntry = archive.GetEntry("metadata/evidence-quality.json");
@@ -1212,8 +1245,25 @@ public sealed class DiagnosticsBundleServiceTests
                 var localhostJson = JsonNode.Parse(localhostReader.ReadToEnd());
                 Assert.True(((bool?)localhostJson?["enabled"]) == true);
                 Assert.Equal("listening", (string?)localhostJson?["status"]);
-                Assert.Equal(1L, ((long?)localhostJson?["totalRequests"]) ?? -1L);
+                Assert.Equal(2L, ((long?)localhostJson?["totalRequests"]) ?? -1L);
                 Assert.Equal(1L, ((long?)localhostJson?["routeCounts"]?["track_map"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostJson?["routeCounts"]?["overlay_model"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostJson?["pathCounts"]?["/api/overlay-model/standings"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostJson?["pathStatusCodeCounts"]?["/api/overlay-model/standings|200"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostJson?["clientCounts"]?["chrome"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostJson?["clientCounts"]?["obs"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostJson?["routeClientCounts"]?["overlay_model|obs"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostJson?["pathClientCounts"]?["/api/overlay-model/standings|obs"]) ?? -1L);
+                Assert.Equal("obs", (string?)localhostJson?["lastRequestClientKind"]);
+                Assert.NotEmpty(Assert.IsType<JsonArray>(localhostJson?["recentRequests"]));
+                Assert.Equal("model-render", (string?)localhostJson?["lastPageEventKind"]);
+                Assert.Equal("standings", (string?)localhostJson?["lastPageEventOverlayId"]);
+                Assert.Equal("obs-test", (string?)localhostJson?["lastPageEventClientId"]);
+                Assert.Equal("obs", (string?)localhostJson?["lastPageEventClientKind"]);
+                Assert.True(((bool?)localhostJson?["lastPageEventShouldRender"]) == true);
+                Assert.Equal(1L, ((long?)localhostJson?["pageEventOverlayCounts"]?["standings|page-loaded"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostJson?["pageEventOverlayCounts"]?["standings|model-render"]) ?? -1L);
+                Assert.NotEmpty(Assert.IsType<JsonArray>(localhostJson?["recentPageEvents"]));
             }
 
             var browserOverlaysEntry = archive.GetEntry("metadata/browser-overlays.json");
@@ -1230,6 +1280,52 @@ public sealed class DiagnosticsBundleServiceTests
                     string.Equals((string?)page?["id"], "garage-cover", StringComparison.Ordinal)
                     && string.Equals((string?)page?["canonicalRoute"], "/overlays/garage-cover", StringComparison.Ordinal)
                     && ((bool?)page?["renderWhenTelemetryUnavailable"]) == true);
+            }
+
+            var localhostModelsEntry = archive.GetEntry("metadata/localhost-overlay-models.json");
+            Assert.NotNull(localhostModelsEntry);
+            using (var localhostModelsReader = new StreamReader(localhostModelsEntry.Open()))
+            {
+                var localhostModelsJson = JsonNode.Parse(localhostModelsReader.ReadToEnd());
+                Assert.Equal("listening", (string?)localhostModelsJson?["localhost"]?["status"]);
+                Assert.Equal(1L, ((long?)localhostModelsJson?["localhost"]?["overlayModelRequestCount"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostModelsJson?["localhost"]?["overlayModelSuccessCount"]) ?? -1L);
+                Assert.True(((bool?)localhostModelsJson?["localhost"]?["anyOverlayModelRequestSucceeded"]) == true);
+                Assert.Equal("obs", (string?)localhostModelsJson?["localhost"]?["lastRequestClientKind"]);
+                Assert.Equal(1L, ((long?)localhostModelsJson?["localhost"]?["clientCounts"]?["obs"]) ?? -1L);
+                Assert.Equal("model-render", (string?)localhostModelsJson?["localhost"]?["lastPageEventKind"]);
+                Assert.Equal("standings", (string?)localhostModelsJson?["localhost"]?["lastPageEventOverlayId"]);
+                Assert.Equal("obs", (string?)localhostModelsJson?["localhost"]?["lastPageEventClientKind"]);
+                Assert.True(((bool?)localhostModelsJson?["localhost"]?["lastPageEventShouldRender"]) == true);
+                Assert.Equal(1L, ((long?)localhostModelsJson?["localhost"]?["pageEventOverlayCounts"]?["standings|model-render"]) ?? -1L);
+                Assert.True(((bool?)localhostModelsJson?["telemetry"]?["current"]?["isConnected"]) == true);
+                Assert.True(((bool?)localhostModelsJson?["telemetry"]?["current"]?["isCollecting"]) == true);
+
+                var modelPages = Assert.IsType<JsonArray>(localhostModelsJson?["pages"]);
+                var standings = modelPages.OfType<JsonObject>().Single(page =>
+                    string.Equals((string?)page["id"], "standings", StringComparison.Ordinal));
+                Assert.Equal("/api/overlay-model/standings", (string?)standings["modelApiPath"]);
+                Assert.Equal(1L, ((long?)standings["modelApiRequestCount"]) ?? -1L);
+                Assert.Equal(1L, ((long?)standings["modelApiSuccessCount"]) ?? -1L);
+                Assert.Equal(1L, ((long?)standings["pageLoadedEventCount"]) ?? -1L);
+                Assert.Equal(1L, ((long?)standings["modelRenderEventCount"]) ?? -1L);
+                Assert.Equal(0L, ((long?)standings["modelHiddenEventCount"]) ?? -1L);
+                Assert.NotEmpty(Assert.IsType<JsonArray>(standings["recentPageEvents"]));
+                Assert.Equal("built", (string?)standings["current"]?["buildStatus"]);
+                Assert.Equal("current", (string?)standings["current"]?["snapshotSource"]);
+                Assert.True(((bool?)standings["current"]?["matchesLocalhostEndpoint"]) == true);
+                Assert.Equal("table", (string?)standings["current"]?["bodyKind"]);
+                Assert.NotNull(standings["current"]?["content"]);
+                Assert.NotNull(standings["current"]?["content"]?["rowCount"]);
+                Assert.NotNull(standings["current"]?["content"]?["referenceRowCount"]);
+                Assert.NotNull(standings["current"]?["content"]?["effectiveRendered"]);
+
+                var gapToLeader = modelPages.OfType<JsonObject>().Single(page =>
+                    string.Equals((string?)page["id"], "gap-to-leader", StringComparison.Ordinal));
+                Assert.Equal("/api/overlay-model/gap-to-leader", (string?)gapToLeader["modelApiPath"]);
+                Assert.Equal("built", (string?)gapToLeader["current"]?["buildStatus"]);
+                Assert.Equal("graph", (string?)gapToLeader["current"]?["bodyKind"]);
+                Assert.NotNull(gapToLeader["current"]?["content"]);
             }
 
             var sessionPreviewEntry = archive.GetEntry("metadata/session-preview.json");
@@ -1254,6 +1350,33 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal("twitch", (string?)sharedContractJson?["streamChatDefaultProvider"]);
                 Assert.Equal("techmatesracing", (string?)sharedContractJson?["streamChatDefaultTwitchChannel"]);
                 Assert.Equal("#00E8FF", (string?)sharedContractJson?["designV2Colors"]?["cyan"]);
+            }
+
+            var overlayGeometryContractEntry = archive.GetEntry("metadata/overlay-geometry-contract.json");
+            Assert.NotNull(overlayGeometryContractEntry);
+            using (var overlayGeometryContractReader = new StreamReader(overlayGeometryContractEntry.Open()))
+            {
+                var overlayGeometryContractJson = JsonNode.Parse(overlayGeometryContractReader.ReadToEnd());
+                Assert.Equal(1, ((int?)overlayGeometryContractJson?["evidenceVersion"]) ?? -1);
+                Assert.Equal("overlay-geometry-contract", (string?)overlayGeometryContractJson?["source"]);
+                Assert.Equal(
+                    "src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json",
+                    (string?)overlayGeometryContractJson?["sourceAsset"]);
+                Assert.Equal(64, ((string?)overlayGeometryContractJson?["runtimeContractSha256"])?.Length ?? -1);
+                Assert.Equal(64, ((string?)overlayGeometryContractJson?["sourceJsonSha256"])?.Length ?? -1);
+                Assert.Null(overlayGeometryContractJson?["sourceError"]);
+                Assert.Equal(1152, ((int?)overlayGeometryContractJson?["current"]?["settingsGeometry"]?["shellWidth"]) ?? -1);
+                Assert.Equal(665, ((int?)overlayGeometryContractJson?["current"]?["overlaySizes"]?["standingsWidth"]) ?? -1);
+                Assert.Equal(240, ((int?)overlayGeometryContractJson?["current"]?["tableGeometry"]?["relativeDriverWidth"]) ?? -1);
+                Assert.Equal(180, ((int?)overlayGeometryContractJson?["current"]?["inputState"]?["maximumTracePoints"]) ?? -1);
+                Assert.Equal(250, ((int?)overlayGeometryContractJson?["current"]?["flags"]?["refreshIntervalMilliseconds"]) ?? -1);
+                Assert.Equal(360, ((int?)overlayGeometryContractJson?["current"]?["canvasOverlays"]?["trackMapWidth"]) ?? -1);
+                Assert.Equal(1152, ((int?)overlayGeometryContractJson?["sourceContract"]?["settingsGeometry"]?["shellWidth"]) ?? -1);
+                Assert.Equal(665, ((int?)overlayGeometryContractJson?["sourceContract"]?["overlaySizes"]?["standingsWidth"]) ?? -1);
+                Assert.Equal(240, ((int?)overlayGeometryContractJson?["sourceContract"]?["tableGeometry"]?["relativeDriverWidth"]) ?? -1);
+                Assert.Equal(180, ((int?)overlayGeometryContractJson?["sourceContract"]?["inputState"]?["maximumTracePoints"]) ?? -1);
+                Assert.Equal(250, ((int?)overlayGeometryContractJson?["sourceContract"]?["flags"]?["refreshIntervalMilliseconds"]) ?? -1);
+                Assert.Equal(360, ((int?)overlayGeometryContractJson?["sourceContract"]?["canvasOverlays"]?["trackMapWidth"]) ?? -1);
             }
 
             var releaseUpdatesEntry = archive.GetEntry("metadata/release-updates.json");
@@ -1526,6 +1649,7 @@ public sealed class DiagnosticsBundleServiceTests
                 trackMapStore,
                 settingsStore,
                 liveTelemetry,
+                CreateBrowserModelFactory(storage, trackMapStore, streamChatSource),
                 sessionPreview,
                 performance,
                 performanceRecorder,
@@ -1578,6 +1702,23 @@ public sealed class DiagnosticsBundleServiceTests
         };
     }
 
+    private static BrowserOverlayModelFactory CreateBrowserModelFactory(
+        AppStorageOptions storage,
+        TrackMapStore trackMapStore,
+        StreamChatOverlaySource streamChatSource)
+    {
+        return new BrowserOverlayModelFactory(
+            new SessionHistoryQueryService(new SessionHistoryOptions
+            {
+                Enabled = true,
+                UseBaselineHistory = false,
+                ResolvedUserHistoryRoot = storage.UserHistoryRoot,
+                ResolvedBaselineHistoryRoot = storage.BaselineHistoryRoot
+            }),
+            trackMapStore,
+            streamChatSource);
+    }
+
     private sealed class TestLiveTelemetrySource : ILiveTelemetrySource
     {
         private readonly LiveTelemetrySnapshot _snapshot;
@@ -1589,7 +1730,9 @@ public sealed class DiagnosticsBundleServiceTests
 
         public LiveTelemetrySnapshot Snapshot()
         {
-            return _snapshot;
+            return _snapshot is { IsConnected: true, IsCollecting: true }
+                ? _snapshot with { LastUpdatedAtUtc = DateTimeOffset.UtcNow }
+                : _snapshot;
         }
     }
 }

@@ -411,7 +411,8 @@ internal sealed record TrackMapRenderModel(
             point.Y,
             radius,
             marker.IsFocus,
-            Fill: MarkerColor(marker.ClassColorHex, marker.IsFocus, marker.AlertKind),
+            marker.IsPlayerFocus,
+            Fill: MarkerColor(marker.ClassColorHex, marker.IsFocus, marker.IsPlayerFocus, marker.AlertKind),
             Stroke: ColorOf(OverlayTheme.DesignV2.TrackMarkerBorder),
             StrokeWidth: marker.IsFocus ? 2d : 1.4d,
             Label: label,
@@ -638,14 +639,18 @@ internal sealed record TrackMapRenderModel(
             : null;
     }
 
-    private static TrackMapRenderColor MarkerColor(string? classColorHex, bool isFocus, TrackMapMarkerAlertKind alertKind)
+    private static TrackMapRenderColor MarkerColor(
+        string? classColorHex,
+        bool isFocus,
+        bool isPlayerFocus,
+        TrackMapMarkerAlertKind alertKind)
     {
         if (alertKind == TrackMapMarkerAlertKind.OffTrack)
         {
             return ColorOf(OffTrackAlertMarkerColor);
         }
 
-        if (isFocus)
+        if (isFocus && isPlayerFocus)
         {
             return ColorOf(OverlayTheme.DesignV2.Cyan);
         }
@@ -822,6 +827,7 @@ internal sealed record TrackMapRenderMarker(
     double Y,
     double Radius,
     bool IsFocus,
+    bool IsPlayerFocus,
     TrackMapRenderColor Fill,
     TrackMapRenderColor Stroke,
     double StrokeWidth,

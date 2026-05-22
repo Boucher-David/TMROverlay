@@ -9,12 +9,13 @@ TmrBrowserOverlay.register({
   render() {
     const model = inputDisplayModel;
     if (model?.shouldRender === false) {
+      postBrowserSourceEvent('model-hidden', model);
       inputTrace = [];
       applyInputOverlayLayoutClasses(false, false, false);
       modelRootOpacity = rootOpacityFromModel(model);
       applyOverlayOpacity(0);
       contentEl.innerHTML = '';
-      renderHeaderItems(model, '');
+      clearHeaderItems();
       clearFooterSource();
       return;
     }
@@ -27,13 +28,15 @@ TmrBrowserOverlay.register({
     applyInputOverlayLayoutClasses(hasGraph, railEnabled, hasContent);
     modelRootOpacity = rootOpacityFromModel(model);
     if (!hasContent) {
-      applyOverlayOpacity(1);
-      contentEl.innerHTML = `<div class="empty">${escapeHtml(model?.status || 'Waiting for player in car.')}</div>`;
-      renderHeaderItems(model, '');
-      renderFooterSource(model);
+      postBrowserSourceEvent(model ? 'model-hidden' : 'model-null', model);
+      applyOverlayOpacity(0);
+      contentEl.innerHTML = '';
+      clearHeaderItems();
+      clearFooterSource();
       return;
     }
 
+    postBrowserSourceEvent('model-render', model);
     applyOverlayOpacity(1);
     const brakeAbsActive = inputs.brakeAbsActive === true;
     const layoutClass = [
@@ -59,41 +62,41 @@ function ensureInputStyle() {
   style.id = 'input-state-browser-style';
   style.textContent = `
     body.input-state-page .overlay {
-      width: min(520px, calc(100vw - 16px));
-      height: min(260px, calc(100vh - 16px));
+      width: min(var(--tmr-overlay-sizes-input-state-width, 520px), calc(100vw - 16px));
+      height: min(var(--tmr-overlay-sizes-input-state-height, 260px), calc(100vh - 16px));
       min-width: 0;
       max-width: calc(100vw - 16px);
     }
 
     body.input-state-page .overlay.input-graph-only {
-      width: min(380px, calc(100vw - 16px));
+      width: min(var(--tmr-input-state-graph-only-base-width), calc(100vw - 16px));
     }
 
     body.input-state-page .overlay.input-rail-only {
-      width: min(276px, calc(100vw - 16px));
+      width: min(var(--tmr-input-state-rail-only-base-width), calc(100vw - 16px));
     }
 
     body.input-state-page .content {
       width: 100%;
       height: 100%;
-      padding: 12px 16px 14px;
+      padding: var(--tmr-input-state-content-padding-top) var(--tmr-input-state-content-padding-x) var(--tmr-input-state-content-padding-bottom);
     }
 
     body.input-state-page .overlay.has-header-band .content {
-      height: calc(100% - 38px);
+      height: calc(100% - var(--tmr-input-state-header-band-height));
     }
 
     .input-layout {
       display: grid;
-      grid-template-columns: minmax(160px, 1fr) minmax(136px, 40%);
-      gap: 18px;
+      grid-template-columns: minmax(var(--tmr-input-state-graph-minimum-width), 1fr) minmax(var(--tmr-input-state-rail-preferred-minimum-width), calc(var(--tmr-input-state-rail-preferred-width-fraction) * 100%));
+      gap: var(--tmr-input-state-graph-rail-gap);
       width: 100%;
       height: 100%;
       min-width: 0;
     }
 
     .input-layout.no-rail {
-      grid-template-columns: minmax(220px, 1fr);
+      grid-template-columns: minmax(var(--tmr-input-state-graph-no-rail-minimum-width), 1fr);
     }
 
     .input-layout.rail-only {
@@ -118,8 +121,8 @@ function ensureInputStyle() {
     .input-rail {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
-      gap: 8px;
-      padding: 8px;
+      gap: var(--tmr-input-state-rail-gap);
+      padding: var(--tmr-input-state-rail-padding);
       overflow: hidden;
       background: var(--tmr-surface-raised);
     }
@@ -132,29 +135,29 @@ function ensureInputStyle() {
     .input-bars,
     .input-readouts {
       display: grid;
-      gap: 7px;
+      gap: var(--tmr-input-state-bars-gap);
     }
 
     .input-readouts {
-      gap: 5px;
+      gap: var(--tmr-input-state-readouts-gap);
     }
 
     .input-bar,
     .input-readout {
       display: grid;
-      grid-template-columns: 42px minmax(0, 1fr);
-      column-gap: 6px;
+      grid-template-columns: var(--tmr-input-state-rail-label-column-width) minmax(0, 1fr);
+      column-gap: var(--tmr-input-state-rail-column-gap);
       min-width: 0;
     }
 
     .input-bar {
       grid-template-rows: 15px 11px;
-      min-height: 25px;
+      min-height: var(--tmr-input-state-bar-height);
     }
 
     .input-readout {
       align-items: center;
-      min-height: 20px;
+      min-height: var(--tmr-input-state-readout-height);
     }
 
     .input-bar-label,
@@ -180,7 +183,7 @@ function ensureInputStyle() {
     .input-bar-track {
       align-self: center;
       position: relative;
-      height: 12px;
+      height: var(--tmr-input-state-bar-track-height);
       border-radius: 6px;
       background: var(--tmr-surface-inset);
       overflow: hidden;
@@ -208,8 +211,8 @@ function ensureInputStyle() {
     .input-wheel {
       display: grid;
       grid-template-columns: 1fr auto;
-      grid-template-rows: 14px minmax(0, 1fr);
-      column-gap: 8px;
+      grid-template-rows: var(--tmr-input-state-wheel-header-height) minmax(0, 1fr);
+      column-gap: var(--tmr-input-state-wheel-gap);
       align-items: center;
       min-height: 0;
       overflow: hidden;
@@ -220,8 +223,8 @@ function ensureInputStyle() {
       grid-row: 2;
       align-self: center;
       justify-self: center;
-      width: min(32px, 100%);
-      height: min(32px, 100%);
+      width: min(var(--tmr-input-state-wheel-svg-size), 100%);
+      height: min(var(--tmr-input-state-wheel-svg-size), 100%);
       max-height: 100%;
     }
 
@@ -231,27 +234,27 @@ function ensureInputStyle() {
       }
 
       body.input-state-page .overlay {
-        width: min(312px, calc(100vw - 16px));
-        height: min(156px, calc(100vh - 16px));
+        width: min(var(--tmr-input-state-compact-width), calc(100vw - 16px));
+        height: min(var(--tmr-input-state-compact-height), calc(100vh - 16px));
       }
 
       body.input-state-page .header {
-        min-height: 32px;
+        min-height: var(--tmr-input-state-compact-header-band-height);
         padding: 7px 10px 6px;
         gap: 8px;
       }
 
       body.input-state-page .content {
-        padding: 6px 7px 7px;
+        padding: var(--tmr-input-state-compact-content-padding-top) var(--tmr-input-state-compact-content-padding-x) var(--tmr-input-state-compact-content-padding-bottom);
       }
 
       body.input-state-page .overlay.has-header-band .content {
-        height: calc(100% - 32px);
+        height: calc(100% - var(--tmr-input-state-compact-header-band-height));
       }
 
       .input-layout {
-        grid-template-columns: minmax(92px, 1fr) minmax(72px, 36%);
-        gap: 10px;
+        grid-template-columns: minmax(var(--tmr-input-state-compact-graph-minimum-width), 1fr) minmax(var(--tmr-input-state-compact-rail-minimum-width), 36%);
+        gap: var(--tmr-input-state-compact-graph-rail-gap);
       }
 
       .input-layout.no-rail {
@@ -259,28 +262,28 @@ function ensureInputStyle() {
       }
 
       .input-rail {
-        gap: 4px;
-        padding: 4px;
+        gap: var(--tmr-input-state-compact-rail-gap);
+        padding: var(--tmr-input-state-compact-rail-padding);
       }
 
       .input-bars,
       .input-readouts {
-        gap: 2px;
+        gap: var(--tmr-input-state-compact-bars-gap);
       }
 
       .input-bar,
       .input-readout {
-        grid-template-columns: 28px minmax(0, 1fr);
-        column-gap: 4px;
+        grid-template-columns: var(--tmr-input-state-compact-rail-label-column-width) minmax(0, 1fr);
+        column-gap: var(--tmr-input-state-compact-rail-column-gap);
       }
 
       .input-bar {
         grid-template-rows: 9px 7px;
-        min-height: 15px;
+        min-height: var(--tmr-input-state-compact-bar-height);
       }
 
       .input-readout {
-        min-height: 13px;
+        min-height: var(--tmr-input-state-compact-readout-height);
       }
 
       .input-bar-label,
@@ -297,17 +300,20 @@ function ensureInputStyle() {
       }
 
       .input-bar-track {
-        height: 8px;
+        height: var(--tmr-input-state-compact-bar-track-height);
       }
 
       .input-wheel {
         grid-template-columns: 1fr auto;
-        grid-template-rows: 12px;
-        column-gap: 4px;
+        grid-template-rows: var(--tmr-input-state-compact-wheel-header-height) minmax(var(--tmr-input-state-compact-wheel-minimum-height), 1fr);
+        column-gap: var(--tmr-input-state-compact-wheel-gap);
+        row-gap: 1px;
       }
 
       .input-wheel svg {
-        display: none;
+        display: block;
+        width: min(var(--tmr-input-state-compact-wheel-svg-size), 100%);
+        height: min(var(--tmr-input-state-compact-wheel-svg-size), 100%);
       }
     }
   `;
@@ -395,7 +401,7 @@ function renderInputRailContents(inputs, brakeAbsActive) {
   ].filter(Boolean).join('');
   return `
       ${bars ? `<div class="input-bars">${bars}</div>` : ''}
-      ${inputs.showSteering ? renderWheel(inputs.steeringWheelAngle, inputs.steeringText) : ''}
+      ${inputs.showSteering ? renderWheel(inputs.steeringWheelAngle, inputs.steeringText, inputs.steeringWheelVisualAngle) : ''}
       ${readouts ? `<div class="input-readouts">${readouts}</div>` : ''}`;
 }
 
@@ -417,9 +423,12 @@ function railBar(label, value, color) {
     </div>`;
 }
 
-function renderWheel(angleRadians, angleText) {
+function renderWheel(angleRadians, angleText, visualAngleRadians = null) {
   const angleDegrees = Number.isFinite(angleRadians) ? angleRadians * 180 / Math.PI : null;
-  const displayDegrees = Number.isFinite(angleDegrees) ? angleDegrees : 0;
+  const visualAngleDegrees = Number.isFinite(visualAngleRadians)
+    ? visualAngleRadians * 180 / Math.PI
+    : Number.isFinite(angleDegrees) ? -angleDegrees : null;
+  const displayDegrees = Number.isFinite(visualAngleDegrees) ? visualAngleDegrees : 0;
   return `
     <div class="input-wheel">
       <div class="input-wheel-label">Wheel</div>
@@ -468,13 +477,6 @@ function drawInputGraph(canvas, inputs) {
     drawAbsSegments(ctx, width, height);
   }
 
-  if (inputTrace.length < 2 && !inputs.isAvailable) {
-    ctx.fillStyle = themeColor('--tmr-text-muted', '#8caed4');
-    ctx.font = '700 13px "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('waiting for inputs', width / 2, height / 2);
-  }
 }
 
 function drawTraceLine(ctx, width, height, key, color, lineWidth) {

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using Microsoft.Extensions.Logging;
+using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.Abstractions;
 using TmrOverlay.App.Overlays.Styling;
 using TmrOverlay.App.Performance;
@@ -14,10 +15,6 @@ internal sealed class StreamChatForm : PersistentOverlayForm
 {
     private const int SettingsRefreshIntervalMilliseconds = 1000;
     private const int VisibleMessageBudget = StreamChatOverlayViewModel.VisibleMessageBudget;
-    private const int HeaderHeight = 42;
-    private const int CloseButtonSize = 22;
-    private const int CloseButtonRightMargin = 10;
-    private const int CloseButtonTop = 10;
 
     private readonly AppSettingsStore _settingsStore;
     private readonly StreamChatOverlaySource _streamChatSource;
@@ -27,7 +24,7 @@ internal sealed class StreamChatForm : PersistentOverlayForm
     private readonly System.Windows.Forms.Timer _settingsTimer;
     private readonly List<StreamChatMessage> _messages = [];
     private StreamChatContentOptions _contentOptions = StreamChatContentOptions.Default;
-    private string _status = "waiting for chat source";
+    private string _status = "chat source not configured";
     private string? _lastLoggedError;
 
     public StreamChatForm(
@@ -169,7 +166,7 @@ internal sealed class StreamChatForm : PersistentOverlayForm
 
     private void DrawHeader(Graphics graphics)
     {
-        var header = new Rectangle(0, 0, ClientSize.Width, 42);
+        var header = new Rectangle(0, 0, ClientSize.Width, (int)Math.Round(OverlayGeometryContracts.StreamChat.HeaderHeight));
         using var headerBrush = new SolidBrush(OverlayTheme.Colors.TitleBarBackground);
         using var borderPen = new Pen(OverlayTheme.Colors.WindowBorder);
         graphics.FillRectangle(headerBrush, header);
@@ -197,11 +194,12 @@ internal sealed class StreamChatForm : PersistentOverlayForm
 
     private static Rectangle CloseButtonBounds(Size clientSize)
     {
+        var geometry = OverlayGeometryContracts.StreamChat;
         return new Rectangle(
-            Math.Max(4, clientSize.Width - CloseButtonSize - CloseButtonRightMargin),
-            CloseButtonTop,
-            CloseButtonSize,
-            CloseButtonSize);
+            (int)Math.Round(Math.Max(4f, clientSize.Width - geometry.CloseButtonSize - geometry.CloseButtonRight)),
+            (int)Math.Round(geometry.CloseButtonTop),
+            (int)Math.Round(geometry.CloseButtonSize),
+            (int)Math.Round(geometry.CloseButtonSize));
     }
 
     private bool IsCloseButtonHit(Point clientPoint)
@@ -222,11 +220,12 @@ internal sealed class StreamChatForm : PersistentOverlayForm
 
     internal static bool IsHeaderDragHit(Point clientPoint, Size clientSize)
     {
-        var closeButtonLeft = Math.Max(4, clientSize.Width - CloseButtonSize - CloseButtonRightMargin);
+        var geometry = OverlayGeometryContracts.StreamChat;
+        var closeButtonLeft = Math.Max(4f, clientSize.Width - geometry.CloseButtonSize - geometry.CloseButtonRight);
         return clientPoint.X >= 0
             && clientPoint.X < closeButtonLeft
             && clientPoint.Y >= 0
-            && clientPoint.Y < HeaderHeight;
+            && clientPoint.Y < geometry.HeaderHeight;
     }
 
     private void DrawMessages(Graphics graphics)

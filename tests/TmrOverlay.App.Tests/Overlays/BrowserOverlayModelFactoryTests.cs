@@ -59,9 +59,48 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "general.unitSystem" && Equals(setting.Value, "Metric"));
         Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "scalePercent" && Equals(setting.Value, 100));
         Assert.Equal(FuelCalculatorOverlayDefinition.Definition.DefaultWidth, effectiveSettings.Rendered.BrowserSource.BaseWidth);
-        Assert.Equal(FuelCalculatorOverlayDefinition.Definition.DefaultHeight, effectiveSettings.Rendered.BrowserSource.BaseHeight);
+        Assert.Equal(298, effectiveSettings.Rendered.BrowserSource.BaseHeight);
         Assert.Equal(FuelCalculatorOverlayDefinition.Definition.DefaultWidth, effectiveSettings.Rendered.BrowserSource.Width);
-        Assert.Equal(FuelCalculatorOverlayDefinition.Definition.DefaultHeight, effectiveSettings.Rendered.BrowserSource.Height);
+        Assert.Equal(298, effectiveSettings.Rendered.BrowserSource.Height);
+    }
+
+    [Fact]
+    public void GarageCoverModel_MapsCoverDecisionToTopLevelRenderability()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "garage-cover");
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var hiddenSnapshot = LocalPlayerSnapshot(now);
+        var visibleSnapshot = hiddenSnapshot with
+        {
+            Models = hiddenSnapshot.Models with
+            {
+                RaceEvents = hiddenSnapshot.Models.RaceEvents with
+                {
+                    IsGarageVisible = true,
+                    IsInGarage = true,
+                    IsOnTrack = false
+                }
+            }
+        };
+
+        Assert.True(factory.TryBuild("garage-cover", hiddenSnapshot, settings, now, out var hidden));
+        Assert.NotNull(hidden.Model.GarageCover);
+        Assert.False(hidden.Model.GarageCover!.ShouldCover);
+        Assert.False(hidden.Model.ShouldRender);
+        Assert.False(hidden.Model.EffectiveSettings!.Rendered.ShouldRender);
+
+        Assert.True(factory.TryBuild("garage-cover", visibleSnapshot, settings, now, out var visible));
+        Assert.NotNull(visible.Model.GarageCover);
+        Assert.True(visible.Model.GarageCover!.ShouldCover);
+        Assert.True(visible.Model.ShouldRender);
+        Assert.True(visible.Model.EffectiveSettings!.Rendered.ShouldRender);
     }
 
     [Fact]
@@ -100,6 +139,93 @@ public sealed class BrowserOverlayModelFactoryTests
     }
 
     [Fact]
+    public void EffectiveSettings_IncludesOverlayEvidenceContractFields()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "standings");
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        var built = factory.TryBuild("standings", LocalPlayerSnapshot(now), settings, now, out var response);
+
+        Assert.True(built);
+        var evidence = response.Model.EffectiveSettings;
+        Assert.NotNull(evidence);
+        Assert.Equal("/review/overlays/standings", evidence!.Sources.BrowserReview.RoutePath);
+        Assert.Equal("/overlays/standings", evidence.Sources.LocalhostObs.RoutePath);
+        Assert.NotNull(evidence.Sources.WindowsNative.PixelEvidence);
+        Assert.False(string.IsNullOrWhiteSpace(evidence.Sources.BrowserReview.SharedSettingsHash));
+        Assert.False(string.IsNullOrWhiteSpace(evidence.Sources.BrowserReview.OverlaySettingsHash));
+        Assert.Equal(evidence.Sources.BrowserReview.SharedSettingsHash, evidence.Sources.LocalhostObs.SharedSettingsHash);
+        Assert.Equal(evidence.Sources.BrowserReview.OverlaySettingsHash, evidence.Sources.WindowsNative.OverlaySettingsHash);
+        Assert.NotNull(evidence.Rendered.Provenance);
+        Assert.False(string.IsNullOrWhiteSpace(evidence.Rendered.Provenance!.EvidenceClass));
+        Assert.Equal("src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs", evidence.Rendered.Provenance.SourceContract);
+        Assert.NotNull(evidence.Rendered.ColumnKeys);
+        Assert.NotNull(evidence.Rendered.RowIdentities);
+        Assert.Equal(response.Model.Rows.Count(row => row.IsPlaceholder || row.Cells.Count == 0 || row.Cells.All(string.IsNullOrWhiteSpace)), evidence.Rendered.PlaceholderRowCount);
+        Assert.NotNull(evidence.Rendered.TableStatus);
+        Assert.NotNull(evidence.Rendered.TimingSanity);
+    }
+
+    [Fact]
+    public void EffectiveSettings_IncludesOverlaySpecificEvidenceContractFields()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        EnableOverlay(settings, "fuel-calculator");
+        Assert.True(factory.TryBuild("fuel-calculator", LiveTelemetrySnapshot.Empty, settings, now, out var fuel));
+        var fuelEvidence = fuel.Model.EffectiveSettings;
+        Assert.NotNull(fuelEvidence);
+        Assert.NotNull(fuelEvidence!.Rendered.FuelStrategy);
+        Assert.Equal("unavailable", fuelEvidence.Rendered.FuelStrategy!.AdditionalFuelNeedState);
+        Assert.True(fuelEvidence.Rendered.FuelStrategy.SuccessCopyRequiresMeasuredNeed);
+        Assert.NotNull(fuelEvidence.Rendered.Layout);
+
+        EnableOverlay(settings, "pit-service");
+        Assert.True(factory.TryBuild("pit-service", LocalPlayerSnapshot(now), settings, now, out var pitService));
+        var pitServiceEvidence = pitService.Model.EffectiveSettings;
+        Assert.NotNull(pitServiceEvidence);
+        Assert.NotNull(pitServiceEvidence!.Rendered.Layout);
+
+        EnableOverlay(settings, "input-state");
+        Assert.True(factory.TryBuild("input-state", LocalPlayerSnapshot(now), settings, now, out var inputState));
+        var inputStateEvidence = inputState.Model.EffectiveSettings;
+        Assert.NotNull(inputStateEvidence);
+        Assert.NotNull(inputStateEvidence!.Rendered.InputAvailability);
+
+        EnableOverlay(settings, "track-map");
+        Assert.True(factory.TryBuild("track-map", LocalPlayerSnapshot(now), settings, now, out var trackMap));
+        if (string.Equals(trackMap.Model.TrackMap?.RenderModel.MapKind, "circle", StringComparison.OrdinalIgnoreCase))
+        {
+            var trackMapEvidence = trackMap.Model.EffectiveSettings;
+            Assert.DoesNotContain("live", trackMap.Model.Status, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(trackMapEvidence);
+            if (trackMap.Model.ShouldRender)
+            {
+                Assert.NotNull(trackMapEvidence!.Rendered.MapFallback);
+            }
+            else
+            {
+                Assert.Null(trackMapEvidence!.Rendered.MapFallback);
+                Assert.Empty(trackMap.Model.HeaderItems);
+            }
+        }
+    }
+
+    [Fact]
     public void LocalhostModel_HidesMissingOverlaySettingsByDefault()
     {
         var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
@@ -118,6 +244,76 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.Equal("disabled | product hidden", response.Model.Status);
         Assert.Empty(response.Model.Rows);
         Assert.Contains(response.Model.EffectiveSettings!.Settings, setting => setting.Key == "overlayEnabled" && Equals(setting.Value, false));
+    }
+
+    [Theory]
+    [InlineData("standings")]
+    [InlineData("relative")]
+    public void TableLocalhostModels_PollHiddenWhenTelemetryIsUnavailable(string overlayId)
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, overlayId);
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        var built = factory.TryBuild(overlayId, LiveTelemetrySnapshot.Empty, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.False(response.Model.ShouldRender);
+        Assert.Empty(response.Model.Columns);
+        Assert.Empty(response.Model.Rows);
+        Assert.Equal("hidden | telemetry unavailable", response.Model.Status);
+        Assert.Equal("suppress-rendered-content", response.Model.EffectiveSettings!.Rendered.UnavailableContentPolicy);
+    }
+
+    [Fact]
+    public void TrackMapLocalhostModel_PollsHiddenWhenTelemetryIsUnavailable()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "track-map");
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        var built = factory.TryBuild("track-map", LiveTelemetrySnapshot.Empty, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.False(response.Model.ShouldRender);
+        Assert.Null(response.Model.TrackMap);
+        Assert.Equal("hidden | telemetry unavailable", response.Model.Status);
+        Assert.Equal("suppress-rendered-content", response.Model.EffectiveSettings!.Rendered.UnavailableContentPolicy);
+    }
+
+    [Fact]
+    public void TrackMapLocalhostModel_UsesOverlayOpacityAsMapFillWithoutFadingRoot()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        var overlay = EnableOverlay(settings, "track-map");
+        overlay.Opacity = 0.42d;
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        var built = factory.TryBuild("track-map", LocalPlayerSnapshot(now), settings, now, out var response);
+
+        Assert.True(built);
+        Assert.Equal(1d, response.Model.RootOpacity, precision: 3);
+        Assert.NotNull(response.Model.TrackMap);
+        Assert.Equal(0.42d, response.Model.TrackMap!.InternalOpacity, precision: 3);
+        Assert.Equal(1d, response.Model.EffectiveSettings!.Rendered.BrowserSource.Opacity, precision: 3);
     }
 
     [Fact]
@@ -158,6 +354,49 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.Empty(response.Model.HeaderItems);
         Assert.Equal(string.Empty, response.Model.Source);
         Assert.Equal("hidden | waiting for iRacing", response.Model.Status);
+    }
+
+    [Fact]
+    public void BrowserHeaderItems_HideUnlimitedClockForLapLimitedRace()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "fuel-calculator");
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var context = RaceContext(sessionTime: "unlimited", sessionLaps: "3");
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Sequence = 1,
+            Context = context,
+            Combo = HistoricalComboIdentity.From(context),
+            Models = LiveRaceModels.Empty with
+            {
+                Session = LiveSessionModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    SessionType = "Race",
+                    SessionState = 4,
+                    SessionTimeRemainSeconds = 604_800d,
+                    SessionTimeTotalSeconds = 604_800d,
+                    SessionLapsRemain = 3,
+                    SessionLapsTotal = 3
+                }
+            }
+        };
+
+        var built = factory.TryBuild("fuel-calculator", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.DoesNotContain(response.Model.HeaderItems, item => item.Key == "timeRemaining");
     }
 
     [Fact]
@@ -433,6 +672,7 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.True(built);
         Assert.DoesNotContain(response.Model.HeaderItems, item => item.Key == "status");
         Assert.Equal("00:03:58", response.Model.HeaderItems.First(item => item.Key == "timeRemaining").Value);
+        Assert.Equal("normal", response.Model.HeaderItems.First(item => item.Key == "timeRemaining").Tone);
         Assert.DoesNotContain(response.Model.Metrics, row => row.Label == "Location");
         Assert.DoesNotContain(response.Model.Metrics, row => row.Label == "Service");
         Assert.DoesNotContain(response.Model.Metrics, row => row.Label == "Tires");
@@ -528,6 +768,68 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.Contains(response.Model.Graph.Series, series => series.CarIdx == timedClassCar.CarIdx);
         Assert.DoesNotContain(response.Model.Graph.Series, series => series.CarIdx == focusWithoutTiming.CarIdx);
         Assert.All(response.Model.Graph.TrendMetrics, metric => Assert.Equal("unavailable", metric.State));
+    }
+
+    [Fact]
+    public void GapToLeaderGraph_WaitsDuringRacePreGreenWhenGapSignalsAreMissing()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "gap-to-leader");
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var leader = TimingRow(carIdx: 11, isClassLeader: true, classPosition: 1);
+        var focus = TimingRow(carIdx: 12, isFocus: true, classPosition: 2);
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Sequence = 1,
+            Models = LiveRaceModels.Empty with
+            {
+                Session = LiveSessionModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    SessionType = "Race",
+                    SessionState = 2,
+                    SessionTimeSeconds = 60d,
+                    SessionTimeRemainSeconds = 120d,
+                    SessionLapsRemain = 3,
+                    SessionLapsTotal = 3
+                },
+                Reference = LiveReferenceModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    FocusCarIdx = focus.CarIdx,
+                    ReferenceCarClass = 1,
+                    ClassPosition = 2
+                },
+                Timing = LiveTimingModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    FocusCarIdx = focus.CarIdx,
+                    ClassLeaderCarIdx = leader.CarIdx,
+                    FocusRow = focus,
+                    ClassRows = [leader, focus],
+                    ClassLeaderGapEvidence = LiveSignalEvidence.Unavailable("class-gap", "gap_signals_missing")
+                }
+            }
+        };
+
+        var built = factory.TryBuild("gap-to-leader", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.False(response.Model.ShouldRender);
+        Assert.Equal("waiting", response.Model.Status);
+        Assert.Null(response.Model.Graph);
     }
 
     [Fact]
@@ -633,10 +935,13 @@ public sealed class BrowserOverlayModelFactoryTests
             lapCompleted: 15), settings, now.AddSeconds(450d), out var response));
 
         var metrics = response.Model.Graph!.TrendMetrics.ToDictionary(metric => metric.Label);
+        Assert.Equal(new[] { "Last", "5L", "10L", "Pit", "PLap", "Stint", "Tire", "Status" }, response.Model.Graph.TrendMetrics.Select(metric => metric.Label));
         Assert.Equal("ready", metrics["5L"].State);
         Assert.NotNull(metrics["5L"].FocusGapChangeSeconds);
+        Assert.Equal(5, metrics["5L"].CompletedReferenceLaps);
         Assert.Equal("unavailable", metrics["10L"].State);
         Assert.Null(metrics["10L"].StateLabel);
+        Assert.Equal(5, metrics["10L"].CompletedReferenceLaps);
     }
 
     [Fact]
@@ -710,7 +1015,104 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.Equal("P2", response.Model.Graph.ComparisonLabel);
         Assert.DoesNotContain(response.Model.Graph.Series, series => series.CarIdx == 21);
         var last = Assert.Single(response.Model.Graph.TrendMetrics, metric => metric.Label == "Last");
-        Assert.Equal("1:29.800", last.ComparisonText);
+        Assert.Equal("0.0", last.PrimaryText);
+        Assert.Equal("-0.6", last.ComparisonText);
+        Assert.DoesNotContain(":", last.ComparisonText!);
+    }
+
+    [Fact]
+    public void GapToLeaderFocusSwitch_ResetsBrowserHistoryForNewFocusPerspective()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "gap-to-leader");
+        var now = DateTimeOffset.Parse("2026-05-19T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.True(factory.TryBuild("gap-to-leader", FocusSwitchGapSnapshot(
+            now,
+            sequence: 1,
+            sessionTimeSeconds: 100d,
+            focusCarIdx: 12,
+            focusClassPosition: 2,
+            focusGapSeconds: 20d,
+            chaseCarIdx: 13), settings, now, out _));
+        Assert.True(factory.TryBuild("gap-to-leader", FocusSwitchGapSnapshot(
+            now.AddSeconds(45d),
+            sequence: 2,
+            sessionTimeSeconds: 145d,
+            focusCarIdx: 21,
+            focusClassPosition: 2,
+            focusGapSeconds: 18d,
+            chaseCarIdx: 22), settings, now.AddSeconds(45d), out _));
+        Assert.True(factory.TryBuild("gap-to-leader", FocusSwitchGapSnapshot(
+            now.AddSeconds(85d),
+            sequence: 3,
+            sessionTimeSeconds: 185d,
+            focusCarIdx: 12,
+            focusClassPosition: 2,
+            focusGapSeconds: 17d,
+            chaseCarIdx: 13), settings, now.AddSeconds(85d), out var response));
+
+        var graph = response.Model.Graph;
+        Assert.NotNull(graph);
+        Assert.True(response.Model.ShouldRender);
+
+        var returnedFocus = Assert.Single(graph!.Series, series => series.CarIdx == 12);
+        Assert.True(returnedFocus.IsReference);
+        Assert.Equal(new[] { 185d }, returnedFocus.Points.Select(point => point.AxisSeconds).ToArray());
+
+        Assert.DoesNotContain(graph.Series, series => series.CarIdx == 21);
+        Assert.Single(graph.Series.Where(series => series.IsReference));
+
+        Assert.DoesNotContain(graph.DriverChanges, marker => marker.Label == "REF");
+    }
+
+    [Fact]
+    public void GapToLeaderFocusSwitch_DoesNotEmitRefMarkerForNonPlayerFocus()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "gap-to-leader");
+        var now = DateTimeOffset.Parse("2026-05-20T18:10:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.True(factory.TryBuild("gap-to-leader", FocusSwitchGapSnapshot(
+            now,
+            sequence: 1,
+            sessionTimeSeconds: 300d,
+            focusCarIdx: 12,
+            focusClassPosition: 2,
+            focusGapSeconds: 18d,
+            chaseCarIdx: 13,
+            playerCarIdx: 63), settings, now, out _));
+        Assert.True(factory.TryBuild("gap-to-leader", FocusSwitchGapSnapshot(
+            now.AddSeconds(30d),
+            sequence: 2,
+            sessionTimeSeconds: 330d,
+            focusCarIdx: 5,
+            focusClassPosition: 5,
+            focusGapSeconds: 24.7d,
+            chaseCarIdx: 6,
+            playerCarIdx: 63), settings, now.AddSeconds(30d), out var response));
+
+        var graph = response.Model.Graph;
+        Assert.NotNull(graph);
+
+        var referenceSeries = Assert.Single(graph!.Series.Where(series => series.IsReference));
+        Assert.Equal(5, referenceSeries.CarIdx);
+        Assert.DoesNotContain(graph.Series, series => series.CarIdx == 63 && series.IsReference);
+
+        Assert.DoesNotContain(graph.DriverChanges, marker => marker.Label == "REF");
+        Assert.DoesNotContain(graph.DriverChanges, marker => marker.CarIdx == 63 && marker.IsReference);
     }
 
     [Fact]
@@ -793,7 +1195,7 @@ public sealed class BrowserOverlayModelFactoryTests
             "car-radar" => (300, 300),
             "fuel-calculator" => (503, 315),
             "gap-to-leader" => (654, 336),
-            "pit-service" => (530, 722),
+            "pit-service" => (530, 707),
             "session-weather" => (464, 496),
             _ => (400, 300)
         };
@@ -851,13 +1253,14 @@ public sealed class BrowserOverlayModelFactoryTests
         LiveSignalEvidence? gapEvidence = null,
         int? lapCompleted = null,
         double? lastLapTimeSeconds = null,
-        double? bestLapTimeSeconds = null)
+        double? bestLapTimeSeconds = null,
+        bool? isPlayer = null)
     {
         return new LiveTimingRow(
             CarIdx: carIdx,
             Quality: LiveModelQuality.Reliable,
             Source: "test",
-            IsPlayer: isFocus,
+            IsPlayer: isPlayer ?? isFocus,
             IsFocus: isFocus,
             IsOverallLeader: false,
             IsClassLeader: isClassLeader,
@@ -975,6 +1378,110 @@ public sealed class BrowserOverlayModelFactoryTests
         };
     }
 
+    private static LiveTelemetrySnapshot FocusSwitchGapSnapshot(
+        DateTimeOffset now,
+        long sequence,
+        double sessionTimeSeconds,
+        int focusCarIdx,
+        int focusClassPosition,
+        double focusGapSeconds,
+        int chaseCarIdx,
+        int? playerCarIdx = null)
+    {
+        var effectivePlayerCarIdx = playerCarIdx ?? focusCarIdx;
+        var leader = TimingRow(
+            carIdx: 11,
+            isClassLeader: true,
+            classPosition: 1,
+            gapSeconds: 0d,
+            deltaSeconds: -focusGapSeconds,
+            gapEvidence: LiveSignalEvidence.Reliable("CarIdxF2Time"),
+            lapCompleted: (int)Math.Floor(sessionTimeSeconds / 90d),
+            lastLapTimeSeconds: 90.0d,
+            bestLapTimeSeconds: 89.7d);
+        var focus = TimingRow(
+            carIdx: focusCarIdx,
+            isFocus: true,
+            classPosition: focusClassPosition,
+            gapSeconds: focusGapSeconds,
+            deltaSeconds: 0d,
+            gapEvidence: LiveSignalEvidence.Reliable("CarIdxF2Time"),
+            lapCompleted: (int)Math.Floor(sessionTimeSeconds / 90d),
+            lastLapTimeSeconds: 90.1d,
+            bestLapTimeSeconds: 89.9d,
+            isPlayer: effectivePlayerCarIdx == focusCarIdx);
+        var chase = TimingRow(
+            carIdx: chaseCarIdx,
+            classPosition: focusClassPosition + 1,
+            gapSeconds: focusGapSeconds + 5d,
+            deltaSeconds: 5d,
+            gapEvidence: LiveSignalEvidence.Reliable("CarIdxF2Time"),
+            lapCompleted: (int)Math.Floor(sessionTimeSeconds / 90d),
+            lastLapTimeSeconds: 90.4d,
+            bestLapTimeSeconds: 90.0d);
+        var player = TimingRow(
+            carIdx: effectivePlayerCarIdx,
+            classPosition: 29,
+            gapSeconds: focusGapSeconds + 180d,
+            deltaSeconds: 180d,
+            gapEvidence: LiveSignalEvidence.Reliable("CarIdxF2Time"),
+            lapCompleted: (int)Math.Floor(sessionTimeSeconds / 90d),
+            lastLapTimeSeconds: 91.2d,
+            bestLapTimeSeconds: 90.8d,
+            isPlayer: true);
+
+        return LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Sequence = sequence,
+            Models = LiveRaceModels.Empty with
+            {
+                Session = LiveSessionModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    SessionType = "Race",
+                    SessionTimeSeconds = sessionTimeSeconds,
+                    SessionTimeRemainSeconds = 3600d
+                },
+                Reference = LiveReferenceModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    PlayerCarIdx = effectivePlayerCarIdx,
+                    FocusCarIdx = focusCarIdx,
+                    FocusIsPlayer = effectivePlayerCarIdx == focusCarIdx,
+                    ReferenceCarClass = 1,
+                    ClassPosition = focusClassPosition,
+                    LastLapTimeSeconds = 90.1d,
+                    HasTimingReference = true,
+                    IsOnTrack = true
+                },
+                Timing = LiveTimingModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    FocusCarIdx = focusCarIdx,
+                    ClassLeaderCarIdx = leader.CarIdx,
+                    FocusRow = focus,
+                    ClassRows = effectivePlayerCarIdx == focusCarIdx ? [leader, focus, chase] : [leader, focus, chase, player],
+                    ClassLeaderGapEvidence = LiveSignalEvidence.Reliable("CarIdxF2Time")
+                },
+                RaceProgress = LiveRaceProgressModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    ReferenceClassPosition = focusClassPosition,
+                    StrategyLapTimeSeconds = 90d,
+                    RacePaceSeconds = 90d,
+                    RacePaceSource = "test"
+                }
+            }
+        };
+    }
+
     private static LiveTelemetrySnapshot GapSnapshot(
         DateTimeOffset now,
         long sequence,
@@ -1050,5 +1557,22 @@ public sealed class BrowserOverlayModelFactoryTests
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(aggregate, JsonOptions));
+    }
+
+    private static HistoricalSessionContext RaceContext(string sessionTime, string sessionLaps)
+    {
+        return new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity(),
+            Track = new HistoricalTrackIdentity(),
+            Session = new HistoricalSessionIdentity
+            {
+                SessionType = "Race",
+                SessionName = "RACE",
+                SessionTime = sessionTime,
+                SessionLaps = sessionLaps
+            },
+            Conditions = new HistoricalSessionInfoConditions()
+        };
     }
 }

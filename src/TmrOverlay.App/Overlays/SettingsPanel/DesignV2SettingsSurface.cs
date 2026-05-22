@@ -4,10 +4,12 @@ using TmrOverlay.App.Brand;
 using TmrOverlay.App.Diagnostics;
 using TmrOverlay.App.Localhost;
 using TmrOverlay.App.Overlays.BrowserSources;
+using TmrOverlay.App.Overlays.CarRadar;
 using TmrOverlay.App.Overlays.Content;
 using TmrOverlay.App.Overlays.Flags;
 using TmrOverlay.App.Overlays.GarageCover;
 using TmrOverlay.App.Overlays.GapToLeader;
+using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Overlays.Styling;
 using TmrOverlay.App.Overlays.TrackMap;
@@ -16,6 +18,7 @@ using TmrOverlay.App.Telemetry;
 using TmrOverlay.App.Updates;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
+using SettingsGeometry = TmrOverlay.App.Overlays.OverlayGeometryContractValues.SettingsGeometry;
 
 namespace TmrOverlay.App.Overlays.SettingsPanel;
 
@@ -54,24 +57,82 @@ internal sealed class DesignV2SettingsCallbacks
     public required Func<string?> LatestDiagnosticsBundlePath { get; init; }
 
     public required Func<string> AdvancedDiagnosticsText { get; init; }
+
+    public required Action<Point> BeginWindowDrag { get; init; }
+
+    public required Action<Point> MoveWindowDrag { get; init; }
+
+    public required Action EndWindowDrag { get; init; }
 }
 
 internal sealed class DesignV2SettingsSurface : Control
 {
     private const string GeneralTabId = "general";
     private const string SupportTabId = "error-logging";
-    private const int ShellX = 44;
-    private const int ShellY = 36;
-    private const int ShellWidth = 1152;
-    private const int ShellHeight = 608;
-    private const int SidebarX = 64;
-    private const int SidebarY = 116;
-    private const int SidebarWidth = 190;
-    private const int SidebarHeight = 506;
-    private const int ContentX = 278;
-    private const int ContentY = 116;
-    private const int ContentWidth = 890;
-    private const int ContentHeight = 506;
+    public const int LogicalCanvasWidth = SettingsGeometry.DesignWidth + SettingsGeometry.NativeCanvasOffsetX * 2;
+    public const int LogicalCanvasHeight = SettingsGeometry.DesignHeight + SettingsGeometry.NativeCanvasOffsetY * 2;
+    private const int ShellX = SettingsGeometry.NativeCanvasOffsetX;
+    private const int ShellY = SettingsGeometry.NativeCanvasOffsetY;
+    private const int ShellWidth = SettingsGeometry.ShellWidth;
+    private const int ShellHeight = SettingsGeometry.ShellHeight;
+    private const int ShellCornerRadius = SettingsGeometry.ShellCornerRadius;
+    private const int TitlebarHeight = SettingsGeometry.TitlebarHeight;
+    private const int BodyHeight = SettingsGeometry.BodyHeight;
+    private const int SidebarX = ShellX + SettingsGeometry.SidebarX;
+    private const int SidebarY = ShellY + SettingsGeometry.SidebarY;
+    private const int SidebarWidth = SettingsGeometry.SidebarWidth;
+    private const int SidebarHeight = SettingsGeometry.SidebarHeight;
+    private const int ContentX = ShellX + SettingsGeometry.ContentX;
+    private const int ContentY = ShellY + SettingsGeometry.ContentY;
+    private const int ContentWidth = SettingsGeometry.ContentWidth;
+    private const int ContentHeight = SettingsGeometry.ContentHeight;
+    private const int ContentHeaderHeight = SettingsGeometry.ContentHeaderHeight;
+    private const int ContentBodyY = ShellY + SettingsGeometry.ContentBodyY;
+    private const int ContentBodyHeight = SettingsGeometry.ContentBodyHeight;
+    private const int PanelX = ShellX + SettingsGeometry.PanelX;
+    private const int PanelNoRegionsY = ShellY + SettingsGeometry.PanelNoRegionsY;
+    private const int PanelWithRegionsY = ShellY + SettingsGeometry.PanelWithRegionsY;
+    private const int PanelSmallWidth = SettingsGeometry.PanelSmallWidth;
+    private const int PanelMediumWidth = SettingsGeometry.PanelMediumWidth;
+    private const int PanelWideWidth = SettingsGeometry.PanelWideWidth;
+    private const int PanelPaddingX = SettingsGeometry.PanelPaddingX;
+    private const int PanelPaddingY = SettingsGeometry.PanelPaddingY;
+    private const int GeneralGridGap = SettingsGeometry.GeneralGridGap;
+    private const int BrowserSourcePanelWidth = SettingsGeometry.BrowserSourcePanelWidth;
+    private const int BrowserSourcePanelHeight = SettingsGeometry.BrowserSourcePanelHeight;
+    private const int CopyButtonWidth = SettingsGeometry.CopyButtonWidth;
+    private const int CopyButtonHeight = SettingsGeometry.CopyButtonHeight;
+    private const int RegionSegmentShellHeight = SettingsGeometry.RegionSegmentShellHeight;
+    private const int RegionSegmentGap = SettingsGeometry.RegionSegmentGap;
+    private const int RegionSegmentPadding = SettingsGeometry.RegionSegmentPadding;
+    private const int RegionSegmentHeight = SettingsGeometry.RegionSegmentHeight;
+    private const int ToggleWidth = SettingsGeometry.ToggleWidth;
+    private const int ToggleHeight = SettingsGeometry.ToggleHeight;
+    private const int SliderWidth = SettingsGeometry.SliderWidth;
+    private const int SliderHeight = SettingsGeometry.SliderHeight;
+    private const int StepperWidth = SettingsGeometry.StepperWidth;
+    private const int StepperHeight = SettingsGeometry.StepperHeight;
+    private const int StepperButtonWidth = SettingsGeometry.StepperButtonWidth;
+    private const int StepperButtonHeight = SettingsGeometry.StepperButtonHeight;
+    private const int StepperGap = SettingsGeometry.StepperGap;
+    private const int ProviderChoiceWidth = SettingsGeometry.ProviderChoiceWidth;
+    private const int StreamlabsInputWidth = SettingsGeometry.StreamlabsInputWidth;
+    private const int StreamlabsInputHeight = SettingsGeometry.StreamlabsInputHeight;
+    private const int TwitchInputWidth = SettingsGeometry.TwitchInputWidth;
+    private const int FieldRowHeight = SettingsGeometry.FieldRowHeight;
+    private const int FieldLabelWidth = SettingsGeometry.FieldLabelWidth;
+    private const float SupportBundleValueFontSize = SettingsGeometry.SupportBundleValueFontSize;
+    private const int SupportBundleRowX = SettingsGeometry.SupportBundleRowX;
+    private const int SupportBundleRowY = SettingsGeometry.SupportBundleRowY;
+    private const int SupportBundleRowWidth = SettingsGeometry.SupportBundleRowWidth;
+    private const int SupportBundleRowHeight = SettingsGeometry.SupportBundleRowHeight;
+    private const int SupportBundleLabelWidth = SettingsGeometry.SupportBundleLabelWidth;
+    private const int SupportBundleLabelHeight = SettingsGeometry.SupportBundleLabelHeight;
+    private const int SupportBundleValueX = SettingsGeometry.SupportBundleValueX;
+    private const int SupportBundleValueY = SettingsGeometry.SupportBundleValueY;
+    private const int SupportBundleValueWidth = SettingsGeometry.SupportBundleValueWidth;
+    private const int SupportBundleValueHeight = SettingsGeometry.SupportBundleValueHeight;
+    private const int CheckSize = SettingsGeometry.CheckSize;
 
     private static readonly string[] PreferredOverlayTabOrder =
     [
@@ -122,6 +183,13 @@ internal sealed class DesignV2SettingsSurface : Control
     private SettingsRegion _selectedRegion = SettingsRegion.General;
     private string _supportStatusText = string.Empty;
     private bool _supportStatusIsError;
+    private bool _draggingWindow;
+
+    public static Size LogicalCanvasSize => new(LogicalCanvasWidth, LogicalCanvasHeight);
+
+    public static Size WindowClientSize => new(ShellWidth, ShellHeight);
+
+    public static Point WindowCanvasOffset => new(-ShellX, -ShellY);
 
     public DesignV2SettingsSurface(
         ApplicationSettings applicationSettings,
@@ -145,7 +213,7 @@ internal sealed class DesignV2SettingsSurface : Control
         _brandLogo = TmrBrandAssets.LoadLogoImage();
 
         BackColor = Color.Black;
-        Size = new Size(SettingsOverlayDefinition.Definition.DefaultWidth, SettingsOverlayDefinition.Definition.DefaultHeight);
+        Size = LogicalCanvasSize;
         SetStyle(
             ControlStyles.AllPaintingInWmPaint
             | ControlStyles.OptimizedDoubleBuffer
@@ -163,6 +231,11 @@ internal sealed class DesignV2SettingsSurface : Control
     public bool IsSupportSelected => string.Equals(_selectedTabId, SupportTabId, StringComparison.OrdinalIgnoreCase);
 
     public bool IsGarageCoverSelected => string.Equals(_selectedTabId, "garage-cover", StringComparison.OrdinalIgnoreCase);
+
+    public static GraphicsPath CreateWindowRegionPath()
+    {
+        return RoundPath(new Rectangle(Point.Empty, WindowClientSize), ShellCornerRadius);
+    }
 
     public void RefreshRuntimeState()
     {
@@ -252,7 +325,6 @@ internal sealed class DesignV2SettingsSurface : Control
         graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
         graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-        DrawBackdrop(graphics, ClientRectangle);
         DrawWindowShell(graphics);
         DrawTitleBar(graphics);
         DrawSidebar(graphics);
@@ -297,6 +369,14 @@ internal sealed class DesignV2SettingsSurface : Control
             return;
         }
 
+        if (TitleBarDragBounds().Contains(e.Location))
+        {
+            _draggingWindow = true;
+            Capture = true;
+            _callbacks.BeginWindowDrag(Cursor.Position);
+            return;
+        }
+
         for (var index = 0; index < _sidebarTabs.Count; index++)
         {
             if (SidebarButtonBounds(index).Contains(e.Location))
@@ -322,6 +402,44 @@ internal sealed class DesignV2SettingsSurface : Control
             }
         }
 
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (_draggingWindow)
+        {
+            _callbacks.MoveWindowDrag(Cursor.Position);
+            return;
+        }
+
+        Cursor = CloseButtonBounds().Contains(e.Location)
+            ? Cursors.Hand
+            : TitleBarDragBounds().Contains(e.Location)
+                ? Cursors.SizeAll
+                : Cursors.Default;
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        if (!_draggingWindow || e.Button != MouseButtons.Left)
+        {
+            return;
+        }
+
+        _draggingWindow = false;
+        Capture = false;
+        _callbacks.EndWindowDrag();
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (!_draggingWindow)
+        {
+            Cursor = Cursors.Default;
+        }
     }
 
     private void RebuildDynamicControls()
@@ -361,7 +479,7 @@ internal sealed class DesignV2SettingsSurface : Control
                 BuildOverlayContentControls(definition, settings);
                 break;
             case SettingsRegion.Header:
-                BuildChromeControls(settings, HeaderChromeRows);
+                BuildChromeControls(settings, HeaderChromeRowsFor(settings.Id));
                 break;
             case SettingsRegion.Footer:
                 BuildChromeControls(settings, FooterChromeRowsFor(settings.Id));
@@ -378,8 +496,12 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private void BuildApplicationGeneralControls()
     {
+        var unitsRow = DesignV2SettingsLayout.FieldRowBounds(
+            DesignV2SettingsLayout.UnitsPanelBounds(),
+            rowIndex: 0,
+            SettingsGeometry.SegmentedRowWidth);
         AddDynamic(new V2ChoiceControl(
-            new Rectangle(506, 270, 154, 30),
+            DesignV2SettingsLayout.RightAlignedControlBounds(unitsRow, SettingsGeometry.SegmentedWidth, SettingsGeometry.SegmentedHeight),
             ["Metric", "Imperial"],
             string.Equals(_applicationSettings.General.UnitSystem, "Imperial", StringComparison.OrdinalIgnoreCase)
                 ? "Imperial"
@@ -393,7 +515,7 @@ internal sealed class DesignV2SettingsSurface : Control
 
         var preview = _callbacks.SessionPreviewSnapshot();
         AddDynamic(new V2ChoiceControl(
-            new Rectangle(328, 458, 468, 32),
+            DesignV2SettingsLayout.PreviewModeControlBounds(),
             ["Off", "Practice", "Quali", "Race"],
             PreviewChoiceLabel(preview.Mode),
             selected =>
@@ -404,14 +526,14 @@ internal sealed class DesignV2SettingsSurface : Control
             }));
 
         var update = _releaseUpdates.Snapshot();
-        AddActionButton(new Rectangle(748, 292, 76, 30), "Check", () => _callbacks.CheckForUpdatesAsync(), update.CanCheck);
+        AddActionButton(DesignV2SettingsLayout.UpdatesCheckButtonBounds(), "Check", () => _callbacks.CheckForUpdatesAsync(), update.CanCheck);
         if (update.Status == ReleaseUpdateStatus.PendingRestart)
         {
-            AddActionButton(new Rectangle(838, 292, 88, 30), "Restart", _callbacks.RestartToApplyUpdate, update.CanRestartToApply);
+            AddActionButton(DesignV2SettingsLayout.UpdatesPrimaryButtonBounds(), "Restart", _callbacks.RestartToApplyUpdate, update.CanRestartToApply);
         }
         else
         {
-            AddActionButton(new Rectangle(838, 292, 88, 30), "Install", () => _callbacks.DownloadAndPrepareUpdateAsync(), update.CanDownload);
+            AddActionButton(DesignV2SettingsLayout.UpdatesPrimaryButtonBounds(), "Install", () => _callbacks.DownloadAndPrepareUpdateAsync(), update.CanDownload);
         }
 
     }
@@ -420,14 +542,16 @@ internal sealed class DesignV2SettingsSurface : Control
     {
         var snapshot = _captureState.Snapshot();
         var trackMapSettings = TrackMapSettings();
+        var capturePanel = DesignV2SettingsLayout.SupportCapturePanelBounds();
+        var rawCaptureRow = DesignV2SettingsLayout.FieldRowBounds(capturePanel, 0, SettingsGeometry.ToggleRowWidth);
         var rawToggle = new V2ToggleControl(
-            new Rectangle(620, 276, 56, 28),
+            DesignV2SettingsLayout.RightAlignedControlBounds(rawCaptureRow, ToggleWidth, ToggleHeight),
             snapshot.RawCaptureEnabled || snapshot.RawCaptureActive,
             isOn =>
             {
                 if (_captureState.Snapshot().RawCaptureActive)
                 {
-                    SetSupportStatus("Diagnostic telemetry is active for this session.", isError: false);
+                    SetSupportStatus("Enhanced iRacing telemetry capture is active for this session.", isError: false);
                     RebuildDynamicControls();
                     return;
                 }
@@ -435,8 +559,8 @@ internal sealed class DesignV2SettingsSurface : Control
                 var accepted = _callbacks.SetRawCaptureEnabled(isOn);
                 SetSupportStatus(
                     accepted
-                        ? (isOn ? "Diagnostic telemetry will start with live data." : "Diagnostic telemetry capture disabled.")
-                        : "Diagnostic telemetry change was rejected while capture is active.",
+                        ? (isOn ? "Enhanced iRacing telemetry capture will start with live data." : "Enhanced iRacing telemetry capture disabled.")
+                        : "Enhanced iRacing telemetry capture change was rejected while capture is active.",
                     !accepted);
                 RebuildDynamicControls();
             })
@@ -444,9 +568,11 @@ internal sealed class DesignV2SettingsSurface : Control
             Enabled = !snapshot.RawCaptureActive
         };
         AddDynamic(rawToggle);
+        AddActionButton(DesignV2SettingsLayout.SupportCreateBundleButtonBounds(), "Create Bundle", _callbacks.CreateDiagnosticsBundle);
+        AddActionButton(DesignV2SettingsLayout.SupportOpenBundleButtonBounds(), "Open Bundle Folder", () => _callbacks.OpenSupportDirectory(_storageOptions.DiagnosticsRoot, "diagnostics"));
 
         AddDynamic(new V2ToggleControl(
-            new Rectangle(620, 320, 56, 28),
+            DesignV2SettingsLayout.SupportAnalysisToggleBounds(DesignV2SettingsLayout.SupportAnalysisRowBounds(0)),
             trackMapSettings.GetBooleanOption(OverlayOptionKeys.TrackMapBuildFromTelemetry, defaultValue: true),
             isOn =>
             {
@@ -456,22 +582,22 @@ internal sealed class DesignV2SettingsSurface : Control
                 RebuildDynamicControls();
                 Invalidate();
             }));
-
-        AddActionButton(new Rectangle(328, 552, 132, 32), "Create Bundle", _callbacks.CreateDiagnosticsBundle);
-        AddActionButton(new Rectangle(474, 552, 104, 32), "Copy Path", _callbacks.CopyLatestDiagnosticsBundlePath);
-        AddActionButton(new Rectangle(748, 514, 104, 30), "Open Logs", () => _callbacks.OpenSupportDirectory(_storageOptions.LogsRoot, "logs"));
-        AddActionButton(new Rectangle(866, 514, 118, 30), "Diagnostics", () => _callbacks.OpenSupportDirectory(_storageOptions.DiagnosticsRoot, "diagnostics"));
-        AddActionButton(new Rectangle(748, 552, 100, 30), "Captures", () => _callbacks.OpenSupportDirectory(_storageOptions.CaptureRoot, "captures"));
-        AddActionButton(new Rectangle(866, 552, 92, 30), "History", () => _callbacks.OpenSupportDirectory(_storageOptions.UserHistoryRoot, "history"));
+        AddDisabledToggle(DesignV2SettingsLayout.SupportAnalysisToggleBounds(DesignV2SettingsLayout.SupportAnalysisRowBounds(1)), isOn: true);
+        AddDisabledToggle(DesignV2SettingsLayout.SupportAnalysisToggleBounds(DesignV2SettingsLayout.SupportAnalysisRowBounds(2)), isOn: true);
+        AddDisabledToggle(DesignV2SettingsLayout.SupportAnalysisToggleBounds(DesignV2SettingsLayout.SupportAnalysisRowBounds(3)), isOn: true);
+        AddDisabledToggle(DesignV2SettingsLayout.SupportAnalysisToggleBounds(DesignV2SettingsLayout.SupportAnalysisRowBounds(4)), isOn: true);
     }
 
     private void BuildOverlayGeneralControls(OverlayDefinition definition, OverlaySettings settings)
     {
         var isGarageCover = string.Equals(definition.Id, "garage-cover", StringComparison.OrdinalIgnoreCase);
+        var panelBounds = DesignV2SettingsLayout.OverlayControlsPanelBounds(OverlayControlsPanelHeight(definition, settings));
+        var rowIndex = 0;
         if (!isGarageCover)
         {
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
             AddDynamic(new V2ToggleControl(
-                new Rectangle(600, 328, 56, 28),
+                DesignV2SettingsLayout.RightAlignedControlBounds(row, ToggleWidth, ToggleHeight),
                 settings.Enabled,
                 isOn =>
                 {
@@ -483,10 +609,12 @@ internal sealed class DesignV2SettingsSurface : Control
 
         if (definition.ShowScaleControl)
         {
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
             AddDynamic(new V2PercentSliderControl(
-                new Rectangle(454, isGarageCover ? 328 : 368, 180, 28),
-                ClosestPercent(settings.Scale, [60, 75, 100, 125, 150, 175, 200]),
-                [60, 75, 100, 125, 150, 175, 200],
+                DesignV2SettingsLayout.InlineControlBounds(row, SliderWidth, SliderHeight),
+                (int)Math.Round(Math.Clamp(settings.Scale, 0.6d, 2d) * 100d),
+                60,
+                200,
                 Cyan,
                 percent =>
                 {
@@ -501,20 +629,24 @@ internal sealed class DesignV2SettingsSurface : Control
 
         if (isGarageCover)
         {
-            AddActionButton(new Rectangle(454, 368, 112, 30), "Import", () => _callbacks.ImportGarageCoverImage(settings));
-            AddActionButton(new Rectangle(580, 368, 86, 30), "Clear", () => _callbacks.ClearGarageCoverImage(settings));
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+            var importBounds = DesignV2SettingsLayout.InlineControlBounds(row, SettingsGeometry.GarageImportButtonWidth, CopyButtonHeight);
+            AddActionButton(importBounds, "Import", () => _callbacks.ImportGarageCoverImage(settings));
+            AddActionButton(DesignV2SettingsLayout.GarageClearButtonBounds(importBounds), "Clear", () => _callbacks.ClearGarageCoverImage(settings));
         }
 
         if (definition.ShowOpacityControl)
         {
-            var opacityPercents = string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-                ? new[] { 0, 20, 30, 40, 50, 60, 70, 80, 90, 100 }
-                : new[] { 20, 30, 40, 50, 60, 70, 80, 90, 100 };
-            var minimumOpacity = opacityPercents[0] / 100d;
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
+            var minimumOpacityPercent = string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+                ? 0
+                : 20;
+            var minimumOpacity = minimumOpacityPercent / 100d;
             AddDynamic(new V2PercentSliderControl(
-                new Rectangle(454, 408, 180, 28),
-                ClosestPercent(settings.Opacity, opacityPercents),
-                opacityPercents,
+                DesignV2SettingsLayout.InlineControlBounds(row, SliderWidth, SliderHeight),
+                (int)Math.Round(Math.Clamp(settings.Opacity, minimumOpacity, 1d) * 100d),
+                minimumOpacityPercent,
+                100,
                 Magenta,
                 percent =>
                 {
@@ -524,24 +656,13 @@ internal sealed class DesignV2SettingsSurface : Control
                 }));
         }
 
-        if (BrowserOverlayCatalog.TryGetRouteForOverlayId(definition.Id, out var route))
-        {
-            var url = $"{_localhostOverlayOptions.Prefix.TrimEnd('/')}{route}";
-            AddActionButton(new Rectangle(1048, 382, 70, 30), "Copy", () => _callbacks.CopyTextToClipboard(url));
-        }
-    }
-
-    private void BuildOverlayContentControls(OverlayDefinition definition, OverlaySettings settings)
-    {
         switch (definition.Id)
         {
             case "relative":
-                var relativeContentRect = new Rectangle(306, 272, 834, 280);
-                var relativeRows = ColumnContentRows(settings, OverlayContentColumnSettings.Relative);
-                AddContentMatrixControls(settings, relativeRows, relativeContentRect, UseContentSessionColumns(definition));
+                var relativeRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
                 AddDynamic(new V2StepperControl(
-                    MatrixControlCountStepperBounds(relativeContentRect, relativeRows.Count),
-                    settings.GetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, defaultValue: 5, minimum: 0, maximum: 8),
+                    DesignV2SettingsLayout.StepperBounds(relativeRow),
+                    settings.GetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, defaultValue: 3, minimum: 0, maximum: 8),
                     0,
                     8,
                     value => $"{value} each side",
@@ -555,14 +676,32 @@ internal sealed class DesignV2SettingsSurface : Control
                     }));
                 break;
             case "standings":
-                var standingsContentRect = new Rectangle(306, 272, 834, 344);
-                var standingsRows = ColumnContentRows(settings, OverlayContentColumnSettings.Standings);
-                AddContentMatrixControls(settings, standingsRows, standingsContentRect, UseContentSessionColumns(definition), rowHeight: 22, rowGap: 3);
+                var carsInClassRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+                AddDynamic(new V2StepperControl(
+                    DesignV2SettingsLayout.StepperBounds(carsInClassRow),
+                    settings.GetIntegerOption(
+                        OverlayOptionKeys.StandingsCarsInClass,
+                        StandingsBrowserSettings.Default.MaximumRows,
+                        StandingsBrowserSettings.MinimumCarsInClass,
+                        StandingsBrowserSettings.MaximumCarsInClass),
+                    StandingsBrowserSettings.MinimumCarsInClass,
+                    StandingsBrowserSettings.MaximumCarsInClass,
+                    value => value == 1 ? "1 car" : $"{value} cars",
+                    value =>
+                    {
+                        settings.SetIntegerOption(
+                            OverlayOptionKeys.StandingsCarsInClass,
+                            value,
+                            StandingsBrowserSettings.MinimumCarsInClass,
+                            StandingsBrowserSettings.MaximumCarsInClass);
+                        _callbacks.SaveAndApply();
+                        Invalidate();
+                    }));
                 if (OverlayContentColumnSettings.Standings.Blocks?.FirstOrDefault() is { } standingsBlock)
                 {
-                    AddDynamic(new V2CheckControl(
-                        StandingsMulticlassVisibleCheckBounds(standingsContentRect, standingsRows.Count, rowHeight: 22, rowGap: 3),
-                        string.Empty,
+                    var multiclassRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+                    AddDynamic(new V2ToggleControl(
+                        DesignV2SettingsLayout.RightAlignedControlBounds(multiclassRow, ToggleWidth, ToggleHeight),
                         OverlayContentColumnSettings.BlockEnabled(settings, standingsBlock),
                         isOn =>
                         {
@@ -572,8 +711,9 @@ internal sealed class DesignV2SettingsSurface : Control
                         }));
                     if (standingsBlock.CountOptionKey is { } countKey)
                     {
+                        var otherClassRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
                         AddDynamic(new V2StepperControl(
-                            StandingsMulticlassCountBounds(standingsContentRect, standingsRows.Count, rowHeight: 22, rowGap: 3),
+                            DesignV2SettingsLayout.StepperBounds(otherClassRow),
                             OverlayContentColumnSettings.BlockCount(settings, standingsBlock),
                             standingsBlock.MinimumCount,
                             standingsBlock.MaximumCount,
@@ -588,12 +728,12 @@ internal sealed class DesignV2SettingsSurface : Control
                 }
                 break;
             case "gap-to-leader":
-                var gapContentRect = new Rectangle(306, 272, 834, 126);
                 var gapEachSide = Math.Max(
                     settings.GetIntegerOption(OverlayOptionKeys.GapCarsAhead, defaultValue: 5, minimum: 0, maximum: 12),
                     settings.GetIntegerOption(OverlayOptionKeys.GapCarsBehind, defaultValue: 5, minimum: 0, maximum: 12));
+                var gapRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
                 AddDynamic(new V2StepperControl(
-                    MatrixControlCountStepperBounds(gapContentRect, 0, followsMatrixRows: false),
+                    DesignV2SettingsLayout.StepperBounds(gapRow),
                     gapEachSide,
                     0,
                     12,
@@ -606,40 +746,132 @@ internal sealed class DesignV2SettingsSurface : Control
                         Invalidate();
                     }));
                 break;
+            case "car-radar":
+                var warningRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+                AddDynamic(new V2ToggleControl(
+                    DesignV2SettingsLayout.RightAlignedControlBounds(warningRow, ToggleWidth, ToggleHeight),
+                    settings.GetBooleanOption(OverlayOptionKeys.RadarMulticlassWarning, defaultValue: true),
+                    isOn =>
+                    {
+                        settings.SetBooleanOption(OverlayOptionKeys.RadarMulticlassWarning, isOn);
+                        _callbacks.SaveAndApply();
+                        Invalidate();
+                    }));
+                if (settings.GetBooleanOption(OverlayOptionKeys.RadarMulticlassWarning, defaultValue: true))
+                {
+                    var warningSecondsRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+                    AddDynamic(new V2StepperControl(
+                        DesignV2SettingsLayout.StepperBounds(warningSecondsRow),
+                        settings.GetIntegerOption(
+                            OverlayOptionKeys.RadarMulticlassWarningSeconds,
+                            CarRadarOverlayViewModel.DefaultMulticlassWarningRangeSeconds,
+                            CarRadarOverlayViewModel.MinimumMulticlassWarningRangeSeconds,
+                            CarRadarOverlayViewModel.MaximumMulticlassWarningRangeSeconds),
+                        CarRadarOverlayViewModel.MinimumMulticlassWarningRangeSeconds,
+                        CarRadarOverlayViewModel.MaximumMulticlassWarningRangeSeconds,
+                        value => $"{value}s back",
+                        value =>
+                        {
+                            settings.SetIntegerOption(
+                                OverlayOptionKeys.RadarMulticlassWarningSeconds,
+                                value,
+                                CarRadarOverlayViewModel.MinimumMulticlassWarningRangeSeconds,
+                                CarRadarOverlayViewModel.MaximumMulticlassWarningRangeSeconds);
+                            _callbacks.SaveAndApply();
+                            Invalidate();
+                        }));
+                }
+
+                var radarRangeRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+                AddDynamic(new V2StepperControl(
+                    DesignV2SettingsLayout.StepperBounds(radarRangeRow),
+                    settings.GetIntegerOption(
+                        OverlayOptionKeys.RadarVisibilitySeconds,
+                        CarRadarOverlayViewModel.DefaultRadarVisibilitySeconds,
+                        CarRadarOverlayViewModel.MinimumRadarVisibilitySeconds,
+                        CarRadarOverlayViewModel.MaximumRadarVisibilitySeconds),
+                    CarRadarOverlayViewModel.MinimumRadarVisibilitySeconds,
+                    CarRadarOverlayViewModel.MaximumRadarVisibilitySeconds,
+                    value => $"{value}s away",
+                    value =>
+                    {
+                        settings.SetIntegerOption(
+                            OverlayOptionKeys.RadarVisibilitySeconds,
+                            value,
+                            CarRadarOverlayViewModel.MinimumRadarVisibilitySeconds,
+                            CarRadarOverlayViewModel.MaximumRadarVisibilitySeconds);
+                        _callbacks.SaveAndApply();
+                        Invalidate();
+                    }));
+                break;
+        }
+
+        if (BrowserOverlayCatalog.TryGetRouteForOverlayId(definition.Id, out var route))
+        {
+            var url = $"{_localhostOverlayOptions.Prefix.TrimEnd('/')}{route}";
+            AddActionButton(BrowserSourceCopyButtonBounds(BrowserSourcePanelBounds()), "Copy", () => _callbacks.CopyTextToClipboard(url));
+        }
+    }
+
+    private void BuildOverlayContentControls(OverlayDefinition definition, OverlaySettings settings)
+    {
+        switch (definition.Id)
+        {
+            case "relative":
+                var relativeRows = ColumnContentRows(settings, OverlayContentColumnSettings.Relative);
+                var relativeContentRect = ContentTablePanelBounds(relativeRows.Count);
+                AddContentMatrixControls(settings, relativeRows, relativeContentRect, UseContentSessionColumns(definition));
+                break;
+            case "standings":
+                var standingsRows = ColumnContentRows(settings, OverlayContentColumnSettings.Standings);
+                var standingsContentRect = ContentTablePanelBounds(standingsRows.Count);
+                AddContentMatrixControls(settings, standingsRows, standingsContentRect, UseContentSessionColumns(definition));
+                break;
+            case "gap-to-leader":
+                var gapRows = BlockContentRows(settings, OverlayContentColumnSettings.GapToLeader);
+                var gapContentRect = ContentTablePanelBounds(gapRows.Count);
+                AddContentMatrixControls(settings, gapRows, gapContentRect, UseContentSessionColumns(definition));
+                break;
             case "fuel-calculator":
+                var fuelRows = BlockContentRows(settings, OverlayContentColumnSettings.FuelCalculator);
+                AddContentMatrixControls(settings, fuelRows, ContentTablePanelBounds(fuelRows.Count), UseContentSessionColumns(definition));
                 break;
             case "track-map":
+                var trackRows = new ContentMatrixRow[]
+                {
+                    new("Sector boundaries", OverlayOptionKeys.TrackMapSectorBoundariesEnabled, true)
+                };
                 AddContentMatrixControls(
                     settings,
-                    [
-                        new ContentMatrixRow("Sector boundaries", OverlayOptionKeys.TrackMapSectorBoundariesEnabled, true)
-                    ],
-                    new Rectangle(306, 272, 834, 150),
+                    trackRows,
+                    ContentTablePanelBounds(trackRows.Length),
                     UseContentSessionColumns(definition));
                 break;
             case "input-state":
-                AddContentMatrixControls(settings, BlockContentRows(settings, OverlayContentColumnSettings.InputState), new Rectangle(306, 272, 834, 236), UseContentSessionColumns(definition), rowHeight: 22, rowGap: 3);
+                var inputRows = BlockContentRows(settings, OverlayContentColumnSettings.InputState);
+                AddContentMatrixControls(settings, inputRows, ContentTablePanelBounds(inputRows.Count), UseContentSessionColumns(definition));
                 break;
             case "session-weather":
-                AddBlockGridToggleControls(settings, OverlayContentColumnSettings.SessionWeather, new Rectangle(306, 272, 834, 344), columns: 2, rowHeight: 16, rowGap: 2, useSessionColumns: UseContentSessionColumns(definition));
+                AddBlockGridToggleControls(settings, OverlayContentColumnSettings.SessionWeather, ContentBlockGridPanelBounds(OverlayContentColumnSettings.SessionWeather.Blocks?.Count ?? 0, columns: 2), columns: 2, rowHeight: BlockGridRowHeight, rowGap: BlockGridRowGap, useSessionColumns: UseContentSessionColumns(definition));
                 break;
             case "pit-service":
-                AddBlockGridToggleControls(settings, OverlayContentColumnSettings.PitService, new Rectangle(306, 272, 834, 344), columns: 2, rowHeight: 18, rowGap: 3, useSessionColumns: UseContentSessionColumns(definition));
+                AddBlockGridToggleControls(settings, OverlayContentColumnSettings.PitService, ContentBlockGridPanelBounds(OverlayContentColumnSettings.PitService.Blocks?.Count ?? 0, columns: 2), columns: 2, rowHeight: BlockGridRowHeight, rowGap: BlockGridRowGap, useSessionColumns: UseContentSessionColumns(definition));
                 break;
             case "car-radar":
-                AddContentMatrixControls(settings, [new ContentMatrixRow("Faster-class warning", OverlayOptionKeys.RadarMulticlassWarning, true)], new Rectangle(306, 272, 834, 126), UseContentSessionColumns(definition));
                 break;
             case "flags":
+                var flagRows = new ContentMatrixRow[]
+                {
+                    new("Green / start / ready", OverlayOptionKeys.FlagsShowGreen, true),
+                    new("Blue", OverlayOptionKeys.FlagsShowBlue, true),
+                    new("Yellow / debris / caution", OverlayOptionKeys.FlagsShowYellow, true),
+                    new("Red / black / repair", OverlayOptionKeys.FlagsShowCritical, true),
+                    new("White / checkered / final laps", OverlayOptionKeys.FlagsShowFinish, true)
+                };
                 AddContentMatrixControls(
                     settings,
-                    [
-                        new ContentMatrixRow("Green", OverlayOptionKeys.FlagsShowGreen, true),
-                        new ContentMatrixRow("Blue", OverlayOptionKeys.FlagsShowBlue, true),
-                        new ContentMatrixRow("Yellow", OverlayOptionKeys.FlagsShowYellow, true),
-                        new ContentMatrixRow("Red / black", OverlayOptionKeys.FlagsShowCritical, true),
-                        new ContentMatrixRow("White / checkered", OverlayOptionKeys.FlagsShowFinish, true)
-                    ],
-                    new Rectangle(306, 272, 834, 240),
+                    flagRows,
+                    ContentTablePanelBounds(flagRows.Length),
                     UseContentSessionColumns(definition));
                 break;
             case "stream-chat":
@@ -653,10 +885,10 @@ internal sealed class DesignV2SettingsSurface : Control
         AddBlockGridToggleControls(
             settings,
             OverlayContentColumnSettings.StreamChat,
-            new Rectangle(306, 272, 834, 200),
+            ContentBlockGridPanelBounds(OverlayContentColumnSettings.StreamChat.Blocks?.Count ?? 0, columns: 2),
             columns: 2,
-            rowHeight: 16,
-            rowGap: 2,
+            rowHeight: BlockGridRowHeight,
+            rowGap: BlockGridRowGap,
             useSessionColumns: false);
     }
 
@@ -664,8 +896,10 @@ internal sealed class DesignV2SettingsSurface : Control
     {
         var provider = StreamChatOverlaySettings.NormalizeProvider(
             settings.GetStringOption(OverlayOptionKeys.StreamChatProvider, StreamChatOverlaySettings.DefaultProvider));
+        var panelBounds = DesignV2SettingsLayout.StreamChatContentPanelBounds();
+        var providerRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, 0, SettingsGeometry.ProviderChoiceRowWidth);
         AddDynamic(new V2ChoiceControl(
-            new Rectangle(454, 330, 300, 30),
+            DesignV2SettingsLayout.InlineControlBounds(providerRow, ProviderChoiceWidth, SettingsGeometry.SegmentedHeight),
             ["Not configured", "Streamlabs", "Twitch"],
             ProviderLabel(provider),
             selected =>
@@ -676,19 +910,23 @@ internal sealed class DesignV2SettingsSurface : Control
                 Invalidate();
             }));
 
+        var streamlabsRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, 1, SettingsGeometry.StreamlabsUrlRowWidth);
         var streamlabsBox = CreateTextBox(
             settings.GetStringOption(OverlayOptionKeys.StreamChatStreamlabsUrl),
-            new Rectangle(454, 368, 420, 28),
-            provider == StreamChatOverlaySettings.ProviderStreamlabs);
+            DesignV2SettingsLayout.InlineControlBounds(streamlabsRow, StreamlabsInputWidth, StreamlabsInputHeight),
+            provider == StreamChatOverlaySettings.ProviderStreamlabs,
+            "stream-chat.content.streamlabs-url.value");
         AddDynamic(streamlabsBox);
 
+        var twitchRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, 2, SettingsGeometry.TwitchChannelRowWidth);
         var twitchBox = CreateTextBox(
             settings.GetStringOption(OverlayOptionKeys.StreamChatTwitchChannel, StreamChatOverlaySettings.DefaultTwitchChannel),
-            new Rectangle(454, 406, 210, 28),
-            provider == StreamChatOverlaySettings.ProviderTwitch);
+            DesignV2SettingsLayout.InlineControlBounds(twitchRow, TwitchInputWidth, StreamlabsInputHeight),
+            provider == StreamChatOverlaySettings.ProviderTwitch,
+            "stream-chat.content.twitch-channel.value");
         AddDynamic(twitchBox);
 
-        AddActionButton(new Rectangle(682, 404, 92, 30), "Save", () =>
+        AddActionButton(DesignV2SettingsLayout.StreamChatSaveButtonBounds(panelBounds), "Save", () =>
         {
             settings.SetStringOption(OverlayOptionKeys.StreamChatStreamlabsUrl, streamlabsBox.Text);
             settings.SetStringOption(OverlayOptionKeys.StreamChatTwitchChannel, twitchBox.Text);
@@ -705,6 +943,7 @@ internal sealed class DesignV2SettingsSurface : Control
         }
 
         var sessionColumns = OverlaySettingsSessionColumns.ChromeColumnsFor(settings.Id);
+        var rect = ContentTablePanelBounds(rows.Count);
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
         {
             var row = rows[rowIndex];
@@ -712,7 +951,7 @@ internal sealed class DesignV2SettingsSurface : Control
             {
                 var sessionKind = sessionColumns[index].Kind;
                 AddDynamic(new V2CheckControl(
-                    new Rectangle(454 + index * 116, 370 + rowIndex * 48, 38, 22),
+                    MatrixSessionCheckBounds(rowIndex, index, rect, sessionColumns.Count),
                     string.Empty,
                     OverlaySettingsSessionColumns.ChromeEnabledFor(settings, row, sessionKind),
                     isOn =>
@@ -730,8 +969,8 @@ internal sealed class DesignV2SettingsSurface : Control
         IReadOnlyList<ContentMatrixRow> rows,
         Rectangle rect,
         bool useSessionColumns,
-        int rowHeight = 24,
-        int rowGap = 5)
+        int rowHeight = MatrixRowHeight,
+        int rowGap = MatrixRowGap)
     {
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
         {
@@ -742,7 +981,7 @@ internal sealed class DesignV2SettingsSurface : Control
                 {
                     var sessionKind = ContentSessionKinds[sessionIndex];
                     AddDynamic(new V2CheckControl(
-                        MatrixSessionCheckBounds(rowIndex, sessionIndex, rect, rowHeight, rowGap),
+                        MatrixSessionCheckBounds(rowIndex, sessionIndex, rect, ContentSessionKinds.Length, rowHeight, rowGap),
                         string.Empty,
                         row.EnabledFor(settings, sessionKind),
                         isOn =>
@@ -824,6 +1063,15 @@ internal sealed class DesignV2SettingsSurface : Control
         AddDynamic(button);
     }
 
+    private void AddDisabledToggle(Rectangle bounds, bool isOn)
+    {
+        var toggle = new V2ToggleControl(bounds, isOn, _ => { })
+        {
+            Enabled = false
+        };
+        AddDynamic(toggle);
+    }
+
     private void AddActionButton(Rectangle bounds, string text, Func<Task> onClick, bool enabled = true)
     {
         var button = new V2ActionButton(bounds, text);
@@ -873,10 +1121,9 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private void DrawWindowShell(Graphics graphics)
     {
-        FillRounded(graphics, new Rectangle(ShellX, ShellY, ShellWidth, ShellHeight), 18, Rgba(0, 0, 0, 72));
-        FillGradient(graphics, new Rectangle(ShellX, ShellY, ShellWidth, ShellHeight), [Rgb(8, 10, 23), Rgb(15, 9, 32), Rgb(5, 20, 37)], -25f, 18);
-        StrokeRounded(graphics, new Rectangle(ShellX, ShellY, ShellWidth, ShellHeight), 18, Rgba(0, 232, 255, 200), 1.4f);
-        FillRounded(graphics, new Rectangle(ShellX, ShellY, ShellWidth, 58), 18, TitleBar);
+        FillGradient(graphics, new Rectangle(ShellX, ShellY, ShellWidth, ShellHeight), [Rgb(8, 10, 23), Rgb(15, 9, 32), Rgb(5, 20, 37)], -25f, ShellCornerRadius);
+        StrokeRounded(graphics, new Rectangle(ShellX, ShellY, ShellWidth, ShellHeight), ShellCornerRadius, Rgba(0, 232, 255, 200), 1.4f);
+        FillRounded(graphics, new Rectangle(ShellX, ShellY, ShellWidth, TitlebarHeight), ShellCornerRadius, TitleBar);
         using var magentaBrush = new SolidBrush(Magenta);
         graphics.FillRectangle(magentaBrush, ShellX, 92, ShellWidth, 2);
         using var cyanBrush = new SolidBrush(Cyan);
@@ -936,7 +1183,7 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private void DrawContentHeader(Graphics graphics, string title, string subtitle, string? status = null)
     {
-        FillRounded(graphics, new Rectangle(ContentX, ContentY, ContentWidth, 70), 16, Rgba(16, 22, 50, 230));
+        FillRounded(graphics, new Rectangle(ContentX, ContentY, ContentWidth, ContentHeaderHeight), 16, Rgba(16, 22, 50, 230));
         using var magentaBrush = new SolidBrush(Magenta);
         graphics.FillRectangle(magentaBrush, ContentX, 184, ContentWidth, 2);
         using var cyanBrush = new SolidBrush(Cyan);
@@ -951,7 +1198,7 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private void DrawSegments(Graphics graphics, IReadOnlyList<SegmentSpec> segments, SettingsRegion selected)
     {
-        var shell = new Rectangle(306, 202, SegmentShellWidth(segments), 42);
+        var shell = new Rectangle(PanelX, RegionSegmentShellY(), SegmentShellWidth(segments), RegionSegmentShellHeight);
         FillRounded(graphics, shell, 21, Rgb(8, 15, 31));
         StrokeRounded(graphics, shell, 21, BorderDim, 1f);
 
@@ -969,24 +1216,37 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private void DrawApplicationGeneralPage(Graphics graphics)
     {
-        DrawPanel(graphics, new Rectangle(306, 214, 392, 132), "Units");
-        DrawText(graphics, "Measurement system", new Rectangle(328, 281, 160, 18), 13f, FontStyle.Regular, TextSecondary);
+        var unitsPanel = DesignV2SettingsLayout.UnitsPanelBounds();
+        var unitsRow = DesignV2SettingsLayout.FieldRowBounds(unitsPanel, 0, SettingsGeometry.SegmentedRowWidth);
+        DrawPanel(graphics, unitsPanel, "Units");
+        DrawText(graphics, "Measurement system", DesignV2SettingsLayout.FieldLabelBounds(unitsRow, 160), 13f, FontStyle.Regular, TextSecondary);
 
         var update = _releaseUpdates.Snapshot();
-        DrawPanel(graphics, new Rectangle(726, 214, 414, 132), "Updates");
-        DrawText(graphics, "Status", new Rectangle(748, 281, 70, 18), 13f, FontStyle.Regular, TextSecondary);
-        DrawText(graphics, ReleaseUpdateSupportText(update), new Rectangle(826, 281, 290, 18), 10f, FontStyle.Bold, ColorForReleaseUpdateStatus(update.Status));
+        var updatesPanel = DesignV2SettingsLayout.UpdatesPanelBounds();
+        var updatesRow = DesignV2SettingsLayout.FieldRowBounds(updatesPanel, 0, SettingsGeometry.FieldRowDefaultWidth);
+        DrawPanel(graphics, updatesPanel, "Updates");
+        DrawText(graphics, "Status", DesignV2SettingsLayout.FieldLabelBounds(updatesRow, 70), 13f, FontStyle.Regular, TextSecondary);
+        DrawText(
+            graphics,
+            ReleaseUpdateSupportText(update),
+            DesignV2SettingsLayout.UpdatesStatusValueBounds(updatesRow),
+            10f,
+            FontStyle.Bold,
+            ColorForReleaseUpdateStatus(update.Status),
+            alignment: StringAlignment.Far);
 
         var preview = _callbacks.SessionPreviewSnapshot();
-        DrawPanel(graphics, new Rectangle(306, 374, 612, 196), "Show Preview");
-        DrawText(graphics, "Session data", new Rectangle(328, 434, 120, 18), 13f, FontStyle.Regular, TextSecondary);
+        var previewPanel = DesignV2SettingsLayout.PreviewPanelBounds();
+        DrawPanel(graphics, previewPanel, "Show Preview");
+        DrawText(graphics, "Session data", DesignV2SettingsLayout.PreviewSummaryLabelBounds(), 13f, FontStyle.Regular, TextSecondary);
         DrawText(
             graphics,
             preview.Active ? $"{PreviewDisplayName(preview.Mode)} preview active" : "Preview off",
-            new Rectangle(454, 434, 250, 18),
+            DesignV2SettingsLayout.PreviewSummaryValueBounds(250),
             12f,
             FontStyle.Bold,
             preview.Active ? Green : TextMuted);
+        var previewBody = DesignV2SettingsLayout.PreviewBodyLineBounds(0, SettingsGeometry.PreviewBodyLineWidth);
         DrawBodyLines(
             graphics,
             [
@@ -994,9 +1254,9 @@ internal sealed class DesignV2SettingsSurface : Control
                 "Overlay visibility, session filters, positions, scale, and opacity stay normal.",
                 "Hidden overlays stay hidden; Stream Chat is not forced open."
             ],
-            328,
-            510,
-            542);
+            previewBody.Left,
+            previewBody.Top,
+            SettingsGeometry.PreviewBodyLineWidth);
     }
 
     private void DrawSupportPage(Graphics graphics)
@@ -1004,33 +1264,59 @@ internal sealed class DesignV2SettingsSurface : Control
         var capture = _captureState.Snapshot();
         var diagnostics = _diagnosticsBundleService.Snapshot();
         var latestPath = diagnostics.LastBundlePath ?? _callbacks.LatestDiagnosticsBundlePath();
+        var localMapBuildingEnabled = TrackMapSettings()
+            .GetBooleanOption(OverlayOptionKeys.TrackMapBuildFromTelemetry, defaultValue: true);
 
-        DrawPanel(graphics, new Rectangle(306, 214, 392, 206), "Capture Controls");
+        var capturePanel = DesignV2SettingsLayout.SupportCapturePanelBounds();
+        var rawCaptureRow = DesignV2SettingsLayout.FieldRowBounds(capturePanel, 0, SettingsGeometry.ToggleRowWidth);
+        DrawPanel(graphics, capturePanel, "Enhanced iRacing Telemetry Capture");
         DrawText(
             graphics,
-            capture.RawCaptureActive ? "Raw diagnostic telemetry active" : "Raw diagnostic telemetry",
-            new Rectangle(328, 282, 250, 18),
+            capture.RawCaptureActive ? "Capture active" : "Capture future live telemetry",
+            DesignV2SettingsLayout.FieldLabelBounds(rawCaptureRow, SettingsGeometry.SupportRawCaptureLabelWidth),
             13f,
             FontStyle.Bold,
             TextPrimary);
-        DrawText(graphics, "Local map building", new Rectangle(328, 326, 250, 18), 13f, FontStyle.Bold, TextPrimary);
-        DrawBodyLines(graphics, ["Capture writes raw frames only when explicitly requested.", "Local map building derives track geometry from completed telemetry."], 328, 364, 326);
-
-        DrawPanel(graphics, new Rectangle(726, 214, 414, 206), "Automatic History");
-        DrawStatusRow(graphics, "Car / track", "Session history", 280, Green);
-        DrawStatusRow(graphics, "Fuel", "History model", 314, Green);
-        DrawStatusRow(graphics, "Radar", "Calibration analysis", 348, Green);
-        DrawStatusRow(graphics, "Post-race", "Summary analysis", 382, Green);
-
-        DrawPanel(graphics, new Rectangle(306, 446, 392, 142), "Support Bundle");
-        DrawText(graphics, "Latest bundle", new Rectangle(328, 514, 110, 18), 13f, FontStyle.Regular, TextMuted);
-        DrawText(graphics, LatestBundleValueText(latestPath), new Rectangle(454, 513, 220, 18), 12f, FontStyle.Bold, TextPrimary, monospaced: true);
+        DrawText(graphics, "Latest bundle", SupportBundleLabelBounds(), 13f, FontStyle.Regular, TextMuted);
+        DrawText(graphics, LatestBundleValueText(latestPath), SupportBundleValueBounds(), SupportBundleValueFontSize, FontStyle.Bold, TextPrimary, monospaced: true);
+        var supportDescriptionLines = new[]
+        {
+            "Raw iRacing frame capture runs only when requested.",
+            "Create a bundle after reproducing an issue."
+        };
+        for (var index = 0; index < supportDescriptionLines.Length; index++)
+        {
+            DrawText(graphics, supportDescriptionLines[index], DesignV2SettingsLayout.SupportDescriptionLineBounds(index), 12f, FontStyle.Regular, TextMuted);
+        }
         if (!string.IsNullOrWhiteSpace(_supportStatusText))
         {
-            DrawText(graphics, _supportStatusText, new Rectangle(328, 562, 330, 18), 11f, FontStyle.Bold, _supportStatusIsError ? OverlayTheme.Colors.WarningText : Green);
+            DrawText(graphics, _supportStatusText, DesignV2SettingsLayout.SupportStatusBounds(), 11f, FontStyle.Bold, _supportStatusIsError ? OverlayTheme.Colors.WarningText : Green);
         }
 
-        DrawPanel(graphics, new Rectangle(726, 446, 414, 142), "Support Folders");
+        var analysisPanel = DesignV2SettingsLayout.SupportAnalysisPanelBounds();
+        DrawPanel(graphics, analysisPanel, "Data Analysis Opt-out");
+        DrawAnalysisToggleRow(graphics, "Local map building", "Track geometry", 0, enabled: localMapBuildingEnabled, configurable: true);
+        DrawAnalysisToggleRow(graphics, "Car / track history", "Session history", 1, enabled: true, configurable: false);
+        DrawAnalysisToggleRow(graphics, "Fuel history", "Fuel model", 2, enabled: true, configurable: false);
+        DrawAnalysisToggleRow(graphics, "Radar calibration", "Car radar", 3, enabled: true, configurable: false);
+        DrawAnalysisToggleRow(graphics, "Post-race analysis", "Summary analysis", 4, enabled: true, configurable: false);
+    }
+
+    private void DrawAnalysisToggleRow(Graphics graphics, string label, string detail, int rowIndex, bool enabled, bool configurable)
+    {
+        var row = DesignV2SettingsLayout.SupportAnalysisRowBounds(rowIndex);
+        var labelBounds = DesignV2SettingsLayout.SupportAnalysisLabelBounds(row);
+        var valueBounds = DesignV2SettingsLayout.SupportAnalysisValueBounds(row);
+        DrawText(graphics, label, new Rectangle(labelBounds.Left, labelBounds.Top - 2, 190, 18), 13f, FontStyle.Bold, configurable ? TextPrimary : TextSecondary);
+        DrawText(graphics, detail, new Rectangle(labelBounds.Left, labelBounds.Top + 15, 190, 16), 10.5f, FontStyle.Regular, TextMuted);
+        DrawText(
+            graphics,
+            configurable ? (enabled ? "On" : "Off") : "On",
+            new Rectangle(valueBounds.Left, valueBounds.Top - 5, 34, 16),
+            10f,
+            FontStyle.Bold,
+            configurable ? TextMuted : TextDim,
+            alignment: StringAlignment.Far);
     }
 
     private void DrawOverlayPage(Graphics graphics, OverlayDefinition definition, OverlaySettings settings)
@@ -1044,7 +1330,7 @@ internal sealed class DesignV2SettingsSurface : Control
                 DrawOverlayContentPage(graphics, definition, settings);
                 break;
             case SettingsRegion.Header:
-                DrawChromePage(graphics, definition, settings, "Header", HeaderChromeRows);
+                DrawChromePage(graphics, definition, settings, "Header", HeaderChromeRowsFor(definition.Id));
                 break;
             case SettingsRegion.Footer:
                 DrawChromePage(graphics, definition, settings, "Footer", FooterChromeRowsFor(definition.Id));
@@ -1064,39 +1350,83 @@ internal sealed class DesignV2SettingsSurface : Control
     private void DrawOverlayGeneralPage(Graphics graphics, OverlayDefinition definition, OverlaySettings settings)
     {
         var isGarageCover = string.Equals(definition.Id, "garage-cover", StringComparison.OrdinalIgnoreCase);
-        DrawPanel(graphics, new Rectangle(306, 272, 392, isGarageCover ? 166 : 226), "Overlay Controls");
+        var panelBounds = DesignV2SettingsLayout.OverlayControlsPanelBounds(OverlayControlsPanelHeight(definition, settings));
+        var rowIndex = 0;
+        DrawPanel(graphics, panelBounds, "Overlay Controls");
         if (isGarageCover)
         {
-            DrawText(graphics, "Scale", new Rectangle(328, 334, 100, 18), 13f, FontStyle.Regular, TextSecondary);
-            DrawText(graphics, $"{(int)Math.Round(settings.Scale * 100d)}%", new Rectangle(642, 331, 40, 18), 12f, FontStyle.Bold, TextPrimary, alignment: StringAlignment.Far);
-            DrawText(graphics, "Cover image", new Rectangle(328, 374, 100, 18), 13f, FontStyle.Regular, TextSecondary);
+            var scaleRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
+            DrawText(graphics, "Scale", DesignV2SettingsLayout.FieldLabelBounds(scaleRow), 13f, FontStyle.Regular, TextSecondary);
+            DrawText(graphics, $"{(int)Math.Round(settings.Scale * 100d)}%", DesignV2SettingsLayout.FieldValueBounds(scaleRow, 40), 12f, FontStyle.Bold, TextPrimary, alignment: StringAlignment.Far);
+            var coverRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+            DrawText(graphics, "Cover image", DesignV2SettingsLayout.FieldLabelBounds(coverRow), 13f, FontStyle.Regular, TextSecondary);
         }
         else
         {
-            DrawText(graphics, "Visible", new Rectangle(328, 334, 100, 18), 13f, FontStyle.Regular, TextSecondary);
+            var visibleRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+            DrawText(graphics, "Visible", DesignV2SettingsLayout.FieldLabelBounds(visibleRow), 13f, FontStyle.Regular, TextSecondary);
 
             if (definition.ShowScaleControl)
             {
-                DrawText(graphics, "Scale", new Rectangle(328, 374, 100, 18), 13f, FontStyle.Regular, TextSecondary);
-                DrawText(graphics, $"{(int)Math.Round(settings.Scale * 100d)}%", new Rectangle(642, 371, 40, 18), 12f, FontStyle.Bold, TextPrimary, alignment: StringAlignment.Far);
+                var scaleRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
+                DrawText(graphics, "Scale", DesignV2SettingsLayout.FieldLabelBounds(scaleRow), 13f, FontStyle.Regular, TextSecondary);
+                DrawText(graphics, $"{(int)Math.Round(settings.Scale * 100d)}%", DesignV2SettingsLayout.FieldValueBounds(scaleRow, 40), 12f, FontStyle.Bold, TextPrimary, alignment: StringAlignment.Far);
             }
 
             if (definition.ShowOpacityControl)
             {
-                DrawText(graphics, string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) ? "Map fill" : "Opacity", new Rectangle(328, 414, 100, 18), 13f, FontStyle.Regular, TextSecondary);
-                DrawText(graphics, $"{(int)Math.Round(settings.Opacity * 100d)}%", new Rectangle(642, 411, 40, 18), 12f, FontStyle.Bold, TextPrimary, alignment: StringAlignment.Far);
+                var opacityRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
+                DrawText(graphics, string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) ? "Map fill" : "Opacity", DesignV2SettingsLayout.FieldLabelBounds(opacityRow), 13f, FontStyle.Regular, TextSecondary);
+                DrawText(graphics, $"{(int)Math.Round(settings.Opacity * 100d)}%", DesignV2SettingsLayout.FieldValueBounds(opacityRow, 40), 12f, FontStyle.Bold, TextPrimary, alignment: StringAlignment.Far);
             }
+
+            DrawOverlaySpecificGeneralRows(graphics, definition, settings, panelBounds, ref rowIndex);
         }
 
         if (BrowserOverlayCatalog.TryGetRouteForOverlayId(definition.Id, out _))
         {
-            DrawBrowserSourcePanel(graphics, definition, settings, new Rectangle(726, 272, 414, 132));
+            DrawBrowserSourcePanel(graphics, definition, settings, BrowserSourcePanelBounds());
+        }
+    }
+
+    private static int OverlayControlsPanelHeight(OverlayDefinition definition, OverlaySettings settings)
+    {
+        return DesignV2SettingsLayout.OverlayControlsPanelHeight(definition, settings);
+    }
+
+    private void DrawOverlaySpecificGeneralRows(Graphics graphics, OverlayDefinition definition, OverlaySettings settings, Rectangle panelBounds, ref int rowIndex)
+    {
+        switch (definition.Id)
+        {
+            case "relative":
+                var eachSide = settings.GetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, defaultValue: 3, minimum: 0, maximum: 8);
+                var relativeRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+                DrawText(graphics, "Rows around focus", DesignV2SettingsLayout.FieldLabelBounds(relativeRow, 140), 13f, FontStyle.Regular, TextSecondary);
+                DrawText(graphics, $"{eachSide * 2 + 1} rows", DesignV2SettingsLayout.FieldValueBounds(relativeRow, 36), 12f, FontStyle.Bold, TextMuted, alignment: StringAlignment.Far);
+                break;
+            case "standings":
+                DrawText(graphics, "Cars in class", DesignV2SettingsLayout.FieldLabelBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth), 140), 13f, FontStyle.Regular, TextSecondary);
+                DrawText(graphics, "Multiclass sections", DesignV2SettingsLayout.FieldLabelBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth), 160), 13f, FontStyle.Regular, TextSecondary);
+                DrawText(graphics, "Other-class cars", DesignV2SettingsLayout.FieldLabelBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth), 140), 13f, FontStyle.Regular, TextSecondary);
+                break;
+            case "gap-to-leader":
+                DrawText(graphics, "Class gap window", DesignV2SettingsLayout.FieldLabelBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth), 140), 13f, FontStyle.Regular, TextSecondary);
+                break;
+            case "car-radar":
+                DrawText(graphics, "Faster-class warning", DesignV2SettingsLayout.FieldLabelBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth), 160), 13f, FontStyle.Regular, TextSecondary);
+                if (settings.GetBooleanOption(OverlayOptionKeys.RadarMulticlassWarning, defaultValue: true))
+                {
+                    DrawText(graphics, "Multiclass window", DesignV2SettingsLayout.FieldLabelBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth), 150), 13f, FontStyle.Regular, TextSecondary);
+                }
+
+                DrawText(graphics, "Radar range", DesignV2SettingsLayout.FieldLabelBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth), 140), 13f, FontStyle.Regular, TextSecondary);
+                break;
         }
     }
 
     private void DrawGarageCoverPreviewPage(Graphics graphics, OverlaySettings settings)
     {
-        var previewRect = new Rectangle(423, 272, 600, 338);
+        var previewRect = DesignV2SettingsLayout.GaragePreviewImageBounds();
         FillRounded(graphics, previewRect, 10, Rgb(3, 8, 18));
         StrokeRounded(graphics, previewRect, 10, Rgba(0, 232, 255, 165), 1f);
         DrawGarageCoverPreview(graphics, previewRect, settings.GetStringOption(OverlayOptionKeys.GarageCoverImagePath));
@@ -1107,97 +1437,73 @@ internal sealed class DesignV2SettingsSurface : Control
         switch (definition.Id)
         {
             case "relative":
-                var relativeContentRect = new Rectangle(306, 272, 834, 280);
                 var relativeRows = ColumnContentRows(settings, OverlayContentColumnSettings.Relative);
+                var relativeContentRect = ContentTablePanelBounds(relativeRows.Count);
                 DrawContentMatrix(graphics, settings, "Content Display", relativeRows, relativeContentRect, UseContentSessionColumns(definition));
-                var eachSide = settings.GetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, defaultValue: 5, minimum: 0, maximum: 8);
-                DrawMatrixControlRow(
-                    graphics,
-                    "Rows around focus",
-                    eachSide > 0,
-                    relativeContentRect,
-                    relativeRows.Count,
-                    countLabel: "Cars each side");
-                var relativeControlLabelBounds = MatrixControlLabelBounds(relativeContentRect, relativeRows.Count);
-                DrawText(graphics, $"{eachSide * 2 + 1} rows", new Rectangle(relativeControlLabelBounds.Right - 86, relativeControlLabelBounds.Top + (relativeControlLabelBounds.Height - 16) / 2, 70, 16), 11f, FontStyle.Bold, TextMuted, alignment: StringAlignment.Far);
                 break;
             case "standings":
-                var standingsContentRect = new Rectangle(306, 272, 834, 344);
                 var standingsRows = ColumnContentRows(settings, OverlayContentColumnSettings.Standings);
-                DrawContentMatrix(graphics, settings, "Content Display", standingsRows, standingsContentRect, UseContentSessionColumns(definition), rowHeight: 22, rowGap: 3);
-                if (OverlayContentColumnSettings.Standings.Blocks?.FirstOrDefault() is { } standingsBlock)
-                {
-                    DrawStandingsMulticlassRow(graphics, settings, standingsBlock, standingsContentRect, standingsRows.Count, rowHeight: 22, rowGap: 3);
-                }
+                var standingsContentRect = ContentTablePanelBounds(standingsRows.Count);
+                DrawContentMatrix(graphics, settings, "Content Display", standingsRows, standingsContentRect, UseContentSessionColumns(definition));
                 break;
             case "gap-to-leader":
-                var gapContentRect = new Rectangle(306, 272, 834, 126);
-                var gapEachSide = Math.Max(
-                    settings.GetIntegerOption(OverlayOptionKeys.GapCarsAhead, defaultValue: 5, minimum: 0, maximum: 12),
-                    settings.GetIntegerOption(OverlayOptionKeys.GapCarsBehind, defaultValue: 5, minimum: 0, maximum: 12));
-                DrawPanel(graphics, gapContentRect, "Content Display");
-                DrawMatrixControlRow(
-                    graphics,
-                    "Class gap window",
-                    gapEachSide > 0,
-                    gapContentRect,
-                    rowIndex: 0,
-                    countLabel: "Cars each side",
-                    followsMatrixRows: false);
+                var gapRows = BlockContentRows(settings, OverlayContentColumnSettings.GapToLeader);
+                var gapContentRect = ContentTablePanelBounds(gapRows.Count);
+                DrawContentMatrix(graphics, settings, "Content Display", gapRows, gapContentRect, UseContentSessionColumns(definition));
                 break;
             case "fuel-calculator":
+                var fuelRows = BlockContentRows(settings, OverlayContentColumnSettings.FuelCalculator);
+                DrawContentMatrix(graphics, settings, "Content Display", fuelRows, ContentTablePanelBounds(fuelRows.Count), UseContentSessionColumns(definition));
                 break;
             case "track-map":
+                var trackRows = new ContentMatrixRow[]
+                {
+                    new("Sector boundaries", OverlayOptionKeys.TrackMapSectorBoundariesEnabled, true)
+                };
                 DrawContentMatrix(
                     graphics,
                     settings,
                     "Content Display",
-                    [
-                        new ContentMatrixRow("Sector boundaries", OverlayOptionKeys.TrackMapSectorBoundariesEnabled, true)
-                    ],
-                    new Rectangle(306, 272, 834, 150),
+                    trackRows,
+                    ContentTablePanelBounds(trackRows.Length),
                     UseContentSessionColumns(definition));
                 break;
             case "stream-chat":
                 DrawStreamChatContentPage(graphics, settings);
                 break;
             case "input-state":
-                DrawContentMatrix(graphics, settings, "Content Display", BlockContentRows(settings, OverlayContentColumnSettings.InputState), new Rectangle(306, 272, 834, 236), UseContentSessionColumns(definition), rowHeight: 22, rowGap: 3);
+                var inputRows = BlockContentRows(settings, OverlayContentColumnSettings.InputState);
+                DrawContentMatrix(graphics, settings, "Content Display", inputRows, ContentTablePanelBounds(inputRows.Count), UseContentSessionColumns(definition));
                 break;
             case "session-weather":
-                DrawBlockToggleGrid(graphics, settings, "Session / Weather Cells", BlockContentRows(settings, OverlayContentColumnSettings.SessionWeather), new Rectangle(306, 272, 834, 344), columns: 2, rowHeight: 16, rowGap: 2, useSessionColumns: UseContentSessionColumns(definition));
+                var sessionWeatherRows = BlockContentRows(settings, OverlayContentColumnSettings.SessionWeather);
+                DrawBlockToggleGrid(graphics, settings, "Session / Weather Cells", sessionWeatherRows, ContentBlockGridPanelBounds(sessionWeatherRows.Count, columns: 2), columns: 2, rowHeight: BlockGridRowHeight, rowGap: BlockGridRowGap, useSessionColumns: UseContentSessionColumns(definition));
                 break;
             case "pit-service":
-                DrawBlockToggleGrid(graphics, settings, "Pit Service Cells", BlockContentRows(settings, OverlayContentColumnSettings.PitService), new Rectangle(306, 272, 834, 344), columns: 2, rowHeight: 18, rowGap: 3, useSessionColumns: UseContentSessionColumns(definition));
+                var pitRows = BlockContentRows(settings, OverlayContentColumnSettings.PitService);
+                DrawBlockToggleGrid(graphics, settings, "Pit Service Cells", pitRows, ContentBlockGridPanelBounds(pitRows.Count, columns: 2), columns: 2, rowHeight: BlockGridRowHeight, rowGap: BlockGridRowGap, useSessionColumns: UseContentSessionColumns(definition));
                 break;
             case "car-radar":
-                DrawContentMatrix(
-                    graphics,
-                    settings,
-                    "Content Display",
-                    [
-                        new ContentMatrixRow("Faster-class warning", OverlayOptionKeys.RadarMulticlassWarning, true)
-                    ],
-                    new Rectangle(306, 272, 834, 126),
-                    UseContentSessionColumns(definition));
                 break;
             case "flags":
+                var flagRows = new ContentMatrixRow[]
+                {
+                    new("Green / start / ready", OverlayOptionKeys.FlagsShowGreen, true),
+                    new("Blue", OverlayOptionKeys.FlagsShowBlue, true),
+                    new("Yellow / debris / caution", OverlayOptionKeys.FlagsShowYellow, true),
+                    new("Red / black / repair", OverlayOptionKeys.FlagsShowCritical, true),
+                    new("White / checkered / final laps", OverlayOptionKeys.FlagsShowFinish, true)
+                };
                 DrawContentMatrix(
                     graphics,
                     settings,
                     "Content Display",
-                    [
-                        new ContentMatrixRow("Green", OverlayOptionKeys.FlagsShowGreen, true),
-                        new ContentMatrixRow("Blue", OverlayOptionKeys.FlagsShowBlue, true),
-                        new ContentMatrixRow("Yellow", OverlayOptionKeys.FlagsShowYellow, true),
-                        new ContentMatrixRow("Red / black", OverlayOptionKeys.FlagsShowCritical, true),
-                        new ContentMatrixRow("White / checkered", OverlayOptionKeys.FlagsShowFinish, true)
-                    ],
-                    new Rectangle(306, 272, 834, 240),
+                    flagRows,
+                    ContentTablePanelBounds(flagRows.Length),
                     UseContentSessionColumns(definition));
                 break;
             default:
-                DrawContentMatrix(graphics, settings, "Content Display", [new ContentMatrixRow("Content", $"{definition.Id}.content.enabled", true)], new Rectangle(306, 272, 834, 126), UseContentSessionColumns(definition));
+                DrawContentMatrix(graphics, settings, "Content Display", [new ContentMatrixRow("Content", $"{definition.Id}.content.enabled", true)], ContentTablePanelBounds(1), UseContentSessionColumns(definition));
                 DrawText(graphics, "This matches the current production settings surface for this overlay.", new Rectangle(328, 410, 560, 18), 12f, FontStyle.Regular, TextMuted);
                 break;
         }
@@ -1205,20 +1511,22 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private void DrawStreamChatContentPage(Graphics graphics, OverlaySettings settings)
     {
-        DrawPanel(graphics, new Rectangle(306, 272, 834, 170), "Chat Source");
-        DrawText(graphics, "Mode", new Rectangle(328, 336, 90, 18), 13f, FontStyle.Regular, TextSecondary);
-        DrawText(graphics, "Streamlabs URL", new Rectangle(328, 374, 120, 18), 13f, FontStyle.Regular, TextSecondary);
-        DrawText(graphics, "Twitch channel", new Rectangle(328, 412, 120, 18), 13f, FontStyle.Regular, TextSecondary);
+        var panelBounds = DesignV2SettingsLayout.StreamChatContentPanelBounds();
+        DrawPanel(graphics, panelBounds, "Chat Source");
+        DrawText(graphics, "Mode", DesignV2SettingsLayout.FieldLabelBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, 0, SettingsGeometry.ProviderChoiceRowWidth), 90), 13f, FontStyle.Regular, TextSecondary);
+        DrawText(graphics, "Streamlabs URL", DesignV2SettingsLayout.FieldLabelBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, 1, SettingsGeometry.StreamlabsUrlRowWidth), 120), 13f, FontStyle.Regular, TextSecondary);
+        DrawText(graphics, "Twitch channel", DesignV2SettingsLayout.FieldLabelBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, 2, SettingsGeometry.TwitchChannelRowWidth), 120), 13f, FontStyle.Regular, TextSecondary);
     }
 
     private void DrawStreamChatTwitchPage(Graphics graphics, OverlaySettings settings)
     {
-        DrawBlockToggleGrid(graphics, settings, "Twitch Metadata", BlockContentRows(settings, OverlayContentColumnSettings.StreamChat), new Rectangle(306, 272, 834, 200), columns: 2, rowHeight: 16, rowGap: 2, useSessionColumns: false);
+        var rows = BlockContentRows(settings, OverlayContentColumnSettings.StreamChat);
+        DrawBlockToggleGrid(graphics, settings, "Twitch Metadata", rows, ContentBlockGridPanelBounds(rows.Count, columns: 2), columns: 2, rowHeight: BlockGridRowHeight, rowGap: BlockGridRowGap, useSessionColumns: false);
     }
 
     private void DrawStreamChatStreamlabsPage(Graphics graphics)
     {
-        DrawPanel(graphics, new Rectangle(306, 272, 834, 150), "Streamlabs");
+        DrawPanel(graphics, DesignV2SettingsLayout.StreamlabsPanelBounds(), "Streamlabs");
         DrawText(graphics, "No Streamlabs-specific message controls yet.", new Rectangle(328, 334, 440, 18), 12f, FontStyle.Regular, TextMuted);
         DrawText(graphics, "This page is reserved for provider-specific controls after Streamlabs payloads are verified.", new Rectangle(328, 362, 640, 18), 12f, FontStyle.Regular, TextMuted);
     }
@@ -1230,7 +1538,8 @@ internal sealed class DesignV2SettingsSurface : Control
         string title,
         IReadOnlyList<SettingsOverlayTabSections.OverlayChromeSettingsRow> rows)
     {
-        DrawPanel(graphics, new Rectangle(306, 272, 834, rows.Count > 1 ? 232 : 188), title);
+        var rect = ContentTablePanelBounds(Math.Max(1, rows.Count));
+        DrawPanel(graphics, rect, title);
         if (!SupportsSharedChromeSettings(definition.Id))
         {
             DrawText(graphics, $"No {title.ToLowerInvariant()} controls yet.", new Rectangle(328, 334, 420, 18), 13f, FontStyle.Regular, TextSecondary);
@@ -1244,19 +1553,25 @@ internal sealed class DesignV2SettingsSurface : Control
             return;
         }
 
-        DrawText(graphics, "Item", new Rectangle(328, 330, 110, 16), 10f, FontStyle.Bold, TextMuted);
         var sessionColumns = OverlaySettingsSessionColumns.ChromeColumnsFor(definition.Id);
+        DrawText(graphics, "Item", MatrixItemHeaderBounds(rect, useSessionColumns: true, sessionColumns.Count), 10f, FontStyle.Bold, TextMuted);
         for (var index = 0; index < sessionColumns.Count; index++)
         {
-            DrawText(graphics, sessionColumns[index].Label, new Rectangle(454 + index * 116, 330, 104, 16), 10f, FontStyle.Bold, TextMuted);
+            DrawText(graphics, sessionColumns[index].Label, MatrixSessionHeaderBounds(rect, index, sessionColumns.Count), 10f, FontStyle.Bold, TextMuted, alignment: StringAlignment.Center);
         }
 
         for (var index = 0; index < rows.Count; index++)
         {
-            var rowBounds = new Rectangle(328, 360 + index * 48, 768, 44);
+            var rowBounds = MatrixItemCellBounds(rect, index, useSessionColumns: true, sessionColumns.Count);
             FillRounded(graphics, rowBounds, 8, Rgba(17, 28, 55, 200));
             StrokeRounded(graphics, rowBounds, 8, BorderDim, 1f);
-            DrawText(graphics, rows[index].Label, new Rectangle(346, rowBounds.Top + 13, 130, 18), 13f, FontStyle.Regular, TextSecondary);
+            DrawText(graphics, rows[index].Label, new Rectangle(rowBounds.Left + 16, rowBounds.Top + 3, rowBounds.Width - 32, 16), 12f, FontStyle.Regular, TextSecondary);
+            for (var sessionIndex = 0; sessionIndex < sessionColumns.Count; sessionIndex++)
+            {
+                var cellBounds = MatrixSessionCellBounds(rect, index, sessionIndex, sessionColumns.Count);
+                FillRounded(graphics, cellBounds, 8, Rgba(17, 28, 55, 200));
+                StrokeRounded(graphics, cellBounds, 8, BorderDim, 1f);
+            }
         }
     }
 
@@ -1267,50 +1582,56 @@ internal sealed class DesignV2SettingsSurface : Control
         IReadOnlyList<ContentMatrixRow> rows,
         Rectangle rect,
         bool useSessionColumns,
-        int rowHeight = 24,
-        int rowGap = 5)
+        int rowHeight = MatrixRowHeight,
+        int rowGap = MatrixRowGap)
     {
         DrawPanel(graphics, rect, title);
-        DrawText(graphics, "Item", new Rectangle(328, rect.Top + 58, 110, 16), 10f, FontStyle.Bold, TextMuted);
+        DrawText(graphics, "Item", MatrixItemHeaderBounds(rect, useSessionColumns, ContentSessionKinds.Length), 10f, FontStyle.Bold, TextMuted);
         if (useSessionColumns)
         {
             for (var index = 0; index < SessionLabels.Length; index++)
             {
-                DrawText(graphics, SessionLabels[index], new Rectangle(548 + index * 116, rect.Top + 58, 104, 16), 10f, FontStyle.Bold, TextMuted);
+                DrawText(graphics, SessionLabels[index], MatrixSessionHeaderBounds(rect, index, ContentSessionKinds.Length), 10f, FontStyle.Bold, TextMuted, alignment: StringAlignment.Center);
             }
         }
         else
         {
-            DrawText(graphics, "Visible", new Rectangle(rect.Right - 96, rect.Top + 58, 72, 16), 10f, FontStyle.Bold, TextMuted, alignment: StringAlignment.Center);
+            DrawText(graphics, "Visible", MatrixVisibleHeaderBounds(rect), 10f, FontStyle.Bold, TextMuted, alignment: StringAlignment.Center);
         }
 
         for (var index = 0; index < rows.Count; index++)
         {
             var row = rows[index];
-            var rowY = rect.Top + 78 + index * (rowHeight + rowGap);
+            var rowY = MatrixRowY(rect, index, rowHeight, rowGap);
             if (rowY + rowHeight > rect.Bottom - 10)
             {
                 break;
             }
 
-            var rowBounds = new Rectangle(328, rowY, 768, rowHeight);
-            FillRounded(graphics, rowBounds, 8, Rgba(17, 28, 55, 200));
-            StrokeRounded(graphics, rowBounds, 8, BorderDim, 1f);
             var rowEnabled = useSessionColumns
                 ? ContentSessionKinds.Any(sessionKind => row.EnabledFor(settings, sessionKind))
                 : row.EnabledFor(settings);
-            DrawText(graphics, row.Label, new Rectangle(346, rowY + 5, 220, 16), 12f, FontStyle.Regular, rowEnabled ? TextSecondary : TextDim);
+            var itemBounds = MatrixItemCellBounds(rect, index, useSessionColumns, ContentSessionKinds.Length, rowHeight, rowGap);
+            FillRounded(graphics, itemBounds, 8, Rgba(17, 28, 55, 200));
+            StrokeRounded(graphics, itemBounds, 8, BorderDim, 1f);
+            DrawText(graphics, row.Label, new Rectangle(itemBounds.Left + 10, itemBounds.Top + 3, itemBounds.Width - 20, 16), 12f, FontStyle.Regular, rowEnabled ? TextSecondary : TextDim);
 
             if (useSessionColumns)
             {
                 for (var sessionIndex = 0; sessionIndex < ContentSessionKinds.Length; sessionIndex++)
                 {
-                    DrawCheckBox(graphics, MatrixSessionCheckBounds(index, sessionIndex, rect, rowHeight, rowGap), row.EnabledFor(settings, ContentSessionKinds[sessionIndex]));
+                    var cellBounds = MatrixSessionCellBounds(rect, index, sessionIndex, ContentSessionKinds.Length, rowHeight, rowGap);
+                    FillRounded(graphics, cellBounds, 8, Rgba(17, 28, 55, 200));
+                    StrokeRounded(graphics, cellBounds, 8, BorderDim, 1f);
+                    DrawCheckBox(graphics, CenteredCheckBounds(cellBounds, MatrixCheckSize), row.EnabledFor(settings, ContentSessionKinds[sessionIndex]));
                 }
             }
             else
             {
-                DrawCheckBox(graphics, MatrixVisibleCheckBounds(index, rect, rowHeight, rowGap), rowEnabled);
+                var visibleBounds = MatrixVisibleCellBounds(rect, index, rowHeight, rowGap);
+                FillRounded(graphics, visibleBounds, 8, Rgba(17, 28, 55, 200));
+                StrokeRounded(graphics, visibleBounds, 8, BorderDim, 1f);
+                DrawCheckBox(graphics, CenteredCheckBounds(visibleBounds, MatrixCheckSize), rowEnabled);
             }
         }
     }
@@ -1344,8 +1665,8 @@ internal sealed class DesignV2SettingsSurface : Control
         bool enabled,
         Rectangle rect,
         int rowIndex,
-        int precedingRowHeight = 24,
-        int precedingRowGap = 5,
+        int precedingRowHeight = MatrixControlHeight,
+        int precedingRowGap = MatrixControlRowTopGap,
         string? visibleLabel = null,
         string? countLabel = null,
         bool followsMatrixRows = true)
@@ -1384,15 +1705,15 @@ internal sealed class DesignV2SettingsSurface : Control
         bool useSessionColumns)
     {
         DrawPanel(graphics, rect, title);
-        var columnGap = 18;
-        var contentLeft = rect.Left + 22;
-        var columnWidth = (rect.Width - 44 - columnGap * (columns - 1)) / columns;
+        var columnGap = BlockGridColumnGap;
+        var contentLeft = BlockGridContentLeft(rect);
+        var columnWidth = BlockGridColumnWidth(rect, columns);
         for (var column = 0; column < columns; column++)
         {
             DrawText(
                 graphics,
                 "Item",
-                new Rectangle(contentLeft + column * (columnWidth + columnGap), rect.Top + 58, 110, 16),
+                new Rectangle(contentLeft + column * (columnWidth + columnGap), rect.Top + BlockGridHeaderOffsetY, 110, MatrixHeaderHeight),
                 10f,
                 FontStyle.Bold,
                 TextMuted);
@@ -1403,7 +1724,7 @@ internal sealed class DesignV2SettingsSurface : Control
                     DrawText(
                         graphics,
                         ShortSessionLabels[sessionIndex],
-                        new Rectangle(contentLeft + column * (columnWidth + columnGap) + columnWidth - BlockGridSessionColumnOffset() - 12 + sessionIndex * 44, rect.Top + 58, 38, 16),
+                        BlockGridSessionCellBounds(column, sessionIndex, rect, columns, rowHeight: MatrixHeaderHeight, rowY: rect.Top + BlockGridHeaderOffsetY),
                         10f,
                         FontStyle.Bold,
                         TextMuted,
@@ -1414,8 +1735,8 @@ internal sealed class DesignV2SettingsSurface : Control
             {
                 DrawText(
                     graphics,
-                    "Visible",
-                    new Rectangle(contentLeft + column * (columnWidth + columnGap) + columnWidth - 64, rect.Top + 58, 54, 16),
+                    "ON",
+                    BlockGridVisibleCellBounds(column, rect, columns, rowHeight: MatrixHeaderHeight, rowY: rect.Top + BlockGridHeaderOffsetY),
                     10f,
                     FontStyle.Bold,
                     TextMuted,
@@ -1429,7 +1750,7 @@ internal sealed class DesignV2SettingsSurface : Control
             var column = index / rowsPerColumn;
             var row = index % rowsPerColumn;
             var rowX = contentLeft + column * (columnWidth + columnGap);
-            var rowY = rect.Top + 78 + row * (rowHeight + rowGap);
+            var rowY = BlockGridRowY(rect, row, rowHeight, rowGap);
             if (rowY + rowHeight > rect.Bottom - 10)
             {
                 break;
@@ -1441,7 +1762,7 @@ internal sealed class DesignV2SettingsSurface : Control
             var rowEnabled = useSessionColumns
                 ? ContentSessionKinds.Any(sessionKind => rows[index].EnabledFor(settings, sessionKind))
                 : rows[index].EnabledFor(settings);
-            DrawText(graphics, rows[index].Label, new Rectangle(rowX + 12, rowY + Math.Max(2, (rowHeight - 13) / 2), columnWidth - (useSessionColumns ? BlockGridSessionColumnOffset() + 30 : 84), 14), 10.5f, FontStyle.Regular, rowEnabled ? TextSecondary : TextDim);
+            DrawText(graphics, rows[index].Label, new Rectangle(rowX + 8, rowY + Math.Max(2, (rowHeight - 13) / 2), columnWidth - (useSessionColumns ? 112 : 48), 14), 10.5f, FontStyle.Regular, rowEnabled ? TextSecondary : TextDim);
             if (useSessionColumns)
             {
                 for (var sessionIndex = 0; sessionIndex < ContentSessionKinds.Length; sessionIndex++)
@@ -1459,18 +1780,14 @@ internal sealed class DesignV2SettingsSurface : Control
     private void DrawBrowserSourcePanel(Graphics graphics, OverlayDefinition definition, OverlaySettings settings, Rectangle bounds)
     {
         DrawPanel(graphics, bounds, "Browser Source");
-        var urlBox = new Rectangle(
-            bounds.Left + 22,
-            bounds.Top + 52,
-            bounds.Width - 44,
-            30);
+        var urlBox = DesignV2SettingsLayout.BrowserSourceUrlBounds(bounds);
         DrawLocalhostBox(graphics, definition, urlBox);
         var browserSize = BrowserOverlayRecommendedSize.ScaledFor(definition, settings);
-        var detailTop = urlBox.Bottom + 8;
+        var sizeBounds = DesignV2SettingsLayout.BrowserSourceSizeBounds(bounds);
         DrawText(
             graphics,
             $"OBS size {browserSize.Width} x {browserSize.Height}",
-            new Rectangle(bounds.Left + 22, detailTop, bounds.Width - 44, 18),
+            sizeBounds,
             11f,
             FontStyle.Regular,
             TextDim);
@@ -1490,9 +1807,9 @@ internal sealed class DesignV2SettingsSurface : Control
     {
         FillRounded(graphics, rect, 12, Rgba(9, 18, 34, 245));
         StrokeRounded(graphics, rect, 12, BorderDim, 1f);
-        DrawText(graphics, title, new Rectangle(rect.Left + 22, rect.Top + 18, rect.Width - 44, 20), 15f, FontStyle.Bold, TextPrimary);
+        DrawText(graphics, title, DesignV2SettingsLayout.PanelTitleBounds(rect), 15f, FontStyle.Bold, TextPrimary);
         using var pen = new Pen(BorderDim);
-        graphics.DrawLine(pen, rect.Left + 22, rect.Top + 48, rect.Right - 22, rect.Top + 48);
+        graphics.DrawLine(pen, rect.Left + DesignV2SettingsLayout.PanelContentInsetX, rect.Top + 48, rect.Right - DesignV2SettingsLayout.PanelContentInsetX, rect.Top + 48);
     }
 
     private void DrawStatusRow(Graphics graphics, string label, string value, int y, Color color)
@@ -1512,20 +1829,16 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private static void DrawCheckBox(Graphics graphics, Rectangle rect, bool isChecked)
     {
-        FillRounded(graphics, rect, 5, isChecked ? Rgb(6, 46, 55) : PanelRaised);
-        StrokeRounded(graphics, rect, 5, isChecked ? Cyan : Border, 1f);
+        FillRounded(graphics, rect, 6, Rgba(9, 15, 30, 225));
+        StrokeRounded(graphics, rect, 6, isChecked ? Rgba(0, 232, 255, 132) : Rgba(107, 127, 153, 102), 1f);
         if (!isChecked)
         {
             return;
         }
 
-        using var pen = new Pen(Green, 2f)
-        {
-            StartCap = LineCap.Round,
-            EndCap = LineCap.Round
-        };
-        graphics.DrawLine(pen, rect.Left + 5, rect.Top + rect.Height / 2, rect.Left + 9, rect.Bottom - 4);
-        graphics.DrawLine(pen, rect.Left + 9, rect.Bottom - 4, rect.Right - 4, rect.Top + 5);
+        var core = Rectangle.Inflate(rect, -4, -4);
+        FillRounded(graphics, core, 3, Rgba(0, 232, 255, 189));
+        StrokeRounded(graphics, core, 3, Rgba(0, 232, 255, 46), 1f);
     }
 
     private void DrawGarageCoverPreview(Graphics graphics, Rectangle rect, string? imagePath)
@@ -1739,12 +2052,29 @@ internal sealed class DesignV2SettingsSurface : Control
 
         if (string.Equals(overlayId, "stream-chat", StringComparison.OrdinalIgnoreCase))
         {
-            return [SettingsRegion.General, SettingsRegion.Content, SettingsRegion.Twitch, SettingsRegion.Streamlabs];
+            return [SettingsRegion.General, SettingsRegion.Content, SettingsRegion.Twitch];
         }
 
-        return SupportsSharedChromeSettings(overlayId)
-            ? [SettingsRegion.General, SettingsRegion.Content, SettingsRegion.Header, SettingsRegion.Footer]
-            : [SettingsRegion.General, SettingsRegion.Content];
+        var regions = new List<SettingsRegion>
+        {
+            SettingsRegion.General
+        };
+        if (HasContentControls(overlayId))
+        {
+            regions.Add(SettingsRegion.Content);
+        }
+
+        if (HasHeaderControls(overlayId))
+        {
+            regions.Add(SettingsRegion.Header);
+        }
+
+        if (HasFooterControls(overlayId))
+        {
+            regions.Add(SettingsRegion.Footer);
+        }
+
+        return regions;
     }
 
     private IReadOnlyList<SegmentSpec> SegmentsFor(string overlayId)
@@ -1758,20 +2088,20 @@ internal sealed class DesignV2SettingsSurface : Control
     {
         return region switch
         {
-            SettingsRegion.General => 86,
-            SettingsRegion.Preview => 82,
-            SettingsRegion.Streamlabs => 104,
-            _ => 76
+            SettingsRegion.General => SettingsGeometry.RegionSegmentGeneralWidth,
+            SettingsRegion.Preview => SettingsGeometry.RegionSegmentPreviewWidth,
+            SettingsRegion.Streamlabs => SettingsGeometry.RegionSegmentStreamlabsWidth,
+            _ => SettingsGeometry.RegionSegmentDefaultWidth
         };
     }
 
     private IEnumerable<(SettingsRegion Region, Rectangle Bounds)> SegmentBounds(IReadOnlyList<SegmentSpec> segments)
     {
-        var x = 312;
+        var x = PanelX + RegionSegmentPadding;
         foreach (var segment in segments)
         {
-            yield return (segment.Region, new Rectangle(x, 208, segment.Width, 30));
-            x += segment.Width + 12;
+            yield return (segment.Region, new Rectangle(x, RegionSegmentY(), segment.Width, RegionSegmentHeight));
+            x += segment.Width + RegionSegmentGap;
         }
     }
 
@@ -1779,7 +2109,9 @@ internal sealed class DesignV2SettingsSurface : Control
     {
         return segments.Count == 0
             ? 0
-            : segments.Sum(segment => segment.Width) + 12 * (segments.Count - 1) + 12;
+            : segments.Sum(segment => segment.Width)
+                + RegionSegmentGap * (segments.Count - 1)
+                + RegionSegmentPadding * 2;
     }
 
     private bool IsKnownTab(string tabId)
@@ -1818,7 +2150,7 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private Rectangle SidebarButtonBounds(int index)
     {
-        return new Rectangle(78, 136 + index * 32, 162, 27);
+        return DesignV2SettingsLayout.SidebarButtonBounds(index);
     }
 
     private Rectangle ContentBounds()
@@ -1828,29 +2160,192 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private static Rectangle CloseButtonBounds()
     {
-        return new Rectangle(1132, 54, 30, 24);
+        return DesignV2SettingsLayout.CloseButtonBounds();
     }
 
-    private static Rectangle MatrixVisibleCheckBounds(int rowIndex, Rectangle rect, int rowHeight = 24, int rowGap = 5)
+    private static Rectangle TitleBarDragBounds()
     {
-        var rowY = rect.Top + 78 + rowIndex * (rowHeight + rowGap);
-        return new Rectangle(rect.Right - 70, rowY + Math.Max(2, (rowHeight - 19) / 2), 19, 19);
+        return new Rectangle(ShellX, ShellY, ShellWidth, TitlebarHeight);
     }
 
-    private static Rectangle MatrixSessionCheckBounds(int rowIndex, int sessionIndex, Rectangle rect, int rowHeight = 24, int rowGap = 5)
+    private static Rectangle ContentTablePanelBounds(int rowCount, int rowHeight = MatrixRowHeight, int rowGap = MatrixRowGap)
     {
-        var rowY = rect.Top + 78 + rowIndex * (rowHeight + rowGap);
-        return new Rectangle(556 + sessionIndex * 116, rowY + Math.Max(2, (rowHeight - 19) / 2), 19, 19);
+        return new Rectangle(PanelX, PanelWithRegionsY, PanelWideWidth, MatrixHeaderOffsetY + TableMatrixHeight(rowCount, rowHeight, rowGap) + MatrixPanelBottomPadding);
+    }
+
+    private static Rectangle ContentBlockGridPanelBounds(int rowCount, int columns, int rowHeight = BlockGridRowHeight, int rowGap = BlockGridRowGap)
+    {
+        return new Rectangle(PanelX, PanelWithRegionsY, PanelWideWidth, BlockGridHeaderOffsetY + BlockGridMatrixHeight(rowCount, columns, rowHeight, rowGap) + BlockGridPanelBottomPadding);
+    }
+
+    private static int RegionSegmentShellY()
+    {
+        return PanelWithRegionsY - SettingsGeometry.RegionSegmentMarginBottom - RegionSegmentShellHeight;
+    }
+
+    private static int RegionSegmentY()
+    {
+        return RegionSegmentShellY() + RegionSegmentPadding;
+    }
+
+    private static Rectangle BrowserSourcePanelBounds()
+    {
+        return DesignV2SettingsLayout.BrowserSourcePanelBounds();
+    }
+
+    private static Rectangle BrowserSourceCopyButtonBounds(Rectangle panelBounds)
+    {
+        return DesignV2SettingsLayout.BrowserSourceCopyButtonBounds(panelBounds);
+    }
+
+    private static Rectangle SupportBundleLabelBounds()
+    {
+        return DesignV2SettingsLayout.SupportBundleLabelBounds();
+    }
+
+    private static Rectangle SupportBundleValueBounds()
+    {
+        return DesignV2SettingsLayout.SupportBundleValueBounds();
+    }
+
+    private static int TableMatrixHeight(int rowCount, int rowHeight, int rowGap)
+    {
+        if (rowCount <= 0)
+        {
+            return MatrixHeaderHeight;
+        }
+
+        return MatrixFirstRowOffsetY - MatrixHeaderOffsetY
+            + (rowCount - 1) * (rowHeight + rowGap)
+            + rowHeight;
+    }
+
+    private static int BlockGridMatrixHeight(int rowCount, int columns, int rowHeight, int rowGap)
+    {
+        var rowsPerColumn = (int)Math.Ceiling(rowCount / (double)Math.Max(1, columns));
+        if (rowsPerColumn <= 0)
+        {
+            return MatrixHeaderHeight;
+        }
+
+        return BlockGridFirstRowOffsetY - BlockGridHeaderOffsetY
+            + (rowsPerColumn - 1) * (rowHeight + rowGap)
+            + rowHeight;
+    }
+
+    private static Rectangle MatrixVisibleCheckBounds(int rowIndex, Rectangle rect, int rowHeight = MatrixRowHeight, int rowGap = MatrixRowGap)
+    {
+        return CenteredCheckBounds(MatrixVisibleCellBounds(rect, rowIndex, rowHeight, rowGap), MatrixCheckSize);
+    }
+
+    private static Rectangle MatrixSessionCheckBounds(
+        int rowIndex,
+        int sessionIndex,
+        Rectangle rect,
+        int sessionColumnCount,
+        int rowHeight = MatrixRowHeight,
+        int rowGap = MatrixRowGap)
+    {
+        return CenteredCheckBounds(MatrixSessionCellBounds(rect, rowIndex, sessionIndex, sessionColumnCount, rowHeight, rowGap), MatrixCheckSize);
+    }
+
+    private static Rectangle MatrixItemHeaderBounds(Rectangle rect, bool useSessionColumns, int sessionColumnCount)
+    {
+        return new Rectangle(MatrixContentLeft(rect), rect.Top + MatrixHeaderOffsetY, MatrixItemCellWidth(rect, useSessionColumns, sessionColumnCount), MatrixHeaderHeight);
+    }
+
+    private static Rectangle MatrixSessionHeaderBounds(Rectangle rect, int sessionIndex, int sessionColumnCount)
+    {
+        return new Rectangle(MatrixSessionColumnLeft(rect, sessionIndex, sessionColumnCount), rect.Top + MatrixHeaderOffsetY, MatrixSessionColumnWidth, MatrixHeaderHeight);
+    }
+
+    private static Rectangle MatrixVisibleHeaderBounds(Rectangle rect)
+    {
+        return new Rectangle(MatrixVisibleColumnLeft(rect), rect.Top + MatrixHeaderOffsetY, MatrixVisibleColumnWidth, MatrixHeaderHeight);
+    }
+
+    private static Rectangle MatrixItemCellBounds(
+        Rectangle rect,
+        int rowIndex,
+        bool useSessionColumns,
+        int sessionColumnCount,
+        int rowHeight = MatrixRowHeight,
+        int rowGap = MatrixRowGap)
+    {
+        return new Rectangle(MatrixContentLeft(rect), MatrixRowY(rect, rowIndex, rowHeight, rowGap), MatrixItemCellWidth(rect, useSessionColumns, sessionColumnCount), rowHeight);
+    }
+
+    private static Rectangle MatrixSessionCellBounds(
+        Rectangle rect,
+        int rowIndex,
+        int sessionIndex,
+        int sessionColumnCount,
+        int rowHeight = MatrixRowHeight,
+        int rowGap = MatrixRowGap)
+    {
+        return new Rectangle(MatrixSessionColumnLeft(rect, sessionIndex, sessionColumnCount), MatrixRowY(rect, rowIndex, rowHeight, rowGap), MatrixSessionColumnWidth, rowHeight);
+    }
+
+    private static Rectangle MatrixVisibleCellBounds(Rectangle rect, int rowIndex, int rowHeight = MatrixRowHeight, int rowGap = MatrixRowGap)
+    {
+        return new Rectangle(MatrixVisibleColumnLeft(rect), MatrixRowY(rect, rowIndex, rowHeight, rowGap), MatrixVisibleColumnWidth, rowHeight);
+    }
+
+    private static int MatrixContentLeft(Rectangle rect)
+    {
+        return rect.Left + MatrixContentInsetX;
+    }
+
+    private static int MatrixContentWidth(Rectangle rect)
+    {
+        return rect.Width - MatrixContentInsetX * 2;
+    }
+
+    private static int MatrixItemCellWidth(Rectangle rect, bool useSessionColumns, int sessionColumnCount)
+    {
+        var controlWidth = useSessionColumns
+            ? sessionColumnCount * MatrixSessionColumnWidth + Math.Max(0, sessionColumnCount - 1) * MatrixColumnGap
+            : MatrixVisibleColumnWidth;
+        return MatrixContentWidth(rect) - MatrixColumnGap - controlWidth;
+    }
+
+    private static int MatrixSessionColumnLeft(Rectangle rect, int sessionIndex, int sessionColumnCount)
+    {
+        return MatrixContentLeft(rect)
+            + MatrixItemCellWidth(rect, useSessionColumns: true, sessionColumnCount)
+            + MatrixColumnGap
+            + sessionIndex * (MatrixSessionColumnWidth + MatrixColumnGap);
+    }
+
+    private static int MatrixVisibleColumnLeft(Rectangle rect)
+    {
+        return MatrixContentLeft(rect)
+            + MatrixItemCellWidth(rect, useSessionColumns: false, sessionColumnCount: 0)
+            + MatrixColumnGap;
+    }
+
+    private static int MatrixRowY(Rectangle rect, int rowIndex, int rowHeight = MatrixRowHeight, int rowGap = MatrixRowGap)
+    {
+        return rect.Top + MatrixFirstRowOffsetY + rowIndex * (rowHeight + rowGap);
+    }
+
+    private static Rectangle CenteredCheckBounds(Rectangle cellBounds, int size)
+    {
+        return new Rectangle(
+            cellBounds.Left + (cellBounds.Width - size) / 2,
+            cellBounds.Top + (cellBounds.Height - size) / 2,
+            size,
+            size);
     }
 
     private static Rectangle StandingsMulticlassVisibleCheckBounds(Rectangle rect, int rowIndex, int rowHeight, int rowGap)
     {
         var visibleBounds = MatrixControlVisibleCellBounds(rect, rowIndex, rowHeight, rowGap, followsMatrixRows: true);
         return new Rectangle(
-            visibleBounds.Left + (visibleBounds.Width - 19) / 2,
-            visibleBounds.Top + (visibleBounds.Height - 19) / 2,
-            19,
-            19);
+            visibleBounds.Left + (visibleBounds.Width - MatrixCheckSize) / 2,
+            visibleBounds.Top + (visibleBounds.Height - MatrixCheckSize) / 2,
+            MatrixCheckSize,
+            MatrixCheckSize);
     }
 
     private static Rectangle StandingsMulticlassCountBounds(Rectangle rect, int rowIndex, int rowHeight, int rowGap)
@@ -1861,21 +2356,21 @@ internal sealed class DesignV2SettingsSurface : Control
     private static Rectangle MatrixControlLabelBounds(
         Rectangle rect,
         int rowIndex,
-        int precedingRowHeight = 24,
-        int precedingRowGap = 5,
+        int precedingRowHeight = MatrixControlHeight,
+        int precedingRowGap = MatrixControlRowTopGap,
         bool hasVisibleColumn = false,
         bool followsMatrixRows = true)
     {
-        var contentLeft = rect.Left + 22;
+        var contentLeft = rect.Left + PanelPaddingX;
         var rowY = MatrixControlRowY(rect, rowIndex, precedingRowHeight, precedingRowGap, followsMatrixRows);
-        return new Rectangle(contentLeft, rowY, MatrixControlLabelWidth, 56);
+        return new Rectangle(contentLeft, rowY, MatrixControlLabelWidth, MatrixControlRowHeight);
     }
 
     private static Rectangle MatrixControlVisibleCellBounds(
         Rectangle rect,
         int rowIndex,
-        int precedingRowHeight = 24,
-        int precedingRowGap = 5,
+        int precedingRowHeight = MatrixControlHeight,
+        int precedingRowGap = MatrixControlRowTopGap,
         bool followsMatrixRows = true)
     {
         var labelBounds = MatrixControlLabelBounds(rect, rowIndex, precedingRowHeight, precedingRowGap, hasVisibleColumn: true, followsMatrixRows);
@@ -1885,8 +2380,8 @@ internal sealed class DesignV2SettingsSurface : Control
     private static Rectangle MatrixControlCountCellBounds(
         Rectangle rect,
         int rowIndex,
-        int precedingRowHeight = 24,
-        int precedingRowGap = 5,
+        int precedingRowHeight = MatrixControlHeight,
+        int precedingRowGap = MatrixControlRowTopGap,
         bool hasVisibleColumn = false,
         bool followsMatrixRows = true)
     {
@@ -1907,20 +2402,20 @@ internal sealed class DesignV2SettingsSurface : Control
     private static Rectangle MatrixControlCountStepperBounds(
         Rectangle rect,
         int rowIndex,
-        int precedingRowHeight = 24,
-        int precedingRowGap = 5,
+        int precedingRowHeight = MatrixControlHeight,
+        int precedingRowGap = MatrixControlRowTopGap,
         bool hasVisibleColumn = false,
         bool followsMatrixRows = true)
     {
         var countBounds = MatrixControlCountCellBounds(rect, rowIndex, precedingRowHeight, precedingRowGap, hasVisibleColumn, followsMatrixRows);
-        return new Rectangle(countBounds.Right - MatrixControlCellPadding - MatrixControlStepperWidth, countBounds.Top + 20, MatrixControlStepperWidth, 32);
+        return new Rectangle(countBounds.Right - MatrixControlCellPadding - MatrixControlStepperWidth, countBounds.Top + MatrixControlHeight - 4, MatrixControlStepperWidth, MatrixControlStepperHeight);
     }
 
     private static int MatrixControlRowY(Rectangle rect, int rowIndex, int precedingRowHeight, int precedingRowGap, bool followsMatrixRows)
     {
         return followsMatrixRows
-            ? rect.Top + 78 + rowIndex * (precedingRowHeight + precedingRowGap)
-            : rect.Top + 58;
+            ? rect.Top + MatrixFirstRowOffsetY + rowIndex * (precedingRowHeight + precedingRowGap)
+            : rect.Top + MatrixHeaderOffsetY;
     }
 
     private static Rectangle BlockGridVisibleCheckBounds(
@@ -1931,14 +2426,10 @@ internal sealed class DesignV2SettingsSurface : Control
         int rowHeight,
         int rowGap)
     {
-        var columnGap = 18;
-        var contentLeft = rect.Left + 22;
-        var columnWidth = (rect.Width - 44 - columnGap * (columns - 1)) / columns;
         var column = index / Math.Max(1, rowsPerColumn);
         var row = index % Math.Max(1, rowsPerColumn);
-        var rowX = contentLeft + column * (columnWidth + columnGap);
-        var rowY = rect.Top + 78 + row * (rowHeight + rowGap);
-        return new Rectangle(rowX + columnWidth - 42, rowY + Math.Max(1, (rowHeight - 15) / 2), 15, 15);
+        var rowY = BlockGridRowY(rect, row, rowHeight, rowGap);
+        return CenteredCheckBounds(BlockGridVisibleCellBounds(column, rect, columns, rowHeight, rowY), BlockGridCheckSize);
     }
 
     private static Rectangle BlockGridSessionCheckBounds(
@@ -1950,31 +2441,60 @@ internal sealed class DesignV2SettingsSurface : Control
         int rowHeight,
         int rowGap)
     {
-        var columnGap = 18;
-        var contentLeft = rect.Left + 22;
-        var columnWidth = (rect.Width - 44 - columnGap * (columns - 1)) / columns;
         var column = index / Math.Max(1, rowsPerColumn);
         var row = index % Math.Max(1, rowsPerColumn);
-        var rowX = contentLeft + column * (columnWidth + columnGap);
-        var rowY = rect.Top + 78 + row * (rowHeight + rowGap);
-        return new Rectangle(rowX + columnWidth - BlockGridSessionColumnOffset() + sessionIndex * 44, rowY + Math.Max(1, (rowHeight - 15) / 2), 15, 15);
+        var rowY = BlockGridRowY(rect, row, rowHeight, rowGap);
+        return CenteredCheckBounds(BlockGridSessionCellBounds(column, sessionIndex, rect, columns, rowHeight, rowY), BlockGridCheckSize);
     }
 
-    private static int BlockGridSessionColumnOffset()
+    private static Rectangle BlockGridSessionCellBounds(int column, int sessionIndex, Rectangle rect, int columns, int rowHeight, int rowY)
     {
-        return 42 + Math.Max(0, ContentSessionKinds.Length - 1) * 44;
+        var columnWidth = BlockGridColumnWidth(rect, columns);
+        var rowX = BlockGridColumnLeft(rect, column, columns);
+        return new Rectangle(rowX + columnWidth - BlockGridSessionCellsRightInset + sessionIndex * BlockGridSessionColumnStride, rowY, BlockGridCompactCellWidth, rowHeight);
     }
 
-    private static TextBox CreateTextBox(string text, Rectangle bounds, bool enabled)
+    private static Rectangle BlockGridVisibleCellBounds(int column, Rectangle rect, int columns, int rowHeight, int rowY)
+    {
+        var columnWidth = BlockGridColumnWidth(rect, columns);
+        var rowX = BlockGridColumnLeft(rect, column, columns);
+        return new Rectangle(rowX + columnWidth - BlockGridVisibleCellRightInset, rowY, BlockGridCompactCellWidth, rowHeight);
+    }
+
+    private static int BlockGridColumnLeft(Rectangle rect, int column, int columns)
+    {
+        return BlockGridContentLeft(rect) + column * (BlockGridColumnWidth(rect, columns) + BlockGridColumnGap);
+    }
+
+    private static int BlockGridContentLeft(Rectangle rect)
+    {
+        return rect.Left + BlockGridContentInsetX;
+    }
+
+    private static int BlockGridColumnWidth(Rectangle rect, int columns)
+    {
+        return (rect.Width - BlockGridContentInsetX * 2 - BlockGridColumnGap * Math.Max(0, columns - 1)) / Math.Max(1, columns);
+    }
+
+    private static int BlockGridRowY(Rectangle rect, int row, int rowHeight, int rowGap)
+    {
+        return rect.Top + BlockGridFirstRowOffsetY + row * (rowHeight + rowGap);
+    }
+
+    private static TextBox CreateTextBox(string text, Rectangle bounds, bool enabled, string evidenceKey)
     {
         return new TextBox
         {
+            AccessibleDescription = $"settings-evidence-key:{evidenceKey}",
+            AccessibleName = evidenceKey,
+            AutoSize = false,
             BackColor = Rgb(4, 9, 20),
             BorderStyle = BorderStyle.FixedSingle,
             Enabled = enabled,
             Font = OverlayTheme.Font(OverlayTheme.DefaultFontFamily, 9f),
             ForeColor = enabled ? TextPrimary : TextDim,
             Location = bounds.Location,
+            Name = evidenceKey,
             Size = bounds.Size,
             TabStop = true,
             Text = text
@@ -2079,24 +2599,40 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private static bool SupportsSharedChromeSettings(string overlayId)
     {
+        return HasHeaderControls(overlayId) || HasFooterControls(overlayId);
+    }
+
+    private static bool HasContentControls(string overlayId)
+    {
+        return !string.Equals(overlayId, "car-radar", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasHeaderControls(string overlayId)
+    {
+        return HeaderChromeRowsFor(overlayId).Count > 0;
+    }
+
+    private static bool HasFooterControls(string overlayId)
+    {
+        return FooterChromeRowsFor(overlayId).Count > 0;
+    }
+
+    private static IReadOnlyList<SettingsOverlayTabSections.OverlayChromeSettingsRow> HeaderChromeRowsFor(string overlayId)
+    {
         return overlayId is
             "standings"
             or "relative"
             or "fuel-calculator"
             or "gap-to-leader"
             or "session-weather"
-            or "pit-service";
+            or "pit-service"
+                ? HeaderChromeRows
+                : [];
     }
 
     private static int ScaleDimension(int defaultDimension, double scale)
     {
         return Math.Max(80, (int)Math.Round(defaultDimension * Math.Clamp(scale, 0.6d, 2d)));
-    }
-
-    private static int ClosestPercent(double value, IReadOnlyList<int> allowedValues)
-    {
-        var percent = (int)Math.Round(value * 100d);
-        return allowedValues.OrderBy(candidate => Math.Abs(candidate - percent)).FirstOrDefault();
     }
 
     private static string ReleaseUpdateSupportText(ReleaseUpdateSnapshot snapshot)
@@ -2121,9 +2657,7 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private static string LatestBundleValueText(string? bundlePath)
     {
-        return string.IsNullOrWhiteSpace(bundlePath)
-            ? "No bundle yet"
-            : Path.GetFileName(bundlePath);
+        return SupportStatusText.LatestBundleValueText(bundlePath);
     }
 
     private static Color ColorForReleaseUpdateStatus(ReleaseUpdateStatus status)
@@ -2168,12 +2702,39 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private static readonly OverlaySessionKind[] ContentSessionKinds = SessionColumns.Select(column => column.Kind).ToArray();
 
-    private const int MatrixControlContentWidth = 768;
-    private const int MatrixControlLabelWidth = 244;
-    private const int MatrixControlVisibleWidth = 104;
-    private const int MatrixControlGap = 12;
-    private const int MatrixControlCellPadding = 12;
-    private const int MatrixControlStepperWidth = 220;
+    private const int MatrixContentInsetX = SettingsGeometry.MatrixContentInsetX;
+    private const int MatrixHeaderOffsetY = SettingsGeometry.MatrixHeaderOffsetY;
+    private const int MatrixFirstRowOffsetY = SettingsGeometry.MatrixFirstRowOffsetY;
+    private const int MatrixHeaderHeight = SettingsGeometry.MatrixHeaderHeight;
+    private const int MatrixRowHeight = SettingsGeometry.MatrixRowHeight;
+    private const int MatrixRowGap = SettingsGeometry.MatrixRowGap;
+    private const int MatrixPanelBottomPadding = SettingsGeometry.MatrixPanelBottomPadding;
+    private const int MatrixColumnGap = SettingsGeometry.MatrixColumnGap;
+    private const int MatrixSessionColumnWidth = SettingsGeometry.SessionColumnWidth;
+    private const int MatrixVisibleColumnWidth = SettingsGeometry.SessionColumnWidth;
+    private const int MatrixCheckSize = SettingsGeometry.MatrixCheckSize;
+    private const int BlockGridContentInsetX = SettingsGeometry.BlockGridContentInsetX;
+    private const int BlockGridHeaderOffsetY = SettingsGeometry.BlockGridHeaderOffsetY;
+    private const int BlockGridFirstRowOffsetY = SettingsGeometry.BlockGridFirstRowOffsetY;
+    private const int BlockGridPanelBottomPadding = SettingsGeometry.BlockGridPanelBottomPadding;
+    private const int BlockGridColumnGap = SettingsGeometry.BlockGridColumnGap;
+    private const int BlockGridRowHeight = SettingsGeometry.BlockGridRowHeight;
+    private const int BlockGridRowGap = SettingsGeometry.BlockGridRowGap;
+    private const int BlockGridCompactCellWidth = SettingsGeometry.CompactSessionColumnWidth;
+    private const int BlockGridSessionColumnStride = SettingsGeometry.BlockGridSessionColumnStride;
+    private const int BlockGridSessionCellsRightInset = SettingsGeometry.BlockGridSessionCellsRightInset;
+    private const int BlockGridVisibleCellRightInset = SettingsGeometry.BlockGridVisibleCellRightInset;
+    private const int BlockGridCheckSize = SettingsGeometry.BlockGridCheckSize;
+    private const int MatrixControlContentWidth = SettingsGeometry.MatrixControlContentWidth;
+    private const int MatrixControlLabelWidth = SettingsGeometry.MatrixControlLabelWidth;
+    private const int MatrixControlVisibleWidth = SettingsGeometry.SessionColumnWidth;
+    private const int MatrixControlGap = SettingsGeometry.MatrixControlGap;
+    private const int MatrixControlCellPadding = SettingsGeometry.MatrixControlCellPadding;
+    private const int MatrixControlStepperWidth = SettingsGeometry.MatrixControlStepperWidth;
+    private const int MatrixControlRowTopGap = SettingsGeometry.MatrixControlRowTopGap;
+    private const int MatrixControlRowHeight = SettingsGeometry.MatrixControlRowHeight;
+    private const int MatrixControlHeight = SettingsGeometry.MatrixControlHeight;
+    private const int MatrixControlStepperHeight = SettingsGeometry.MatrixControlStepperHeight;
 
     private static readonly SettingsOverlayTabSections.OverlayChromeSettingsRow[] HeaderChromeRows =
     [
@@ -2390,7 +2951,8 @@ internal sealed class DesignV2SettingsSurface : Control
         {
             base.OnPaint(e);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var box = new Rectangle(0, Math.Max(0, (Height - 19) / 2), 19, 19);
+            var checkSize = Math.Min(CheckSize, Math.Min(Width, Height));
+            var box = new Rectangle(0, Math.Max(0, (Height - checkSize) / 2), checkSize, checkSize);
             DrawCheckBox(e.Graphics, box, IsChecked);
             if (!string.IsNullOrWhiteSpace(Text))
             {
@@ -2442,10 +3004,21 @@ internal sealed class DesignV2SettingsSurface : Control
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             FillRounded(e.Graphics, ClientRectangle, 15, Rgb(8, 15, 31));
             StrokeRounded(e.Graphics, new Rectangle(0, 0, Width, Height), 15, BorderDim, 1f);
-            var segmentWidth = Width / Math.Max(1, _options.Count);
+            var segmentInset = SettingsGeometry.SegmentedPadding;
+            var segmentGap = SettingsGeometry.SegmentedChoiceGap;
+            var segmentCount = Math.Max(1, _options.Count);
+            var segmentWidth = Math.Max(0, Width - segmentInset * 2 - segmentGap * (segmentCount - 1)) / segmentCount;
+            var segmentX = segmentInset;
             for (var index = 0; index < _options.Count; index++)
             {
-                var bounds = new Rectangle(index * segmentWidth + 3, 3, index == _options.Count - 1 ? Width - index * segmentWidth - 6 : segmentWidth - 6, Height - 6);
+                var segmentRight = index == _options.Count - 1
+                    ? Width - segmentInset
+                    : segmentX + segmentWidth;
+                var bounds = new Rectangle(
+                    segmentX,
+                    segmentInset,
+                    Math.Max(0, segmentRight - segmentX),
+                    Math.Max(0, Height - segmentInset * 2));
                 var active = string.Equals(_options[index], Selected, StringComparison.Ordinal);
                 if (active)
                 {
@@ -2453,6 +3026,7 @@ internal sealed class DesignV2SettingsSurface : Control
                 }
 
                 DrawCentered(e.Graphics, _options[index], bounds, 10.5f, FontStyle.Bold, active ? TextPrimary : Cyan);
+                segmentX = segmentRight + segmentGap;
             }
         }
     }
@@ -2506,9 +3080,11 @@ internal sealed class DesignV2SettingsSurface : Control
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             FillRounded(e.Graphics, ClientRectangle, 10, Rgb(17, 30, 60));
             StrokeRounded(e.Graphics, new Rectangle(0, 0, Width, Height), 10, BorderDim, 1f);
-            DrawStepButton(e.Graphics, new Rectangle(4, 4, 34, Height - 8), "-", Value > _minimum);
-            DrawStepButton(e.Graphics, new Rectangle(Width - 38, 4, 34, Height - 8), "+", Value < _maximum);
-            DrawCentered(e.Graphics, _valueLabel(Value), new Rectangle(44, 0, Width - 88, Height), 12f, FontStyle.Bold, TextPrimary);
+            var buttonInset = Math.Max(0, (Height - StepperButtonHeight) / 2);
+            DrawStepButton(e.Graphics, new Rectangle(buttonInset, buttonInset, StepperButtonWidth, StepperButtonHeight), "-", Value > _minimum);
+            DrawStepButton(e.Graphics, new Rectangle(Width - StepperButtonWidth - buttonInset, buttonInset, StepperButtonWidth, StepperButtonHeight), "+", Value < _maximum);
+            var valueLeft = buttonInset + StepperButtonWidth + StepperGap;
+            DrawCentered(e.Graphics, _valueLabel(Value), new Rectangle(valueLeft, 0, Math.Max(1, Width - valueLeft * 2), Height), 12f, FontStyle.Bold, TextPrimary);
         }
 
         private static void DrawStepButton(Graphics graphics, Rectangle rect, string label, bool enabled)
@@ -2521,18 +3097,21 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private sealed class V2PercentSliderControl : V2PaintedControl
     {
-        private readonly IReadOnlyList<int> _allowedValues;
+        private readonly int _minimum;
+        private readonly int _maximum;
         private readonly Color _activeColor;
         private readonly Action<int> _onChange;
+        private bool _dragging;
 
-        public V2PercentSliderControl(Rectangle bounds, int value, IReadOnlyList<int> allowedValues, Color activeColor, Action<int> onChange)
+        public V2PercentSliderControl(Rectangle bounds, int value, int minimum, int maximum, Color activeColor, Action<int> onChange)
             : base(bounds)
         {
-            _allowedValues = allowedValues;
-            Value = allowedValues.Contains(value) ? value : allowedValues.OrderBy(candidate => Math.Abs(candidate - value)).First();
+            _minimum = Math.Min(minimum, maximum);
+            _maximum = Math.Max(minimum, maximum);
+            Value = Math.Clamp(value, _minimum, _maximum);
             _activeColor = activeColor;
             _onChange = onChange;
-            Cursor = Cursors.Hand;
+            Cursor = Cursors.SizeWE;
             TabStop = true;
         }
 
@@ -2541,43 +3120,103 @@ internal sealed class DesignV2SettingsSurface : Control
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
-            if (_allowedValues.Count == 0)
+            if (e.Button != MouseButtons.Left)
             {
                 return;
             }
 
-            var percent = e.X / (double)Math.Max(1, Width);
-            var index = Math.Clamp((int)Math.Round(percent * (_allowedValues.Count - 1)), 0, _allowedValues.Count - 1);
-            var next = _allowedValues[index];
-            if (next == Value)
+            Focus();
+            Capture = true;
+            _dragging = true;
+            SetValueFromX(e.X);
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (_dragging)
+            {
+                SetValueFromX(e.X);
+            }
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (!_dragging || e.Button != MouseButtons.Left)
             {
                 return;
             }
 
-            Value = next;
-            _onChange(Value);
-            Invalidate();
+            SetValueFromX(e.X);
+            _dragging = false;
+            Capture = false;
+        }
+
+        protected override void OnLostFocus(EventArgs e)
+        {
+            base.OnLostFocus(e);
+            _dragging = false;
+            Capture = false;
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            var handled = e.KeyCode switch
+            {
+                Keys.Left or Keys.Down => SetValue(Value - 1),
+                Keys.Right or Keys.Up => SetValue(Value + 1),
+                Keys.PageDown => SetValue(Value - 10),
+                Keys.PageUp => SetValue(Value + 10),
+                Keys.Home => SetValue(_minimum),
+                Keys.End => SetValue(_maximum),
+                _ => false
+            };
+            if (handled)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var track = new Rectangle(4, Height / 2 - 4, Width - 8, 8);
+            var track = TrackBounds();
             FillRounded(e.Graphics, track, 4, Rgb(17, 30, 60));
-            var index = 0;
-            for (var candidateIndex = 0; candidateIndex < _allowedValues.Count; candidateIndex++)
-            {
-                if (_allowedValues[candidateIndex] == Value)
-                {
-                    index = candidateIndex;
-                    break;
-                }
-            }
-            var activeWidth = _allowedValues.Count <= 1 ? track.Width : (int)Math.Round(index / (double)(_allowedValues.Count - 1) * track.Width);
+            var ratio = _maximum <= _minimum ? 1d : (Value - _minimum) / (double)(_maximum - _minimum);
+            var activeWidth = (int)Math.Round(ratio * track.Width);
             FillRounded(e.Graphics, new Rectangle(track.Left, track.Top, Math.Max(8, activeWidth), track.Height), 4, _activeColor);
             var knobX = track.Left + activeWidth - 7;
             FillRounded(e.Graphics, new Rectangle(Math.Clamp(knobX, track.Left, track.Right - 14), Height / 2 - 7, 14, 14), 7, Green);
+        }
+
+        private Rectangle TrackBounds()
+        {
+            return new Rectangle(4, Height / 2 - 4, Math.Max(1, Width - 8), 8);
+        }
+
+        private void SetValueFromX(int x)
+        {
+            var track = TrackBounds();
+            var ratio = Math.Clamp((x - track.Left) / (double)Math.Max(1, track.Width), 0d, 1d);
+            SetValue((int)Math.Round(_minimum + ratio * (_maximum - _minimum)));
+        }
+
+        private bool SetValue(int value)
+        {
+            var next = Math.Clamp(value, _minimum, _maximum);
+            if (next == Value)
+            {
+                return false;
+            }
+
+            Value = next;
+            _onChange(Value);
+            Invalidate();
+            return true;
         }
     }
 }

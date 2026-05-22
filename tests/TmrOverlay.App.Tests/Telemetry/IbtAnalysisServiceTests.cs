@@ -395,7 +395,7 @@ public sealed class IbtAnalysisServiceTests
             var missingStatusCapture = Path.Combine(captureRoot, "capture-missing-status");
             Directory.CreateDirectory(missingStatusCapture);
             var startedAtUtc = DateTimeOffset.Parse("2026-05-20T18:03:06Z");
-            WriteCaptureManifest(missingStatusCapture, startedAtUtc);
+            WriteCaptureManifest(missingStatusCapture, startedAtUtc, captureId: "capture-missing-status");
             WriteLiveSchema(missingStatusCapture);
 
             var service = CreateService(Path.Combine(root, "ibt"));
@@ -628,13 +628,14 @@ public sealed class IbtAnalysisServiceTests
     private static void WriteCaptureManifest(
         string captureDirectory,
         DateTimeOffset startedAtUtc,
-        int frameCount = 10)
+        int frameCount = 10,
+        string captureId = "capture-test")
     {
         File.WriteAllText(
             Path.Combine(captureDirectory, "capture-manifest.json"),
             JsonSerializer.Serialize(new CaptureManifest
             {
-                CaptureId = "capture-test",
+                CaptureId = captureId,
                 StartedAtUtc = startedAtUtc,
                 FinishedAtUtc = startedAtUtc.AddMinutes(10),
                 TelemetryFile = "telemetry.bin",

@@ -154,15 +154,15 @@ public sealed class OverlayContentSizingTests
         var metricHeight = ExpectedMetricSectionHeight(rowCount: signalRows, segmentedRows: signalRows);
         var gridHeight = tireRows <= 0
             ? 0
-            : (int)Math.Round(
+            : RoundToInt(
                 MetricRows.MetricGridHeaderHeight
                 + MetricRows.MetricGridHeaderBottomGap
                 + tireRows * MetricRows.MetricGridRowHeight
                 + Math.Max(0, tireRows - 1) * MetricRows.MetricGridRowGap);
         var contentHeight = metricHeight
-            + (metricHeight > 0 && gridHeight > 0 ? (int)Math.Round(MetricRows.MetricGridGap) : 0)
+            + (metricHeight > 0 && gridHeight > 0 ? RoundToInt(MetricRows.MetricGridGap) : 0)
             + gridHeight;
-        var height = contentHeight + (int)Math.Round(MetricRows.PitServiceContentChromeHeight);
+        var height = contentHeight + RoundToInt(MetricRows.PitServiceContentChromeHeight);
         return Math.Clamp(
             height,
             MetricRows.MinimumSimpleTelemetryHeight,
@@ -177,9 +177,14 @@ public sealed class OverlayContentSizingTests
         }
 
         var plainRows = Math.Max(0, rowCount - segmentedRows);
-        return (int)Math.Round(MetricRows.SectionTitleHeight + MetricRows.SectionTitleBottomGap)
-            + (int)Math.Round(segmentedRows * MetricRows.SegmentedRowHeight)
-            + (int)Math.Round(plainRows * MetricRows.PlainRowHeight)
-            + (int)Math.Round(Math.Max(0, rowCount - 1) * MetricRows.RowGap);
+        return RoundToInt(MetricRows.SectionTitleHeight + MetricRows.SectionTitleBottomGap)
+            + RoundToInt(segmentedRows * MetricRows.SegmentedRowHeight)
+            + RoundToInt(plainRows * MetricRows.PlainRowHeight)
+            + RoundToInt(Math.Max(0, rowCount - 1) * MetricRows.RowGap);
+    }
+
+    private static int RoundToInt(double value)
+    {
+        return (int)Math.Round(value);
     }
 }

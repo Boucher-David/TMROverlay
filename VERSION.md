@@ -13,47 +13,71 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.0.3 - Feedback Hardening, Geometry Parity, And Evidence Gates
+### v1.0.4 - Unit Coverage Reporting And Targeted Test Hardening
 
 Current branch name:
 
 ```text
-v1.0.3-feedback
+v1.0.4
 ```
 
 Release/tag decision:
 
-- Treat this as the V1.0.3 feedback-hardening branch after the V1.0.2 validation and CI artifact review work.
-- Do not create the `v1.0.3` release tag until the branch is merged or explicitly designated as the release point.
-- `Directory.Build.props` is aligned to `1.0.3` so branch-built MSI and screenshot artifacts are distinguishable from the V1.0.2 feedback baseline.
-- No durable raw-capture schema change is intended for this branch. Settings/data-contract compatibility remains covered by the branch tests and CI gates; if the final release pass discovers a durable user-data schema change, add the matching compatibility tests, docs, versioned snapshots, and migration/reader updates before tagging.
+- Treat this as the V1.0.4 coverage and test-hardening follow-up after the V1.0.3 testing framework redux.
+- Do not create the `v1.0.4` release tag until the branch is merged or explicitly designated as the release point.
+- `Directory.Build.props` is aligned to `1.0.4` so branch-built MSI and coverage artifacts are distinguishable from the V1.0.3 baseline.
+- No durable raw-capture schema or user-data schema change is intended for this branch. Settings/data-contract compatibility remains covered by existing branch tests and CI gates; if the final release pass discovers a durable schema change, add the matching compatibility tests, docs, versioned snapshots, and migration/reader updates before tagging.
 
 Planned scope:
 
-- Close the remaining feedback-hardening issues that CI artifacts exposed after V1.0.2: unavailable/no-content rendering, redundant overlay titles, fuel/session/pit/standings/relative session semantics, Gap To Leader signals, Stream Chat evidence, and Input minimum-scale layout.
-- Make browser review, localhost, and Windows native surfaces share measured geometry contracts for table widths/heights, metric rows, overlay sizes, Gap graph geometry, Stream Chat row geometry, settings shell/component/control geometry, screenshot evidence, and diagnostics metadata.
-- Keep settings and overlay user settings working through geometry and renderer changes, with browser, localhost, data-contract, settings-effect, screenshot, and native evidence tests covering the pipeline.
-- Improve diagnostics and support capture so real Windows test bundles include geometry contract hashes and current dimensions that can be compared against CI artifacts.
-- Split screenshot CI lanes where the build flow allows it, so browser/localhost, Windows overlay, and Windows installer evidence can run as independent first-line validation.
-- Preserve capture-only and future v1.X telemetry questions in `docs/v1.0.3.md` without promoting local CI artifact folders or raw captures into the release commit.
-- Keep the deprecated tracked macOS harness out of the V1 parity gate; Windows/native, browser review, and localhost remain the active product validation surfaces.
+- Add reporting-only coverage collection for .NET and JavaScript unit tests in CI, with readable artifacts and summaries but no percentage threshold yet.
+- Add focused C# unit/functional tests for high-risk V1.0.3 logic around settings layout contracts, overlay content sizing, browser/localhost model semantics, diagnostics bundles, settings migration/defaults, history maintenance, and IBT candidate selection.
+- Add JavaScript unit coverage for browser overlay runtime modules, shell runtime behavior, and evidence-contract helpers without treating Playwright layout tests as the line-coverage metric.
+- Add Python unit coverage for screenshot-manifest comparator behavior and keep manifest/screenshot validators strict.
+- Keep screenshot, Playwright, Windows native, browser review, and localhost parity gates intact as product evidence rather than replacing them with coverage percentages.
+- Preserve the report-first CI/build-failure rule and helper-thread cleanup rule in the repo agent notes.
+- Keep broader capture replay, overlay product behavior, and threshold policy decisions out of this patch branch unless the coverage baseline exposes a concrete release blocker.
 
 Branch-complete checklist:
 
-1. Re-read the final branch diff before writing the squash title/body; do not reuse stale V1.0 release-candidate text for this patch branch.
-2. Confirm `Directory.Build.props` stays aligned to `1.0.3` before tagging.
-3. Keep `AGENTS.md`, `README.md`, `telemetry.md`, `docs/live-overlay-diagnostics.md`, `docs/media-packet/`, `docs/v1.0.3.md`, and repo skills aligned with the branch behavior.
-4. Run browser review screenshots, localhost screenshots, media packet generation, screenshot expectation checks, app/static screenshot checks, Windows expectation checks, settings-effect tests, unit tests, C# compile-shape checks, and Windows .NET/Windows screenshot CI gates before tagging.
-5. Inspect the uploaded CI artifacts for browser review, localhost, and Windows screenshots; a passing validator is not enough if the artifact shows product-regression evidence.
-6. Keep the untracked CI log archive out of the release commit unless it is deliberately promoted as a tracked fixture; the evidence summary belongs in `docs/v1.0.3.md`.
+1. Re-read the final branch diff before writing the squash title/body; do not reuse stale V1.0.3 release text for this patch branch.
+2. Confirm `Directory.Build.props` stays aligned to `1.0.4` before tagging.
+3. Keep `AGENTS.md`, `docs/model-v2-future-branches.md`, `docs/v1.0.4.md`, coverage scripts, CI workflow text, and validation tooling aligned with the branch behavior.
+4. Run local JS/Python/static validation where available, plus C# compile-shape checks for changed `.cs` files.
+5. Confirm Windows CI runs the .NET build/tests, .NET coverage lane, data-contract tests, Windows screenshots, browser/localhost checks, JS coverage, and static validation before tagging.
+6. Review the uploaded `dotnet-coverage` and `javascript-coverage` artifacts after CI before setting any future coverage thresholds.
 
 Suggested squash title:
+
+```text
+[v1.0.4] Add unit coverage reporting and targeted test hardening
+```
+
+Suggested squash body:
+
+- Added reporting-only .NET coverage collection in Windows CI with `dotnet-coverage`, ReportGenerator output, Cobertura validation for the app/core assemblies, and uploaded coverage artifacts.
+- Added Vitest V8 coverage for browser overlay unit tests with text, HTML, lcov, and JSON summary outputs plus a GitHub job summary.
+- Added focused C# coverage for settings layout contracts, overlay content sizing, browser overlay model semantics, localhost request/page state, diagnostics bundle evidence, settings migration/defaults, history maintenance, and IBT candidate selection.
+- Added JavaScript unit coverage for browser overlay runtime modules, shell runtime behavior, and overlay evidence-contract helpers.
+- Added Python unit coverage for screenshot-manifest comparator behavior and wired the comparator tests into Windows static validation.
+- Kept coverage thresholds disabled for the first baseline so CI publishes reviewable artifacts without blocking on an unreviewed percentage target.
+- Preserved existing screenshot, Playwright, native Windows, browser review, localhost, manifest parity, and static validation gates as product evidence alongside the new coverage lanes.
+- Documented the V1.0.4 testing strategy, coverage policy, CI failure-handling rule, and helper-thread cleanup rule in branch docs and repo agent notes.
+- Aligned shared build metadata to `1.0.4` for V1.0.4 branch artifacts without introducing a durable raw-capture or user-data schema change.
+
+## Merged Mainline Milestones
+
+### v1.0.3 - V1 Fixes And Testing Framework Redux
+
+Commit: `d3beab0`
+
+Squash title:
 
 ```text
 [v1.0.3] V1 Fixes and Testing Framework Redux
 ```
 
-Suggested squash body:
+Summary:
 
 - Fixed feedback-driven overlay behavior across native, browser review, and localhost, including unavailable/no-content visibility, redundant overlay titles, non-race Standings/Relative/Fuel/Session/Pit semantics, settings-faithful previews, Stream Chat opacity/evidence, Gap To Leader signals, and Input minimum-scale layout.
 - Added shared geometry contracts for overlay sizes, table widths/heights, metric rows, Gap graph metrics, Stream Chat row/header/badge layout, settings shell/component/control geometry, and settings segmented controls, with generated C# constants and injected browser CSS variables.
@@ -62,10 +86,8 @@ Suggested squash body:
 - Preserved existing user settings through the geometry and settings UI changes, with data-contract, browser, localhost, settings-effect, screenshot, and native evidence tests covering the settings-to-renderer pipeline.
 - Split screenshot CI jobs where practical into browser/localhost, Windows overlay, and Windows installer evidence lanes while keeping manifest parity as the cross-surface comparison gate.
 - Documented SDK/capture v1.1 replay findings, spotting/spectator telemetry notes, shared-geometry rules, CI artifact triage, and remaining future-contract areas in `docs/v1.0.3.md` and repo agent/validation notes.
-- Regenerated and validated the full browser/localhost screenshot matrix during branch cleanup; Windows build, .NET tests, native screenshots, and installer screenshots remain Windows CI gates on non-Windows machines.
+- Regenerated and validated the full browser/localhost screenshot matrix during branch cleanup; Windows build, .NET tests, native screenshots, and installer screenshots remained Windows CI gates on non-Windows machines.
 - Aligned shared build metadata to `1.0.3` for V1.0.3 branch artifacts without introducing a durable raw-capture schema change.
-
-## Merged Mainline Milestones
 
 ### v1.0.0 - Private Team Release Candidate
 

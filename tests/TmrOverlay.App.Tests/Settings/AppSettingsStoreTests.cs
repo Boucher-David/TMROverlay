@@ -430,6 +430,64 @@ public sealed class AppSettingsStoreTests
     }
 
     [Fact]
+    public void Load_NormalizesScopedOverlayOptionDefaults()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-settings-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            Directory.CreateDirectory(storage.SettingsRoot);
+            var settingsPath = Path.Combine(storage.SettingsRoot, "settings.json");
+            File.WriteAllText(
+                settingsPath,
+                """
+                {
+                  "settingsVersion": 8,
+                  "overlays": [
+                    {
+                      "id": "stream-chat",
+                      "options": {
+                        "stream-chat.provider": "youtube",
+                        "stream-chat.twitch-channel": "https://www.twitch.tv/Team_Driver",
+                        "stream-chat.twitch.badges": "not-a-bool",
+                        "stream-chat.twitch.message-ids": "true"
+                      }
+                    },
+                    {
+                      "id": "flags",
+                      "options": {
+                        "flags.show-green": "false"
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var settings = new AppSettingsStore(storage).Load();
+            var streamChat = settings.Overlays.Single(overlay => overlay.Id == "stream-chat");
+            var flags = settings.Overlays.Single(overlay => overlay.Id == "flags");
+
+            Assert.Equal(SharedOverlayContract.StreamChatProviderNone, streamChat.GetStringOption(OverlayOptionKeys.StreamChatProvider));
+            Assert.Equal("team_driver", streamChat.GetStringOption(OverlayOptionKeys.StreamChatTwitchChannel));
+            Assert.True(streamChat.GetBooleanOption(OverlayOptionKeys.StreamChatShowBadges, defaultValue: false));
+            Assert.True(streamChat.GetBooleanOption(OverlayOptionKeys.StreamChatShowMessageIds, defaultValue: false));
+
+            Assert.False(flags.GetBooleanOption(OverlayOptionKeys.FlagsShowGreen, defaultValue: true));
+            Assert.True(flags.GetBooleanOption(OverlayOptionKeys.FlagsShowBlue, defaultValue: false));
+            Assert.True(flags.GetBooleanOption(OverlayOptionKeys.FlagsShowYellow, defaultValue: false));
+            Assert.True(flags.GetBooleanOption(OverlayOptionKeys.FlagsShowCritical, defaultValue: false));
+            Assert.True(flags.GetBooleanOption(OverlayOptionKeys.FlagsShowFinish, defaultValue: false));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Load_PreservesExistingUserStateDuringMigration()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-settings-test", Guid.NewGuid().ToString("N"));

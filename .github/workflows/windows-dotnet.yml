@@ -102,6 +102,39 @@ jobs:
       - name: Validate overlay evidence contract
         run: npm run test:evidence-contract
 
+  javascript_coverage:
+    name: JavaScript coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install browser test dependencies
+        run: npm ci
+
+      - name: Collect Vitest coverage
+        run: npm run test:coverage:js
+
+      - name: Add JavaScript coverage summary
+        if: always()
+        run: node tools/ci/summarize-vitest-coverage.mjs
+
+      - name: Upload JavaScript coverage report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: javascript-coverage
+          path: coverage/js
+          if-no-files-found: error
+          retention-days: 14
+
   browser_review_screenshots:
     name: Browser review screenshots
     runs-on: ubuntu-latest
@@ -243,6 +276,61 @@ jobs:
 
       - name: Test native app
         run: dotnet test tmrOverlay.sln --configuration Release --no-restore
+
+  dotnet_coverage:
+    name: .NET coverage
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore tmrOverlay.sln
+
+      - name: Collect .NET coverage
+        run: dotnet test tmrOverlay.sln --configuration Release --no-restore --settings coverage.runsettings --collect:"XPlat Code Coverage" --results-directory artifacts/dotnet-test-results
+
+      - name: Install ReportGenerator
+        run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Generate .NET coverage report
+        shell: pwsh
+        run: |
+          $reports = Get-ChildItem -Path .\artifacts\dotnet-test-results -Filter coverage.cobertura.xml -Recurse
+          if ($reports.Count -eq 0) {
+              throw "No Cobertura coverage files were produced."
+          }
+
+          $reportPaths = ($reports | ForEach-Object { $_.FullName }) -join ";"
+          $reportGenerator = Join-Path $env:USERPROFILE ".dotnet\tools\reportgenerator.exe"
+          & $reportGenerator `
+            "-reports:$reportPaths" `
+            "-targetdir:artifacts\coverage\dotnet" `
+            "-reporttypes:Html;Cobertura;MarkdownSummaryGithub" `
+            "-assemblyfilters:+TmrOverlay.*;-TmrOverlay.App.Tests"
+          if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+          }
+
+          $summary = "artifacts\coverage\dotnet\SummaryGithub.md"
+          if (Test-Path $summary) {
+              Get-Content $summary >> $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Upload .NET coverage report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dotnet-coverage
+          path: artifacts/coverage/dotnet
+          if-no-files-found: error
+          retention-days: 14
 
   windows_overlay_screenshots:
     name: Windows overlay screenshots
@@ -582,6 +670,8 @@ jobs:
       - windows_static_validation
       - windows_build
       - windows_tests
+      - dotnet_coverage
+      - javascript_coverage
       - windows_overlay_screenshots
       - windows_installer_screenshots
       - windows_publish_dry_run

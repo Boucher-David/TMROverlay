@@ -324,6 +324,10 @@ jobs:
               Get-Content $summary >> $env:GITHUB_STEP_SUMMARY
           }
 
+      - name: Validate .NET coverage assemblies
+        shell: pwsh
+        run: .\tools\ci\assert-dotnet-coverage-assemblies.ps1 -CoveragePath .\artifacts\coverage\dotnet\Cobertura.xml
+
       - name: Upload .NET coverage report
         uses: actions/upload-artifact@v7
         if: always()

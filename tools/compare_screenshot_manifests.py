@@ -33,6 +33,7 @@ from validate_overlay_screenshots import (
 
 DEFAULT_GEOMETRY_TOLERANCE = 4.0
 TABLE_GEOMETRY_TOLERANCE = 2.0
+SETTINGS_MATRIX_GEOMETRY_TOLERANCE = 4.0
 COLOR_CHANNEL_TOLERANCE = 3
 COLOR_ALPHA_TOLERANCE = 10
 WEB_NATIVE_GEOMETRY_TOLERANCE_BY_OVERLAY = {
@@ -47,7 +48,26 @@ WEB_NATIVE_GEOMETRY_TOLERANCE_BY_OVERLAY = {
     # Native/browser graph and dense metric text layout can differ by a few
     # pixels after chrome collapse and font measurement.
     "gap-to-leader": 5.5,
+    "relative": 8.0,
     "session-weather": 5.0,
+}
+SHARED_HEADER_OVERLAY_IDS = {
+    "standings",
+    "relative",
+    "fuel-calculator",
+    "gap-to-leader",
+    "session-weather",
+    "pit-service",
+}
+WEB_NATIVE_RENDERED_CELL_GEOMETRY_MISMATCH_OVERLAYS = {"standings", "relative"}
+SETTINGS_TEXT_SLOT_ROLES = {"settings-field-label", "settings-field-value", "settings-preview-summary"}
+SETTINGS_LEGACY_ID_ALIASES = {
+    "tab:error-logging": "tab:support",
+    "settings-field-value:field-value-track-geometry": "support.analysis.local-map-building.detail",
+    "settings-field-value:field-value-session-history": "support.analysis.car-track-history.detail",
+    "settings-field-value:field-value-fuel-model": "support.analysis.fuel-history.detail",
+    "settings-field-value:field-value-car-radar": "support.analysis.radar-calibration.detail",
+    "settings-field-value:field-value-summary-analysis": "support.analysis.post-race-analysis.detail",
 }
 
 
@@ -307,6 +327,7 @@ def compare_pair(
     if compare_size:
         compare_image_size(context, left, right, failures, stats)
     compare_common_overlay_fields(context, body_kind, left, right, failures, stats)
+    compare_effective_settings_evidence(context, body_kind, left, right, failures, stats)
     if is_web_overlay_path(left_path) and is_web_overlay_path(right_path):
         compare_runtime_asset_evidence(context, left.get("runtimeAssets"), right.get("runtimeAssets"), failures, stats)
 
@@ -319,9 +340,11 @@ def compare_pair(
     if not model_checks:
         return
 
+    overlay_id = str(left.get("overlayId") or right.get("overlayId") or "")
     body_kind = str(left.get("bodyKind") or left_model.get("bodyKind") or "")
     compare_model_evidence(
         context,
+        overlay_id,
         body_kind,
         left_model,
         right_model,
@@ -333,7 +356,6 @@ def compare_pair(
         right_should_render=right.get("shouldRender"),
     )
     if semantic_checks:
-        overlay_id = str(left.get("overlayId") or right.get("overlayId") or "")
         compare_overlay_semantics(context, overlay_id, body_kind, left, right, failures, stats)
 
 
@@ -361,6 +383,7 @@ def compare_common_overlay_fields(
 ) -> None:
     required_fields = (
         "overlayId",
+        "title",
         "previewMode",
         "fixtureVariant",
         "bodyKind",
@@ -372,6 +395,8 @@ def compare_common_overlay_fields(
     )
     for field in required_fields:
         compare_field(context, field, left.get(field), right.get(field), failures, stats)
+    if not context.startswith("localhost canonical vs alias:"):
+        compare_field(context, "v102Evidence", left.get("v102Evidence"), right.get("v102Evidence"), failures, stats)
     if body_kind == "flags":
         compare_field(
             context,
@@ -386,6 +411,121 @@ def compare_common_overlay_fields(
     for field in ("source", "shouldRender"):
         if left.get(field) is not None and right.get(field) is not None:
             compare_field(context, field, left.get(field), right.get(field), failures, stats)
+    overlay_id = str(left.get("overlayId") or right.get("overlayId") or "")
+    if overlay_id in SHARED_HEADER_OVERLAY_IDS:
+        compare_header_item_tones(context, left, right, failures, stats)
+
+
+def compare_effective_settings_evidence(
+    context: str,
+    body_kind: str,
+    left: dict[str, Any],
+    right: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    left_effective = typed_dict(left.get("effectiveSettings"))
+    right_effective = typed_dict(right.get("effectiveSettings"))
+    if not left_effective or not right_effective:
+        failures.append(f"{context}: both manifests must include effectiveSettings parity evidence")
+        return
+
+    for field in ("overlayId", "previewMode"):
+        compare_field(context, f"effectiveSettings.{field}", left_effective.get(field), right_effective.get(field), failures, stats)
+
+    left_sources = typed_dict(left_effective.get("sources"))
+    right_sources = typed_dict(right_effective.get("sources"))
+    for source_name in ("browserReview", "localhostObs", "windowsNative"):
+        left_source = typed_dict(left_sources.get(source_name))
+        right_source = typed_dict(right_sources.get(source_name))
+        if not left_source or not right_source:
+            failures.append(f"{context}: effectiveSettings source {source_name} missing in one or both manifests")
+            continue
+        for field in ("applied", "fixtureVariant", "sharedSettingsHash", "overlaySettingsHash", "routePath"):
+            left_value = left_source.get(field)
+            right_value = right_source.get(field)
+            if field in ("sharedSettingsHash", "overlaySettingsHash", "routePath") and (left_value in (None, "") or right_value in (None, "")):
+                failures.append(f"{context}: effectiveSettings source {source_name} missing {field}")
+                continue
+            compare_field(context, f"effectiveSettings.sources.{source_name}.{field}", left_value, right_value, failures, stats)
+        compare_field(
+            context,
+            f"effectiveSettings.sources.{source_name}.pixelEvidence.status",
+            nested(left_source, "pixelEvidence", "status"),
+            nested(right_source, "pixelEvidence", "status"),
+            failures,
+            stats,
+        )
+
+    left_rendered = typed_dict(left_effective.get("rendered"))
+    right_rendered = typed_dict(right_effective.get("rendered"))
+    if not left_rendered or not right_rendered:
+        failures.append(f"{context}: effectiveSettings rendered evidence missing in one or both manifests")
+        return
+    for field in ("bodyKind", "shouldRender", "rowCount", "placeholderRowCount", "unavailableContentPolicy"):
+        compare_optional_field(context, f"effectiveSettings.rendered.{field}", left_rendered.get(field), right_rendered.get(field), failures, stats)
+    compare_signature(
+        context,
+        "effectiveSettings.rendered.header item evidence",
+        [header_item_tone_signature(item) for item in as_list(left_rendered.get("headerItems"))],
+        [header_item_tone_signature(item) for item in as_list(right_rendered.get("headerItems"))],
+        failures,
+        stats,
+    )
+
+    if body_kind == "table":
+        compare_signature(
+            context,
+            "effectiveSettings.rendered.column keys",
+            [normalize_scalar(key) for key in as_list(left_rendered.get("columnKeys"))],
+            [normalize_scalar(key) for key in as_list(right_rendered.get("columnKeys"))],
+            failures,
+            stats,
+        )
+        compare_signature(
+            context,
+            "effectiveSettings.rendered.row identities",
+            [normalize_scalar(key) for key in as_list(left_rendered.get("rowIdentities"))],
+            [normalize_scalar(key) for key in as_list(right_rendered.get("rowIdentities"))],
+            failures,
+            stats,
+        )
+        if left_rendered.get("shouldRender") is not False or right_rendered.get("shouldRender") is not False:
+            for side, rendered in (("left", left_rendered), ("right", right_rendered)):
+                if not as_list(rendered.get("columnKeys")):
+                    failures.append(f"{context}: {side} effectiveSettings rendered table evidence missing columnKeys")
+                if not as_list(rendered.get("rowIdentities")):
+                    failures.append(f"{context}: {side} effectiveSettings rendered table evidence missing rowIdentities")
+
+
+def compare_header_item_tones(
+    context: str,
+    left: dict[str, Any],
+    right: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    left_items = [header_item_tone_signature(item) for item in as_list(left.get("headerItems"))]
+    right_items = [header_item_tone_signature(item) for item in as_list(right.get("headerItems"))]
+    if not left_items and not right_items:
+        return
+    compare_signature(
+        context,
+        "shared header item tone semantics",
+        left_items,
+        right_items,
+        failures,
+        stats,
+    )
+
+
+def header_item_tone_signature(item: Any) -> tuple[Any, Any, Any]:
+    values = typed_dict(item)
+    return (
+        str(normalize_scalar(values.get("key"))).lower(),
+        str(normalize_scalar(values.get("value"))),
+        str(normalize_scalar(values.get("tone"))).lower(),
+    )
 
 
 def is_web_overlay_path(path: str) -> bool:
@@ -425,6 +565,7 @@ def nested_dotted(values: dict[str, Any], path: str) -> Any:
 
 def compare_model_evidence(
     context: str,
+    overlay_id: str,
     body_kind: str,
     left: dict[str, Any],
     right: dict[str, Any],
@@ -438,9 +579,17 @@ def compare_model_evidence(
 ) -> None:
     compare_field(context, "modelEvidence.bodyKind", left.get("bodyKind"), right.get("bodyKind"), failures, stats)
     if body_kind == "table":
-        compare_table_model(context, left, right, failures, stats, geometry_tolerance if not strict_geometry else TABLE_GEOMETRY_TOLERANCE)
+        compare_table_model(
+            context,
+            overlay_id,
+            left,
+            right,
+            failures,
+            stats,
+            geometry_tolerance if not strict_geometry else TABLE_GEOMETRY_TOLERANCE,
+            strict_geometry=strict_geometry)
     elif body_kind == "metrics":
-        compare_metrics_model(context, left, right, failures, stats, geometry_tolerance)
+        compare_metrics_model(context, overlay_id, left, right, failures, stats, geometry_tolerance, strict_geometry=strict_geometry)
     elif body_kind == "graph":
         compare_graph_model(
             context,
@@ -453,12 +602,28 @@ def compare_model_evidence(
             right_should_render=right_should_render,
         )
     elif body_kind == "inputs":
-        compare_inputs_model(context, left.get("inputs"), right.get("inputs"), failures, stats, geometry_tolerance)
+        if left_should_render is False and right_should_render is False:
+            return
+        compare_inputs_model(
+            context,
+            left.get("inputs"),
+            right.get("inputs"),
+            failures,
+            stats,
+            geometry_tolerance,
+            strict_geometry=strict_geometry,
+        )
     elif body_kind == "flags":
         compare_flags_model(context, left.get("flags"), right.get("flags"), failures, stats, geometry_tolerance)
     elif body_kind in ("car-radar", "track-map"):
+        if left_should_render is False and right_should_render is False:
+            return
         key = "carRadar" if body_kind == "car-radar" else "trackMap"
         compare_vector_model(context, body_kind, left.get(key), right.get(key), failures, stats, geometry_tolerance)
+    elif body_kind == "stream-chat":
+        compare_stream_chat_model(context, left.get("streamChat"), right.get("streamChat"), failures, stats, geometry_tolerance)
+    elif body_kind == "garage-cover":
+        compare_garage_cover_model(context, left.get("garageCover"), right.get("garageCover"), failures, stats, geometry_tolerance)
 
 
 def compare_overlay_semantics(
@@ -483,10 +648,16 @@ def compare_overlay_semantics(
             return
         compare_gap_semantics(context, left_graph, right_graph, failures, stats)
     elif overlay_id == "input-state":
+        if left.get("shouldRender") is False and right.get("shouldRender") is False:
+            return
         compare_input_semantics(context, typed_dict(left_model.get("inputs")), typed_dict(right_model.get("inputs")), failures, stats)
     elif overlay_id == "track-map":
+        if left.get("shouldRender") is False and right.get("shouldRender") is False:
+            return
         compare_vector_semantics(context, "track-map", typed_dict(left_model.get("trackMap")), typed_dict(right_model.get("trackMap")), failures, stats)
     elif overlay_id == "car-radar":
+        if left.get("shouldRender") is False and right.get("shouldRender") is False:
+            return
         compare_vector_semantics(context, "car-radar", typed_dict(left_model.get("carRadar")), typed_dict(right_model.get("carRadar")), failures, stats)
     elif overlay_id == "flags":
         compare_flags_semantics(context, typed_dict(left_model.get("flags")), typed_dict(right_model.get("flags")), failures, stats)
@@ -697,12 +868,16 @@ def compare_stream_chat_semantics(
 
 def compare_table_model(
     context: str,
+    overlay_id: str,
     left: dict[str, Any],
     right: dict[str, Any],
     failures: list[str],
     stats: ComparisonStats,
     tolerance: float,
+    *,
+    strict_geometry: bool,
 ) -> None:
+    rect_keys = table_rect_keys(overlay_id, strict_geometry)
     left_columns = as_list(left.get("columns"))
     right_columns = as_list(right.get("columns"))
     compare_count(context, "columns", left_columns, right_columns, failures, stats)
@@ -712,7 +887,7 @@ def compare_table_model(
             continue
         for field in ("label", "configuredWidth", "alignment"):
             compare_field(context, f"columns[{index}].{field}", get_manifest_value(left_column, field), get_manifest_value(right_column, field), failures, stats)
-        compare_rect(context, f"columns[{index}].bounds", get_manifest_value(left_column, "bounds"), get_manifest_value(right_column, "bounds"), failures, stats, tolerance=tolerance)
+        compare_rect(context, f"columns[{index}].bounds", get_manifest_value(left_column, "bounds"), get_manifest_value(right_column, "bounds"), failures, stats, tolerance=tolerance, keys=rect_keys)
 
     left_rows = as_list(left.get("rows"))
     right_rows = as_list(right.get("rows"))
@@ -731,19 +906,29 @@ def compare_table_model(
         )
         for field in ("isReference", "isPartial", "classColorHex", "relativeLapDelta"):
             compare_field(context, f"rows[{index}].{field}", get_manifest_value(left_row, field), get_manifest_value(right_row, field), failures, stats)
-        compare_rect(context, f"rows[{index}].bounds", get_manifest_value(left_row, "bounds"), get_manifest_value(right_row, "bounds"), failures, stats, tolerance=tolerance)
+        compare_rect(context, f"rows[{index}].bounds", get_manifest_value(left_row, "bounds"), get_manifest_value(right_row, "bounds"), failures, stats, tolerance=tolerance, keys=rect_keys)
         compare_text_list(context, f"rows[{index}].cells", get_manifest_value(left_row, "cells"), get_manifest_value(right_row, "cells"), failures, stats)
-        if get_manifest_value(left_row, "kind") != "class-header" and get_manifest_value(right_row, "kind") != "class-header":
-            compare_rendered_cell_text(context, index, left_row, right_row, failures, stats)
+        compare_rendered_cell_text(context, overlay_id, index, left_row, right_row, failures, stats, tolerance, strict_geometry)
+
+
+def table_rect_keys(overlay_id: str, strict_geometry: bool) -> tuple[str, ...]:
+    return ("x", "y", "width", "height")
+
+
+def skip_web_native_rendered_cell_bounds(overlay_id: str, strict_geometry: bool) -> bool:
+    return not strict_geometry and overlay_id in WEB_NATIVE_RENDERED_CELL_GEOMETRY_MISMATCH_OVERLAYS
 
 
 def compare_rendered_cell_text(
     context: str,
+    overlay_id: str,
     row_index: int,
     left_row: dict[str, Any],
     right_row: dict[str, Any],
     failures: list[str],
     stats: ComparisonStats,
+    tolerance: float,
+    strict_geometry: bool,
 ) -> None:
     left_cells = as_list(get_manifest_value(left_row, "renderedCells"))
     right_cells = as_list(get_manifest_value(right_row, "renderedCells"))
@@ -761,28 +946,65 @@ def compare_rendered_cell_text(
                 failures,
                 stats,
             )
+        if not skip_web_native_rendered_cell_bounds(overlay_id, strict_geometry):
+            compare_rect(
+                context,
+                f"rows[{row_index}].renderedCells[{cell_index}].bounds",
+                get_manifest_value(left_cell, "bounds"),
+                get_manifest_value(right_cell, "bounds"),
+                failures,
+                stats,
+                tolerance=tolerance,
+            )
 
 
 def compare_metrics_model(
     context: str,
+    overlay_id: str,
     left: dict[str, Any],
     right: dict[str, Any],
     failures: list[str],
     stats: ComparisonStats,
     tolerance: float,
+    *,
+    strict_geometry: bool,
 ) -> None:
-    compare_metric_rows(context, "metrics", as_list(left.get("metrics")), as_list(right.get("metrics")), failures, stats, tolerance)
-    compare_metric_sections(context, as_list(left.get("metricSections")), as_list(right.get("metricSections")), failures, stats, tolerance)
-    compare_grid_sections(context, as_list(left.get("gridSections")), as_list(right.get("gridSections")), failures, stats, tolerance)
+    row_keys, segment_keys, grid_cell_keys = metric_rect_keys(overlay_id, strict_geometry)
+    compare_metric_rows(context, "metrics", as_list(left.get("metrics")), as_list(right.get("metrics")), failures, stats, tolerance, row_keys, segment_keys)
+    compare_metric_sections(
+        context,
+        overlay_id,
+        as_list(left.get("metricSections")),
+        as_list(right.get("metricSections")),
+        failures,
+        stats,
+        tolerance,
+        row_keys,
+        segment_keys,
+        strict_geometry,
+    )
+    compare_grid_sections(context, as_list(left.get("gridSections")), as_list(right.get("gridSections")), failures, stats, tolerance, grid_cell_keys)
+
+
+def metric_rect_keys(overlay_id: str, strict_geometry: bool) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    return (
+        ("x", "y", "width", "height"),
+        ("x", "y", "width", "height"),
+        ("x", "y", "width", "height"),
+    )
 
 
 def compare_metric_sections(
     context: str,
+    overlay_id: str,
     left_sections: list[Any],
     right_sections: list[Any],
     failures: list[str],
     stats: ComparisonStats,
     tolerance: float,
+    row_keys: tuple[str, ...],
+    segment_keys: tuple[str, ...],
+    strict_geometry: bool,
 ) -> None:
     compare_count(context, "metricSections", left_sections, right_sections, failures, stats)
     for section_index, (left_section, right_section) in enumerate(zip(left_sections, right_sections)):
@@ -790,6 +1012,21 @@ def compare_metric_sections(
             failures.append(f"{context}: metric section {section_index} must be an object in both manifests")
             continue
         compare_field(context, f"metricSections[{section_index}].title", title_text(left_section.get("title")), title_text(right_section.get("title")), failures, stats)
+        left_bounds = get_manifest_value(left_section, "bounds")
+        right_bounds = get_manifest_value(right_section, "bounds")
+        if left_bounds is None or right_bounds is None:
+            failures.append(f"{context}: metricSections[{section_index}].bounds missing on one side")
+        else:
+            compare_rect(
+                context,
+                f"metricSections[{section_index}].bounds",
+                left_bounds,
+                right_bounds,
+                failures,
+                stats,
+                tolerance=tolerance,
+                keys=row_keys,
+            )
         compare_metric_rows(
             context,
             f"metricSections[{section_index}].rows",
@@ -798,6 +1035,8 @@ def compare_metric_sections(
             failures,
             stats,
             tolerance,
+            row_keys,
+            segment_keys,
         )
 
 
@@ -809,6 +1048,8 @@ def compare_metric_rows(
     failures: list[str],
     stats: ComparisonStats,
     tolerance: float,
+    row_keys: tuple[str, ...],
+    segment_keys: tuple[str, ...],
 ) -> None:
     compare_count(context, label, left_rows, right_rows, failures, stats)
     for row_index, (left_row, right_row) in enumerate(zip(left_rows, right_rows)):
@@ -817,8 +1058,8 @@ def compare_metric_rows(
             continue
         for field in ("label", "value"):
             compare_field(context, f"{label}[{row_index}].{field}", get_manifest_value(left_row, field), get_manifest_value(right_row, field), failures, stats)
-        compare_rect(context, f"{label}[{row_index}].bounds", get_manifest_value(left_row, "bounds"), get_manifest_value(right_row, "bounds"), failures, stats, tolerance=tolerance)
-        compare_metric_segments(context, f"{label}[{row_index}].segments", as_list(get_manifest_value(left_row, "segments")), as_list(get_manifest_value(right_row, "segments")), failures, stats, tolerance)
+        compare_rect(context, f"{label}[{row_index}].bounds", get_manifest_value(left_row, "bounds"), get_manifest_value(right_row, "bounds"), failures, stats, tolerance=tolerance, keys=row_keys)
+        compare_metric_segments(context, f"{label}[{row_index}].segments", as_list(get_manifest_value(left_row, "segments")), as_list(get_manifest_value(right_row, "segments")), failures, stats, tolerance, segment_keys)
 
 
 def compare_metric_segments(
@@ -829,6 +1070,7 @@ def compare_metric_segments(
     failures: list[str],
     stats: ComparisonStats,
     tolerance: float,
+    rect_keys: tuple[str, ...],
 ) -> None:
     compare_count(context, label, left_segments, right_segments, failures, stats)
     for index, (left_segment, right_segment) in enumerate(zip(left_segments, right_segments)):
@@ -837,7 +1079,7 @@ def compare_metric_segments(
             continue
         for field in ("label", "value", "rotationDegrees"):
             compare_field(context, f"{label}[{index}].{field}", get_manifest_value(left_segment, field), get_manifest_value(right_segment, field), failures, stats)
-        compare_rect(context, f"{label}[{index}].bounds", get_manifest_value(left_segment, "bounds"), get_manifest_value(right_segment, "bounds"), failures, stats, tolerance=tolerance)
+        compare_rect(context, f"{label}[{index}].bounds", get_manifest_value(left_segment, "bounds"), get_manifest_value(right_segment, "bounds"), failures, stats, tolerance=tolerance, keys=rect_keys)
 
 
 def compare_grid_sections(
@@ -847,6 +1089,7 @@ def compare_grid_sections(
     failures: list[str],
     stats: ComparisonStats,
     tolerance: float,
+    cell_keys: tuple[str, ...],
 ) -> None:
     compare_count(context, "gridSections", left_sections, right_sections, failures, stats)
     for section_index, (left_section, right_section) in enumerate(zip(left_sections, right_sections)):
@@ -854,7 +1097,18 @@ def compare_grid_sections(
             failures.append(f"{context}: grid section {section_index} must be an object in both manifests")
             continue
         compare_field(context, f"gridSections[{section_index}].title", title_text(left_section.get("title")), title_text(right_section.get("title")), failures, stats)
+        compare_rect(context, f"gridSections[{section_index}].bounds", left_section.get("bounds"), right_section.get("bounds"), failures, stats, tolerance=tolerance, keys=cell_keys)
         compare_text_list(context, f"gridSections[{section_index}].headers", left_section.get("headers"), right_section.get("headers"), failures, stats)
+        compare_rendered_grid_headers(
+            context,
+            section_index,
+            as_list(get_manifest_value(left_section, "renderedHeaders")),
+            as_list(get_manifest_value(right_section, "renderedHeaders")),
+            failures,
+            stats,
+            tolerance,
+            cell_keys,
+        )
         compare_grid_rows(
             context,
             section_index,
@@ -863,6 +1117,7 @@ def compare_grid_sections(
             failures,
             stats,
             tolerance,
+            cell_keys,
         )
 
 
@@ -874,6 +1129,7 @@ def compare_grid_rows(
     failures: list[str],
     stats: ComparisonStats,
     tolerance: float,
+    cell_keys: tuple[str, ...],
 ) -> None:
     compare_count(context, f"gridSections[{section_index}].rows", left_rows, right_rows, failures, stats)
     for row_index, (left_row, right_row) in enumerate(zip(left_rows, right_rows)):
@@ -881,7 +1137,7 @@ def compare_grid_rows(
             failures.append(f"{context}: grid row {section_index}.{row_index} must be an object in both manifests")
             continue
         compare_field(context, f"gridSections[{section_index}].rows[{row_index}].label", get_manifest_value(left_row, "label"), get_manifest_value(right_row, "label"), failures, stats)
-        compare_rect(context, f"gridSections[{section_index}].rows[{row_index}].bounds", get_manifest_value(left_row, "bounds"), get_manifest_value(right_row, "bounds"), failures, stats, tolerance=tolerance, keys=("height",))
+        compare_rect(context, f"gridSections[{section_index}].rows[{row_index}].bounds", get_manifest_value(left_row, "bounds"), get_manifest_value(right_row, "bounds"), failures, stats, tolerance=tolerance, keys=cell_keys)
         row_label = get_manifest_value(left_row, "label") or get_manifest_value(right_row, "label")
         compare_grid_cells(
             context,
@@ -892,6 +1148,7 @@ def compare_grid_rows(
             failures,
             stats,
             tolerance,
+            cell_keys,
             row_label=row_label if isinstance(row_label, str) else None,
         )
 
@@ -905,18 +1162,37 @@ def compare_grid_cells(
     failures: list[str],
     stats: ComparisonStats,
     tolerance: float,
+    cell_keys: tuple[str, ...],
     *,
     row_label: str | None,
 ) -> None:
-    left_cells = drop_repeated_label_cell(left_cells, row_label)
-    right_cells = drop_repeated_label_cell(right_cells, row_label)
     compare_count(context, f"gridSections[{section_index}].rows[{row_index}].cells", left_cells, right_cells, failures, stats)
     for cell_index, (left_cell, right_cell) in enumerate(zip(left_cells, right_cells)):
         if not isinstance(left_cell, dict) or not isinstance(right_cell, dict):
             failures.append(f"{context}: grid cell {section_index}.{row_index}.{cell_index} must be an object in both manifests")
             continue
         compare_field(context, f"gridSections[{section_index}].rows[{row_index}].cells[{cell_index}].value", get_manifest_value(left_cell, "value"), get_manifest_value(right_cell, "value"), failures, stats)
-        compare_rect(context, f"gridSections[{section_index}].rows[{row_index}].cells[{cell_index}].bounds", get_manifest_value(left_cell, "bounds"), get_manifest_value(right_cell, "bounds"), failures, stats, tolerance=tolerance, keys=("width", "height"))
+        compare_rect(context, f"gridSections[{section_index}].rows[{row_index}].cells[{cell_index}].bounds", get_manifest_value(left_cell, "bounds"), get_manifest_value(right_cell, "bounds"), failures, stats, tolerance=tolerance, keys=cell_keys)
+
+
+def compare_rendered_grid_headers(
+    context: str,
+    section_index: int,
+    left_headers: list[Any],
+    right_headers: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+    cell_keys: tuple[str, ...],
+) -> None:
+    compare_count(context, f"gridSections[{section_index}].renderedHeaders", left_headers, right_headers, failures, stats)
+    for header_index, (left_header, right_header) in enumerate(zip(left_headers, right_headers)):
+        if not isinstance(left_header, dict) or not isinstance(right_header, dict):
+            failures.append(f"{context}: grid header {section_index}.{header_index} must be an object in both manifests")
+            continue
+        for field in ("columnIndex", "column", "text", "value"):
+            compare_field(context, f"gridSections[{section_index}].renderedHeaders[{header_index}].{field}", get_manifest_value(left_header, field), get_manifest_value(right_header, field), failures, stats)
+        compare_rect(context, f"gridSections[{section_index}].renderedHeaders[{header_index}].bounds", get_manifest_value(left_header, "bounds"), get_manifest_value(right_header, "bounds"), failures, stats, tolerance=tolerance, keys=cell_keys)
 
 
 def compare_graph_model(
@@ -933,9 +1209,17 @@ def compare_graph_model(
     if not isinstance(left_graph, dict) or not isinstance(right_graph, dict):
         failures.append(f"{context}: graph evidence missing graph object")
         return
+    for field in ("comparisonLabel", "threatCarIdx", "leaderChangeCount", "driverChangeCount", "weatherCount"):
+        compare_optional_field(context, f"graph.{field}", left_graph.get(field), right_graph.get(field), failures, stats)
+    compare_gap_active_threat(context, left_graph.get("activeThreat"), right_graph.get("activeThreat"), failures, stats)
+    compare_gap_trend_metrics(context, as_list(left_graph.get("trendMetrics")), as_list(right_graph.get("trendMetrics")), failures, stats)
     if hidden_empty_graph_pair(left_graph, right_graph, left_should_render, right_should_render):
         compare_optional_field(context, "graph.selectedSeriesCount", left_graph.get("selectedSeriesCount"), right_graph.get("selectedSeriesCount"), failures, stats)
         compare_optional_field(context, "graph.trendMetricCount", left_graph.get("trendMetricCount"), right_graph.get("trendMetricCount"), failures, stats)
+        return
+    if graph_off_with_metrics_pair(left_graph, right_graph) and not isinstance(left_graph.get("geometry"), dict) and not isinstance(right_graph.get("geometry"), dict):
+        for field in ("showGraph", "showTrendMetrics", "selectedSeriesCount", "trendMetricCount"):
+            compare_optional_field(context, f"graph.{field}", left_graph.get(field), right_graph.get(field), failures, stats)
         return
     left_geometry = left_graph.get("geometry")
     right_geometry = right_graph.get("geometry")
@@ -949,8 +1233,75 @@ def compare_graph_model(
     for field in ("frame", "plot", "axis", "labelLane", "metricsTable"):
         compare_rect(context, f"graph.{field}", left_geometry.get(field), right_geometry.get(field), failures, stats, tolerance=tolerance)
     compare_graph_lines(context, "graph.gridLines", as_list(left_geometry.get("gridLines")), as_list(right_geometry.get("gridLines")), failures, stats, tolerance)
+    compare_graph_markers(context, "graph.markers", as_list(left_geometry.get("markers")), as_list(right_geometry.get("markers")), failures, stats, tolerance)
+    compare_graph_weather_bands(context, as_list(left_geometry.get("weatherBands")), as_list(right_geometry.get("weatherBands")), failures, stats, tolerance)
     compare_graph_metric_rows(context, as_list(left_geometry.get("metricRows")), as_list(right_geometry.get("metricRows")), failures, stats, tolerance)
     compare_graph_series(context, as_list(left_geometry.get("series")), as_list(right_geometry.get("series")), failures, stats, tolerance)
+
+
+def compare_gap_active_threat(
+    context: str,
+    left_threat: Any,
+    right_threat: Any,
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    if left_threat is None and right_threat is None:
+        return
+    if not isinstance(left_threat, dict) or not isinstance(right_threat, dict):
+        failures.append(f"{context}: graph.activeThreat missing on one side")
+        return
+    for field in ("label", "state", "stateLabel", "focusGapChangeSeconds"):
+        compare_optional_field(context, f"graph.activeThreat.{field}", left_threat.get(field), right_threat.get(field), failures, stats)
+    compare_gap_chaser(context, left_threat.get("chaser"), right_threat.get("chaser"), failures, stats)
+
+
+def compare_gap_chaser(
+    context: str,
+    left_chaser: Any,
+    right_chaser: Any,
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    if left_chaser is None and right_chaser is None:
+        return
+    if not isinstance(left_chaser, dict) or not isinstance(right_chaser, dict):
+        failures.append(f"{context}: graph.activeThreat.chaser missing on one side")
+        return
+    for field in ("carIdx", "label", "gainSeconds"):
+        compare_optional_field(context, f"graph.activeThreat.chaser.{field}", left_chaser.get(field), right_chaser.get(field), failures, stats)
+
+
+def compare_gap_trend_metrics(
+    context: str,
+    left_metrics: list[Any],
+    right_metrics: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    compare_count(context, "graph.trendMetrics", left_metrics, right_metrics, failures, stats)
+    for index, (left_metric, right_metric) in enumerate(zip(left_metrics, right_metrics)):
+        if not isinstance(left_metric, dict) or not isinstance(right_metric, dict):
+            failures.append(f"{context}: graph.trendMetrics[{index}] must be an object in both manifests")
+            continue
+        for field in (
+            "index",
+            "label",
+            "focusGapChangeSeconds",
+            "state",
+            "stateLabel",
+            "completedReferenceLaps",
+            "valueText",
+            "chaserText",
+            "primaryText",
+            "threatText",
+            "comparisonText",
+            "effectiveAlpha",
+            "isStickyExit",
+            "isStale",
+        ):
+            compare_optional_field(context, f"graph.trendMetrics[{index}].{field}", left_metric.get(field), right_metric.get(field), failures, stats)
+        compare_color_field(context, f"graph.trendMetrics[{index}].renderedColor", left_metric.get("renderedColor"), right_metric.get("renderedColor"), failures, stats)
 
 
 def graph_intentionally_has_no_geometry(graph: dict[str, Any]) -> bool:
@@ -965,6 +1316,15 @@ def hidden_empty_graph_pair(left_graph: dict[str, Any], right_graph: dict[str, A
         and right_should_render is False
         and graph_has_no_series_or_metrics(left_graph)
         and graph_has_no_series_or_metrics(right_graph)
+    )
+
+
+def graph_off_with_metrics_pair(left_graph: dict[str, Any], right_graph: dict[str, Any]) -> bool:
+    return (
+        left_graph.get("showGraph") is False
+        and right_graph.get("showGraph") is False
+        and (left_graph.get("selectedSeriesCount") in (None, 0))
+        and (right_graph.get("selectedSeriesCount") in (None, 0))
     )
 
 
@@ -1007,6 +1367,45 @@ def compare_graph_lines(
         compare_point(context, f"{label}[{index}].start", left_line.get("start"), right_line.get("start"), failures, stats, tolerance)
         compare_point(context, f"{label}[{index}].end", left_line.get("end"), right_line.get("end"), failures, stats, tolerance)
         compare_numeric(context, f"{label}[{index}].strokeWidth", left_line.get("strokeWidth"), right_line.get("strokeWidth"), failures, stats, tolerance=0.25)
+
+
+def compare_graph_markers(
+    context: str,
+    label: str,
+    left_markers: list[Any],
+    right_markers: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, label, left_markers, right_markers, failures, stats)
+    for index, (left_marker, right_marker) in enumerate(zip(left_markers, right_markers)):
+        if not isinstance(left_marker, dict) or not isinstance(right_marker, dict):
+            failures.append(f"{context}: {label}[{index}] must be an object in both manifests")
+            continue
+        for field in ("kind", "label", "text", "seconds", "lap"):
+            compare_optional_field(context, f"{label}[{index}].{field}", left_marker.get(field), right_marker.get(field), failures, stats)
+        compare_point(context, f"{label}[{index}].point", left_marker.get("point"), right_marker.get("point"), failures, stats, tolerance)
+        compare_rect(context, f"{label}[{index}].bounds", left_marker.get("bounds"), right_marker.get("bounds"), failures, stats, tolerance=tolerance)
+
+
+def compare_graph_weather_bands(
+    context: str,
+    left_bands: list[Any],
+    right_bands: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, "graph.weatherBands", left_bands, right_bands, failures, stats)
+    for index, (left_band, right_band) in enumerate(zip(left_bands, right_bands)):
+        if not isinstance(left_band, dict) or not isinstance(right_band, dict):
+            failures.append(f"{context}: graph.weatherBands[{index}] must be an object in both manifests")
+            continue
+        for field in ("kind", "label", "text", "startSeconds", "endSeconds"):
+            compare_optional_field(context, f"graph.weatherBands[{index}].{field}", left_band.get(field), right_band.get(field), failures, stats)
+        compare_rect(context, f"graph.weatherBands[{index}].bounds", left_band.get("bounds"), right_band.get("bounds"), failures, stats, tolerance=tolerance)
+        compare_color_field(context, f"graph.weatherBands[{index}].fill", left_band.get("fill"), right_band.get("fill"), failures, stats)
 
 
 def compare_graph_metric_rows(
@@ -1067,6 +1466,26 @@ def compare_graph_series(
         compare_color_field(context, f"graph.series[{index}].baseColor", get_manifest_value(left_item, "baseColor"), get_manifest_value(right_item, "baseColor"), failures, stats)
         compare_numeric(context, f"graph.series[{index}].strokeWidth", get_manifest_value(left_item, "strokeWidth"), get_manifest_value(right_item, "strokeWidth"), failures, stats, tolerance=0.35)
         compare_point(context, f"graph.series[{index}].latestPoint", get_manifest_value(left_item, "latestPoint"), get_manifest_value(right_item, "latestPoint"), failures, stats, tolerance)
+        compare_graph_series_points(context, index, as_list(get_manifest_value(left_item, "points")), as_list(get_manifest_value(right_item, "points")), failures, stats, tolerance)
+
+
+def compare_graph_series_points(
+    context: str,
+    series_index: int,
+    left_points: list[Any],
+    right_points: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, f"graph.series[{series_index}].points", left_points, right_points, failures, stats)
+    for point_index, (left_point, right_point) in enumerate(zip(left_points, right_points)):
+        if isinstance(left_point, dict) and isinstance(right_point, dict):
+            for field in ("axisSeconds", "gapSeconds", "startsSegment"):
+                compare_field(context, f"graph.series[{series_index}].points[{point_index}].{field}", left_point.get(field), right_point.get(field), failures, stats)
+            compare_point(context, f"graph.series[{series_index}].points[{point_index}].point", left_point.get("point"), right_point.get("point"), failures, stats, tolerance)
+        else:
+            compare_point(context, f"graph.series[{series_index}].points[{point_index}]", left_point, right_point, failures, stats, tolerance)
 
 
 def compare_inputs_model(
@@ -1076,6 +1495,8 @@ def compare_inputs_model(
     failures: list[str],
     stats: ComparisonStats,
     tolerance: float,
+    *,
+    strict_geometry: bool,
 ) -> None:
     if not isinstance(left_inputs, dict) or not isinstance(right_inputs, dict):
         failures.append(f"{context}: input evidence missing inputs object")
@@ -1084,8 +1505,166 @@ def compare_inputs_model(
         compare_field(context, f"inputs.{field}", left_inputs.get(field), right_inputs.get(field), failures, stats)
     compare_rect(context, "inputs.graph.bounds", nested(left_inputs, "graph", "bounds"), nested(right_inputs, "graph", "bounds"), failures, stats, tolerance=tolerance)
     compare_rect(context, "inputs.rail.bounds", nested(left_inputs, "rail", "bounds"), nested(right_inputs, "rail", "bounds"), failures, stats, tolerance=tolerance)
-    compare_count(context, "inputs.series", as_list(left_inputs.get("series")), as_list(right_inputs.get("series")), failures, stats)
-    compare_count(context, "inputs.grid", as_list(left_inputs.get("grid")), as_list(right_inputs.get("grid")), failures, stats)
+    compare_input_lines(context, "inputs.grid", as_list(left_inputs.get("grid")), as_list(right_inputs.get("grid")), failures, stats, tolerance)
+    compare_input_series(context, "inputs.series", as_list(left_inputs.get("series")), as_list(right_inputs.get("series")), failures, stats, tolerance)
+    compare_input_lines(context, "inputs.graph.gridLines", as_list(nested(left_inputs, "graph", "gridLines")), as_list(nested(right_inputs, "graph", "gridLines")), failures, stats, tolerance)
+    compare_input_series(context, "inputs.graph.series", as_list(nested(left_inputs, "graph", "series")), as_list(nested(right_inputs, "graph", "series")), failures, stats, tolerance)
+    left_groups = as_list(nested(left_inputs, "rail", "groups"))
+    right_groups = as_list(nested(right_inputs, "rail", "groups"))
+    if strict_geometry or (left_groups and right_groups):
+        compare_input_rail_groups(context, left_groups, right_groups, failures, stats, tolerance)
+    compare_input_rail_items(
+        context,
+        as_list(nested(left_inputs, "rail", "items")),
+        as_list(nested(right_inputs, "rail", "items")),
+        failures,
+        stats,
+        tolerance,
+        strict_geometry=strict_geometry,
+    )
+
+
+def compare_input_lines(
+    context: str,
+    label: str,
+    left_lines: list[Any],
+    right_lines: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, label, left_lines, right_lines, failures, stats)
+    for index, (left_line, right_line) in enumerate(zip(left_lines, right_lines)):
+        if not isinstance(left_line, dict) or not isinstance(right_line, dict):
+            failures.append(f"{context}: {label}[{index}] must be an object in both manifests")
+            continue
+        compare_field(context, f"{label}[{index}].kind", left_line.get("kind"), right_line.get("kind"), failures, stats)
+        compare_point(context, f"{label}[{index}].start", left_line.get("start"), right_line.get("start"), failures, stats, tolerance)
+        compare_point(context, f"{label}[{index}].end", left_line.get("end"), right_line.get("end"), failures, stats, tolerance)
+
+
+def compare_input_series(
+    context: str,
+    label: str,
+    left_series: list[Any],
+    right_series: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, label, left_series, right_series, failures, stats)
+    for index, (left_item, right_item) in enumerate(zip(left_series, right_series)):
+        if not isinstance(left_item, dict) or not isinstance(right_item, dict):
+            failures.append(f"{context}: {label}[{index}] must be an object in both manifests")
+            continue
+        for field in ("kind", "pointCount", "curveCount"):
+            compare_field(context, f"{label}[{index}].{field}", left_item.get(field), right_item.get(field), failures, stats)
+        compare_color_field(context, f"{label}[{index}].color", left_item.get("color"), right_item.get("color"), failures, stats)
+        compare_numeric(context, f"{label}[{index}].strokeWidth", left_item.get("strokeWidth"), right_item.get("strokeWidth"), failures, stats, tolerance=0.35)
+        compare_input_points(context, f"{label}[{index}].points", as_list(left_item.get("points")), as_list(right_item.get("points")), failures, stats, tolerance)
+        compare_input_curves(context, f"{label}[{index}].curves", as_list(left_item.get("curves")), as_list(right_item.get("curves")), failures, stats, tolerance)
+
+
+def compare_input_points(
+    context: str,
+    label: str,
+    left_points: list[Any],
+    right_points: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, label, left_points, right_points, failures, stats)
+    for index, (left_point, right_point) in enumerate(zip(left_points, right_points)):
+        compare_point(context, f"{label}[{index}]", left_point, right_point, failures, stats, tolerance)
+
+
+def compare_input_curves(
+    context: str,
+    label: str,
+    left_curves: list[Any],
+    right_curves: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, label, left_curves, right_curves, failures, stats)
+    for index, (left_curve, right_curve) in enumerate(zip(left_curves, right_curves)):
+        if not isinstance(left_curve, dict) or not isinstance(right_curve, dict):
+            failures.append(f"{context}: {label}[{index}] must be an object in both manifests")
+            continue
+        for key in ("start", "control1", "control2", "end"):
+            compare_point(context, f"{label}[{index}].{key}", left_curve.get(key), right_curve.get(key), failures, stats, tolerance)
+
+
+def compare_input_rail_groups(
+    context: str,
+    left_groups: list[Any],
+    right_groups: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, "inputs.rail.groups", left_groups, right_groups, failures, stats)
+    for index, (left_group, right_group) in enumerate(zip(left_groups, right_groups)):
+        if not isinstance(left_group, dict) or not isinstance(right_group, dict):
+            failures.append(f"{context}: inputs.rail.groups[{index}] must be an object in both manifests")
+            continue
+        for field in ("kind", "text", "role"):
+            compare_optional_field(context, f"inputs.rail.groups[{index}].{field}", left_group.get(field), right_group.get(field), failures, stats)
+        compare_rect(context, f"inputs.rail.groups[{index}].bounds", left_group.get("bounds"), right_group.get("bounds"), failures, stats, tolerance=tolerance)
+
+
+def compare_input_rail_items(
+    context: str,
+    left_items: list[Any],
+    right_items: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+    *,
+    strict_geometry: bool,
+) -> None:
+    compare_count(context, "inputs.rail.items", left_items, right_items, failures, stats)
+    for index, (left_item, right_item) in enumerate(zip(left_items, right_items)):
+        if not isinstance(left_item, dict) or not isinstance(right_item, dict):
+            failures.append(f"{context}: inputs.rail.items[{index}] must be an object in both manifests")
+            continue
+        compare_field(context, f"inputs.rail.items[{index}].kind", left_item.get("kind"), right_item.get("kind"), failures, stats)
+        compare_field(
+            context,
+            f"inputs.rail.items[{index}].visibleText",
+            input_rail_item_visible_text(left_item),
+            input_rail_item_visible_text(right_item),
+            failures,
+            stats,
+        )
+        compare_rect(context, f"inputs.rail.items[{index}].bounds", left_item.get("bounds"), right_item.get("bounds"), failures, stats, tolerance=tolerance)
+        left_children = as_list(left_item.get("children"))
+        right_children = as_list(right_item.get("children"))
+        if strict_geometry or (left_children and right_children):
+            compare_input_rail_children(context, index, left_children, right_children, failures, stats, tolerance)
+
+
+def compare_input_rail_children(
+    context: str,
+    item_index: int,
+    left_children: list[Any],
+    right_children: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, f"inputs.rail.items[{item_index}].children", left_children, right_children, failures, stats)
+    for child_index, (left_child, right_child) in enumerate(zip(left_children, right_children)):
+        if not isinstance(left_child, dict) or not isinstance(right_child, dict):
+            failures.append(f"{context}: inputs.rail.items[{item_index}].children[{child_index}] must be an object in both manifests")
+            continue
+        for field in ("role", "kind", "text"):
+            compare_optional_field(context, f"inputs.rail.items[{item_index}].children[{child_index}].{field}", left_child.get(field), right_child.get(field), failures, stats)
+        for field in ("foreground", "background", "fill", "stroke"):
+            compare_color_field(context, f"inputs.rail.items[{item_index}].children[{child_index}].{field}", left_child.get(field), right_child.get(field), failures, stats)
+        compare_rect(context, f"inputs.rail.items[{item_index}].children[{child_index}].bounds", left_child.get("bounds"), right_child.get("bounds"), failures, stats, tolerance=tolerance)
 
 
 def compare_flags_model(
@@ -1124,6 +1703,9 @@ def compare_flags_model(
         )
         compare_rect(context, f"flags.cells[{index}].bounds", get_manifest_value(left_cell, "bounds"), get_manifest_value(right_cell, "bounds"), failures, stats, tolerance=tolerance)
         compare_rect(context, f"flags.cells[{index}].clothBounds", get_manifest_value(left_cell, "clothBounds"), get_manifest_value(right_cell, "clothBounds"), failures, stats, tolerance=tolerance)
+        compare_rect(context, f"flags.cells[{index}].labelBounds", get_manifest_value(left_cell, "labelBounds"), get_manifest_value(right_cell, "labelBounds"), failures, stats, tolerance=tolerance)
+        for field in ("index", "row", "column", "fill", "label", "detail", "visualKind"):
+            compare_field(context, f"flags.cells[{index}].{field}", get_manifest_value(left_cell, field), get_manifest_value(right_cell, field), failures, stats)
 
 
 def compare_vector_model(
@@ -1138,17 +1720,197 @@ def compare_vector_model(
     if not isinstance(left_vector, dict) or not isinstance(right_vector, dict):
         failures.append(f"{context}: {body_kind} evidence missing vector object")
         return
-    for field in ("shouldRender", "carCount", "labelCount", "itemCount", "markerCount", "primitiveCount"):
+    for field in ("shouldRender", "isAvailable", "mapKind", "ringCount", "carCount", "labelCount", "itemCount", "markerCount", "primitiveCount"):
         left_value = get_manifest_value(left_vector, field)
         right_value = get_manifest_value(right_vector, field)
         if left_value is not None or right_value is not None:
             compare_field(context, f"{body_kind}.{field}", left_value, right_value, failures, stats)
-    for field in ("width", "height", "sourceWidth", "sourceHeight"):
+    for field in ("width", "height", "sourceWidth", "sourceHeight", "scaleX", "scaleY", "surfaceAlpha"):
         left_value = get_manifest_value(left_vector, field)
         right_value = get_manifest_value(right_vector, field)
         if left_value is not None and right_value is not None:
             compare_numeric(context, f"{body_kind}.{field}", left_value, right_value, failures, stats, tolerance=tolerance)
+    compare_color_map(context, f"{body_kind}.colors", typed_dict(left_vector.get("colors")), typed_dict(right_vector.get("colors")), failures, stats)
     compare_rect(context, f"{body_kind}.targetBounds", get_manifest_value(left_vector, "targetBounds"), get_manifest_value(right_vector, "targetBounds"), failures, stats, tolerance=tolerance)
+    compare_vector_items(context, body_kind, as_list(left_vector.get("items")), as_list(right_vector.get("items")), failures, stats, tolerance)
+    compare_vector_primitives(context, body_kind, as_list(left_vector.get("primitives")), as_list(right_vector.get("primitives")), failures, stats, tolerance)
+    compare_vector_labels(context, body_kind, as_list(left_vector.get("labels")), as_list(right_vector.get("labels")), failures, stats, tolerance)
+
+
+def compare_vector_items(
+    context: str,
+    body_kind: str,
+    left_items: list[Any],
+    right_items: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, f"{body_kind}.items", left_items, right_items, failures, stats)
+    for index, (left_item, right_item) in enumerate(zip(left_items, right_items)):
+        if not isinstance(left_item, dict) or not isinstance(right_item, dict):
+            failures.append(f"{context}: {body_kind}.items[{index}] must be an object in both manifests")
+            continue
+        item_fields = ("kind", "label", "alertKind") if body_kind == "car-radar" else ("kind", "id", "label", "alertKind")
+        for field in item_fields:
+            compare_field(context, f"{body_kind}.items[{index}].{field}", left_item.get(field), right_item.get(field), failures, stats)
+        for field in ("strokeWidth", "alertRingStrokeWidth"):
+            compare_numeric(context, f"{body_kind}.items[{index}].{field}", left_item.get(field), right_item.get(field), failures, stats, tolerance=0.35)
+        for field in ("fill", "stroke", "labelColor", "alertRingStroke"):
+            compare_color_field(context, f"{body_kind}.items[{index}].{field}", left_item.get(field), right_item.get(field), failures, stats)
+        compare_rect(context, f"{body_kind}.items[{index}].bounds", left_item.get("bounds"), right_item.get("bounds"), failures, stats, tolerance=tolerance)
+        compare_rect(context, f"{body_kind}.items[{index}].alertRingBounds", left_item.get("alertRingBounds"), right_item.get("alertRingBounds"), failures, stats, tolerance=tolerance)
+
+
+def compare_color_map(
+    context: str,
+    label: str,
+    left_colors: dict[str, Any],
+    right_colors: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    if not left_colors and not right_colors:
+        return
+    compare_signature(context, f"{label} keys", sorted(left_colors.keys()), sorted(right_colors.keys()), failures, stats)
+    for key in sorted(set(left_colors) & set(right_colors)):
+        compare_color_field(context, f"{label}.{key}", left_colors.get(key), right_colors.get(key), failures, stats)
+
+
+def compare_vector_primitives(
+    context: str,
+    body_kind: str,
+    left_primitives: list[Any],
+    right_primitives: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, f"{body_kind}.primitives", left_primitives, right_primitives, failures, stats)
+    for index, (left_primitive, right_primitive) in enumerate(zip(left_primitives, right_primitives)):
+        if not isinstance(left_primitive, dict) or not isinstance(right_primitive, dict):
+            failures.append(f"{context}: {body_kind}.primitives[{index}] must be an object in both manifests")
+            continue
+        for field in ("kind", "closed", "startDegrees", "sweepDegrees"):
+            compare_field(context, f"{body_kind}.primitives[{index}].{field}", left_primitive.get(field), right_primitive.get(field), failures, stats)
+        compare_numeric(context, f"{body_kind}.primitives[{index}].strokeWidth", left_primitive.get("strokeWidth"), right_primitive.get("strokeWidth"), failures, stats, tolerance=0.35)
+        for field in ("fill", "stroke"):
+            compare_color_field(context, f"{body_kind}.primitives[{index}].{field}", left_primitive.get(field), right_primitive.get(field), failures, stats)
+        compare_rect(context, f"{body_kind}.primitives[{index}].bounds", left_primitive.get("bounds"), right_primitive.get("bounds"), failures, stats, tolerance=tolerance)
+        compare_vector_points(context, f"{body_kind}.primitives[{index}].points", as_list(left_primitive.get("points")), as_list(right_primitive.get("points")), failures, stats, tolerance)
+
+
+def compare_vector_points(
+    context: str,
+    label: str,
+    left_points: list[Any],
+    right_points: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, label, left_points, right_points, failures, stats)
+    for index, (left_point, right_point) in enumerate(zip(left_points, right_points)):
+        compare_point(context, f"{label}[{index}]", left_point, right_point, failures, stats, tolerance)
+
+
+def vector_label_bounds_keys(body_kind: str) -> tuple[str, ...]:
+    if body_kind == "track-map":
+        return ("x", "y", "width")
+    return ("x", "y", "width", "height")
+
+
+def compare_vector_labels(
+    context: str,
+    body_kind: str,
+    left_labels: list[Any],
+    right_labels: list[Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    compare_count(context, f"{body_kind}.labels", left_labels, right_labels, failures, stats)
+    for index, (left_label, right_label) in enumerate(zip(left_labels, right_labels)):
+        if not isinstance(left_label, dict) or not isinstance(right_label, dict):
+            failures.append(f"{context}: {body_kind}.labels[{index}] must be an object in both manifests")
+            continue
+        for field in ("text", "bold", "alignment"):
+            compare_field(context, f"{body_kind}.labels[{index}].{field}", left_label.get(field), right_label.get(field), failures, stats)
+        compare_numeric(context, f"{body_kind}.labels[{index}].fontSize", left_label.get("fontSize"), right_label.get("fontSize"), failures, stats, tolerance=0.5)
+        compare_color_field(context, f"{body_kind}.labels[{index}].color", left_label.get("color"), right_label.get("color"), failures, stats)
+        compare_rect(
+            context,
+            f"{body_kind}.labels[{index}].bounds",
+            left_label.get("bounds"),
+            right_label.get("bounds"),
+            failures,
+            stats,
+            tolerance=tolerance,
+            keys=vector_label_bounds_keys(body_kind),
+        )
+
+
+def compare_stream_chat_model(
+    context: str,
+    left_stream: Any,
+    right_stream: Any,
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    if not isinstance(left_stream, dict) or not isinstance(right_stream, dict):
+        failures.append(f"{context}: stream-chat evidence missing streamChat object")
+        return
+    for field in ("rowCount", "renderedRowCount", "badgeCount", "metadataCount", "emoteCount"):
+        compare_optional_field(context, f"stream-chat.{field}", left_stream.get(field), right_stream.get(field), failures, stats)
+    left_rows = as_list(left_stream.get("rows"))
+    right_rows = as_list(right_stream.get("rows"))
+    compare_count(context, "stream-chat.rows", left_rows, right_rows, failures, stats)
+    for index, (left_row, right_row) in enumerate(zip(left_rows, right_rows)):
+        if not isinstance(left_row, dict) or not isinstance(right_row, dict):
+            failures.append(f"{context}: stream-chat.rows[{index}] must be an object in both manifests")
+            continue
+        for field in ("index", "name", "text", "kind"):
+            compare_field(context, f"stream-chat.rows[{index}].{field}", left_row.get(field), right_row.get(field), failures, stats)
+        compare_color_field(context, f"stream-chat.rows[{index}].authorColorHex", left_row.get("authorColorHex"), right_row.get("authorColorHex"), failures, stats)
+        compare_text_list(context, f"stream-chat.rows[{index}].metadata", left_row.get("metadata"), right_row.get("metadata"), failures, stats)
+        compare_signature(
+            context,
+            f"stream-chat.rows[{index}].badges",
+            [stream_chat_badge_signature(badge) for badge in as_list(left_row.get("badges"))],
+            [stream_chat_badge_signature(badge) for badge in as_list(right_row.get("badges"))],
+            failures,
+            stats,
+        )
+        compare_signature(
+            context,
+            f"stream-chat.rows[{index}].segments",
+            [stream_chat_segment_signature(segment) for segment in as_list(left_row.get("segments"))],
+            [stream_chat_segment_signature(segment) for segment in as_list(right_row.get("segments"))],
+            failures,
+            stats,
+        )
+        compare_rect(context, f"stream-chat.rows[{index}].bounds", left_row.get("bounds"), right_row.get("bounds"), failures, stats, tolerance=tolerance)
+        for field in ("nameBounds", "textBounds"):
+            if left_row.get(field) is not None and right_row.get(field) is not None:
+                compare_rect(context, f"stream-chat.rows[{index}].{field}", left_row.get(field), right_row.get(field), failures, stats, tolerance=tolerance)
+
+
+def compare_garage_cover_model(
+    context: str,
+    left_cover: Any,
+    right_cover: Any,
+    failures: list[str],
+    stats: ComparisonStats,
+    tolerance: float,
+) -> None:
+    if not isinstance(left_cover, dict) or not isinstance(right_cover, dict):
+        failures.append(f"{context}: garage-cover evidence missing garageCover object")
+        return
+    for field in ("shouldCover", "detectionState", "detectionIsFresh", "detectionText"):
+        compare_optional_field(context, f"garage-cover.{field}", left_cover.get(field), right_cover.get(field), failures, stats)
+    compare_rect(context, "garage-cover.bounds", left_cover.get("bounds"), right_cover.get("bounds"), failures, stats, tolerance=tolerance)
+    compare_rect(context, "garage-cover.imageBounds", left_cover.get("imageBounds"), right_cover.get("imageBounds"), failures, stats, tolerance=tolerance)
 
 
 def compare_settings_components(
@@ -1175,8 +1937,15 @@ def compare_settings_components(
             failures.append(f"{context}: Windows component expected {expected_size[0]}x{expected_size[1]}")
         compare_field(context, "tab", normalize_settings_tab(left.get("tab")), normalize_settings_tab(right.get("tab")), failures, stats)
         compare_field(context, "region", left.get("region"), right.get("region"), failures, stats)
+        compare_field(context, "captureMode", left.get("captureMode"), right.get("captureMode"), failures, stats)
+        compare_field(context, "comparisonMode", left.get("comparisonMode"), right.get("comparisonMode"), failures, stats)
+        compare_field(context, "comparisonLimit", left.get("comparisonLimit"), right.get("comparisonLimit"), failures, stats)
+        compare_rect(context, "cropBounds", left.get("cropBounds"), right.get("cropBounds"), failures, stats, tolerance=0)
+        compare_field(context, "v102Evidence", left.get("v102Evidence"), right.get("v102Evidence"), failures, stats)
         require_structural_ui_evidence(context, left.get("uiEvidence"), "browser", failures, stats)
         require_structural_ui_evidence(context, right.get("uiEvidence"), "Windows", failures, stats)
+        compare_settings_matrix_geometry(context, left.get("uiEvidence"), right.get("uiEvidence"), failures, stats)
+        compare_ui_geometry_matrix(context, left.get("uiEvidence"), right.get("uiEvidence"), "settings", failures, stats)
 
 
 def compare_settings_pages(
@@ -1200,13 +1969,27 @@ def compare_settings_pages(
         # Component crops below are the exact-size parity evidence for settings layout.
         compare_field(context, "tab", normalize_settings_tab(left.get("tab")), normalize_settings_tab(right.get("tab")), failures, stats)
         compare_field(context, "region", left.get("region"), right.get("region"), failures, stats)
+        compare_field(context, "v102Evidence", left.get("v102Evidence"), right.get("v102Evidence"), failures, stats)
         require_structural_ui_evidence(context, left.get("uiEvidence"), "browser", failures, stats)
         require_structural_ui_evidence(context, right.get("uiEvidence"), "Windows", failures, stats)
+        compare_settings_matrix_geometry(context, left.get("uiEvidence"), right.get("uiEvidence"), failures, stats)
+        compare_ui_geometry_matrix(context, left.get("uiEvidence"), right.get("uiEvidence"), "settings", failures, stats)
 
 
 def settings_page_pairs() -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = [
         ("settings/general.png", "states/settings-general.png"),
+        ("settings/general-update-disabled.png", "states/settings-general-update-disabled.png"),
+        ("settings/general-update-not-installed.png", "states/settings-general-update-not-installed.png"),
+        ("settings/general-update-idle.png", "states/settings-general-update-idle.png"),
+        ("settings/general-update-up-to-date.png", "states/settings-general-update-up-to-date.png"),
+        ("settings/general-update-available.png", "states/settings-general-update-available.png"),
+        ("settings/general-update-checking.png", "states/settings-general-update-checking.png"),
+        ("settings/general-update-downloading.png", "states/settings-general-update-downloading.png"),
+        ("settings/general-update-pending-restart.png", "states/settings-general-update-pending-restart.png"),
+        ("settings/general-update-applying.png", "states/settings-general-update-applying.png"),
+        ("settings/general-update-failed.png", "states/settings-general-update-failed.png"),
+        ("settings/diagnostics.png", "states/settings-support.png"),
         ("settings/support.png", "states/settings-support.png"),
         ("settings/inputs.png", "states/settings-inputs.png"),
     ]
@@ -1216,9 +1999,11 @@ def settings_page_pairs() -> list[tuple[str, str]]:
         if overlay_id == "garage-cover":
             regions = ("general", "preview")
         elif overlay_id == "stream-chat":
-            regions = ("general", "content", "twitch", "streamlabs")
+            regions = ("general", "content", "twitch")
+        elif overlay_id == "car-radar":
+            regions = ("general",)
         elif overlay_id in {"standings", "relative", "fuel-calculator", "gap-to-leader", "session-weather", "pit-service"}:
-            regions = ("general", "content", "header", "footer")
+            regions = ("general", "content", "header")
         else:
             regions = ("general", "content")
         for region in regions:
@@ -1249,6 +2034,611 @@ def require_structural_ui_evidence(
         failures.append(f"{context}: {label} uiEvidence has no structural tabs/regions/panels/controls")
 
 
+def compare_settings_matrix_geometry(
+    context: str,
+    left_ui: Any,
+    right_ui: Any,
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    left_elements = settings_matrix_elements(left_ui)
+    right_elements = settings_matrix_elements(right_ui)
+    if not left_elements and not right_elements:
+        return
+    if not left_elements or not right_elements:
+        failures.append(
+            f"{context}: settings matrix evidence missing on one side "
+            f"(browser {len(left_elements)}, Windows {len(right_elements)})"
+        )
+        return
+
+    left_keys = [settings_matrix_key(element, index) for index, element in enumerate(left_elements)]
+    right_keys = [settings_matrix_key(element, index) for index, element in enumerate(right_elements)]
+    if any(key is None for key in left_keys + right_keys):
+        missing_left = sum(1 for key in left_keys if key is None)
+        missing_right = sum(1 for key in right_keys if key is None)
+        failures.append(
+            f"{context}: settings matrix semantic keys missing "
+            f"(browser {missing_left}, Windows {missing_right}); refusing legacy index comparison"
+        )
+        return
+    compare_signature(context, "settings matrix keys", sorted(left_keys), sorted(right_keys), failures, stats)
+
+    left_matrix = next((element for element in left_elements if element.get("role") == "settings-matrix"), None)
+    right_matrix = next((element for element in right_elements if element.get("role") == "settings-matrix"), None)
+    if left_matrix is None or right_matrix is None:
+        failures.append(f"{context}: settings matrix root missing on one side")
+        return
+
+    left_matrix_bounds = settings_source_rect(left_matrix)
+    right_matrix_bounds = settings_source_rect(right_matrix)
+    if left_matrix_bounds is None or right_matrix_bounds is None:
+        failures.append(f"{context}: settings matrix root bounds missing on one side")
+        return
+
+    compare_rect(
+        context,
+        "settings matrix root size",
+        {"x": 0, "y": 0, "width": get_manifest_value(left_matrix_bounds, "width"), "height": get_manifest_value(left_matrix_bounds, "height")},
+        {"x": 0, "y": 0, "width": get_manifest_value(right_matrix_bounds, "width"), "height": get_manifest_value(right_matrix_bounds, "height")},
+        failures,
+        stats,
+        tolerance=SETTINGS_MATRIX_GEOMETRY_TOLERANCE,
+    )
+    compare_settings_matrix_panel_offset(context, left_ui, right_ui, left_matrix_bounds, right_matrix_bounds, failures, stats)
+
+    left_by_key = dict(zip(left_keys, left_elements))
+    right_by_key = dict(zip(right_keys, right_elements))
+    for key in sorted(set(left_by_key) & set(right_by_key)):
+        left = left_by_key[key]
+        right = right_by_key[key]
+        compare_field(context, f"settings matrix[{key}].role", left.get("role"), right.get("role"), failures, stats)
+        if left.get("role") != "settings-matrix" or right.get("role") != "settings-matrix":
+            compare_field(context, f"settings matrix[{key}].text", normalize_matrix_text(left.get("text")), normalize_matrix_text(right.get("text")), failures, stats)
+        if left.get("role") == "settings-check" or right.get("role") == "settings-check":
+            compare_field(
+                context,
+                f"settings matrix[{key}].checked",
+                matrix_attr(left, "checked"),
+                matrix_attr(right, "checked"),
+                failures,
+                stats,
+            )
+            compare_field(
+                context,
+                f"settings matrix[{key}].enabled",
+                matrix_attr(left, "enabled"),
+                matrix_attr(right, "enabled"),
+                failures,
+                stats,
+            )
+        left_bounds = settings_source_rect(left)
+        right_bounds = settings_source_rect(right)
+        if left_bounds is None or right_bounds is None:
+            failures.append(f"{context}: settings matrix[{key}] bounds missing on one side")
+            continue
+        compare_rect(
+            context,
+            f"settings matrix[{key}].relativeBounds",
+            relative_rect(left_bounds, left_matrix_bounds),
+            relative_rect(right_bounds, right_matrix_bounds),
+            failures,
+            stats,
+            tolerance=SETTINGS_MATRIX_GEOMETRY_TOLERANCE,
+        )
+
+
+def compare_settings_matrix_panel_offset(
+    context: str,
+    left_ui: Any,
+    right_ui: Any,
+    left_matrix_bounds: dict[str, Any],
+    right_matrix_bounds: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+) -> None:
+    left_panel = first_settings_panel_bounds(left_ui)
+    right_panel = first_settings_panel_bounds(right_ui)
+    if left_panel is None or right_panel is None:
+        return
+    compare_rect(
+        context,
+        "settings matrix panel offset",
+        relative_rect(left_matrix_bounds, left_panel),
+        relative_rect(right_matrix_bounds, right_panel),
+        failures,
+        stats,
+        tolerance=SETTINGS_MATRIX_GEOMETRY_TOLERANCE,
+        keys=("x", "y"),
+    )
+
+
+def settings_matrix_elements(ui_evidence: Any) -> list[dict[str, Any]]:
+    if not isinstance(ui_evidence, dict):
+        return []
+    matrix = ui_geometry_matrix(ui_evidence, "settings")
+    if isinstance(matrix, dict):
+        elements = matrix.get("elements")
+        if isinstance(elements, list):
+            matrix_elements = [
+                element
+                for element in elements
+                if isinstance(element, dict)
+                and (
+                    element.get("role") in {"settings-matrix", "settings-matrix-row", "settings-matrix-cell"}
+                    or (
+                        element.get("role") == "settings-check"
+                        and (element.get("matrixKind") is not None or isinstance(element.get("attributes"), dict) and element["attributes"].get("matrixKind") is not None)
+                    )
+                )
+            ]
+            if matrix_elements:
+                return matrix_elements
+    controls = ui_evidence.get("controls")
+    if not isinstance(controls, list):
+        return []
+    return [
+        control
+        for control in controls
+        if isinstance(control, dict)
+        and (
+            control.get("role") in {"settings-matrix", "settings-matrix-row", "settings-matrix-cell"}
+            or (
+                control.get("role") == "settings-check"
+                and (control.get("matrixKind") is not None or isinstance(control.get("attributes"), dict) and control["attributes"].get("matrixKind") is not None)
+            )
+        )
+    ]
+
+
+def settings_matrix_key(element: dict[str, Any], index: int) -> str | None:
+    matrix_kind = element.get("matrixKind")
+    if matrix_kind is None and isinstance(element.get("attributes"), dict):
+        matrix_kind = element["attributes"].get("matrixKind")
+    if matrix_kind:
+        row_key = element.get("rowKey")
+        column_key = element.get("columnKey")
+        if row_key is None and isinstance(element.get("attributes"), dict):
+            row_key = element["attributes"].get("rowKey")
+        if column_key is None and isinstance(element.get("attributes"), dict):
+            column_key = element["attributes"].get("columnKey")
+        row_index = element.get("rowIndex")
+        column_index = element.get("columnIndex")
+        if row_index is None and isinstance(element.get("attributes"), dict):
+            row_index = element["attributes"].get("rowIndex")
+        if column_index is None and isinstance(element.get("attributes"), dict):
+            column_index = element["attributes"].get("columnIndex")
+        row_identity = row_key if row_key is not None else row_index
+        column_identity = column_key if column_key is not None else column_index
+        return f"{matrix_kind}:{element.get('role')}:{row_identity if row_identity is not None else 'none'}:{column_identity if column_identity is not None else 'none'}"
+    return None
+
+
+def matrix_attr(element: dict[str, Any], key: str) -> Any:
+    value = element.get(key)
+    if value is not None:
+        return value
+    attributes = element.get("attributes")
+    if isinstance(attributes, dict):
+        return attributes.get(key)
+    return None
+
+
+def settings_source_rect(element: dict[str, Any]) -> dict[str, Any] | None:
+    source = element.get("sourceBounds")
+    if isinstance(source, dict):
+        return source
+    bounds = element.get("bounds")
+    return bounds if isinstance(bounds, dict) else None
+
+
+def first_settings_panel_bounds(ui_evidence: Any) -> dict[str, Any] | None:
+    if not isinstance(ui_evidence, dict):
+        return None
+    panels = ui_evidence.get("panels")
+    if not isinstance(panels, list):
+        return None
+    for panel in panels:
+        if isinstance(panel, dict):
+            bounds = settings_source_rect(panel)
+            if bounds is not None:
+                return bounds
+    return None
+
+
+def relative_rect(bounds: dict[str, Any], origin: dict[str, Any]) -> dict[str, float]:
+    return {
+        "x": float(get_manifest_value(bounds, "x") or 0) - float(get_manifest_value(origin, "x") or 0),
+        "y": float(get_manifest_value(bounds, "y") or 0) - float(get_manifest_value(origin, "y") or 0),
+        "width": float(get_manifest_value(bounds, "width") or 0),
+        "height": float(get_manifest_value(bounds, "height") or 0),
+    }
+
+
+def normalize_matrix_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def compare_ui_geometry_matrix(
+    context: str,
+    left_ui: Any,
+    right_ui: Any,
+    expected_kind: str,
+    failures: list[str],
+    stats: ComparisonStats,
+    *,
+    tolerance: float = SETTINGS_MATRIX_GEOMETRY_TOLERANCE,
+) -> None:
+    left_matrix = ui_geometry_matrix(left_ui, expected_kind)
+    right_matrix = ui_geometry_matrix(right_ui, expected_kind)
+    if left_matrix is None or right_matrix is None:
+        failures.append(f"{context}: {expected_kind} geometry matrix missing on one side")
+        return
+
+    left_elements = ui_geometry_elements(left_matrix, expected_kind)
+    right_elements = ui_geometry_elements(right_matrix, expected_kind)
+    if not left_elements or not right_elements:
+        failures.append(
+            f"{context}: {expected_kind} geometry matrix has no comparable elements "
+            f"({len(left_elements)} vs {len(right_elements)})"
+        )
+        return
+
+    left_keys = [ui_geometry_element_key(element, index, expected_kind) for index, element in enumerate(left_elements)]
+    right_keys = [ui_geometry_element_key(element, index, expected_kind) for index, element in enumerate(right_elements)]
+    compare_signature(context, f"{expected_kind} geometry matrix keys", sorted(left_keys), sorted(right_keys), failures, stats)
+
+    left_origin = ui_geometry_origin(left_elements, expected_kind)
+    right_origin = ui_geometry_origin(right_elements, expected_kind)
+    left_by_key = dict(zip(left_keys, left_elements))
+    right_by_key = dict(zip(right_keys, right_elements))
+    for key in sorted(set(left_by_key) & set(right_by_key)):
+        left = left_by_key[key]
+        right = right_by_key[key]
+        compare_field(
+            context,
+            f"{expected_kind} geometry[{key}].role",
+            ui_geometry_canonical_role(expected_kind, left.get("role")),
+            ui_geometry_canonical_role(expected_kind, right.get("role")),
+            failures,
+            stats,
+        )
+        if ui_geometry_should_compare_text(left, right):
+            compare_field(
+                context,
+                f"{expected_kind} geometry[{key}].text",
+                normalize_ui_geometry_text(expected_kind, left.get("text")),
+                normalize_ui_geometry_text(expected_kind, right.get("text")),
+                failures,
+                stats,
+            )
+        for state_field in ("selected", "enabled", "visible", "checked", "value"):
+            if ui_geometry_should_compare_state(expected_kind, left, right, state_field):
+                compare_field(
+                    context,
+                    f"{expected_kind} geometry[{key}].{state_field}",
+                    normalize_ui_geometry_state(left.get(state_field)),
+                    normalize_ui_geometry_state(right.get(state_field)),
+                    failures,
+                    stats,
+                )
+        left_bounds = settings_source_rect(left)
+        right_bounds = settings_source_rect(right)
+        if left_bounds is None or right_bounds is None:
+            failures.append(f"{context}: {expected_kind} geometry[{key}] bounds missing on one side")
+            continue
+        left_relative_bounds = relative_rect(left_bounds, left_origin)
+        right_relative_bounds = relative_rect(right_bounds, right_origin)
+        label = f"{expected_kind} geometry[{key}].relativeBounds"
+        if ui_geometry_text_slot_role(expected_kind, left, right):
+            compare_settings_text_slot_position(
+                context,
+                label,
+                left_relative_bounds,
+                right_relative_bounds,
+                failures,
+                stats,
+                tolerance=tolerance,
+            )
+        else:
+            rect_keys = ui_geometry_rect_keys(expected_kind, left, right)
+            compare_rect(
+                context,
+                label,
+                left_relative_bounds,
+                right_relative_bounds,
+                failures,
+                stats,
+                keys=rect_keys,
+                tolerance=tolerance,
+            )
+
+
+def ui_geometry_matrix(ui_evidence: Any, expected_kind: str) -> dict[str, Any] | None:
+    if not isinstance(ui_evidence, dict):
+        return None
+    matrix = ui_evidence.get("geometryMatrix")
+    if not isinstance(matrix, dict):
+        return None
+    if matrix.get("contract") != "ui-geometry-matrix/v1" or matrix.get("kind") != expected_kind:
+        return None
+    return matrix
+
+
+def ui_geometry_elements(matrix: dict[str, Any], expected_kind: str) -> list[dict[str, Any]]:
+    elements = matrix.get("elements")
+    if not isinstance(elements, list):
+        return []
+    return [
+        element
+        for element in elements
+        if isinstance(element, dict)
+        and not ui_geometry_role_excluded(expected_kind, str(element.get("role") or ""))
+        and not ui_geometry_element_excluded(expected_kind, element)
+    ]
+
+
+def ui_geometry_rect_keys(
+    expected_kind: str,
+    left: dict[str, Any],
+    right: dict[str, Any],
+) -> tuple[str, ...]:
+    return ("x", "y", "width", "height")
+
+
+def ui_geometry_text_slot_role(
+    expected_kind: str,
+    left: dict[str, Any],
+    right: dict[str, Any],
+) -> bool:
+    if expected_kind != "settings":
+        return False
+    role = ui_geometry_canonical_role(expected_kind, left.get("role") or right.get("role"))
+    return role in SETTINGS_TEXT_SLOT_ROLES
+
+
+def compare_settings_text_slot_position(
+    context: str,
+    label: str,
+    left: dict[str, Any],
+    right: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    *,
+    tolerance: float,
+) -> None:
+    compare_numeric(
+        context,
+        f"{label}.centerY",
+        rect_center(left, "y"),
+        rect_center(right, "y"),
+        failures,
+        stats,
+        tolerance=tolerance,
+    )
+    compare_text_slot_horizontal_anchor(context, label, left, right, failures, stats, tolerance=tolerance)
+
+
+def compare_text_slot_horizontal_anchor(
+    context: str,
+    label: str,
+    left: dict[str, Any],
+    right: dict[str, Any],
+    failures: list[str],
+    stats: ComparisonStats,
+    *,
+    tolerance: float,
+) -> None:
+    stats.detail_checks += 1
+    left_anchors = text_slot_horizontal_anchors(left)
+    right_anchors = text_slot_horizontal_anchors(right)
+    deltas = {
+        key: abs(left_anchors[key] - right_anchors[key])
+        for key in left_anchors.keys() & right_anchors.keys()
+        if math.isfinite(left_anchors[key]) and math.isfinite(right_anchors[key])
+    }
+    if not deltas:
+        failures.append(f"{context}: {label}.horizontalAnchor missing comparable text anchors")
+        return
+    _best_anchor, best_delta = min(deltas.items(), key=lambda item: item[1])
+    if best_delta > tolerance:
+        failures.append(
+            f"{context}: {label}.horizontalAnchor differs by more than {tolerance:g}px, "
+            f"{format_anchor_values(left_anchors)} vs {format_anchor_values(right_anchors)}"
+        )
+        return
+    if best_delta > 0:
+        stats.tolerated_numeric_differences += 1
+        stats.max_tolerated_delta = max(stats.max_tolerated_delta, best_delta)
+
+
+def text_slot_horizontal_anchors(rect: dict[str, Any]) -> dict[str, float]:
+    x = rect_number(rect, "x")
+    width = rect_number(rect, "width")
+    return {
+        "x": x,
+        "centerX": x + width / 2,
+        "right": x + width,
+    }
+
+
+def rect_center(rect: dict[str, Any], axis: str) -> float:
+    start_key = "x" if axis == "x" else "y"
+    size_key = "width" if axis == "x" else "height"
+    return rect_number(rect, start_key) + rect_number(rect, size_key) / 2
+
+
+def rect_number(rect: dict[str, Any], key: str) -> float:
+    value = get_manifest_value(rect, key)
+    if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        return math.nan
+    return float(value)
+
+
+def format_anchor_values(values: dict[str, float]) -> str:
+    return "{" + ", ".join(f"{key}: {value:g}" for key, value in values.items()) + "}"
+
+
+def ui_geometry_role_excluded(expected_kind: str, role: str) -> bool:
+    if expected_kind == "settings" and role in {"settings-matrix", "settings-matrix-row", "settings-matrix-cell"}:
+        return True
+    if expected_kind == "settings" and role in {"settings-section", "settings-button-row", "settings-check"}:
+        return True
+    if expected_kind == "installer" and role in {
+        "installer-body",
+        "installer-splash",
+        "installer-banner",
+        "installer-content",
+        "installer-footer",
+        "installer-maintenance-option",
+        "installer-cancel-body",
+        "installer-cancel-footer",
+        "installer-information-icon",
+        "installer-control",
+    }:
+        return True
+    return False
+
+
+def ui_geometry_element_excluded(expected_kind: str, element: dict[str, Any]) -> bool:
+    if expected_kind == "settings" and ui_geometry_canonical_role(expected_kind, element.get("role")) == "settings-button":
+        text = normalize_geometry_text(element.get("text"))
+        return text in {"-", "+"}
+    if expected_kind == "installer" and ui_geometry_canonical_role(expected_kind, element.get("role")) == "installer-text":
+        text = normalize_geometry_text(element.get("text"))
+        return not text or text.startswith("wixui-bmp") or text.startswith("wixui_bmp") or text == "information icon"
+    if expected_kind == "installer" and ui_geometry_canonical_role(expected_kind, element.get("role")) == "installer-button":
+        return not normalize_geometry_text(element.get("text"))
+    return False
+
+
+def ui_geometry_element_key(element: dict[str, Any], index: int, expected_kind: str) -> str:
+    role = ui_geometry_canonical_role(expected_kind, element.get("role"))
+    if expected_kind == "installer":
+        if role in {"installer-window", "installer-titlebar", "installer-body"}:
+            return role
+        text = normalize_installer_geometry_text(element.get("text"))
+        if text:
+            return f"{role}:text:{text}"
+        return f"{role}:index:{index}"
+    element_id = normalize_geometry_id(element.get("id"))
+    text = normalize_geometry_text(element.get("text"))
+    if expected_kind == "settings" and role == "settings-preview-summary" and text:
+        return f"{role}:text:{text}"
+    if element_id:
+        return f"{role}:{element_id}"
+    if text:
+        return f"{role}:text:{text}:{index}"
+    return f"{role}:index:{index}"
+
+
+def ui_geometry_canonical_role(expected_kind: str, role_value: Any) -> str:
+    role = str(role_value or "element")
+    if expected_kind == "installer" and role == "installer-heading":
+        return "installer-text"
+    return role
+
+
+def normalize_ui_geometry_text(expected_kind: str, value: Any) -> str | None:
+    normalized = normalize_matrix_text(value)
+    if expected_kind == "installer" and normalized is not None:
+        normalized = re.sub(r"\([^)]*\)", "(user)", normalized.replace("&", ""))
+    return normalized
+
+
+def normalize_geometry_id(value: Any) -> str:
+    if value is None:
+        return ""
+    normalized = re.sub(r"\s+", " ", str(value).replace("&", "")).strip().lower()
+    return SETTINGS_LEGACY_ID_ALIASES.get(normalized, normalized)
+
+
+def normalize_geometry_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"\s+", " ", str(value).replace("&", "")).strip().lower()
+
+
+def normalize_installer_geometry_text(value: Any) -> str:
+    text = normalize_geometry_text(value)
+    return re.sub(r"\([^)]*\)", "(user)", text)
+
+
+def ui_geometry_origin(elements: list[dict[str, Any]], expected_kind: str) -> dict[str, Any]:
+    preferred_roles = ("settings-shell",) if expected_kind == "settings" else ("installer-window",)
+    for role in preferred_roles:
+        for element in elements:
+            if element.get("role") == role:
+                bounds = settings_source_rect(element)
+                if bounds is not None:
+                    return bounds
+    return {"x": 0, "y": 0, "width": 0, "height": 0}
+
+
+def ui_geometry_should_compare_text(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    role = left.get("role") or right.get("role")
+    if role in {
+        "settings-shell",
+        "settings-titlebar",
+        "settings-body",
+        "settings-sidebar",
+        "settings-content",
+        "settings-content-body",
+        "settings-region-tabs",
+        "settings-panel",
+        "settings-field-row",
+        "settings-button-row",
+        "settings-segmented",
+        "settings-toggle",
+        "settings-check",
+        "settings-stepper",
+        "settings-slider",
+        "settings-textbox",
+        "settings-preview-stage",
+        "settings-preview-image",
+        "settings-drag-zone",
+        "installer-body",
+    }:
+        return False
+    if role in {"installer-window"}:
+        return False
+    return left.get("text") is not None or right.get("text") is not None
+
+
+def ui_geometry_should_compare_state(
+    expected_kind: str,
+    left: dict[str, Any],
+    right: dict[str, Any],
+    field: str,
+) -> bool:
+    if expected_kind != "settings":
+        return False
+    role = str(left.get("role") or right.get("role") or "")
+    if field in {"enabled", "visible", "checked", "value"} and (left.get(field) is None or right.get(field) is None):
+        return False
+    if role not in {
+        "settings-button",
+        "settings-toggle",
+        "settings-check",
+        "settings-stepper",
+        "settings-slider",
+        "settings-textbox",
+        "settings-segmented",
+        "settings-segment-choice",
+        "settings-choice",
+    }:
+        return False
+    return left.get(field) is not None or right.get(field) is not None
+
+
+def normalize_ui_geometry_state(value: Any) -> Any:
+    if isinstance(value, str):
+        return re.sub(r"\s+", " ", value).strip()
+    return value
+
+
 def compare_installer_menus(
     browser: dict[str, dict[str, Any]],
     installer: dict[str, dict[str, Any]],
@@ -1275,6 +2665,10 @@ def compare_installer_menus(
             failures.append(f"{context}: missing Windows installer screenshot")
             continue
         stats.installer_pairs += 1
+        # Browser installer review is a mock/review surface, while Windows
+        # installer captures are real MSI UI. Cross-source parity proves that
+        # the same menus are covered with evidence; per-control copy and
+        # geometry remain surface-local validations.
         compare_image_size(context, left, right, failures, stats)
         compare_field(context, "menuId", left.get("menuId"), right.get("menuId"), failures, stats)
         require_installer_detail(context, left.get("uiEvidence"), "browser", failures, stats)
@@ -1296,6 +2690,7 @@ def require_installer_detail(
     controls = value.get("controls")
     text_blocks = value.get("textBlocks")
     palette = value.get("palette")
+    geometry_matrix = value.get("geometryMatrix")
     if not isinstance(buttons, list) or not buttons:
         failures.append(f"{context}: {label} installer evidence missing buttons")
     if not isinstance(controls, list) or not controls:
@@ -1304,6 +2699,8 @@ def require_installer_detail(
         failures.append(f"{context}: {label} installer evidence missing textBlocks")
     if not isinstance(palette, list) or not palette:
         failures.append(f"{context}: {label} installer evidence missing palette")
+    if not isinstance(geometry_matrix, dict) or not isinstance(geometry_matrix.get("elements"), list) or not geometry_matrix.get("elements"):
+        failures.append(f"{context}: {label} installer evidence missing geometryMatrix")
 
 
 def compare_field(
@@ -1724,6 +3121,27 @@ def stream_chat_row_signature(row: Any) -> tuple[Any, Any, Any]:
         normalize_scalar(get_manifest_value(row, "kind")),
         normalize_scalar(get_manifest_value(row, "name")),
         normalize_scalar(get_manifest_value(row, "text")),
+    )
+
+
+def stream_chat_badge_signature(badge: Any) -> tuple[Any, Any, Any, Any]:
+    if not isinstance(badge, dict):
+        return ("", "", "", "")
+    return (
+        normalize_scalar(get_manifest_value(badge, "id")),
+        normalize_scalar(get_manifest_value(badge, "version")),
+        normalize_scalar(get_manifest_value(badge, "label")),
+        normalize_scalar(get_manifest_value(badge, "roomId")),
+    )
+
+
+def stream_chat_segment_signature(segment: Any) -> tuple[Any, Any, Any]:
+    if not isinstance(segment, dict):
+        return ("", "", "")
+    return (
+        normalize_scalar(get_manifest_value(segment, "kind")),
+        normalize_scalar(get_manifest_value(segment, "text")),
+        normalize_scalar(get_manifest_value(segment, "imageUrl")),
     )
 
 

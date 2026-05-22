@@ -8,9 +8,11 @@ internal sealed class LocalhostOverlayOptions
 
     public bool Enabled { get; init; }
 
+    public string Host { get; init; } = "localhost";
+
     public int Port { get; init; } = DefaultPort;
 
-    public string Prefix => $"http://localhost:{Port}/";
+    public string Prefix => $"http://{Host}:{Port}/";
 
     public static LocalhostOverlayOptions FromConfiguration(IConfiguration configuration)
     {

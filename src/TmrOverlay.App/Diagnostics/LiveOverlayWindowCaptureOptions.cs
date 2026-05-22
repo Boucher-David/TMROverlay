@@ -6,7 +6,7 @@ internal sealed class LiveOverlayWindowCaptureOptions
 {
     public bool CaptureScreenshots { get; init; }
 
-    public bool CapturePreviewScreenshots { get; init; } = true;
+    public bool CapturePreviewScreenshots { get; init; }
 
     public int MaxPreviewScreenshots { get; init; } = 32;
 
@@ -16,7 +16,7 @@ internal sealed class LiveOverlayWindowCaptureOptions
         return new LiveOverlayWindowCaptureOptions
         {
             CaptureScreenshots = ParseBoolean(section["CaptureScreenshots"], defaultValue: false),
-            CapturePreviewScreenshots = ParseBoolean(section["CapturePreviewScreenshots"], defaultValue: true),
+            CapturePreviewScreenshots = ParseBoolean(section["CapturePreviewScreenshots"], defaultValue: false),
             MaxPreviewScreenshots = ParseInt32(section["MaxPreviewScreenshots"], defaultValue: 32, minimumValue: 1, maximumValue: 128)
         };
     }

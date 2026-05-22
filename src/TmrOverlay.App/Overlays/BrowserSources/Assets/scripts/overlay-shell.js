@@ -1,4 +1,8 @@
     const page = {{PAGE_JSON}};
+    const geometry = {{GEOMETRY_JSON}};
+    const gapGraphGeometry = geometry?.gapGraph || {};
+    const metricRowsGeometry = geometry?.metricRows || {};
+    const streamChatGeometry = geometry?.streamChat || {};
     const overlayEl = document.querySelector('.overlay');
     const headerEl = document.querySelector('.header');
     const statusEl = document.getElementById('status');
@@ -7,6 +11,10 @@
     const contentEl = document.getElementById('content');
     const sourceEl = document.getElementById('source');
     let modelRootOpacity = 1;
+    const browserSourceClientId = browserSourceClientIdentity();
+    const browserSourceEventRepeatIntervalMilliseconds = 5000;
+    let lastBrowserSourceEventKey = '';
+    let lastBrowserSourceEventAtMilliseconds = 0;
     const browserOverlay = {
       module: null,
       register(module) {
@@ -14,6 +22,20 @@
       }
     };
     window.TmrBrowserOverlay = browserOverlay;
+
+    function browserSourceClientIdentity() {
+      const params = new URLSearchParams(window.location.search);
+      const explicitClient = String(params.get('client') || params.get('tmrClient') || '').trim();
+      const explicitKind = String(params.get('clientKind') || params.get('tmrClientKind') || '').trim().toLowerCase();
+      const userAgent = String(window.navigator?.userAgent || '');
+      const inferredKind = explicitKind
+        || (/obs|obs-browser/i.test(userAgent) ? 'obs' : /edg\//i.test(userAgent) ? 'edge' : /chrome|chromium/i.test(userAgent) ? 'chrome' : userAgent ? 'other' : 'unknown');
+      const idSeed = explicitClient || `${inferredKind}-${Math.random().toString(36).slice(2, 10)}`;
+      return {
+        id: idSeed.slice(0, 80),
+        kind: inferredKind.slice(0, 32)
+      };
+    }
 
     function apiPath(path) {
       const url = new URL(path, window.location.href);
@@ -98,7 +120,8 @@
     }
 
     function rootOpacityFromModel(model) {
-      return clamp01(model?.rootOpacity, 1);
+      const numeric = Number(model?.rootOpacity);
+      return Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : 1;
     }
 
     function applyOverlayOpacity(visibilityAlpha = 1) {
@@ -111,16 +134,13 @@
         return '<div class="empty">Waiting for live rows.</div>';
       }
       const fixedWidth = headers.reduce((total, header) => total + columnWidth(header), 0);
-      const useProportionalColumns = shouldScaleTableColumns() && fixedWidth > 0;
-      const tableStyle = useProportionalColumns
-        ? ' style="width:100%; min-width:0; table-layout:fixed;"'
-        : fixedWidth > 0
+      const tableStyle = fixedWidth > 0
         ? ` style="width:${fixedWidth}px; min-width:${fixedWidth}px; table-layout:fixed;"`
         : '';
       const colGroup = fixedWidth > 0
-        ? `<colgroup>${headers.map((header) => `<col style="${columnWidthDeclaration(header, fixedWidth)}">`).join('')}</colgroup>`
+        ? `<colgroup>${headers.map((header) => `<col style="${columnWidthDeclaration(header)}">`).join('')}</colgroup>`
         : '';
-      const headerHtml = headers.map((header) => `<th${cellStyle(header, null, null, fixedWidth)}>${escapeHtml(header.label)}</th>`).join('');
+      const headerHtml = headers.map((header) => `<th${cellStyle(header)}>${escapeHtml(header.label)}</th>`).join('');
       const rowHtml = rows.map((row) => {
         const classes = [
           row.isFocus || row.isReference || row.isReferenceCar ? 'focus' : '',
@@ -136,14 +156,10 @@
           return `<tr class="${classes}"${classHeaderStyle(row)}><td colspan="${Math.max(1, headers.length)}">${classHeaderContent(row)}</td></tr>`;
         }
 
-        const cells = headers.map((header, columnIndex) => `<td${cellStyle(header, row, columnIndex, fixedWidth)}>${header.value(row)}</td>`).join('');
+        const cells = headers.map((header, columnIndex) => `<td${cellStyle(header, row, columnIndex)}>${header.value(row)}</td>`).join('');
         return `<tr class="${classes}"${rowStyle(row)}>${cells}</tr>`;
       }).join('');
       return `<table${tableStyle}>${colGroup}<thead><tr>${headerHtml}</tr></thead><tbody>${rowHtml}</tbody></table>`;
-    }
-
-    function shouldScaleTableColumns() {
-      return page?.id === 'relative';
     }
 
     function isClassHeaderRow(row) {
@@ -165,7 +181,7 @@
       const detail = row?.headerDetail
         ? escapeHtml(row.headerDetail)
         : [
-          row?.rowCount ? `${row.rowCount} cars` : '',
+          row?.rowCount ? formatCarCount(row.rowCount) : '',
           row?.estimatedLapsLabel || ''
         ].filter(Boolean).map(escapeHtml).join(' | ');
       return `
@@ -180,19 +196,15 @@
       return Number.isFinite(width) && width > 0 ? Math.round(width) : 0;
     }
 
-    function columnWidthDeclaration(header, totalWidth = 0) {
+    function columnWidthDeclaration(header) {
       const width = columnWidth(header);
       if (width <= 0) return '';
-      if (shouldScaleTableColumns() && totalWidth > 0) {
-        return `width:${(width / totalWidth * 100).toFixed(4)}%;`;
-      }
-
       return `width:${width}px;`;
     }
 
-    function cellStyle(header, row = null, columnIndex = null, totalWidth = 0) {
+    function cellStyle(header, row = null, columnIndex = null) {
       const styles = [];
-      const width = columnWidthDeclaration(header, totalWidth);
+      const width = columnWidthDeclaration(header);
       if (width) styles.push(width);
       const align = ['left', 'right', 'center'].includes(header?.align) ? header.align : null;
       if (align) styles.push(`text-align:${align}`);
@@ -214,11 +226,17 @@
       return classColorStyle(row?.carClassColorHex);
     }
 
+    function formatCarCount(value) {
+      const count = Number(value);
+      if (!Number.isFinite(count)) return '';
+      return count === 1 ? '1 car' : `${count} cars`;
+    }
+
     function rowStyle(row) {
       if (isClassHeaderRow(row)) return classHeaderStyle(row);
       const color = parseHexColor(row?.carClassColorHex);
       return color
-        ? ` style="--row-class-accent: #${color.key}; --row-class-bg: rgba(${color.r}, ${color.g}, ${color.b}, 0.13);"`
+        ? ` style="--row-class-accent: #${color.key}; --row-class-bg: rgba(${color.r}, ${color.g}, ${color.b}, ${row?.isPartial ? '0.055' : '0.13'});"`
         : '';
     }
 
@@ -268,12 +286,13 @@
       const highlight = tone === 'info' ? ' highlight' : '';
       const segments = Array.isArray(row?.segments) ? row.segments : [];
       const hasSegments = segments.length > 0;
+      const hasDirectionalSegment = segments.some((segment) => Number.isFinite(Number(segment?.rotationDegrees)));
       const rowColor = metricColorStyle(row?.rowColorHex || row?.carClassColorHex);
       const valueHtml = hasSegments
         ? `<div class="value value-segments" style="--tmr-segment-count: ${Math.min(segments.length, 6)};">${segments.map(metricSegment).join('')}</div>`
         : `<div class="value">${escapeHtml(row?.value || '--')}</div>`;
       return `
-        <div class="metric ${tone}${highlight}${hasSegments ? ' segmented' : ''}${rowColor ? ' class-colored' : ''}"${rowColor}>
+        <div class="metric ${tone}${highlight}${hasSegments ? ' segmented' : ''}${hasDirectionalSegment ? ' directional' : ''}${rowColor ? ' class-colored' : ''}"${rowColor}>
           <div class="label">${escapeHtml(row?.label || '')}</div>
           ${valueHtml}
         </div>`;
@@ -332,9 +351,13 @@
         : ['Info', 'FL', 'FR', 'RL', 'RR'];
       const rows = Array.isArray(section?.rows) ? section.rows : [];
       if (!rows.length) return '';
-      const columns = `repeat(${Math.max(1, headers.length)}, minmax(44px, 1fr))`;
+      const columns = `repeat(${Math.max(1, headers.length)}, minmax(${metricGeometryNumber('metricGridCellMinimumWidth', 42)}px, 1fr))`;
       const headerHtml = headers
-        .map((header) => `<div class="tire-grid-header">${escapeHtml(header || '')}</div>`)
+        .map((header, index) => {
+          const text = index === 0 ? (section?.title || header || '') : (header || '');
+          const classes = index === 0 ? 'tire-grid-header metric-section-title tire-grid-section-title' : 'tire-grid-header';
+          return `<div class="${classes}">${escapeHtml(text)}</div>`;
+        })
         .join('');
       const rowHtml = rows.map((row) => {
         const rowTone = toneClass(row?.tone);
@@ -351,7 +374,6 @@
       }).join('');
       return `
         <section class="metric-section">
-          <div class="metric-section-title">${escapeHtml(section?.title || 'Details')}</div>
           <div class="tire-grid" style="--tmr-grid-columns: ${escapeHtml(columns)};">
             <div class="tire-grid-head">${headerHtml}</div>
             ${rowHtml}
@@ -366,9 +388,44 @@
       return payload.model || null;
     }
 
+    function postBrowserSourceEvent(eventName, model = null, error = null) {
+      const eventKey = [
+        eventName,
+        page.id,
+        model?.shouldRender === false ? 'false' : model ? 'true' : 'null',
+        model?.status || '',
+        error?.message || ''
+      ].join('|');
+      const nowMilliseconds = Date.now();
+      if (eventKey === lastBrowserSourceEventKey
+        && eventName !== 'page-loaded'
+        && nowMilliseconds - lastBrowserSourceEventAtMilliseconds < browserSourceEventRepeatIntervalMilliseconds) {
+        return;
+      }
+
+      lastBrowserSourceEventKey = eventKey;
+      lastBrowserSourceEventAtMilliseconds = nowMilliseconds;
+      const payload = {
+        event: eventName,
+        overlayId: page.id || 'unknown',
+        clientId: browserSourceClientId.id,
+        clientKind: browserSourceClientId.kind,
+        shouldRender: model ? model.shouldRender !== false : null,
+        status: model?.status || null,
+        error: error?.message || null
+      };
+      fetch(apiPath('/api/browser-source-event'), {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => {});
+    }
+
     function renderOverlayModel(model) {
       updateOverlayRuntimeClasses(model);
       if (!model) {
+        postBrowserSourceEvent('model-null');
         contentEl.innerHTML = '<div class="empty">Waiting for overlay model.</div>';
         renderHeaderItems(null, 'waiting for model');
         clearFooterSource();
@@ -376,14 +433,16 @@
       }
 
       if (model.shouldRender === false) {
+        postBrowserSourceEvent('model-hidden', model);
         modelRootOpacity = rootOpacityFromModel(model);
         applyOverlayOpacity(0);
         contentEl.innerHTML = '';
-        renderHeaderItems(model, '');
+        clearHeaderItems();
         clearFooterSource();
         return;
       }
 
+      postBrowserSourceEvent('model-render', model);
       modelRootOpacity = rootOpacityFromModel(model);
       applyOverlayOpacity(1);
       const metrics = Array.isArray(model.metrics) ? model.metrics : [];
@@ -410,7 +469,7 @@
           : '';
         contentEl.innerHTML = metricsHtml || metricSectionHtml || sectionHtml
           ? `${metricsHtml}${metricSectionHtml}${sectionHtml}`
-          : '<div class="empty">Waiting for live values.</div>';
+          : '';
       } else {
         contentEl.innerHTML = rowsTable(displayModelHeaders(model), rows);
       }
@@ -422,6 +481,108 @@
     function updateOverlayRuntimeClasses(model) {
       if (!overlayEl) return;
       overlayEl.classList.toggle('fuel-non-race', isFuelNonRaceModel(model));
+      if (model?.overlayId === 'fuel-calculator') {
+        overlayEl.style.setProperty('--fuel-content-height', `${fuelContentHeightForModel(model)}px`);
+      } else {
+        overlayEl.style.removeProperty('--fuel-content-height');
+      }
+      if (model?.overlayId === 'relative') {
+        const size = relativeOverlaySizeForModel(model);
+        overlayEl.style.setProperty('--relative-overlay-width', `${size.width}px`);
+        overlayEl.style.setProperty('--relative-overlay-height', `${size.height}px`);
+      } else {
+        overlayEl.style.removeProperty('--relative-overlay-width');
+        overlayEl.style.removeProperty('--relative-overlay-height');
+      }
+      const tableWidth = tableOverlayWidthForModel(model);
+      if (tableWidth > 0) {
+        overlayEl.style.setProperty('--table-overlay-width', `${tableWidth}px`);
+      } else {
+        overlayEl.style.removeProperty('--table-overlay-width');
+      }
+      const simpleTelemetrySize = simpleTelemetryOverlaySizeForModel(model);
+      if (simpleTelemetrySize) {
+        overlayEl.style.setProperty('--simple-telemetry-overlay-width', `${simpleTelemetrySize.width}px`);
+        overlayEl.style.setProperty('--simple-telemetry-overlay-height', `${simpleTelemetrySize.height}px`);
+      } else {
+        overlayEl.style.removeProperty('--simple-telemetry-overlay-width');
+        overlayEl.style.removeProperty('--simple-telemetry-overlay-height');
+      }
+      overlayEl.classList.toggle('gap-graph-off', model?.overlayId === 'gap-to-leader' && model?.graph?.showGraph === false);
+      overlayEl.classList.toggle('gap-trend-off', model?.overlayId === 'gap-to-leader' && model?.graph?.showTrendMetrics === false);
+      if (model?.overlayId === 'gap-to-leader') {
+        const size = gapPanelSizeForModel(model);
+        overlayEl.style.setProperty('--gap-panel-width', `${size.width}px`);
+        overlayEl.style.setProperty('--gap-panel-height', `${size.height}px`);
+      } else {
+        overlayEl.style.removeProperty('--gap-panel-width');
+        overlayEl.style.removeProperty('--gap-panel-height');
+      }
+    }
+
+    function tableOverlayWidthForModel(model) {
+      if (model?.bodyKind !== 'table') {
+        return null;
+      }
+
+      const browserSource = model?.effectiveSettings?.rendered?.browserSource || {};
+      const evidenceWidth = Number(browserSource.baseWidth || browserSource.width);
+      if (Number.isFinite(evidenceWidth) && evidenceWidth > 0) {
+        return Math.round(evidenceWidth);
+      }
+
+      if (!Array.isArray(model?.columns)) {
+        return null;
+      }
+
+      const columnsWidth = model.columns.reduce((total, column) => {
+        const width = Number(column?.width || column?.configuredWidth || 0);
+        return Number.isFinite(width) && width > 0 ? total + width : total;
+      }, 0);
+      return columnsWidth > 0 ? columnsWidth + 34 : null;
+    }
+
+    function simpleTelemetryOverlaySizeForModel(model) {
+      if (model?.overlayId !== 'session-weather' && model?.overlayId !== 'pit-service') {
+        return null;
+      }
+
+      const browserSource = model?.effectiveSettings?.rendered?.browserSource || {};
+      const width = Number(browserSource.baseWidth || browserSource.width);
+      const height = Number(browserSource.baseHeight || browserSource.height);
+      if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+        return null;
+      }
+
+      return {
+        width: Math.max(1, Math.round(width)),
+        height: Math.max(1, Math.round(height))
+      };
+    }
+
+    function relativeOverlaySizeForModel(model) {
+      const browserSource = model?.effectiveSettings?.rendered?.browserSource || {};
+      const evidenceWidth = Number(browserSource.baseWidth || browserSource.width);
+      const evidenceHeight = Number(browserSource.baseHeight || browserSource.height);
+      const height = Number.isFinite(evidenceHeight) && evidenceHeight > 0
+        ? Math.max(1, Math.round(evidenceHeight))
+        : null;
+      if (Number.isFinite(evidenceWidth) && evidenceWidth > 0) {
+        return {
+          width: Math.max(1, Math.round(evidenceWidth)),
+          height: height || 308
+        };
+      }
+
+      const columns = Array.isArray(model?.columns) ? model.columns : [];
+      const tableWidth = columns.reduce((total, column) => {
+        const width = Number(column?.width);
+        return total + (Number.isFinite(width) && width > 0 ? width : 0);
+      }, 0);
+      return {
+        width: Math.max(1, tableWidth + 34),
+        height: height || 308
+      };
     }
 
     function isFuelNonRaceModel(model) {
@@ -435,6 +596,46 @@
       return titles.includes('Fuel Range')
         && !titles.includes('Race Information')
         && !titles.includes('Stint Targets');
+    }
+
+    function fuelContentHeightForModel(model) {
+      const sections = Array.isArray(model?.metricSections)
+        ? model.metricSections.filter((section) => Array.isArray(section?.rows) && section.rows.length > 0)
+        : [];
+      const rowCount = sections.reduce((total, section) => total + section.rows.length, 0);
+      const sectionCount = sections.length;
+      let height = fuelContentHeight(rowCount, sectionCount);
+      const hasHeader = Array.isArray(model?.headerItems)
+        && model.headerItems.some((item) => String(item?.value || '').trim());
+      if (!hasHeader) {
+        height = Math.max(
+          metricGeometryNumber('minimumChromeAdjustedHeight', 80),
+          height - metricGeometryNumber('headerChromeHeight', 38));
+      }
+
+      return height;
+    }
+
+    function gapPanelSizeForModel(model) {
+      const graph = model?.graph || {};
+      if (graph.showGraph === false) return { width: 326, height: 275 };
+      if (graph.showTrendMetrics === false) return { width: 410, height: 275 };
+      return { width: 620, height: 275 };
+    }
+
+    function fuelContentHeight(rowCount, sectionCount) {
+      const minimumHeight = metricGeometryNumber('minimumFuelCalculatorHeight', 126);
+      if (rowCount <= 0 || sectionCount <= 0) return minimumHeight;
+      const rowGaps = Math.max(0, rowCount - sectionCount) * metricGeometryNumber('rowGap', 5);
+      const sectionGaps = Math.max(0, sectionCount - 1) * metricGeometryNumber('sectionGap', 8);
+      const height = metricGeometryNumber('headerChromeHeight', 38)
+        + metricGeometryNumber('fuelContentVerticalPadding', 26)
+        + sectionCount * metricGeometryNumber('fuelSectionTitleReserveHeight', 14)
+        + rowCount * metricGeometryNumber('segmentedRowHeight', 35)
+        + rowGaps
+        + sectionGaps
+        + metricGeometryNumber('collapsedFooterReserveHeight', 8);
+      return Math.max(minimumHeight, Math.min(315, height));
     }
 
     function renderHeaderItems(model, fallbackStatus) {
@@ -593,12 +794,21 @@
 
     function drawOverlayGapGraph(ctx, width, height, graph) {
       const series = Array.isArray(graph?.series) ? graph.series : [];
+      const metrics = Array.isArray(graph?.trendMetrics) ? graph.trendMetrics : [];
+      if (graph?.showGraph === false) {
+        if (graph?.showTrendMetrics !== false && metrics.length > 0) {
+          drawGapFocusedMetricsTable(ctx, gapMetricOnlyRect(width, height), graph);
+        }
+
+        return true;
+      }
+
       const totalSeriesPoints = series.reduce((total, item) => total + (Array.isArray(item?.points) ? item.points.length : 0), 0);
       if (totalSeriesPoints < 2) {
         return false;
       }
 
-      const { plot, labelLane, metricsRect } = gapGraphLayout(width, height);
+      const { plot, labelLane, metricsRect } = gapGraphLayout(width, height, graph);
       const scale = graph.scale || { isFocusRelative: false, maxGapSeconds: graph.maxGapSeconds };
       const maxGapSeconds = Math.max(1, numberOr(scale.maxGapSeconds, graph.maxGapSeconds, 1));
       drawGapWeatherBands(ctx, graph, plot);
@@ -664,16 +874,16 @@
       return true;
     }
 
-    function gapGraphLayout(width, height) {
-      const axisWidth = 58;
-      const xAxisHeight = 17;
-      const labelLaneWidth = 38;
-      const metricsWidth = gapMetricsTableWidth(width);
+    function gapGraphLayout(width, height, graph = null) {
+      const axisWidth = gapGeometryNumber('axisWidth', 58);
+      const xAxisHeight = gapGeometryNumber('xAxisHeight', 17);
+      const labelLaneWidth = gapGeometryNumber('endpointLabelLaneWidth', 38);
+      const metricsWidth = gapMetricsTableWidth(width, graph);
       const plotHeight = Math.max(40, height - xAxisHeight);
       const metricsRect = metricsWidth > 0
         ? { left: width - metricsWidth, top: 0, width: metricsWidth, height: plotHeight }
         : null;
-      const chartRight = metricsRect ? metricsRect.left - 10 : width - 4;
+      const chartRight = metricsRect ? metricsRect.left - gapGeometryNumber('metricsTableGap', 10) : width - 4;
       const labelLane = {
         left: chartRight - labelLaneWidth,
         top: 0,
@@ -689,8 +899,17 @@
       return { plot, labelLane, metricsRect, plotHeight, axisWidth };
     }
 
+    function gapMetricOnlyRect(width, height) {
+      if (gapGraphGeometry?.metricOnlyUsesFullFrame !== false) {
+        return { left: 0, top: 0, width, height };
+      }
+
+      const xAxisHeight = gapGeometryNumber('xAxisHeight', 17);
+      return { left: 0, top: 0, width, height: Math.max(1, height - xAxisHeight) };
+    }
+
     function drawEmptyGapTrendFrame(ctx, width, height, graph) {
-      const { plot, metricsRect } = gapGraphLayout(width, height);
+      const { plot, metricsRect } = gapGraphLayout(width, height, graph);
       ctx.save();
       ctx.strokeStyle = themeRgba('--tmr-text-muted-rgb', 0.18, 'rgba(140, 174, 212, 0.18)');
       ctx.lineWidth = 1;
@@ -702,14 +921,6 @@
         ctx.stroke();
       }
 
-      ctx.fillStyle = themeColor('--tmr-text-muted', '#8caed4');
-      ctx.font = '700 12px "Segoe UI", Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('waiting for timing', plot.left + plot.width / 2, plot.top + plot.height / 2);
-      ctx.font = '10px "Segoe UI", Arial, sans-serif';
-      ctx.fillStyle = 'rgba(140, 174, 212, 0.74)';
-      ctx.fillText('trend will populate when live gaps are grounded', plot.left + plot.width / 2, plot.top + plot.height / 2 + 18);
       ctx.restore();
       if (metricsRect) drawGapFocusedMetricsTable(ctx, metricsRect, graph);
     }
@@ -815,8 +1026,6 @@
         ctx.moveTo(plot.left, referenceY);
         ctx.lineTo(plot.left + plot.width, referenceY);
         ctx.stroke();
-        ctx.fillStyle = themeColor('--tmr-green', '#70e092');
-        ctx.fillText('focus', plot.left - 8, referenceY);
         ctx.strokeStyle = themeRgba('--tmr-text-muted-rgb', 0.18, 'rgba(140, 174, 212, 0.18)');
         ctx.fillStyle = themeColor('--tmr-text-muted', '#8caed4');
 
@@ -871,7 +1080,7 @@
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'right';
       if (scale?.isFocusRelative === true) {
-        ctx.fillText('local', plot.left - 8, plot.top + 7);
+        ctx.fillText('ahead', plot.left - 8, plot.top + 7);
         ctx.fillText(formatDeltaSeconds(-numberOr(scale.aheadSeconds, 0)), plot.left - 8, plot.top + 18);
         ctx.fillText(formatDeltaSeconds(numberOr(scale.behindSeconds, 0)), plot.left - 8, plot.top + plot.height - 8);
       } else {
@@ -913,6 +1122,7 @@
       ctx.font = '700 10px "Segoe UI", Arial, sans-serif';
       for (const marker of markers) {
         if (!Number.isFinite(marker?.axisSeconds) || !Number.isFinite(marker?.gapSeconds)) continue;
+        if (gapDriverMarkerIsReferenceSwitch(marker)) continue;
         const point = gapPoint(graph, scale, plot, maxGapSeconds, marker.axisSeconds, marker.gapSeconds);
         const color = marker.isReference ? themeColor('--tmr-green', '#70e092') : themeColor('--tmr-text-secondary', '#cdd8e4');
         ctx.strokeStyle = color;
@@ -926,16 +1136,35 @@
         ctx.arc(point.x, point.y, 4.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = color;
-        ctx.fillText(String(marker.label || 'DR').slice(0, 3), point.x + 6, point.y - 8);
+        const label = gapDriverMarkerDisplayLabel(marker);
+        if (label) {
+          ctx.fillStyle = color;
+          ctx.fillText(label.slice(0, 3), point.x + 6, point.y - 8);
+        }
       }
       ctx.restore();
     }
 
-    function gapMetricsTableWidth(width) {
-      const metricsWidth = 220;
-      const availableAfterTable = width - 58 - 38 - 10 - metricsWidth;
-      return availableAfterTable >= 260 ? metricsWidth : 0;
+    function gapDriverMarkerDisplayLabel(marker) {
+      const label = String(marker?.label || '').trim();
+      return gapDriverMarkerIsReferenceSwitch(marker) ? '' : label || 'DR';
+    }
+
+    function gapDriverMarkerIsReferenceSwitch(marker) {
+      const label = String(marker?.label || '').trim();
+      return Boolean(marker?.isReference) && label.toUpperCase() === 'REF';
+    }
+
+    function gapMetricsTableWidth(width, graph = null) {
+      if (graph?.showTrendMetrics === false) return 0;
+      if (graph?.showGraph === false) return width;
+      const metricsWidth = gapGeometryNumber('metricsTableWidth', 220);
+      const availableAfterTable = width
+        - gapGeometryNumber('axisWidth', 58)
+        - gapGeometryNumber('endpointLabelLaneWidth', 38)
+        - gapGeometryNumber('metricsTableGap', 10)
+        - metricsWidth;
+      return availableAfterTable >= gapGeometryNumber('metricsMinimumPlotWidth', 260) ? metricsWidth : 0;
     }
 
     function drawGapThreatAnnotation(ctx, metric, plot) {
@@ -971,7 +1200,7 @@
         ? graph.trendMetrics
         : [];
       const visibleMetrics = metrics.filter(Boolean);
-      const rowHeight = Math.max(9.5, Math.min(26, (rect.height - 8 - 38) / Math.max(1, visibleMetrics.length)));
+      const layout = gapMetricTableLayout(rect, visibleMetrics.length);
       ctx.save();
       ctx.lineWidth = 1;
       drawRoundedRect(
@@ -981,29 +1210,110 @@
         rect.width,
         rect.height,
         3,
-        'rgba(18, 24, 28, 0.74)',
-        themeRgba('--tmr-text-rgb', 0.15, 'rgba(247, 251, 255, 0.15)'));
+        'rgba(9, 14, 18, 0.82)',
+        themeRgba('--tmr-cyan-rgb', 0.22, 'rgba(0, 232, 255, 0.22)'));
 
       ctx.textBaseline = 'middle';
       ctx.font = '700 10px "Segoe UI", Arial, sans-serif';
       ctx.fillStyle = themeColor('--tmr-text', '#f7fbff');
-      ctx.fillText('Trend', rect.left + 8, rect.top + 11);
+      ctx.textAlign = 'left';
+      ctx.fillText('Signals', layout.contentLeft, rect.top + 11);
       ctx.font = '8px "Segoe UI", Arial, sans-serif';
       ctx.fillStyle = themeColor('--tmr-text-muted', '#8caed4');
-      ctx.fillText('Metric', rect.left + 8, rect.top + 26);
-      ctx.fillText(graph?.comparisonLabel || '--', rect.left + 56, rect.top + 26);
-      ctx.fillText('Threat', rect.left + 136, rect.top + 26);
+      drawGapMetricText(ctx, 'Metric', gapMetricColumnBounds(rect, rect.top + 25, 12).label, 'left');
+      ctx.textAlign = 'right';
+      drawGapMetricText(ctx, graph?.comparisonLabel || '--', gapMetricColumnBounds(rect, rect.top + 25, 12).value, 'right');
+      drawGapMetricText(ctx, 'Threat', gapMetricColumnBounds(rect, rect.top + 25, 12).threat, 'right');
+      ctx.strokeStyle = themeRgba('--tmr-text-muted-rgb', 0.18, 'rgba(140, 174, 212, 0.18)');
+      ctx.beginPath();
+      ctx.moveTo(layout.contentLeft, rect.top + 40);
+      ctx.lineTo(layout.contentRight, rect.top + 40);
+      ctx.stroke();
 
-      ctx.font = `${rowHeight < 16 ? '8px' : '9px'} "Segoe UI", Arial, sans-serif`;
+      ctx.font = `${layout.rowHeight < 16 ? '8px' : '9px'} "Segoe UI", Arial, sans-serif`;
       visibleMetrics.forEach((metric, index) => {
-        const y = rect.top + 38 + index * rowHeight;
+        const y = layout.rowsTop + index * layout.rowHeight;
+        const valueColor = gapMetricValueColor(metric, numberOr(graph?.metricDeadbandSeconds, 0.25));
+        const chaserColor = gapMetricChaserColor(metric);
+        const rowTextHeight = Math.max(10, Math.min(14, layout.rowHeight));
+        const textTop = y - rowTextHeight / 2;
+        const columns = gapMetricColumnBounds(rect, textTop, rowTextHeight);
+        if (layout.rowHeight >= 12) {
+          const fill = index % 2 === 0 ? 'rgba(255, 255, 255, 0.075)' : 'rgba(255, 255, 255, 0.035)';
+          [columns.label, columns.value, columns.threat].forEach((cell) => {
+            drawRoundedRect(
+              ctx,
+              cell.left,
+              y - layout.rowHeight / 2 + 1,
+              Math.max(1, cell.width),
+              Math.max(9, layout.rowHeight - 2),
+              2,
+              fill,
+              'rgba(140, 174, 212, 0.08)');
+          });
+        }
         ctx.fillStyle = themeColor('--tmr-text-secondary', '#cdd8e4');
-        ctx.fillText(metric?.label || '--', rect.left + 8, y);
-        ctx.fillStyle = gapMetricValueColor(metric, numberOr(graph?.metricDeadbandSeconds, 0.25));
-        ctx.fillText(gapMetricValueText(metric), rect.left + 56, y);
-        ctx.fillStyle = gapMetricChaserColor(metric);
-        ctx.fillText(gapMetricChaserText(metric), rect.left + 136, y);
+        drawGapMetricText(ctx, metric?.label || '--', columns.label, 'left');
+        ctx.fillStyle = valueColor;
+        drawGapMetricText(ctx, gapMetricValueText(metric), columns.value, 'right');
+        ctx.fillStyle = chaserColor;
+        drawGapMetricText(ctx, gapMetricChaserText(metric), columns.threat, 'right');
       });
+      ctx.restore();
+    }
+
+    function gapMetricTableLayout(rect, metricCount) {
+      const inset = gapGeometryNumber('metricsTableInset', 10);
+      const rowsTop = rect.top + gapGeometryNumber('metricsRowsTopOffset', 48);
+      const availableHeight = Math.max(1, rect.top + rect.height - gapGeometryNumber('metricsBottomPadding', 8) - rowsTop);
+      return {
+        contentLeft: rect.left + inset,
+        contentRight: rect.left + rect.width - inset,
+        rowsTop,
+        rowHeight: Math.max(
+          gapGeometryNumber('metricsRowMinHeight', 12),
+          Math.min(gapGeometryNumber('metricsRowMaxHeight', 26), availableHeight / Math.max(1, metricCount)))
+      };
+    }
+
+    function gapMetricColumnBounds(rect, y, height) {
+      const inset = gapGeometryNumber('metricsTableInset', 10);
+      const gap = gapGeometryNumber('metricsColumnGap', 6);
+      const contentLeft = rect.left + inset;
+      const contentWidth = Math.max(1, rect.width - inset * 2);
+      const labelWidth = Math.max(48, Math.min(56, contentWidth * 0.25));
+      const valueWidth = Math.max(64, Math.min(76, contentWidth * 0.32));
+      const threatWidth = Math.max(1, contentWidth - labelWidth - valueWidth - gap * 2);
+      const valueLeft = contentLeft + labelWidth + gap;
+      const threatLeft = valueLeft + valueWidth + gap;
+      return {
+        label: { left: contentLeft, top: y, width: labelWidth, height },
+        value: { left: valueLeft, top: y, width: valueWidth, height },
+        threat: { left: threatLeft, top: y, width: threatWidth, height }
+      };
+    }
+
+    function gapGeometryNumber(key, fallback) {
+      return numberOr(gapGraphGeometry?.[key], fallback);
+    }
+
+    function metricGeometryNumber(key, fallback) {
+      return numberOr(metricRowsGeometry?.[key], fallback);
+    }
+
+    function drawGapMetricText(ctx, text, bounds, align) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(bounds.left, bounds.top, Math.max(1, bounds.width), Math.max(1, bounds.height));
+      ctx.clip();
+      ctx.textAlign = align;
+      const padding = Math.min(5, Math.max(3, bounds.width * 0.08));
+      const x = align === 'right'
+        ? bounds.left + bounds.width - padding
+        : align === 'center'
+          ? bounds.left + bounds.width / 2
+          : bounds.left + padding;
+      ctx.fillText(String(text || ''), x, bounds.top + bounds.height / 2);
       ctx.restore();
     }
 
@@ -1410,6 +1720,7 @@
 
         render();
       } catch (error) {
+        postBrowserSourceEvent('model-error', null, error);
         if (module?.renderOffline) {
           module.renderOffline(error);
           return;
@@ -1422,6 +1733,7 @@
     }
 
     const module = browserOverlay.module;
+    postBrowserSourceEvent('page-loaded');
     if (module?.start) {
       module.start({ refresh });
     } else {

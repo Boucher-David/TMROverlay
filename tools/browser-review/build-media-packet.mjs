@@ -99,7 +99,7 @@ const appItems = [
     source: 'settings/support.png',
     output: 'app/14-settings-diagnostics.png',
     title: 'Settings - Diagnostics',
-    description: 'Diagnostic telemetry, local map building, support bundle, and support folder controls.'
+    description: 'Enhanced iRacing telemetry capture, bundle actions, and data analysis opt-out controls.'
   }
 ];
 

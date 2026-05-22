@@ -13,14 +13,20 @@
     <main id="settings-app" class="app-canvas" aria-label="TMR Overlay settings review"></main>
   </div>
   <script type="application/json" id="settings-app-config">{{APP_CONFIG_JSON}}</script>
+  <script type="application/json" id="overlay-geometry-contract">{{GEOMETRY_JSON}}</script>
   <script>
     (() => {
       const config = JSON.parse(document.getElementById('settings-app-config').textContent);
+      const geometry = JSON.parse(document.getElementById('overlay-geometry-contract').textContent);
+      const metricRowsGeometry = geometry?.metricRows || {};
+      const settingsGeometry = geometry?.settingsGeometry || {};
+      const overlaySizes = geometry?.overlaySizes || {};
+      const tableGeometry = geometry?.tableGeometry || {};
       const app = document.getElementById('settings-app');
       const scaleFrame = document.getElementById('settings-scale-frame');
       const sessionLabels = normalizedSessionLabels(config.sessionLabels);
-      const designWidth = 1240;
-      const designHeight = 680;
+      const designWidth = settingsGeometryNumber('designWidth', 1152);
+      const designHeight = settingsGeometryNumber('designHeight', 608);
       const state = {
         selectedTab: initialTab(),
         selectedRegion: initialRegion(),
@@ -31,13 +37,16 @@
           latestBundlePath: config.support?.latestBundlePath || '',
           statusText: config.support?.statusText || '',
           statusTone: config.support?.statusTone || 'neutral',
-          updateText: config.support?.updateText || 'No update available.',
+          updateText: config.support?.updateText || 'Current v1.0.3.',
+          updateTone: config.support?.updateTone || 'success',
           canCheckUpdates: config.support?.canCheckUpdates !== false,
           canInstallUpdate: config.support?.canInstallUpdate === true,
           canRestartUpdate: config.support?.canRestartUpdate === true,
           updatePendingRestart: config.support?.updatePendingRestart === true
         }
       };
+      normalizeSelectedRegion();
+      const latestBundleValueMaxLength = 30;
       applySessionLayoutVars();
       applyReviewScale();
       window.addEventListener('resize', applyReviewScale);
@@ -51,7 +60,7 @@
       function initialRegion() {
         const params = new URLSearchParams(window.location.search);
         const requested = params.get('region') || config.selectedRegion || 'general';
-        return ['general', 'content', 'header', 'footer', 'preview', 'twitch', 'streamlabs'].includes(requested) ? requested : 'general';
+        return ['general', 'content', 'header', 'footer', 'preview', 'twitch'].includes(requested) ? requested : 'general';
       }
 
       function knownTab(tabId) {
@@ -64,11 +73,29 @@
         return config.overlays.find((overlay) => overlay.id === state.selectedTab) || null;
       }
 
+      function normalizeSelectedRegion() {
+        const overlay = currentOverlay();
+        if (!overlay) {
+          state.selectedRegion = 'general';
+          return;
+        }
+
+        const regions = regionsFor(overlay);
+        if (!regions.includes(state.selectedRegion)) {
+          state.selectedRegion = regions[0] || 'general';
+        }
+      }
+
       function regionsFor(overlay) {
         if (!overlay) return [];
         if (overlay.id === 'garage-cover') return ['general', 'preview'];
-        if (overlay.id === 'stream-chat') return ['general', 'content', 'twitch', 'streamlabs'];
-        return overlay.supportsChrome ? ['general', 'content', 'header', 'footer'] : ['general', 'content'];
+        if (overlay.id === 'stream-chat') return ['general', 'content', 'twitch'];
+        return [
+          'general',
+          ...(Array.isArray(overlay.contentRows) && overlay.contentRows.length > 0 ? ['content'] : []),
+          ...(Array.isArray(overlay.headerRows) && overlay.headerRows.length > 0 ? ['header'] : []),
+          ...(Array.isArray(overlay.footerRows) && overlay.footerRows.length > 0 ? ['footer'] : [])
+        ];
       }
 
       function setTab(tabId) {
@@ -121,14 +148,14 @@
       }
 
       function renderTitleBar() {
-        return node('header', 'titlebar', {}, [
+        return node('header', 'titlebar', { 'data-evidence-key': 'chrome.titlebar' }, [
           node('div', 'brand-lockup', {}, [
             node('div', 'brand-mark', {}, ['TMR']),
             node('div', 'brand-copy', {}, [
               node('div', 'brand-title', {}, ['Tech Mates Racing Overlay'])
             ])
           ]),
-          node('button', 'close-button', { type: 'button', 'aria-label': 'Close settings preview' }, ['X'], { click: closeSettingsReview })
+          node('button', 'close-button', { type: 'button', 'aria-label': 'Close settings preview', 'data-evidence-key': 'chrome.close' }, ['X'], { click: closeSettingsReview })
         ]);
       }
 
@@ -182,10 +209,11 @@
           [
             renderSegments(regions),
             renderOverlayRegion(overlay)
-          ]);
+          ],
+          { hasRegions: true });
       }
 
-      function renderContentShell(title, subtitle, status, children) {
+      function renderContentShell(title, subtitle, status, children, options = {}) {
         return node('section', 'content-card', { 'aria-labelledby': 'page-title' }, [
           node('header', 'content-header', {}, [
             node('div', 'content-heading-copy', {}, [
@@ -194,7 +222,7 @@
             ]),
             status ? node('span', 'header-pill', {}, [status]) : null
           ]),
-          node('div', 'content-body', {}, children)
+          node('div', `content-body${options.hasRegions ? ' with-regions' : ' without-regions'}`, {}, children)
         ].filter(Boolean));
       }
 
@@ -217,24 +245,24 @@
                 state.unitSystem = value;
                 persistSettings({ kind: 'unitSystem', value });
                 render();
-              }))
+              }), 'general.units.measurement-system')
             ]),
             panel('Updates', 'updates-panel', [
-              row('Status', node('strong', 'field-value muted', {}, [support.updateText]), 'general.updates.status'),
+              row('Status', node('strong', `field-value ${updateToneClass(support.updateTone)}`, {}, [support.updateText]), 'general.updates.status'),
               node('div', 'button-row small', {}, [
-                button('Check', () => checkReviewUpdates(), { disabled: support.canCheckUpdates === false }),
-                button(support.updatePendingRestart ? 'Restart' : 'Install', () => runSupportAction(support.updatePendingRestart ? 'restartUpdate' : 'installUpdate', support.updatePendingRestart ? 'Restart requested.' : 'No installable update in review run.'), { disabled: support.updatePendingRestart ? support.canRestartUpdate === false : support.canInstallUpdate !== true })
+                button('Check', () => checkReviewUpdates(), { disabled: support.canCheckUpdates === false, 'data-evidence-key': 'general.updates.check' }),
+                button(support.updatePendingRestart ? 'Restart' : 'Install', () => runSupportAction(support.updatePendingRestart ? 'restartUpdate' : 'installUpdate', support.updatePendingRestart ? 'Restart requested.' : 'No installable update in review run.'), { disabled: support.updatePendingRestart ? support.canRestartUpdate === false : support.canInstallUpdate !== true, 'data-evidence-key': 'general.updates.primary' })
               ])
             ])
           ]),
           panel('Show Preview', 'preview-panel', [
-            node('div', 'preview-summary', {}, [
+            node('div', 'preview-summary', { 'data-evidence-key': 'general.preview.session-data' }, [
               node('div', 'preview-copy', {}, [
-                node('span', 'field-label', {}, ['Session data']),
-                node('strong', `field-value ${state.previewMode === 'off' ? 'muted' : 'success'}`, {}, [previewLabel(state.previewMode)])
+                node('span', 'field-label', { 'data-evidence-key': 'general.preview.session-data.label', 'data-evidence-role': 'label' }, ['Session data']),
+                node('strong', `field-value ${state.previewMode === 'off' ? 'muted' : 'success'}`, { 'data-evidence-key': 'general.preview.session-data.value', 'data-evidence-role': 'value' }, [previewLabel(state.previewMode)])
               ])
             ]),
-            node('div', 'preview-control-row', {}, [
+            node('div', 'preview-control-row', { 'data-evidence-key': 'general.preview.mode' }, [
               choice(['Off', 'Practice', 'Quali', 'Race'], previewChoice(state.previewMode), (value) => setPreview(previewModeFromChoice(value)), 'wide')
             ]),
             node('div', 'body-lines', {}, [
@@ -249,40 +277,40 @@
       function renderSupportPage() {
         const support = state.support;
         const trackMapBuildEnabled = trackMapBuildFromTelemetryEnabled();
+        const analysisRows = [
+          ['Local map building', 'Track geometry', trackMapBuildEnabled, (isOn) => setTrackMapBuildFromTelemetry(isOn), 'Local map building', 'support.analysis.local-map-building'],
+          ['Car / track history', 'Session history', true, null, 'Car / track history', 'support.analysis.car-track-history'],
+          ['Fuel history', 'Fuel model', true, null, 'Fuel history', 'support.analysis.fuel-history'],
+          ['Radar calibration', 'Car radar', true, null, 'Radar calibration', 'support.analysis.radar-calibration'],
+          ['Post-race analysis', 'Summary analysis', true, null, 'Post-race analysis', 'support.analysis.post-race-analysis']
+        ];
         return [
           node('div', 'support-stack', {}, [
             node('div', 'support-grid', {}, [
-              panel('Capture Controls', 'support-capture-panel', [
-                row('Raw diagnostic telemetry', toggle(support.rawCaptureEnabled, (isOn) => setRawCaptureEnabled(isOn), 'Raw diagnostic telemetry')),
-                row('Local map building', toggle(trackMapBuildEnabled, (isOn) => setTrackMapBuildFromTelemetry(isOn), 'Local map building')),
-                node('div', 'body-lines compact', {}, [
-                  node('p', '', {}, ['Capture writes raw frames only when explicitly requested.']),
-                  node('p', '', {}, ['Local map building derives track geometry from completed telemetry.'])
-                ])
-              ]),
-              panel('Automatic History', 'support-history-panel', [
-                statusRow('Car / track', 'Session history', 'success'),
-                statusRow('Fuel', 'History model', 'success'),
-                statusRow('Radar', 'Calibration analysis', 'success'),
-                statusRow('Post-race', 'Summary analysis', 'success')
-              ])
-            ]),
-            node('div', 'support-grid support-bottom-grid', {}, [
-              panel('Support Bundle', 'support-bundle', [
+              panel('Enhanced iRacing Telemetry Capture', 'support-capture-panel', [
+                row('Capture future live telemetry', toggle(support.rawCaptureEnabled, (isOn) => setRawCaptureEnabled(isOn), 'Enhanced iRacing Telemetry Capture'), 'support.capture.raw.enabled'),
                 row('Latest bundle', node('code', 'value-code', {}, [latestBundleDisplayText(support.latestBundlePath)]), 'support.bundle.latest'),
                 node('div', 'button-row', {}, [
-                  button('Create Bundle', () => createReviewDiagnosticsBundle()),
-                  button('Copy Path', () => copyLatestReviewBundlePath())
+                  button('Create Bundle', () => createReviewDiagnosticsBundle(), { 'data-evidence-key': 'support.bundle.create' }),
+                  button('Open Bundle Folder', () => runSupportAction('openDiagnostics', 'Opened diagnostics folder.'), { 'data-evidence-key': 'support.bundle.open-folder' })
+                ]),
+                node('div', 'body-lines compact', {}, [
+                  node('p', '', { 'data-evidence-key': 'support.capture.raw.description' }, ['Raw iRacing frame capture runs only when requested.']),
+                  node('p', '', { 'data-evidence-key': 'support.bundle.create.description' }, ['Create a bundle after reproducing an issue.'])
                 ]),
                 support.statusText ? node('p', `support-status ${support.statusTone}`, {}, [support.statusText]) : null
               ]),
-              panel('Support Folders', 'support-folders', [
-                node('div', 'button-row small', {}, [
-                  button('Open Logs', () => runSupportAction('openLogs', 'Opened logs folder.')),
-                  button('Diagnostics', () => runSupportAction('openDiagnostics', 'Opened diagnostics folder.')),
-                  button('Captures', () => runSupportAction('openCaptures', 'Opened captures folder.')),
-                  button('History', () => runSupportAction('openHistory', 'Opened history folder.'))
-                ])
+              panel('Data Analysis Opt-out', 'support-analysis-panel', [
+                node('div', 'analysis-control-list', {}, analysisRows.map(([label, detail, isOn, onChange, ariaLabel, key]) => (
+                  node('div', `analysis-control-row${onChange ? '' : ' locked'}`, { 'data-evidence-key': key }, [
+                    node('span', 'analysis-copy', {}, [
+                      node('strong', '', { 'data-evidence-key': `${key}.label`, 'data-evidence-role': 'label' }, [label]),
+                      node('span', '', { 'data-evidence-key': `${key}.detail`, 'data-evidence-role': 'value' }, [detail])
+                    ]),
+                    node('span', 'analysis-state', { 'data-evidence-key': `${key}.value`, 'data-evidence-role': 'value' }, [isOn ? 'On' : 'Off']),
+                    toggle(isOn, onChange, ariaLabel, { disabled: !onChange, evidenceKey: `${key}.value` })
+                  ])
+                )))
               ])
             ])
           ])
@@ -315,33 +343,34 @@
             overlay.enabled = isOn;
             persistSettings({ kind: 'overlayEnabled', overlayId: overlay.id, enabled: isOn });
             render();
-          })));
+          }), `${overlay.id}.general.visible`));
         }
-        if (overlay.showScale) controls.push(row('Scale', percentSlider('Scale', overlay.scalePercent, [60, 75, 100, 125, 150, 175, 200], 'cyan', (percent) => {
+        if (overlay.showScale) controls.push(row('Scale', percentSlider('Scale', overlay.scalePercent, 60, 200, 'cyan', (percent) => {
           overlay.scalePercent = percent;
           persistSettings({ kind: 'number', overlayId: overlay.id, key: 'scalePercent', value: percent });
           render();
-        })));
+        }), `${overlay.id}.general.scale`));
         if (overlay.showOpacity) {
           const opacityLabel = overlay.id === 'track-map' ? 'Map fill' : 'Opacity';
-          const opacityValues = overlay.id === 'track-map' ? [0, 20, 30, 40, 50, 60, 70, 80, 90, 100] : [20, 30, 40, 50, 60, 70, 80, 90, 100];
-          controls.push(row(opacityLabel, percentSlider(opacityLabel, overlay.opacityPercent, opacityValues, 'magenta', (percent) => {
+          const minimumOpacity = overlay.id === 'track-map' ? 0 : 20;
+          controls.push(row(opacityLabel, percentSlider(opacityLabel, overlay.opacityPercent, minimumOpacity, 100, 'magenta', (percent) => {
             overlay.opacityPercent = percent;
             persistSettings({ kind: 'number', overlayId: overlay.id, key: 'opacityPercent', value: percent });
             render();
-          })));
+          }), `${overlay.id}.general.${slugEvidenceKey(opacityLabel)}`));
         }
+        controls.push(...overlaySpecificControlRows(overlay));
         if (overlay.id === 'garage-cover') {
           controls.push(row('Cover image', node('div', 'button-row inline', {}, [
-            button('Import', () => importGarageCoverPreviewImage(overlay)),
+            button('Import', () => importGarageCoverPreviewImage(overlay), { 'data-evidence-key': `${overlay.id}.general.cover-image.import` }),
             button('Clear', () => {
               clearGarageCoverPreviewImage(overlay);
               overlay.garageHasImage = false;
               overlay.garagePreviewVisible = false;
               persistSettings({ kind: 'garageCover', overlayId: overlay.id, action: 'clear' });
               render();
-            })
-          ])));
+            }, { 'data-evidence-key': `${overlay.id}.general.cover-image.clear` })
+          ]), `${overlay.id}.general.cover-image`));
         }
 
         const panels = [panel('Overlay Controls', 'overlay-controls', controls)];
@@ -353,11 +382,12 @@
 
       function renderGarageCoverPreview(overlay) {
         return node('div', 'content-stack garage-preview-content', {}, [
-          node('div', 'garage-preview-stage', {}, [
-            node('div', 'cover-preview standalone', {}, [
+          node('div', 'garage-preview-stage', { 'data-evidence-key': 'garage-cover.preview.stage' }, [
+            node('div', 'cover-preview standalone', { 'data-evidence-key': 'garage-cover.preview.shell' }, [
               node('img', 'cover-image', {
                 alt: '',
-                src: garageCoverPreviewImageSrc(overlay)
+                src: garageCoverPreviewImageSrc(overlay),
+                'data-evidence-key': 'garage-cover.preview.image'
               }, [], {
                 error: (event) => handleGarageCoverPreviewImageError(event.currentTarget)
               })
@@ -428,17 +458,17 @@
         }
         if (overlay.id === 'standings') {
           return node('div', 'content-stack standings-content', {}, [
-            contentMatrix('Content Display', overlay.contentRows || [], 1, [standingsMulticlassRow(overlay)])
+            contentMatrix('Content Display', overlay.contentRows || [])
           ]);
         }
         if (overlay.id === 'gap-to-leader') {
           return node('div', 'content-stack', {}, [
-            contentMatrix('Content Display', [], 1, [gapWindowRow(overlay)])
+            contentMatrix('Content Display', overlay.contentRows || [])
           ]);
         }
         if (overlay.id === 'relative') {
           return node('div', 'content-stack', {}, [
-            contentMatrix('Content Display', overlay.contentRows || [], 1, [relativeRowsRow(overlay)])
+            contentMatrix('Content Display', overlay.contentRows || [])
           ]);
         }
         return contentMatrix(overlay.contentTitle || 'Content Display', overlay.contentRows || [], overlay.gridColumns || 1);
@@ -451,13 +481,13 @@
               overlay.providerLabel = value;
               persistSettings({ kind: 'streamChatProvider', overlayId: overlay.id, providerLabel: value });
               render();
-            })),
+            }, 'provider-choice'), 'stream-chat.content.provider'),
             row('Streamlabs URL', inputBox(overlay.streamlabsWidgetUrl || '', overlay.providerLabel === 'Streamlabs', (value) => {
               overlay.streamlabsWidgetUrl = value;
-            })),
+            }, 'streamlabs-url-input', { 'aria-label': 'Streamlabs URL', 'data-evidence-key': 'stream-chat.content.streamlabs-url.value' }), 'stream-chat.content.streamlabs-url'),
             row('Twitch channel', inputBox(overlay.twitchChannel || 'techmatesracing', overlay.providerLabel === 'Twitch', (value) => {
               overlay.twitchChannel = value;
-            })),
+            }, 'twitch-channel-input', { 'aria-label': 'Twitch channel', 'data-evidence-key': 'stream-chat.content.twitch-channel.value' }), 'stream-chat.content.twitch-channel'),
             node('div', 'button-row small stream-chat-actions', {}, [
               button('Save', () => {
                 persistSettings({
@@ -466,7 +496,7 @@
                   streamlabsWidgetUrl: overlay.streamlabsWidgetUrl || '',
                   twitchChannel: overlay.twitchChannel || ''
                 });
-              })
+              }, { 'data-evidence-key': 'stream-chat.content.save' })
             ])
           ])
         ]);
@@ -500,19 +530,20 @@
           ]);
         }
         const chromeSessions = chromeSessionLabels(overlay);
+        const matrixKind = settingsMatrixKind(overlay, title.toLowerCase());
         return panel(title, 'chrome-panel', [
-          node('div', 'chrome-table', { style: sessionColumnStyle(chromeSessions) }, [
-            node('div', 'chrome-head item', {}, ['Item']),
-            ...chromeSessions.map((label) => node('div', 'chrome-head', {}, [label])),
-            ...rows.flatMap((rowItem) => [
-              node('div', 'chrome-row-label', {}, [rowItem]),
-              ...chromeSessions.map((session) => {
+          node('div', 'chrome-table', { style: sessionColumnStyle(chromeSessions), ...matrixAttrs(matrixKind) }, [
+            node('div', 'chrome-head item', matrixAttrs(matrixKind, -1, 0, '__header__', 'item'), ['Item']),
+            ...chromeSessions.map((label, columnIndex) => node('div', 'chrome-head', matrixAttrs(matrixKind, -1, columnIndex + 1, '__header__', sessionKey(label)), [label])),
+            ...rows.flatMap((rowItem, rowIndex) => [
+              node('div', 'chrome-row-label', matrixAttrs(matrixKind, rowIndex, 0, slugEvidenceKey(rowItem), 'item'), [rowItem]),
+              ...chromeSessions.map((session, columnIndex) => {
                 const current = chromeEnabled(overlay, title, rowItem, session);
-                return node('div', 'chrome-check', {}, [checkbox(current, (isOn) => {
+                return node('div', 'chrome-check', matrixAttrs(matrixKind, rowIndex, columnIndex + 1, slugEvidenceKey(rowItem), sessionKey(session)), [checkbox(current, (isOn) => {
                   setChromeEnabled(overlay, title, rowItem, session, isOn);
                   persistSettings({ kind: 'chrome', overlayId: overlay.id, area: title.toLowerCase(), label: rowItem, session, enabled: isOn });
                   render();
-                })]);
+                }, matrixAttrs(matrixKind, rowIndex, columnIndex + 1, slugEvidenceKey(rowItem), sessionKey(session)))]);
               })
             ])
           ])
@@ -522,34 +553,41 @@
       function contentMatrix(title, rows, columns = 1, extraRows = []) {
         const overlay = currentOverlay();
         const useSessionColumns = overlay?.showSessionFilters === true;
+        const matrixKind = settingsMatrixKind(overlay, state.selectedRegion);
         if (columns > 1) {
+          const rowsPerColumn = Math.ceil(rows.length / Math.max(1, columns));
           return panel(title, 'content-matrix grid', [
-            rows.length ? compactMatrixLegend(useSessionColumns) : null,
-            node('div', `toggle-grid ${useSessionColumns ? 'with-sessions' : 'with-visible'}`, {}, rows.map((item) => contentGridRow(item, overlay, useSessionColumns))),
+            node('div', `toggle-grid columned ${useSessionColumns ? 'with-sessions' : 'with-visible'}`, matrixAttrs(matrixKind), Array.from({ length: columns }).map((_, column) => {
+              const columnRows = rows.slice(column * rowsPerColumn, (column + 1) * rowsPerColumn);
+              return node('div', 'toggle-grid-column', {}, [
+                columnRows.length ? compactMatrixLegend(useSessionColumns) : null,
+                ...columnRows.map((item, rowOffset) => contentGridRow(item, overlay, useSessionColumns, matrixKind, column * rowsPerColumn + rowOffset, column))
+              ].filter(Boolean));
+            })),
             ...extraRows
           ].filter(Boolean));
         }
         return panel(title, 'content-matrix', [
-          rows.length ? node('div', `matrix-table ${useSessionColumns ? 'with-sessions' : 'with-visible'}`, {}, [
-            node('div', 'matrix-head item', {}, ['Item']),
+          rows.length ? node('div', `matrix-table ${useSessionColumns ? 'with-sessions' : 'with-visible'}`, matrixAttrs(matrixKind), [
+            node('div', 'matrix-head item', matrixAttrs(matrixKind, -1, 0, '__header__', 'item'), ['Item']),
             ...(useSessionColumns
-              ? sessionLabels.map((label) => node('div', 'matrix-head', {}, [label]))
-              : [node('div', 'matrix-head visible', {}, ['Visible'])]),
-            ...rows.flatMap((item) => [
-              node('div', `matrix-item${item.locked ? ' fixed' : ''}`, {}, [
+              ? sessionLabels.map((label, columnIndex) => node('div', 'matrix-head', matrixAttrs(matrixKind, -1, columnIndex + 1, '__header__', sessionKey(label)), [label]))
+              : [node('div', 'matrix-head visible', matrixAttrs(matrixKind, -1, 1, '__header__', 'visible'), ['Visible'])]),
+            ...rows.flatMap((item, rowIndex) => [
+              node('div', `matrix-item${item.locked ? ' fixed' : ''}`, matrixAttrs(matrixKind, rowIndex, 0, contentKey(item), 'item'), [
                 node('span', '', {}, [item.label])
               ]),
               ...(useSessionColumns
-                ? sessionLabels.map((session) => node('div', 'matrix-session', {}, [checkbox(contentEnabledForSession(overlay, item, session), (isOn) => {
+                ? sessionLabels.map((session, columnIndex) => node('div', 'matrix-session', matrixAttrs(matrixKind, rowIndex, columnIndex + 1, contentKey(item), sessionKey(session)), [checkbox(contentEnabledForSession(overlay, item, session), (isOn) => {
                     setContentEnabledForSession(overlay, item, session, isOn);
                     persistSettings({ kind: 'content', overlayId: overlay?.id, key: item.key, label: item.label, session, enabled: isOn });
                     render();
-                  })]))
-                : [node('div', 'matrix-visible', {}, [checkbox(contentEnabled(overlay, item), (isOn) => {
+                  }, matrixAttrs(matrixKind, rowIndex, columnIndex + 1, contentKey(item), sessionKey(session)))]))
+                : [node('div', 'matrix-visible', matrixAttrs(matrixKind, rowIndex, 1, contentKey(item), 'visible'), [checkbox(contentEnabled(overlay, item), (isOn) => {
                     setContentEnabled(overlay, item, isOn);
                     persistSettings({ kind: 'content', overlayId: overlay?.id, key: item.key, label: item.label, enabled: isOn });
                     render();
-                  })])])
+                  }, matrixAttrs(matrixKind, rowIndex, 1, contentKey(item), 'visible'))])])
             ])
           ]) : null,
           ...extraRows
@@ -565,12 +603,15 @@
         ]);
       }
 
-      function standingsMulticlassRow(overlay) {
-        return node('div', 'matrix-control-row', {}, [
-          node('span', 'matrix-control-label', {}, ['Multiclass sections']),
-          node('div', 'matrix-control-visible', {}, [
-            node('span', 'matrix-control-head', {}, ['Visible']),
-            checkbox(overlay.classSeparatorsEnabled, (isOn) => {
+      function overlaySpecificControlRows(overlay) {
+        if (overlay.id === 'standings') {
+          return [
+            row('Cars in class', stepper(formatCarCount(overlay.carsInClass), 1, 24, overlay.carsInClass, (value) => {
+              overlay.carsInClass = value;
+              persistSettings({ kind: 'number', overlayId: overlay.id, key: 'carsInClass', value });
+              render();
+            }), 'standings.general.cars-in-class'),
+            row('Multiclass sections', toggle(overlay.classSeparatorsEnabled, (isOn) => {
               overlay.classSeparatorsEnabled = isOn;
               overlay.content ||= {};
               overlay.content['standings.class-separators.enabled'] = isOn;
@@ -583,79 +624,126 @@
                 enabled: isOn
               });
               render();
-            })
-          ]),
-          node('div', 'matrix-control-count', {}, [
-            node('span', 'matrix-control-head', {}, ['Other-class cars']),
-            stepper(`${overlay.otherClassRows} rows`, 0, 6, overlay.otherClassRows, (value) => {
+            }), 'standings.general.multiclass-sections'),
+            row('Other-class cars', stepper(`${overlay.otherClassRows} rows`, 0, 6, overlay.otherClassRows, (value) => {
               overlay.otherClassRows = value;
               persistSettings({ kind: 'number', overlayId: overlay.id, key: 'otherClassRows', value });
               render();
-            })
-          ])
-        ]);
-      }
+            }), 'standings.general.other-class-cars')
+          ];
+        }
 
-      function relativeRowsRow(overlay) {
-        return node('div', 'matrix-control-row one-count', {}, [
-          node('span', 'matrix-control-label', {}, ['Rows around focus']),
-          node('div', 'matrix-control-count', {}, [
-            node('span', 'matrix-control-head', {}, ['Cars each side']),
-            stepper(`${overlay.carsEachSide} each side`, 0, 8, overlay.carsEachSide, (value) => {
-              overlay.carsEachSide = value;
-              persistSettings({ kind: 'number', overlayId: overlay.id, key: 'carsEachSide', value });
-              render();
-            }),
-            node('span', 'matrix-control-note', {}, [`${overlay.carsEachSide * 2 + 1} rows`])
-          ])
-        ]);
-      }
+        if (overlay.id === 'relative') {
+          return [
+            row('Rows around focus', node('div', 'inline-setting-control', {}, [
+              stepper(`${overlay.carsEachSide} each side`, 0, 8, overlay.carsEachSide, (value) => {
+                overlay.carsEachSide = value;
+                persistSettings({ kind: 'number', overlayId: overlay.id, key: 'carsEachSide', value });
+                render();
+              }),
+              node('span', 'field-value muted', {}, [`${overlay.carsEachSide * 2 + 1} rows`])
+            ]), 'relative.general.rows-around-focus')
+          ];
+        }
 
-      function gapWindowRow(overlay) {
-        const carsEachSide = Math.max(Number(overlay.carsAhead ?? 5), Number(overlay.carsBehind ?? 5));
-        return node('div', 'matrix-control-row one-count', {}, [
-          node('span', 'matrix-control-label', {}, ['Class gap window']),
-          node('div', 'matrix-control-count', {}, [
-            node('span', 'matrix-control-head', {}, ['Cars each side']),
-            stepper(`${carsEachSide} each side`, 0, 12, carsEachSide, (value) => {
+        if (overlay.id === 'gap-to-leader') {
+          const carsEachSide = Math.max(Number(overlay.carsAhead ?? 5), Number(overlay.carsBehind ?? 5));
+          return [
+            row('Class gap window', stepper(`${carsEachSide} each side`, 0, 12, carsEachSide, (value) => {
               overlay.carsAhead = value;
               overlay.carsBehind = value;
               persistSettings({ kind: 'number', overlayId: overlay.id, key: 'carsAhead', value });
               persistSettings({ kind: 'number', overlayId: overlay.id, key: 'carsBehind', value });
               render();
-            })
-          ])
-        ]);
+            }), 'gap-to-leader.general.class-gap-window')
+          ];
+        }
+
+        if (overlay.id === 'car-radar') {
+          const warningSeconds = clampInteger(overlay.multiclassWarningSeconds, 5, 3, 10);
+          const visibilitySeconds = clampInteger(overlay.radarVisibilitySeconds, 2, 2, 5);
+          const showMulticlassWarning = overlay.showMulticlassWarning !== false;
+          const controls = [
+            row('Faster-class warning', toggle(overlay.showMulticlassWarning !== false, (isOn) => {
+              overlay.showMulticlassWarning = isOn;
+              overlay.content ||= {};
+              overlay.content['radar.multiclass-warning'] = isOn;
+              overlay.content['Faster-class warning'] = isOn;
+              persistSettings({
+                kind: 'content',
+                overlayId: overlay.id,
+                key: 'radar.multiclass-warning',
+                label: 'Faster-class warning',
+                enabled: isOn
+              });
+              render();
+            }), 'car-radar.general.faster-class-warning')
+          ];
+          if (showMulticlassWarning) {
+            controls.push(row('Multiclass window', stepper(`${warningSeconds}s back`, 3, 10, warningSeconds, (value) => {
+              overlay.multiclassWarningSeconds = value;
+              persistSettings({ kind: 'number', overlayId: overlay.id, key: 'multiclassWarningSeconds', value });
+              render();
+            }), 'car-radar.general.multiclass-window'));
+          }
+          controls.push(row('Radar range', stepper(`${visibilitySeconds}s away`, 2, 5, visibilitySeconds, (value) => {
+            overlay.radarVisibilitySeconds = value;
+            persistSettings({ kind: 'number', overlayId: overlay.id, key: 'radarVisibilitySeconds', value });
+            render();
+          }), 'car-radar.general.radar-range'));
+          return controls;
+        }
+
+        return [];
       }
 
-      function contentGridRow(item, overlay, useSessionColumns) {
+      function settingsMatrixKind(overlay, region) {
+        if (!overlay?.id) return null;
+        if (overlay.id === 'stream-chat' && region === 'twitch') return 'stream-chat.twitch';
+        if (region === 'header') return `${overlay.id}.header`;
+        if (region === 'content') return `${overlay.id}.content`;
+        return null;
+      }
+
+      function matrixAttrs(matrixKind, rowIndex = null, columnIndex = null, rowKey = null, columnKey = null) {
+        if (!matrixKind) return {};
+        return {
+          'data-matrix-kind': matrixKind,
+          'data-row-index': rowIndex === null ? null : String(rowIndex),
+          'data-column-index': columnIndex === null ? null : String(columnIndex),
+          'data-row-key': rowKey === null ? null : String(rowKey),
+          'data-column-key': columnKey === null ? null : String(columnKey)
+        };
+      }
+
+      function contentGridRow(item, overlay, useSessionColumns, matrixKind = null, rowIndex = null, columnIndex = null) {
         const enabled = useSessionColumns
           ? sessionLabels.some((session) => contentEnabledForSession(overlay, item, session))
           : contentEnabled(overlay, item);
-        return node('div', `grid-toggle-row${enabled ? '' : ' disabled'}${useSessionColumns ? ' sessions' : ' visible'}`, {}, [
+        return node('div', `grid-toggle-row${enabled ? '' : ' disabled'}${useSessionColumns ? ' sessions' : ' visible'}`, matrixAttrs(matrixKind, rowIndex, columnIndex, contentKey(item), `column-${columnIndex ?? 0}`), [
           node('span', '', {}, [item.label]),
           ...(useSessionColumns
-            ? sessionLabels.map((session) => checkbox(contentEnabledForSession(overlay, item, session), (isOn) => {
+            ? sessionLabels.map((session, sessionIndex) => checkbox(contentEnabledForSession(overlay, item, session), (isOn) => {
                 setContentEnabledForSession(overlay, item, session, isOn);
                 persistSettings({ kind: 'content', overlayId: overlay?.id, key: item.key, label: item.label, session, enabled: isOn });
                 render();
-              }))
+              }, matrixAttrs(matrixKind, rowIndex, sessionIndex + 1, contentKey(item), sessionKey(session))))
             : [checkbox(contentEnabled(overlay, item), (isOn) => {
                 setContentEnabled(overlay, item, isOn);
                 persistSettings({ kind: 'content', overlayId: overlay?.id, key: item.key, label: item.label, enabled: isOn });
                 render();
-              })])
+              }, matrixAttrs(matrixKind, rowIndex, 1, contentKey(item), 'visible'))])
         ]);
       }
 
       function browserSourcePanel(overlay) {
         const url = overlay.route ? `${window.location.origin}${overlay.route}` : 'No localhost route';
         return panel('Browser Source', 'browser-source-panel', [
-          node('code', 'browser-url', {}, [url]),
-          node('div', 'browser-details', {}, [
-            node('span', '', {}, [`OBS size ${browserSize(overlay)}`])
+          node('code', 'browser-url', { 'data-evidence-key': `${overlay.id}.browser-source.url` }, [url]),
+          node('div', 'browser-details', { 'data-evidence-key': `${overlay.id}.browser-source.size` }, [
+            node('span', '', { 'data-evidence-key': `${overlay.id}.browser-source.size.value` }, [`OBS size ${browserSize(overlay)}`])
           ]),
-          node('div', 'button-row small', {}, [button('Copy', (event) => copyBrowserSourceUrl(url, event.currentTarget))])
+          node('div', 'button-row small', {}, [button('Copy', (event) => copyBrowserSourceUrl(url, event.currentTarget), { 'data-evidence-key': `${overlay.id}.browser-source.copy` })])
         ]);
       }
 
@@ -667,13 +755,25 @@
       }
 
       function row(label, control, evidenceKey = null) {
-        if (evidenceKey && control instanceof Element) {
-          control.setAttribute('data-evidence-key', `${evidenceKey}.value`);
+        const key = evidenceKey || `row.${slugEvidenceKey(label)}`;
+        const rowClasses = ['field-row'];
+        if (control instanceof Element) {
+          const hasControlClass = (className) => control.classList.contains(className) || control.querySelector(`.${className}`);
+          control.setAttribute('data-evidence-key', `${key}.value`);
           control.setAttribute('data-evidence-role', 'value');
+          if (hasControlClass('slider-control-group')) rowClasses.push('slider-row');
+          if (hasControlClass('stepper')) rowClasses.push('stepper-row');
+          if (hasControlClass('toggle')) rowClasses.push('toggle-row');
+          if (hasControlClass('segmented')) rowClasses.push('segmented-row');
+          if (hasControlClass('provider-choice')) rowClasses.push('provider-choice-row');
+          if (hasControlClass('text-input')) rowClasses.push('text-input-row');
+          if (hasControlClass('streamlabs-url-input')) rowClasses.push('streamlabs-url-row');
+          if (hasControlClass('twitch-channel-input')) rowClasses.push('twitch-channel-row');
+          if (key.endsWith('.general.cover-image')) rowClasses.push('stepper-row');
         }
 
-        return node('div', 'field-row', evidenceKey ? { 'data-evidence-key': evidenceKey } : {}, [
-          node('span', 'field-label', evidenceKey ? { 'data-evidence-key': `${evidenceKey}.label`, 'data-evidence-role': 'label' } : {}, [label]),
+        return node('div', rowClasses.join(' '), { 'data-evidence-key': key }, [
+          node('span', 'field-label', { 'data-evidence-key': `${key}.label`, 'data-evidence-role': 'label' }, [label]),
           control
         ]);
       }
@@ -731,71 +831,81 @@
           { click: () => onChange(option) })));
       }
 
-      function toggle(isOn, onChange = null, ariaLabel = null) {
-        return node('button', `toggle${isOn ? ' on' : ''}`, { type: 'button', 'aria-pressed': isOn ? 'true' : 'false', 'aria-label': ariaLabel }, [
+      function toggle(isOn, onChange = null, ariaLabel = null, options = {}) {
+        const disabled = options.disabled === true;
+        return node('button', `toggle${isOn ? ' on' : ''}${disabled ? ' disabled' : ''}`, { type: 'button', 'aria-pressed': isOn ? 'true' : 'false', 'aria-label': ariaLabel, 'data-evidence-key': options.evidenceKey || null, disabled: disabled ? 'disabled' : null }, [
           node('span', '', {}, [])
-        ], { click: () => onChange?.(!isOn) });
+        ], { click: () => {
+          if (!disabled) onChange?.(!isOn);
+        } });
       }
 
-      function checkbox(isOn, onChange = null) {
+      function checkbox(isOn, onChange = null, attrs = {}) {
         if (onChange) {
           return node('button', `check${isOn ? ' on' : ''}`, {
             type: 'button',
-            'aria-pressed': isOn ? 'true' : 'false'
+            'aria-pressed': isOn ? 'true' : 'false',
+            ...attrs
           }, [], { click: () => onChange(!isOn) });
         }
 
-        return node('span', `check${isOn ? ' on' : ''}`, { 'aria-hidden': 'true' }, []);
+        return node('span', `check${isOn ? ' on' : ''}`, { 'aria-hidden': 'true', ...attrs }, []);
       }
 
       function stateChip(isOn, text = null) {
         return node('span', `state-chip ${isOn ? 'on' : 'off'}`, { 'aria-hidden': 'true' }, [text || (isOn ? 'On' : 'Off')]);
       }
 
-      function percentSlider(label, currentValue, allowed, tone, onChange = null) {
-        const values = allowed.slice().sort((a, b) => a - b);
+      function percentSlider(label, currentValue, min, max, tone, onChange = null) {
         const numeric = Number(currentValue);
-        const index = closestAllowedIndex(Number.isFinite(numeric) ? numeric : values[0], values);
-        const fillPercent = values.length > 1 ? (index / (values.length - 1)) * 100 : 100;
-        return node('div', `slider ${tone}`, {}, [
-          node('input', 'slider-track', {
-            type: 'range',
-            min: '0',
-            max: String(Math.max(0, values.length - 1)),
-            step: '1',
-            value: String(index),
-            'aria-label': label,
-            'aria-valuetext': `${values[index]}%`,
-            style: `--slider-fill:${fillPercent.toFixed(1)}%;`
-          }, [], {
-            input: (event) => {
-              const selectedIndex = Math.max(0, Math.min(values.length - 1, Number(event.target.value)));
-              const selectedFill = values.length > 1 ? (selectedIndex / (values.length - 1)) * 100 : 100;
-              event.target.style.setProperty('--slider-fill', `${selectedFill.toFixed(1)}%`);
-              event.target.setAttribute('aria-valuetext', `${values[selectedIndex]}%`);
-              const valueEl = event.target.parentElement?.querySelector('.field-value');
-              if (valueEl) valueEl.textContent = `${values[selectedIndex]}%`;
-            },
-            change: (event) => {
-              const selectedIndex = Math.max(0, Math.min(values.length - 1, Number(event.target.value)));
-              onChange?.(values[selectedIndex]);
-            }
-          }),
-          node('strong', 'field-value', {}, [`${values[index]}%`])
+        const minimum = Number(min);
+        const maximum = Number(max);
+        const value = clampPercent(Number.isFinite(numeric) ? numeric : maximum, minimum, maximum);
+        const fillPercent = percentFill(value, minimum, maximum);
+        return node('div', `slider-control-group ${tone}`, {}, [
+          node('div', `slider ${tone}`, {}, [
+            node('input', 'slider-track', {
+              type: 'range',
+              min: String(minimum),
+              max: String(maximum),
+              step: '1',
+              value: String(value),
+              'aria-label': label,
+              'aria-valuetext': `${value}%`,
+              style: `--slider-fill:${fillPercent.toFixed(1)}%;`
+            }, [], {
+              input: (event) => {
+                const selectedValue = clampPercent(Number(event.target.value), minimum, maximum);
+                const selectedFill = percentFill(selectedValue, minimum, maximum);
+                event.target.style.setProperty('--slider-fill', `${selectedFill.toFixed(1)}%`);
+                event.target.setAttribute('aria-valuetext', `${selectedValue}%`);
+                const valueEl = event.target.closest('.slider-control-group')?.querySelector('.field-value');
+                if (valueEl) valueEl.textContent = `${selectedValue}%`;
+              },
+              change: (event) => {
+                onChange?.(clampPercent(Number(event.target.value), minimum, maximum));
+              }
+            })
+          ]),
+          node('strong', 'field-value', {}, [`${value}%`])
         ]);
       }
 
-      function closestAllowedIndex(current, allowed) {
-        let closestIndex = 0;
-        let closestDelta = Number.POSITIVE_INFINITY;
-        for (let index = 0; index < allowed.length; index++) {
-          const delta = Math.abs(allowed[index] - current);
-          if (delta < closestDelta) {
-            closestDelta = delta;
-            closestIndex = index;
-          }
-        }
-        return closestIndex;
+      function clampPercent(value, min, max) {
+        const rounded = Math.round(Number(value));
+        const fallback = Number.isFinite(max) ? max : 100;
+        const numeric = Number.isFinite(rounded) ? rounded : fallback;
+        return Math.max(min, Math.min(max, numeric));
+      }
+
+      function clampInteger(value, fallback, min, max) {
+        const rounded = Math.round(Number(value));
+        const numeric = Number.isFinite(rounded) ? rounded : fallback;
+        return Math.max(min, Math.min(max, numeric));
+      }
+
+      function percentFill(value, min, max) {
+        return max <= min ? 100 : ((value - min) / (max - min)) * 100;
       }
 
       function stepper(label, min = 0, max = 10, value = 0, onChange = null) {
@@ -806,17 +916,33 @@
         ]);
       }
 
-      function inputBox(value, enabled, onInput = null) {
-        return node('input', 'text-input', { value, disabled: enabled ? null : 'disabled' }, [], {
+      function inputBox(value, enabled, onInput = null, className = '', attrs = {}) {
+        return node('input', `text-input ${className}`.trim(), { type: 'text', value, ...attrs, disabled: enabled ? null : 'disabled' }, [], {
           input: (event) => onInput?.(event.target.value)
         });
       }
 
       function button(label, onClick = null, attrs = {}) {
         const disabled = attrs.disabled === true;
-        return node('button', `action-button${disabled ? ' disabled' : ''}`, { type: 'button', ...attrs, disabled: disabled ? 'disabled' : null }, [label], { click: (event) => {
+        const style = settingsActionButtonStyle(attrs);
+        return node('button', `action-button${disabled ? ' disabled' : ''}`, { type: 'button', ...attrs, style, disabled: disabled ? 'disabled' : null }, [label], { click: (event) => {
           if (!disabled) onClick?.(event);
         } });
+      }
+
+      function settingsActionButtonStyle(attrs) {
+        const key = attrs?.['data-evidence-key'];
+        const widthVariable = {
+          'general.updates.check': '--tmr-settings-update-check-button-width',
+          'general.updates.primary': '--tmr-settings-update-primary-button-width',
+          'support.bundle.create': '--tmr-settings-support-create-bundle-button-width',
+          'support.bundle.open-folder': '--tmr-settings-support-open-bundle-button-width',
+          'garage-cover.general.cover-image.import': '--tmr-settings-garage-import-button-width',
+          'garage-cover.general.cover-image.clear': '--tmr-settings-garage-clear-button-width',
+          'stream-chat.content.save': '--tmr-settings-stream-chat-save-button-width'
+        }[key];
+        const widthStyle = widthVariable ? `width: var(${widthVariable})` : null;
+        return [attrs?.style, widthStyle].filter(Boolean).join('; ') || null;
       }
 
       async function copyBrowserSourceUrl(url, buttonEl) {
@@ -872,7 +998,7 @@
 
       function setRawCaptureEnabled(isOn) {
         state.support.rawCaptureEnabled = isOn;
-        setSupportStatus(isOn ? 'Diagnostic telemetry will start with live data.' : 'Diagnostic telemetry capture disabled.', 'success');
+        setSupportStatus(isOn ? 'Enhanced iRacing telemetry capture will start with live data.' : 'Enhanced iRacing telemetry capture disabled.', 'success');
         persistSettings({ kind: 'support', action: 'rawCapture', enabled: isOn });
         render();
       }
@@ -931,7 +1057,19 @@
         if (!path) return 'No bundle yet';
         const normalized = String(path).replaceAll('\\\\', '/');
         const fileName = normalized.split('/').filter(Boolean).pop();
-        return fileName ? `Latest bundle: ${fileName}` : 'Latest bundle ready';
+        return fileName ? compactMiddle(fileName, latestBundleValueMaxLength) : 'Bundle ready';
+      }
+
+      function compactMiddle(value, maxLength) {
+        const text = String(value || '');
+        if (text.length <= maxLength) return text;
+
+        const ellipsis = '...';
+        const suffixLength = Math.min(15, maxLength - ellipsis.length - 1);
+        const prefixLength = maxLength - ellipsis.length - suffixLength;
+        if (prefixLength <= 0) return text.slice(0, maxLength);
+
+        return `${text.slice(0, prefixLength)}${ellipsis}${text.slice(-suffixLength)}`;
       }
 
       function checkReviewUpdates() {
@@ -956,6 +1094,12 @@
         return region[0].toUpperCase() + region.slice(1);
       }
 
+      function formatCarCount(value) {
+        const count = Number(value);
+        if (!Number.isFinite(count)) return '';
+        return count === 1 ? '1 car' : `${count} cars`;
+      }
+
       function previewChoice(mode) {
         return mode === 'qualifying' ? 'Quali' : mode === 'race' ? 'Race' : mode === 'practice' ? 'Practice' : 'Off';
       }
@@ -966,6 +1110,18 @@
 
       function previewLabel(mode) {
         return mode === 'off' ? 'Preview off' : `${mode === 'qualifying' ? 'Qualifying' : regionTitle(mode)} preview active`;
+      }
+
+      function slugEvidenceKey(value) {
+        return String(value || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'control';
+      }
+
+      function updateToneClass(tone) {
+        return ['success', 'warning', 'error', 'info', 'muted'].includes(tone) ? tone : 'muted';
       }
 
       function sessionKey(label) {
@@ -992,10 +1148,14 @@
 
       function applySessionLayoutVars() {
         const count = Math.max(1, sessionLabels.length);
-        app.style.setProperty('--settings-session-check-grid', `repeat(${count}, minmax(0, 100px))`);
-        app.style.setProperty('--settings-session-check-min-width', `${count * 100 + Math.max(0, count - 1) * 16}px`);
-        app.style.setProperty('--settings-session-columns', `repeat(${count}, 104px)`);
-        app.style.setProperty('--settings-compact-session-columns', `repeat(${count}, 24px)`);
+        const sessionCheckColumnWidth = settingsGeometryNumber('sessionCheckColumnWidth', 100);
+        const sessionCheckColumnGap = settingsGeometryNumber('sessionCheckColumnGap', 16);
+        const sessionColumnWidth = settingsGeometryNumber('sessionColumnWidth', 104);
+        const compactSessionColumnWidth = settingsGeometryNumber('compactSessionColumnWidth', 24);
+        app.style.setProperty('--settings-session-check-grid', `repeat(${count}, minmax(0, ${sessionCheckColumnWidth}px))`);
+        app.style.setProperty('--settings-session-check-min-width', `${count * sessionCheckColumnWidth + Math.max(0, count - 1) * sessionCheckColumnGap}px`);
+        app.style.setProperty('--settings-session-columns', `repeat(${count}, ${sessionColumnWidth}px)`);
+        app.style.setProperty('--settings-compact-session-columns', `repeat(${count}, ${compactSessionColumnWidth}px)`);
       }
 
       function applyReviewScale() {
@@ -1016,7 +1176,12 @@
 
       function sessionColumnStyle(labels) {
         const count = Math.max(1, labels.length);
-        return `--settings-session-columns: repeat(${count}, 104px);`;
+        return `--settings-session-columns: repeat(${count}, ${settingsGeometryNumber('sessionColumnWidth', 104)}px);`;
+      }
+
+      function settingsGeometryNumber(key, fallback) {
+        const value = Number(settingsGeometry?.[key]);
+        return Number.isFinite(value) ? value : fallback;
       }
 
       function chromeSessionLabels(overlay) {
@@ -1037,22 +1202,13 @@
       }
 
       function browserSize(overlay) {
-        const base = {
-          standings: [677, 313],
-          relative: [360, 352],
-          'gap-to-leader': [654, 336],
-          'track-map': [360, 360],
-          'stream-chat': [380, 520],
-          'garage-cover': [1280, 720],
-          'fuel-calculator': [503, 315],
-          'input-state': [520, 260],
-          'car-radar': [300, 300],
-          flags: [360, 170],
-          'session-weather': [464, 496],
-          'pit-service': [530, 722]
-        }[overlay?.id] || [400, 300];
+        const base = browserBaseSize(overlay?.id);
         if (overlay?.id === 'input-state') {
           base[0] = inputStateBaseWidth(overlay, base[0]);
+        } else if (overlay?.id === 'gap-to-leader') {
+          const gapSize = gapToLeaderBaseSize(overlay, base[0], base[1]);
+          base[0] = gapSize[0];
+          base[1] = gapSize[1];
         } else if (overlay?.id === 'fuel-calculator') {
           base[1] = fuelCalculatorBaseHeight(overlay, base[1]);
         } else if (overlay?.id === 'standings' || overlay?.id === 'relative') {
@@ -1070,14 +1226,65 @@
         return `${Math.round(base[0] * scale)} x ${Math.round(base[1] * scale)}`;
       }
 
+      function browserBaseSize(overlayId) {
+        return {
+          standings: [
+            overlaySizeNumber('standingsBrowserReviewWidth', overlaySizeNumber('standingsWidth', 677)),
+            overlaySizeNumber('standingsHeight', 313)
+          ],
+          relative: [overlaySizeNumber('relativeWidth', 360), overlaySizeNumber('relativeHeight', 308)],
+          'gap-to-leader': [overlaySizeNumber('gapToLeaderWidth', 654), overlaySizeNumber('gapToLeaderHeight', 336)],
+          'track-map': [overlaySizeNumber('trackMapWidth', 360), overlaySizeNumber('trackMapHeight', 360)],
+          'stream-chat': [overlaySizeNumber('streamChatWidth', 380), overlaySizeNumber('streamChatHeight', 520)],
+          'garage-cover': [overlaySizeNumber('garageCoverWidth', 1280), overlaySizeNumber('garageCoverHeight', 720)],
+          'fuel-calculator': [overlaySizeNumber('fuelCalculatorWidth', 503), overlaySizeNumber('fuelCalculatorHeight', 315)],
+          'input-state': [overlaySizeNumber('inputStateWidth', 520), overlaySizeNumber('inputStateHeight', 260)],
+          'car-radar': [overlaySizeNumber('carRadarWidth', 300), overlaySizeNumber('carRadarHeight', 300)],
+          flags: [overlaySizeNumber('flagsWidth', 360), overlaySizeNumber('flagsHeight', 170)],
+          'session-weather': [overlaySizeNumber('sessionWeatherWidth', 464), overlaySizeNumber('sessionWeatherHeight', 496)],
+          'pit-service': [overlaySizeNumber('pitServiceWidth', 530), overlaySizeNumber('pitServiceHeight', 707)]
+        }[overlayId] || [400, 300];
+      }
+
       function fuelCalculatorBaseHeight(overlay, fullHeight) {
         const session = sizingSession(overlay);
-        return session === 'practice' || session === 'qualifying' ? 184 : fullHeight;
+        if (session === 'practice' || session === 'qualifying') {
+          const rows = [
+            ['fuel-calculator.range.fuel.enabled', 'Fuel range'],
+            ['fuel-calculator.usage.enabled', 'Fuel usage']
+          ].filter(([key, label]) => contentEnabledForSession(overlay, { key, label, defaultEnabled: true }, session)).length;
+          return fuelCalculatorContentHeight(rows, rows) || metricGeometryNumber('fuelNonRaceHeight', 184);
+        }
+
+        const showPlan = contentEnabledForSession(overlay, { key: 'fuel-calculator.race.plan.enabled', label: 'Plan', defaultEnabled: true }, session);
+        const showFuel = contentEnabledForSession(overlay, { key: 'fuel-calculator.race.fuel.enabled', label: 'Fuel', defaultEnabled: true }, session);
+        const showStints = contentEnabledForSession(overlay, { key: 'fuel-calculator.race.stint-targets.enabled', label: 'Stint targets', defaultEnabled: true }, session);
+        const raceRows = (showPlan ? 1 : 0) + (showFuel ? 1 : 0);
+        const stintRows = showStints ? 3 : 0;
+        const sectionCount = (raceRows > 0 ? 1 : 0) + (stintRows > 0 ? 1 : 0);
+        return fuelCalculatorContentHeight(raceRows + stintRows, sectionCount) || fullHeight;
+      }
+
+      function fuelCalculatorContentHeight(rowCount, sectionCount) {
+        const minimumHeight = metricGeometryNumber('minimumFuelCalculatorHeight', 126);
+        if (rowCount <= 0 || sectionCount <= 0) return minimumHeight;
+        const rowGaps = Math.max(0, rowCount - sectionCount) * metricGeometryNumber('rowGap', 5);
+        const sectionGaps = Math.max(0, sectionCount - 1) * metricGeometryNumber('sectionGap', 8);
+        const height = metricGeometryNumber('headerChromeHeight', 38)
+          + metricGeometryNumber('fuelContentVerticalPadding', 26)
+          + sectionCount * metricGeometryNumber('fuelSectionTitleReserveHeight', 14)
+          + rowCount * metricGeometryNumber('segmentedRowHeight', 35)
+          + rowGaps
+          + sectionGaps
+          + metricGeometryNumber('collapsedFooterReserveHeight', 8);
+        return Math.max(minimumHeight, Math.min(315, height));
       }
 
       function chromeAdjustedBaseHeight(overlay, fullHeight) {
-        const titleHeaderHeight = 38;
-        const minimumHeaderlessHeight = 80;
+        const titleHeaderHeight = overlay?.id === 'relative'
+          ? overlaySizeNumber('relativeHeaderChromeCollapseHeight', 34)
+          : metricGeometryNumber('headerChromeHeight', 38);
+        const minimumHeaderlessHeight = metricGeometryNumber('minimumChromeAdjustedHeight', 80);
         if (!usesCollapsibleHeaderHeight(overlay?.id) || headerChromeEnabledForSizing(overlay)) {
           return fullHeight;
         }
@@ -1115,64 +1322,158 @@
           return state.previewMode;
         }
 
-        return overlay?.id === 'gap-to-leader' ? 'race' : 'practice';
+        return null;
       }
 
       function tableBaseWidth(overlay, fullWidth) {
         const session = sizingSession(overlay);
-        const widths = {
-          standings: {
-            'Class position': 35,
-            'Car number': 50,
-            Driver: 250,
-            'Class gap': 60,
-            'Previous interval': 60,
-            'Fastest lap': 70,
-            'Last lap': 70,
-            'Pit status': 48
-          },
-          relative: {
-            'Relative position': 38,
-            Driver: 250,
-            'Relative delta': 70,
-            'Pit status': 48
-          }
-        }[overlay?.id] || {};
+        const widths = tableColumnWidths(overlay?.id);
         const rows = overlay?.contentRows || [];
-        const defaultWidth = rows
-          .filter((item) => item.defaultEnabled !== false)
-          .reduce((total, item) => total + (widths[item.label] || 0), 0);
         let visibleWidth = rows
           .filter((item) => contentEnabledForSession(overlay, item, session))
           .reduce((total, item) => total + (widths[item.label] || 0), 0);
-        if (visibleWidth <= 0 && widths.Driver) {
+        if (visibleWidth <= 0 && overlay?.id !== 'relative' && widths.Driver) {
           visibleWidth = widths.Driver;
         }
-        if (visibleWidth <= 0 || defaultWidth <= 0) return fullWidth;
-        if (visibleWidth <= defaultWidth) {
-          return Math.max(360, Math.round(fullWidth * visibleWidth / defaultWidth));
-        }
-        return Math.max(fullWidth, visibleWidth + 34);
+        if (visibleWidth <= 0) return fullWidth;
+        return visibleWidth + tableGeometryNumber('browserWidthPadding', 34);
+      }
+
+      function tableColumnWidths(overlayId) {
+        return {
+          standings: {
+            'Class position': tableGeometryNumber('standingsClassPositionWidth', 35),
+            'Car number': tableGeometryNumber('standingsCarNumberWidth', 50),
+            Driver: tableGeometryNumber('standingsDriverWidth', 250),
+            'Class gap': tableGeometryNumber('standingsClassGapWidth', 60),
+            'Previous interval': tableGeometryNumber('standingsPreviousIntervalWidth', 60),
+            'Fastest lap': tableGeometryNumber('standingsFastestLapWidth', 70),
+            'Last lap': tableGeometryNumber('standingsLastLapWidth', 70),
+            'Pit status': tableGeometryNumber('standingsPitStatusWidth', 48)
+          },
+          relative: {
+            'Relative position': tableGeometryNumber('relativePositionWidth', 48),
+            Driver: tableGeometryNumber('relativeDriverWidth', 240),
+            'Relative delta': tableGeometryNumber('relativeDeltaWidth', 70),
+            'Pit status': tableGeometryNumber('relativePitStatusWidth', 48)
+          }
+        }[overlayId] || {};
       }
 
       function relativeBaseHeight(overlay, fullHeight) {
-        const carsEachSide = Math.max(0, Math.min(8, Number(overlay?.carsEachSide ?? 5)));
+        const carsEachSide = Math.max(0, Math.min(8, Number(overlay?.carsEachSide ?? 3)));
         const rows = carsEachSide * 2 + 1;
-        return Math.max(160, fullHeight - Math.max(0, 11 - rows) * 26);
+        return Math.max(
+          tableGeometryNumber('relativeMinimumHeight', 160),
+          tableGeometryNumber('relativeHeightChrome', 96)
+            + rows * tableGeometryNumber('relativeRowHeight', 26)
+            + Math.max(0, rows - 1) * tableGeometryNumber('relativeRowGap', 5));
       }
 
       function simpleTelemetryBaseSize(overlay, fullWidth, fullHeight) {
         const session = sizingSession(overlay);
         const rows = overlay?.contentRows || [];
+        if (overlay?.id === 'pit-service') {
+          return pitServiceBaseSize(rows, overlay, fullWidth, fullHeight, session);
+        }
+
+        const sessionFullHeight = simpleTelemetryFullHeightForSizingSession(overlay, fullHeight, session);
         const defaultCount = rows.filter((item) => item.defaultEnabled !== false).length;
         const enabledCount = rows.filter((item) => contentEnabledForSession(overlay, item, session)).length;
         if (enabledCount <= 0 || enabledCount >= defaultCount || defaultCount <= 1) {
-          return [fullWidth, fullHeight];
+          return [fullWidth, sessionFullHeight];
         }
 
         const progress = (enabledCount - 1) / Math.max(1, defaultCount - 1);
-        const compactHeight = 184 + Math.round((fullHeight - 184) * progress);
-        return [Math.min(fullWidth, 464), Math.max(184, Math.min(fullHeight, compactHeight))];
+        const minimumHeight = metricGeometryNumber('minimumSimpleTelemetryHeight', 184);
+        const compactHeight = minimumHeight + Math.round((sessionFullHeight - minimumHeight) * progress);
+        return [
+          Math.min(fullWidth, metricGeometryNumber('minimumSimpleTelemetryWidth', 464)),
+          Math.max(minimumHeight, Math.min(sessionFullHeight, compactHeight))
+        ];
+      }
+
+      function pitServiceBaseSize(rows, overlay, fullWidth, fullHeight, session) {
+        const enabled = new Set(rows
+          .filter((item) => contentEnabledForSession(overlay, item, session))
+          .map((item) => item.label));
+        if (enabled.size <= 0) {
+          return [fullWidth, metricGeometryNumber('minimumSimpleTelemetryHeight', 184)];
+        }
+
+        const sectionHeights = [];
+        const sessionRows = enabled.has('Session time') || (session === 'race' && enabled.has('Session laps')) ? 1 : 0;
+        addMetricSectionHeight(sectionHeights, sessionRows, sessionRows);
+        const signalRows = Number(enabled.has('Release')) + Number(enabled.has('Pit status'));
+        addMetricSectionHeight(sectionHeights, signalRows, signalRows);
+        let serviceRows = 0;
+        if (enabled.has('Fuel requested') || enabled.has('Fuel selected')) serviceRows += 1;
+        if (enabled.has('Tearoff requested')) serviceRows += 1;
+        if (enabled.has('Required repair') || enabled.has('Optional repair')) serviceRows += 1;
+        if (enabled.has('Fast repair selected') || enabled.has('Fast repairs available')) serviceRows += 1;
+        addMetricSectionHeight(sectionHeights, serviceRows, serviceRows);
+        const metricHeight = sectionHeights.reduce((total, value) => total + value, 0)
+          + Math.max(0, sectionHeights.length - 1) * metricGeometryNumber('pitServiceSectionGap', 3);
+        const tireRows = [
+          'Compound',
+          'Change request',
+          'Set limit',
+          'Sets available',
+          'Sets used',
+          'Pressure',
+          'Temperature',
+          'Wear',
+          'Distance'
+        ].filter((label) => enabled.has(label)).length;
+        const gridHeight = tireRows <= 0
+          ? 0
+          : metricGeometryNumber('metricGridHeaderHeight', 20)
+            + metricGeometryNumber('metricGridHeaderBottomGap', 4)
+            + tireRows * metricGeometryNumber('metricGridRowHeight', 29)
+            + Math.max(0, tireRows - 1) * metricGeometryNumber('metricGridRowGap', 4);
+        const contentHeight = metricHeight
+          + (metricHeight > 0 && gridHeight > 0 ? metricGeometryNumber('metricGridGap', 8) : 0)
+          + gridHeight;
+        const width = tireRows > 0 ? fullWidth : Math.min(fullWidth, metricGeometryNumber('pitServiceMetricOnlyWidth', 454));
+        const minimumHeight = metricGeometryNumber('minimumSimpleTelemetryHeight', 184);
+        return [width, Math.max(minimumHeight, Math.min(fullHeight, contentHeight + metricGeometryNumber('pitServiceContentChromeHeight', 70)))];
+      }
+
+      function addMetricSectionHeight(sectionHeights, rowCount, segmentedRows) {
+        if (rowCount <= 0) return;
+        const plainRows = Math.max(0, rowCount - segmentedRows);
+        sectionHeights.push(
+          metricGeometryNumber('sectionTitleHeight', 11)
+          + metricGeometryNumber('sectionTitleBottomGap', 4)
+          + segmentedRows * metricGeometryNumber('segmentedRowHeight', 35)
+          + plainRows * metricGeometryNumber('plainRowHeight', 30)
+          + Math.max(0, rowCount - 1) * metricGeometryNumber('rowGap', 5)
+        );
+      }
+
+      function metricGeometryNumber(key, fallback) {
+        const value = Number(metricRowsGeometry?.[key]);
+        return Number.isFinite(value) ? value : fallback;
+      }
+
+      function overlaySizeNumber(key, fallback) {
+        const value = Number(overlaySizes?.[key]);
+        return Number.isFinite(value) ? value : fallback;
+      }
+
+      function tableGeometryNumber(key, fallback) {
+        const value = Number(tableGeometry?.[key]);
+        return Number.isFinite(value) ? value : fallback;
+      }
+
+      function simpleTelemetryFullHeightForSizingSession(overlay, fullHeight, session) {
+        if (overlay?.id === 'session-weather' && (session === 'practice' || session === 'qualifying')) {
+          return Math.max(
+            metricGeometryNumber('minimumSimpleTelemetryHeight', 184),
+            fullHeight - metricGeometryNumber('nonRaceSimpleTelemetryHeightReduction', 40));
+        }
+
+        return fullHeight;
       }
 
       function inputStateBaseWidth(overlay, fullWidth) {
@@ -1189,6 +1490,31 @@
         if (hasGraph && hasRail) return fullWidth;
         if (hasGraph) return 380;
         return 276;
+      }
+
+      function gapToLeaderBaseSize(overlay, fullWidth, fullHeight) {
+        const session = sizingSession(overlay);
+        const carsEnabled = Number(overlay?.carsAhead ?? 5) > 0 || Number(overlay?.carsBehind ?? 5) > 0;
+        const hasGraph = carsEnabled && contentEnabledForSession(overlay, { label: 'Graph', key: 'gap.graph.enabled', defaultEnabled: true }, session);
+        const hasTrend = [
+          { label: 'Last', key: 'gap.trend.last.enabled' },
+          { label: '5L', key: 'gap.trend.5l.enabled' },
+          { label: '10L', key: 'gap.trend.10l.enabled' },
+          { label: 'Pit', key: 'gap.trend.pit.enabled' },
+          { label: 'PLap', key: 'gap.trend.pit-lap.enabled' },
+          { label: 'Stint', key: 'gap.trend.stint.enabled' },
+          { label: 'Tire', key: 'gap.trend.tire.enabled' },
+          { label: 'Status', key: 'gap.trend.status.enabled' }
+        ].some((item) => contentEnabledForSession(overlay, { ...item, defaultEnabled: true }, session));
+        if (!hasGraph && !hasTrend) {
+          return [
+            overlaySizeNumber('gapToLeaderMinimumWidth', 360),
+            overlaySizeNumber('gapToLeaderMinimumHeight', 196)
+          ];
+        }
+        if (!hasGraph) return [overlaySizeNumber('gapToLeaderTrendOnlyWidth', 360), fullHeight];
+        if (!hasTrend) return [overlaySizeNumber('gapToLeaderGraphOnlyWidth', 444), fullHeight];
+        return [fullWidth, fullHeight];
       }
 
       function chromeEnabled(overlay, area, label, session) {

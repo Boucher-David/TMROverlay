@@ -14,14 +14,21 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   browserOverlayPages,
+  overlayGeometry,
   renderOverlayHtml
 } from '../../tests/browser-overlays/browserOverlayAssets.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const overlayPages = browserOverlayPages();
+const geometry = overlayGeometry();
+const gapGraphGeometry = geometry.gapGraph || {};
+const flagsGeometry = geometry.flags || {};
+const overlaySizesGeometry = geometry.overlaySizes || {};
+const canvasOverlayGeometry = geometry.canvasOverlays || {};
+const settingsGeometry = geometry.settingsGeometry || {};
 const overlayIds = overlayPages.map((page) => page.page.id);
 const overlayPagesById = new Map(overlayPages.map((page) => [page.page.id, page]));
-const sharedChromeOverlayIds = new Set([
+const headerChromeOverlayIds = new Set([
   'standings',
   'relative',
   'fuel-calculator',
@@ -29,10 +36,48 @@ const sharedChromeOverlayIds = new Set([
   'session-weather',
   'pit-service'
 ]);
+const footerChromeOverlayIds = new Set();
+const v102EvidenceByOverlay = new Map([
+  ['standings', ['V102-004', 'V102-008', 'V102-016', 'V102-020', 'V102-023', 'V102-027', 'V102-031', 'V102-049']],
+  ['relative', ['V102-005', 'V102-008', 'V102-013', 'V102-014', 'V102-016', 'V102-019', 'V102-020', 'V102-027', 'V102-031']],
+  ['fuel-calculator', ['V102-006', 'V102-008', 'V102-027', 'V102-031']],
+  ['session-weather', ['V102-007', 'V102-008', 'V102-027', 'V102-031']],
+  ['pit-service', ['V102-008', 'V102-009', 'V102-011', 'V102-027', 'V102-031']],
+  ['gap-to-leader', ['V102-017', 'V102-018', 'V102-021', 'V102-024', 'V102-025', 'V102-026', 'V102-027', 'V102-029', 'V102-031', 'V102-040']],
+  ['input-state', ['V102-008', 'V102-031', 'V102-043']],
+  ['car-radar', ['V102-031', 'V102-047']],
+  ['track-map', ['V102-012', 'V102-031', 'V102-044']],
+  ['flags', ['V102-031', 'V102-042', 'V102-048']],
+  ['garage-cover', ['V102-008', 'V102-015', 'V102-031']],
+  ['stream-chat', ['V102-031', 'V102-050']]
+]);
+const v102EvidenceByFixture = new Map([
+  ['chrome-off', ['V102-008']],
+  ['rightmost-evidence', ['V102-020']],
+  ['rows-2', ['V102-014', 'V102-016']],
+  ['input-no-content', ['V102-008']],
+  ['input-min-scale', ['V102-043']],
+  ['flags-all-kinds', ['V102-042', 'V102-048']],
+  ['circle-fallback', ['V102-012', 'V102-044']]
+]);
+const v102EvidenceBySettingsTab = new Map([
+  ['general', ['V102-001', 'V102-002', 'V102-008', 'V102-032', 'V102-040', 'V102-046']],
+  ['support', ['V102-010', 'V102-011', 'V102-022', 'V102-032', 'V102-035', 'V102-036', 'V102-038', 'V102-040', 'V102-046']],
+  ['error-logging', ['V102-010', 'V102-011', 'V102-022', 'V102-032', 'V102-035', 'V102-036', 'V102-038', 'V102-040', 'V102-046']]
+]);
 const configuredCanvasOverlaySizes = new Map([
-  ['car-radar', { width: 300, height: 300 }],
-  ['track-map', { width: 360, height: 360 }],
-  ['flags', { width: 360, height: 170 }]
+  ['car-radar', {
+    width: geometryNumber(canvasOverlayGeometry.carRadarWidth, overlaySizesGeometry.carRadarWidth, 300),
+    height: geometryNumber(canvasOverlayGeometry.carRadarHeight, overlaySizesGeometry.carRadarHeight, 300)
+  }],
+  ['track-map', {
+    width: geometryNumber(canvasOverlayGeometry.trackMapWidth, overlaySizesGeometry.trackMapWidth, 360),
+    height: geometryNumber(canvasOverlayGeometry.trackMapHeight, overlaySizesGeometry.trackMapHeight, 360)
+  }],
+  ['flags', {
+    width: geometryNumber(overlaySizesGeometry.flagsWidth, 360),
+    height: geometryNumber(overlaySizesGeometry.flagsHeight, 170)
+  }]
 ]);
 const configuredCanvasCaptureBackdrop = {
   kind: 'solid-color',
@@ -43,16 +88,47 @@ const configuredCanvasCaptureBackdrop = {
 const previewModes = ['practice', 'qualifying', 'race'];
 const nonHappyPathOverlayVariants = [
   { overlayId: 'fuel-calculator', slug: 'waiting', query: 'fixture=fuel-waiting' },
+  { overlayId: 'fuel-calculator', slug: 'calculating', query: 'fixture=fuel-calculating' },
+  { overlayId: 'fuel-calculator', slug: 'plan-off', query: 'fixture=fuel-plan-off' },
+  { overlayId: 'fuel-calculator', slug: 'fuel-off', query: 'fixture=fuel-fuel-off' },
+  { overlayId: 'fuel-calculator', slug: 'stint-targets-off', query: 'fixture=fuel-stint-targets-off' },
+  { overlayId: 'fuel-calculator', slug: 'race-information-off', query: 'fixture=fuel-race-information-off' },
+  { overlayId: 'fuel-calculator', slug: 'no-data', query: 'fixture=fuel-no-data' },
   { overlayId: 'standings', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'standings', slug: 'one-class', query: 'fixture=standings-one-class' },
+  { overlayId: 'standings', slug: 'two-class', query: 'fixture=standings-two-class' },
+  { overlayId: 'standings', slug: 'three-class', query: 'fixture=standings-three-class' },
+  { overlayId: 'standings', slug: 'no-pit', query: 'fixture=standings-no-pit' },
+  { overlayId: 'standings', slug: 'driver-only', query: 'fixture=standings-driver-only' },
+  { overlayId: 'standings', slug: 'class-separators-off', query: 'fixture=standings-class-separators-off' },
+  { overlayId: 'standings', slug: 'focused-class-only', query: 'fixture=standings-focused-class-only' },
+  { overlayId: 'standings', slug: 'starting-grid', query: 'fixture=standings-starting-grid' },
+  { overlayId: 'standings', slug: 'no-content', query: 'fixture=standings-no-content' },
   { overlayId: 'relative', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'relative', slug: 'rightmost-evidence', query: 'fixture=rightmost-evidence' },
+  { overlayId: 'relative', slug: 'driver-only', query: 'fixture=relative-driver-only' },
+  { overlayId: 'relative', slug: 'position-driver', query: 'fixture=relative-position-driver' },
+  { overlayId: 'relative', slug: 'rows-2', query: 'fixture=relative-rows-2' },
+  { overlayId: 'relative', slug: 'no-content', query: 'fixture=relative-no-content' },
   { overlayId: 'fuel-calculator', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'gap-to-leader', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'session-weather', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'pit-service', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'session-weather', slug: 'missing', query: 'fixture=session-weather-missing' },
+  { overlayId: 'session-weather', slug: 'session-off', query: 'fixture=session-weather-session-off' },
+  { overlayId: 'session-weather', slug: 'weather-off', query: 'fixture=session-weather-weather-off' },
+  { overlayId: 'session-weather', slug: 'no-data', query: 'fixture=session-weather-no-data' },
   { overlayId: 'pit-service', slug: 'idle', query: 'fixture=pit-service-idle' },
+  { overlayId: 'pit-service', slug: 'session-off', query: 'fixture=pit-service-session-off' },
+  { overlayId: 'pit-service', slug: 'signal-off', query: 'fixture=pit-service-signal-off' },
+  { overlayId: 'pit-service', slug: 'service-off', query: 'fixture=pit-service-service-off' },
+  { overlayId: 'pit-service', slug: 'tire-analysis-off', query: 'fixture=pit-service-tire-analysis-off' },
+  { overlayId: 'pit-service', slug: 'no-data', query: 'fixture=pit-service-no-data' },
+  { overlayId: 'input-state', slug: 'mock-data', query: 'fixture=input-state-mock-data' },
+  { overlayId: 'input-state', slug: 'graph-only', query: 'fixture=input-graph-only' },
+  { overlayId: 'input-state', slug: 'rail-only', query: 'fixture=input-rail-only' },
   { overlayId: 'input-state', slug: 'waiting', query: 'fixture=input-waiting' },
+  { overlayId: 'input-state', slug: 'no-data', query: 'fixture=input-no-data' },
   { overlayId: 'input-state', slug: 'no-content', query: 'fixture=input-no-content' },
   { overlayId: 'input-state', slug: 'min-scale', query: 'fixture=input-min-scale', viewport: { width: 328, height: 172 }, minScale: 0.6 },
   { overlayId: 'car-radar', slug: 'left', query: 'fixture=car-radar-left' },
@@ -60,6 +136,9 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'car-radar', slug: 'both-sides', query: 'fixture=car-radar-both-sides' },
   { overlayId: 'car-radar', slug: 'clear', query: 'fixture=car-radar-clear' },
   { overlayId: 'gap-to-leader', slug: 'no-cars', query: 'fixture=gap-no-cars' },
+  { overlayId: 'gap-to-leader', slug: 'trend-row-off', query: 'fixture=gap-trend-row-off' },
+  { overlayId: 'gap-to-leader', slug: 'trend-off', query: 'fixture=gap-trend-off' },
+  { overlayId: 'gap-to-leader', slug: 'graph-off', query: 'fixture=gap-graph-off' },
   { overlayId: 'track-map', slug: 'no-markers', query: 'fixture=track-map-no-markers' },
   { overlayId: 'flags', slug: 'all-kinds', query: 'fixture=flags-all-kinds' },
   { overlayId: 'garage-cover', slug: 'hidden', query: 'fixture=garage-hidden' },
@@ -69,6 +148,59 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'stream-chat', slug: 'twitch-rich', query: 'fixture=stream-chat-twitch-rich' },
   { overlayId: 'stream-chat', slug: 'streamlabs-configured', query: 'fixture=stream-chat-streamlabs-configured' }
 ];
+
+const settingsGeometryMatrixRoles = new Set([
+  'settings-shell',
+  'settings-titlebar',
+  'settings-drag-zone',
+  'settings-body',
+  'settings-sidebar',
+  'settings-sidebar-tab',
+  'settings-content',
+  'settings-content-header',
+  'settings-content-body',
+  'settings-region-tabs',
+  'settings-region-segment',
+  'settings-section',
+  'settings-panel',
+  'settings-panel-title',
+  'settings-field-row',
+  'settings-field-label',
+  'settings-field-value',
+  'settings-button',
+  'settings-toggle',
+  'settings-check',
+  'settings-stepper',
+  'settings-slider',
+  'settings-textbox',
+  'settings-segmented',
+  'settings-segment-choice',
+  'settings-choice',
+  'settings-button-row',
+  'settings-preview-summary',
+  'settings-preview-stage',
+  'settings-preview-image',
+  'settings-matrix',
+  'settings-matrix-row',
+  'settings-matrix-cell'
+]);
+
+const installerGeometryMatrixRoles = new Set([
+  'installer-window',
+  'installer-titlebar',
+  'installer-body',
+  'installer-splash',
+  'installer-banner',
+  'installer-content',
+  'installer-maintenance-option',
+  'installer-cancel-body',
+  'installer-cancel-footer',
+  'installer-information-icon',
+  'installer-heading',
+  'installer-text',
+  'installer-footer',
+  'installer-button'
+]);
 
 const args = parseArgs(process.argv.slice(2));
 const outputRoot = resolve(repoRoot, args.output || defaultOutputFor(args.surface));
@@ -121,6 +253,16 @@ function screenshotRoutes(surface) {
   if (surface === 'browser-review' || surface === 'all') {
     routes.push(
       settingsRoute('settings/general.png', '/review/app', { tab: 'general', region: 'general' }),
+      settingsRoute('settings/general-update-disabled.png', '/review/app?update=disabled', { tab: 'general', region: 'general', updateStatus: 'disabled' }),
+      settingsRoute('settings/general-update-not-installed.png', '/review/app?update=not-installed', { tab: 'general', region: 'general', updateStatus: 'not-installed' }),
+      settingsRoute('settings/general-update-idle.png', '/review/app?update=idle', { tab: 'general', region: 'general', updateStatus: 'idle' }),
+      settingsRoute('settings/general-update-up-to-date.png', '/review/app?update=up-to-date', { tab: 'general', region: 'general', updateStatus: 'up-to-date' }),
+      settingsRoute('settings/general-update-available.png', '/review/app?update=available', { tab: 'general', region: 'general', updateStatus: 'available' }),
+      settingsRoute('settings/general-update-checking.png', '/review/app?update=checking', { tab: 'general', region: 'general', updateStatus: 'checking' }),
+      settingsRoute('settings/general-update-downloading.png', '/review/app?update=downloading', { tab: 'general', region: 'general', updateStatus: 'downloading' }),
+      settingsRoute('settings/general-update-pending-restart.png', '/review/app?update=pending-restart', { tab: 'general', region: 'general', updateStatus: 'pending-restart' }),
+      settingsRoute('settings/general-update-applying.png', '/review/app?update=applying', { tab: 'general', region: 'general', updateStatus: 'applying' }),
+      settingsRoute('settings/general-update-failed.png', '/review/app?update=failed', { tab: 'general', region: 'general', updateStatus: 'failed' }),
       settingsRoute('settings/diagnostics.png', '/review/app?tab=support', { tab: 'support', region: 'general' }),
       settingsRoute('settings/support.png', '/review/app?tab=support', { tab: 'support', region: 'general', pathAlias: 'windows-settings-support' }),
       settingsRoute('settings/inputs.png', '/review/app?tab=input-state', { tab: 'input-state', overlayId: 'input-state', region: 'general', pathAlias: 'windows-settings-inputs' }),
@@ -196,18 +338,18 @@ function screenshotRoutes(surface) {
         routes.push(overlayRoute(
           `browser-overlays/${overlayId}-${mode}.png`,
           withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, mode),
-          { surface: 'browser-review-overlay', overlayId, previewMode: mode }));
+          { surface: 'browser-review-overlay', overlayId, previewMode: mode, minBytes: previewMinBytes(overlayId, mode) }));
       }
       if (surface === 'localhost' || surface === 'all') {
         routes.push(overlayRoute(
           `localhost-overlays/${overlayId}-${mode}.png`,
           withPreview(`/overlays/${encodeURIComponent(overlayId)}`, mode),
-          { surface: 'localhost-overlay', overlayId, previewMode: mode }));
+          { surface: 'localhost-overlay', overlayId, previewMode: mode, minBytes: previewMinBytes(overlayId, mode) }));
         for (const alias of localhostAliasesForOverlay(overlayId)) {
           routes.push(overlayRoute(
             `localhost-overlays/${overlayId}-alias-${aliasSlug(alias)}-${mode}.png`,
             withPreview(alias, mode),
-            { surface: 'localhost-overlay', overlayId, previewMode: mode, routeAlias: alias }));
+            { surface: 'localhost-overlay', overlayId, previewMode: mode, routeAlias: alias, minBytes: previewMinBytes(overlayId, mode) }));
         }
       }
     }
@@ -225,11 +367,14 @@ function regionsForOverlay(overlayId) {
     return ['general', 'preview'];
   }
   if (overlayId === 'stream-chat') {
-    return ['general', 'content', 'twitch', 'streamlabs'];
+    return ['general', 'content', 'twitch'];
   }
-  return sharedChromeOverlayIds.has(overlayId)
-    ? ['general', 'content', 'header', 'footer']
-    : ['general', 'content'];
+  return [
+    'general',
+    ...(overlayId === 'car-radar' ? [] : ['content']),
+    ...(headerChromeOverlayIds.has(overlayId) ? ['header'] : []),
+    ...(footerChromeOverlayIds.has(overlayId) ? ['footer'] : [])
+  ];
 }
 
 function previewModesForOverlay(overlayId) {
@@ -255,7 +400,14 @@ function variantMinBytes(variant) {
   const key = `${variant.overlayId}/${variant.slug}`;
   if ([
     'input-state/no-content',
-    'gap-to-leader/no-cars'
+    'input-state/no-data',
+    'fuel-calculator/waiting',
+    'fuel-calculator/no-data',
+    'standings/no-content',
+    'relative/no-content',
+    'gap-to-leader/no-cars',
+    'session-weather/no-data',
+    'pit-service/no-data'
   ].includes(key)) {
     return 100;
   }
@@ -271,6 +423,14 @@ function variantMinBytes(variant) {
   return 1_000;
 }
 
+function previewMinBytes(overlayId, mode) {
+  if (overlayId === 'relative' && mode === 'qualifying') {
+    return 100;
+  }
+
+  return 1_000;
+}
+
 function settingsRoute(relativePath, urlPath, metadata = {}) {
   return {
     relativePath,
@@ -278,6 +438,7 @@ function settingsRoute(relativePath, urlPath, metadata = {}) {
     selector: '#settings-app',
     viewport: { width: 1280, height: 760 },
     minBytes: 10_000,
+    omitBackground: true,
     surface: 'browser-review-settings',
     renderer: 'settings-general.html',
     sourceContract: 'src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html',
@@ -288,16 +449,33 @@ function settingsRoute(relativePath, urlPath, metadata = {}) {
 function settingsComponentRoutes() {
   const route = (fileName, urlPath, clip, metadata = {}) =>
     settingsComponentRoute(`components/settings/${fileName}.png`, urlPath, clip, metadata);
+  const value = (key, fallback) => {
+    const number = Number(settingsGeometry[key]);
+    return Number.isFinite(number) ? number : fallback;
+  };
+  const panelX = value('panelX', 262);
+  const panelNoRegionsY = value('panelNoRegionsY', 178);
+  const panelWithRegionsY = value('panelWithRegionsY', 236);
+  const panelSmallWidth = value('panelSmallWidth', 392);
+  const panelMediumWidth = value('panelMediumWidth', 414);
+  const panelWideWidth = value('panelWideWidth', 834);
+  const gridGap = value('generalGridGap', 28);
+  const regionShellY = panelWithRegionsY - value('regionSegmentMarginBottom', 28) - value('regionSegmentShellHeight', 42);
 
   return [
-    route('sidebar-tabs', '/review/app', { x: 64, y: 116, width: 190, height: 506 }, { tab: 'general', region: 'general' }),
-    route('region-tabs', '/review/app?tab=relative', { x: 306, y: 202, width: 420, height: 52 }, { tab: 'relative', overlayId: 'relative', region: 'general' }),
-    route('unit-choice', '/review/app', { x: 306, y: 272, width: 392, height: 132 }, { tab: 'general', region: 'general' }),
-    route('overlay-controls', '/review/app?tab=relative', { x: 306, y: 272, width: 392, height: 226 }, { tab: 'relative', overlayId: 'relative', region: 'general' }),
-    route('content-matrix', '/review/app?tab=relative&region=content', { x: 306, y: 272, width: 690, height: 222 }, { tab: 'relative', overlayId: 'relative', region: 'content' }),
-    route('chat-inputs', '/review/app?tab=stream-chat&region=content', { x: 306, y: 272, width: 650, height: 204 }, { tab: 'stream-chat', overlayId: 'stream-chat', region: 'content' }),
-    route('support-buttons', '/review/app?tab=support', { x: 306, y: 410, width: 716, height: 202 }, { tab: 'support', region: 'general' }),
-    route('browser-source', '/review/app?tab=relative', { x: 726, y: 272, width: 296, height: 132 }, { tab: 'relative', overlayId: 'relative', region: 'general' })
+    route('sidebar-tabs', '/review/app', { x: value('sidebarX', 20), y: value('sidebarY', 80), width: value('sidebarWidth', 190), height: value('sidebarHeight', 506) }, { tab: 'general', region: 'general' }),
+    route('region-tabs', '/review/app?tab=relative', {
+      x: panelX - value('regionSegmentPadding', 6),
+      y: regionShellY - value('regionTabsCropTopInset', 4),
+      width: panelMediumWidth + value('regionSegmentPadding', 6),
+      height: value('regionSegmentShellHeight', 42) + value('regionTabsCropExtraHeight', 10)
+    }, { tab: 'relative', overlayId: 'relative', region: 'general' }),
+    route('unit-choice', '/review/app', { x: panelX, y: panelNoRegionsY, width: value('unitsPanelWidth', 392), height: value('unitsPanelHeight', 132) }, { tab: 'general', region: 'general' }),
+    route('overlay-controls', '/review/app?tab=relative', { x: panelX, y: panelWithRegionsY, width: panelSmallWidth, height: value('overlayControlsPanelHeight', 266) }, { tab: 'relative', overlayId: 'relative', region: 'general' }),
+    route('content-matrix', '/review/app?tab=relative&region=content', { x: panelX, y: panelWithRegionsY, width: value('contentMatrixWidth', 834), height: value('contentMatrixPreviewHeight', 222) }, { tab: 'relative', overlayId: 'relative', region: 'content' }),
+    route('chat-inputs', '/review/app?tab=stream-chat&region=content', { x: panelX, y: panelWithRegionsY, width: value('chatInputsWidth', 650), height: value('chatInputsHeight', 204) }, { tab: 'stream-chat', overlayId: 'stream-chat', region: 'content' }),
+    route('support-buttons', '/review/app?tab=support', { x: panelX, y: panelNoRegionsY, width: panelWideWidth, height: value('supportPanelHeight', 278) }, { tab: 'support', region: 'general' }),
+    route('browser-source', '/review/app?tab=relative', { x: panelX + panelSmallWidth + gridGap, y: panelWithRegionsY, width: value('browserSourcePanelWidth', 414), height: value('browserSourcePanelHeight', 132) }, { tab: 'relative', overlayId: 'relative', region: 'general' })
   ];
 }
 
@@ -371,18 +549,19 @@ async function captureRoute(page, route, manifest) {
       ? await elementRelativeClip(element, route.clip)
     : null;
   const removeCaptureBackdrop = await injectCaptureBackdrop(page, route);
+  const screenshotOptions = {
+    path: screenshotPath,
+    animations: 'disabled',
+    ...(route.omitBackground === true ? { omitBackground: true } : {})
+  };
   try {
     if (exactClip) {
       await page.screenshot({
-        path: screenshotPath,
-        animations: 'disabled',
+        ...screenshotOptions,
         clip: exactClip
       });
     } else {
-      await element.screenshot({
-        path: screenshotPath,
-        animations: 'disabled'
-      });
+      await element.screenshot(screenshotOptions);
     }
   } finally {
     if (removeCaptureBackdrop) {
@@ -408,12 +587,14 @@ async function captureRoute(page, route, manifest) {
     compositingMode: route.compositingMode || null,
     captureBackdrop: route.captureBackdrop || null,
     overlayId: route.overlayId || null,
+    title: stringOrNull(model?.title),
     tab: route.tab || null,
     region: route.region || null,
     activeRegion: dom.activeRegion,
     routeAlias: route.routeAlias || null,
     fixtureVariant: route.fixtureVariant || null,
     previewMode: route.previewMode || null,
+    updateStatus: route.updateStatus || null,
     unitSystem: route.unitSystem || screenshotUnitSystem,
     menuId: route.menuId || null,
     status: stringOrNull(model?.status),
@@ -432,6 +613,7 @@ async function captureRoute(page, route, manifest) {
     layout: dom.layout,
     uiEvidence: uiEvidence(route, dom),
     modelEvidence: modelLayoutEvidence(model, dom.layout),
+    v102Evidence: v102EvidenceForRoute(route),
     runtimeAssets,
     scenarioEvidence: scenarioEvidence(route, model, dom.layout),
     width: artifact.width,
@@ -647,6 +829,7 @@ async function readDomDiagnostics(element) {
         fontSize: style.fontSize || null,
         fontWeight: style.fontWeight || null,
         display: style.display || null,
+        cursor: style.cursor || null,
         gridTemplateColumns: style.gridTemplateColumns && style.gridTemplateColumns !== 'none'
           ? style.gridTemplateColumns
           : null,
@@ -668,22 +851,84 @@ async function readDomDiagnostics(element) {
       if (tag === 'textarea') return 'textarea';
       return null;
     };
+    const numericAttribute = (element, name) => {
+      const value = element.getAttribute(name);
+      if (value === null || value === '') return null;
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    };
+    const inheritedEvidenceKey = (element) => {
+      const explicit = element.getAttribute('data-evidence-key');
+      if (explicit) return explicit;
+
+      if (element.matches('.field-label, .analysis-copy strong')) {
+        const row = element.closest('.field-row[data-evidence-key], .analysis-control-row[data-evidence-key], .status-row[data-evidence-key]');
+        const rowKey = row?.getAttribute('data-evidence-key');
+        return rowKey ? `${rowKey}.label` : null;
+      }
+
+      if (element.matches('.field-value, .value-code, .support-status, .browser-url, .browser-details span, .analysis-state')) {
+        const valueContainer = element.closest('[data-evidence-role="value"][data-evidence-key]');
+        const valueKey = valueContainer?.getAttribute('data-evidence-key');
+        if (valueKey) return valueKey;
+
+        const keyedContainer = element.closest('.browser-details[data-evidence-key], .field-row[data-evidence-key], .status-row[data-evidence-key], .analysis-control-row[data-evidence-key]');
+        const containerKey = keyedContainer?.getAttribute('data-evidence-key');
+        return containerKey ? `${containerKey}.value` : null;
+      }
+
+      if (element.matches('.segmented, .toggle, .stepper, .slider, .text-input')) {
+        const valueContainer = element.closest('[data-evidence-role="value"][data-evidence-key]');
+        const valueKey = valueContainer?.getAttribute('data-evidence-key');
+        if (valueKey) return valueKey;
+
+        const keyedContainer = element.closest('.preview-control-row[data-evidence-key], .analysis-control-row[data-evidence-key], .field-row[data-evidence-key]');
+        const containerKey = keyedContainer?.getAttribute('data-evidence-key');
+        return containerKey ? `${containerKey}.value` : null;
+      }
+
+      return null;
+    };
+    const shouldCaptureRoleElement = (role, element) => {
+      if (role === 'settings-field-value' && element.closest('.stepper')) {
+        return false;
+      }
+
+      return true;
+    };
     const attributeEvidence = (element) => {
       const tag = String(element.tagName || '').toLowerCase();
       const value = 'value' in element ? String(element.value ?? '') : null;
+      const ariaPressed = element.getAttribute('aria-pressed');
+      const ariaChecked = element.getAttribute('aria-checked');
+      const checked = 'checked' in element
+        ? Boolean(element.checked)
+        : (ariaChecked === 'true' || ariaPressed === 'true'
+            ? true
+            : (ariaChecked === 'false' || ariaPressed === 'false' ? false : null));
       return {
         role: element.getAttribute('role') || null,
         ariaLabel: element.getAttribute('aria-label') || null,
         ariaSelected: element.getAttribute('aria-selected') || null,
-        ariaChecked: element.getAttribute('aria-checked') || null,
+        ariaPressed: ariaPressed || null,
+        ariaChecked: ariaChecked || null,
         type: element.getAttribute('type') || null,
         href: element.getAttribute('href') || null,
-        evidenceKey: element.getAttribute('data-evidence-key') || null,
+        src: element.getAttribute('src') || null,
+        alt: element.getAttribute('alt') || null,
+        dataFallback: element.getAttribute('data-fallback') || null,
+        evidenceKey: inheritedEvidenceKey(element),
         evidenceRole: element.getAttribute('data-evidence-role') || null,
         dataKey: element.getAttribute('data-key') || null,
+        matrixKind: element.getAttribute('data-matrix-kind') || null,
+        rowIndex: numericAttribute(element, 'data-row-index'),
+        columnIndex: numericAttribute(element, 'data-column-index'),
+        rowKey: element.getAttribute('data-row-key') || null,
+        columnKey: element.getAttribute('data-column-key') || null,
         dataTone: element.getAttribute('data-tone') || null,
+        panelTitle: element.matches('.panel') ? element.querySelector(':scope > h2')?.textContent?.trim() || null : null,
         value: value || null,
-        checked: 'checked' in element ? Boolean(element.checked) : null,
+        checked,
         selected: 'selected' in element ? Boolean(element.selected) : null,
         disabled: 'disabled' in element ? Boolean(element.disabled) : null,
         controlKind: controlKindFor(tag, element)
@@ -691,21 +936,36 @@ async function readDomDiagnostics(element) {
     };
     const roleSelectors = [
       ['settings-app', '#settings-app'],
+      ['settings-shell', '.settings-window'],
       ['settings-titlebar', '.titlebar'],
+      ['settings-drag-zone', '.titlebar'],
+      ['settings-body', '.settings-body'],
       ['settings-sidebar', '.sidebar'],
       ['settings-sidebar-tab', '.sidebar-tab'],
       ['settings-content', '.content-card'],
       ['settings-content-header', '.content-header'],
       ['settings-content-body', '.content-body'],
+      ['settings-region-tabs', '.region-segments'],
       ['settings-region-segment', '.region-segment'],
+      ['settings-section', '.general-top-grid, .support-stack, .support-grid, .overlay-general-grid, .content-stack, .garage-preview-content, .stream-chat-content, .stream-chat-twitch, .stream-chat-streamlabs'],
       ['settings-panel', '.panel, .garage-preview-stage, .cover-preview'],
       ['settings-panel-title', '.panel h2'],
-      ['settings-field-row', '.field-row, .status-row'],
-      ['settings-field-label', '.field-label'],
-      ['settings-field-value', '.field-value, .value-code, .support-status'],
-      ['settings-button', 'button'],
+      ['settings-field-row', '.field-row, .status-row, .analysis-control-row, .browser-details'],
+      ['settings-field-label', '.field-label, .analysis-copy strong'],
+      ['settings-field-value', '.field-value, .value-code, .support-status, .analysis-state, .analysis-copy span, .browser-url, .browser-details span'],
+      ['settings-button', '.action-button, .close-button'],
+      ['settings-toggle', '.toggle'],
+      ['settings-check', '.check'],
+      ['settings-stepper', '.stepper'],
+      ['settings-slider', '.slider'],
+      ['settings-textbox', '.text-input'],
       ['settings-segmented', '.segmented'],
+      ['settings-segment-choice', '.segment'],
       ['settings-choice', '.choice'],
+      ['settings-button-row', '.button-row'],
+      ['settings-preview-summary', '.preview-summary, .preview-control-row, .body-lines p'],
+      ['settings-preview-stage', '.garage-preview-stage, .cover-preview'],
+      ['settings-preview-image', '.cover-image'],
       ['settings-matrix', '.matrix-table, .toggle-grid, .chrome-table'],
       ['settings-matrix-row', '.matrix-item, .grid-toggle-row, .chrome-row-label'],
       ['settings-matrix-cell', '.matrix-session, .matrix-visible, .matrix-head, .chrome-check, .chrome-head'],
@@ -832,6 +1092,7 @@ async function readDomDiagnostics(element) {
     const elements = [];
     for (const [role, selector] of roleSelectors) {
       matchingElements(selector).forEach((element, index) => {
+        if (!shouldCaptureRoleElement(role, element)) return;
         const bounds = rectFor(element, rootRect);
         if (!bounds) return;
         elements.push({
@@ -905,7 +1166,13 @@ function uiEvidence(route, dom) {
     return null;
   }
 
-  const elements = Array.isArray(dom?.layout?.elements) ? dom.layout.elements : [];
+  const settingsDom = settingsEvidenceDom(route, dom);
+  const elements = Array.isArray(settingsDom?.layout?.elements) ? settingsDom.layout.elements : [];
+  const appShell = settingsAppShellEvidence(elements, settingsDom);
+  const navigation = settingsNavigationEvidence(route, elements, settingsDom);
+  const sections = settingsSectionEvidence(elements);
+  const layoutHealth = settingsLayoutHealthEvidence(route, settingsDom, elements, navigation);
+  const coverage = settingsCoverageEvidence(elements, sections, navigation);
   return {
     contract: 'settings-ui-evidence/v1',
     surface: route.surface,
@@ -915,8 +1182,14 @@ function uiEvidence(route, dom) {
     activeRegion: dom.activeRegion || null,
     previewMode: route.previewMode || null,
     unitSystem: route.unitSystem || screenshotUnitSystem,
-    root: dom.layout?.root || null,
-    contentBounds: dom.contentBounds || null,
+    root: settingsDom.layout?.root || null,
+    contentBounds: settingsDom.contentBounds || null,
+    appShell,
+    navigation,
+    sections,
+    layoutHealth,
+    coverage,
+    geometryMatrix: settingsGeometryMatrixEvidence(route, elements),
     sidebar: firstElement(elements, 'settings-sidebar'),
     content: firstElement(elements, 'settings-content'),
     contentBody: firstElement(elements, 'settings-content-body'),
@@ -933,8 +1206,18 @@ function uiEvidence(route, dom) {
       .filter((element) => [
         'settings-field-row',
         'settings-button',
+        'settings-toggle',
+        'settings-check',
+        'settings-stepper',
+        'settings-slider',
+        'settings-textbox',
         'settings-segmented',
+        'settings-segment-choice',
         'settings-choice',
+        'settings-button-row',
+        'settings-preview-summary',
+        'settings-preview-stage',
+        'settings-preview-image',
         'settings-matrix',
         'settings-matrix-row',
         'settings-matrix-cell'
@@ -947,8 +1230,81 @@ function uiEvidence(route, dom) {
         'settings-field-value'
       ].includes(element.role))
       .map(settingElementEvidence),
+    interaction: settingsInteractionEvidence(route, elements),
     preview: settingsPreviewEvidence(elements)
   };
+}
+
+function settingsEvidenceDom(route, dom) {
+  const elements = Array.isArray(dom?.layout?.elements) ? dom.layout.elements : [];
+  if (route.surface !== 'browser-review-settings-component' || !route.clip) {
+    return dom;
+  }
+
+  const capture = {
+    x: Number(route.clip.x || 0),
+    y: Number(route.clip.y || 0),
+    width: Number(route.clip.width || 0),
+    height: Number(route.clip.height || 0)
+  };
+  if (capture.width <= 0 || capture.height <= 0) {
+    return dom;
+  }
+
+  const clippedElements = elements
+    .map((element) => clipSettingsElement(element, capture))
+    .filter(Boolean);
+  const root = {
+    x: 0,
+    y: 0,
+    width: capture.width,
+    height: capture.height
+  };
+  const contentBounds = {
+    ...root,
+    aspectRatio: capture.height > 0 ? Number((capture.width / capture.height).toFixed(4)) : null
+  };
+  return {
+    ...dom,
+    contentBounds,
+    layout: {
+      ...(dom.layout || {}),
+      root,
+      contentBounds: root,
+      elements: clippedElements
+    }
+  };
+}
+
+function clipSettingsElement(element, capture) {
+  const bounds = element?.bounds;
+  if (!bounds) return null;
+  const x = Number(bounds.x || 0);
+  const y = Number(bounds.y || 0);
+  const width = Number(bounds.width || 0);
+  const height = Number(bounds.height || 0);
+  const left = Math.max(x, capture.x);
+  const top = Math.max(y, capture.y);
+  const right = Math.min(x + width, capture.x + capture.width);
+  const bottom = Math.min(y + height, capture.y + capture.height);
+  const clippedWidth = roundNumber(right - left);
+  const clippedHeight = roundNumber(bottom - top);
+  if (clippedWidth <= 0 || clippedHeight <= 0) return null;
+
+  return {
+    ...element,
+    sourceBounds: element.sourceBounds || { ...bounds },
+    bounds: {
+      x: roundNumber(left - capture.x),
+      y: roundNumber(top - capture.y),
+      width: clippedWidth,
+      height: clippedHeight
+    }
+  };
+}
+
+function roundNumber(value) {
+  return Math.round(Number(value || 0) * 1000) / 1000;
 }
 
 function installerReviewUiEvidence(route, dom) {
@@ -988,6 +1344,7 @@ function installerReviewUiEvidence(route, dom) {
         'installer-text'
       ].includes(element.role))
       .map(settingElementEvidence),
+    geometryMatrix: installerGeometryMatrixEvidence(route, elements),
     palette: [
       { color: '#ffffff', samples: 1 },
       { color: '#f4f4f4', samples: 1 },
@@ -1021,12 +1378,455 @@ function settingElementEvidence(element) {
   };
 }
 
+function settingsGeometryMatrixEvidence(route, elements) {
+  const matrixElements = elements
+    .filter((element) => settingsGeometryMatrixRoles.has(element.role))
+    .map((element, index) => settingsGeometryElement(element, index));
+  return {
+    contract: 'ui-geometry-matrix/v1',
+    kind: 'settings',
+    surface: route.surface || null,
+    tab: route.tab || null,
+    overlayId: route.overlayId || null,
+    requestedRegion: route.region || null,
+    elementCount: matrixElements.length,
+    elements: matrixElements
+  };
+}
+
+function installerGeometryMatrixEvidence(route, elements) {
+  const matrixElements = elements
+    .filter((element) => installerGeometryMatrixRoles.has(element.role))
+    .map((element, index) => installerGeometryElement(element, index));
+  return {
+    contract: 'ui-geometry-matrix/v1',
+    kind: 'installer',
+    surface: route.surface || null,
+    menuId: route.menuId || null,
+    elementCount: matrixElements.length,
+    elements: matrixElements
+  };
+}
+
+function settingsGeometryElement(element, index) {
+  const attributes = element.attributes || {};
+  const evidence = settingsDiagnosticElement(element, settingsGeometryElementId(element, index), index);
+  return {
+    ...evidence,
+    sourceBounds: element.sourceBounds || null,
+    evidenceKey: attributes.evidenceKey || null,
+    matrixKind: attributes.matrixKind || null,
+    rowIndex: attributes.rowIndex ?? null,
+    columnIndex: attributes.columnIndex ?? null,
+    rowKey: attributes.rowKey || null,
+    columnKey: attributes.columnKey || null
+  };
+}
+
+function installerGeometryElement(element, index) {
+  const evidence = settingElementEvidence(element);
+  return {
+    role: evidence.role,
+    id: installerGeometryElementId(element, index),
+    text: evidence.text,
+    bounds: evidence.bounds,
+    sourceBounds: evidence.sourceBounds || null,
+    cursor: evidence.styles?.cursor || null,
+    controlKind: evidence.attributes?.controlKind || null,
+    enabled: typeof evidence.attributes?.disabled === 'boolean' ? !evidence.attributes.disabled : null,
+    visible: true,
+    index
+  };
+}
+
+function settingsGeometryElementId(element, index) {
+  const attributes = element.attributes || {};
+  const role = String(element.role || 'settings-element');
+  if (attributes.evidenceKey) return String(attributes.evidenceKey);
+  if (attributes.tabId) return `tab:${attributes.tabId}`;
+  if (role === 'settings-sidebar-tab') return `tab:${settingsTabId(element)}`;
+  if (attributes.regionId) return `region:${attributes.regionId}`;
+  if (role === 'settings-region-segment') return `region:${settingsRegionId(element)}`;
+  if (role === 'settings-panel' && attributes.panelTitle) return `panel:${slugId(attributes.panelTitle)}`;
+  if (role === 'settings-panel-title') return `panel-title:${slugId(element.text)}`;
+  if (attributes.matrixKind) {
+    return `${attributes.matrixKind}:${role}:${attributes.rowKey || attributes.rowIndex || 'none'}:${attributes.columnKey || attributes.columnIndex || 'none'}`;
+  }
+  const sectionId = settingsSectionId(element, index);
+  return sectionId ? `${role}:${sectionId}` : `${role}:${index}`;
+}
+
+function installerGeometryElementId(element, index) {
+  const role = String(element.role || 'installer-element');
+  if (element.id) return `${role}:${element.id}`;
+  const textId = slugId(element.text);
+  return textId ? `${role}:${textId}:${index}` : `${role}:${index}`;
+}
+
+function settingsAppShellEvidence(elements, dom) {
+  return {
+    contract: 'settings-app-shell-evidence/v1',
+    root: dom.layout?.root || null,
+    contentBounds: dom.contentBounds || null,
+    shell: firstElement(elements, 'settings-shell'),
+    titlebar: firstElement(elements, 'settings-titlebar'),
+    dragZone: firstElement(elements, 'settings-drag-zone'),
+    body: firstElement(elements, 'settings-body'),
+    sidebar: firstElement(elements, 'settings-sidebar'),
+    content: firstElement(elements, 'settings-content'),
+    contentHeader: firstElement(elements, 'settings-content-header'),
+    contentBody: firstElement(elements, 'settings-content-body')
+  };
+}
+
+function settingsNavigationEvidence(route, elements, dom) {
+  const tabs = elements
+    .filter((element) => element.role === 'settings-sidebar-tab')
+    .map((element, index) => settingsDiagnosticElement(element, settingsTabId(element), index));
+  const regions = elements
+    .filter((element) => element.role === 'settings-region-segment')
+    .map((element, index) => settingsDiagnosticElement(element, settingsRegionId(element), index));
+  const activeTabs = tabs.filter((element) => element.selected);
+  const activeRegions = regions.filter((element) => element.selected);
+  return {
+    contract: 'settings-navigation-evidence/v1',
+    requestedTab: route.tab || null,
+    activeTab: activeTabs[0] || null,
+    activeTabId: activeTabs[0]?.id || null,
+    activeTabCount: activeTabs.length,
+    tabCount: tabs.length,
+    tabs,
+    requestedRegion: route.region || null,
+    activeRegion: dom.activeRegion || activeRegions[0]?.text || null,
+    activeRegionId: activeRegions[0]?.id || null,
+    activeRegionCount: activeRegions.length,
+    regionCount: regions.length,
+    regions
+  };
+}
+
+function settingsSectionEvidence(elements) {
+  const sectionRoles = new Set([
+    'settings-shell',
+    'settings-titlebar',
+    'settings-drag-zone',
+    'settings-body',
+    'settings-sidebar',
+    'settings-content',
+    'settings-content-header',
+    'settings-content-body',
+    'settings-region-tabs',
+    'settings-section',
+    'settings-panel',
+    'settings-matrix'
+  ]);
+  return elements
+    .filter((element) => sectionRoles.has(element.role))
+    .map((element, index) => ({
+      sectionId: settingsSectionId(element, index),
+      ...settingElementEvidence(element)
+    }));
+}
+
+function settingsLayoutHealthEvidence(route, dom, elements, navigation) {
+  const root = dom.layout?.root || null;
+  const textOverflow = elements
+    .filter(settingsTextElementOverflows)
+    .map((element, index) => settingsDiagnosticElement(element, settingsSectionId(element, index), index))
+    .slice(0, 24);
+  const clippedElements = elements
+    .filter(settingsElementIsClipped)
+    .map((element, index) => settingsDiagnosticElement(element, settingsSectionId(element, index), index))
+    .slice(0, 24);
+  const outsideRoot = elements
+    .filter((element) => root && !rectWithin(element.bounds, root, 1.5))
+    .map((element, index) => settingsDiagnosticElement(element, settingsSectionId(element, index), index))
+    .slice(0, 24);
+  const shell = elements.find((element) => element.role === 'settings-shell');
+  const content = elements.find((element) => element.role === 'settings-content');
+  const contentBody = elements.find((element) => element.role === 'settings-content-body');
+  const isComponentCrop = route.surface === 'browser-review-settings-component';
+  const expectsRegion = route.region
+    && route.region !== 'general'
+    && route.tab
+    && !['general', 'support'].includes(route.tab);
+  return {
+    contract: 'settings-layout-health/v1',
+    hasOverflowingText: textOverflow.length > 0,
+    overflowingTextCount: textOverflow.length,
+    overflowingTextElements: textOverflow,
+    clippedElementCount: clippedElements.length,
+    clippedElements,
+    outsideRootCount: outsideRoot.length,
+    outsideRootElements: outsideRoot,
+    duplicateActiveTabs: navigation.activeTabCount > 1,
+    missingActiveTab: !isComponentCrop && navigation.tabCount > 0 && navigation.activeTabCount !== 1,
+    duplicateActiveRegions: navigation.activeRegionCount > 1,
+    missingActiveRegion: !isComponentCrop && Boolean(expectsRegion) && navigation.regionCount > 0 && navigation.activeRegionCount !== 1,
+    shellWithinRoot: root && shell?.bounds ? rectWithin(shell.bounds, root, 1.5) : null,
+    contentWithinShell: shell?.bounds && content?.bounds ? rectWithin(content.bounds, shell.bounds, 1.5) : null,
+    contentBodyWithinShell: shell?.bounds && contentBody?.bounds ? rectWithin(contentBody.bounds, shell.bounds, 1.5) : null
+  };
+}
+
+function settingsCoverageEvidence(elements, sections, navigation) {
+  const countRole = (role) => elements.filter((element) => element.role === role).length;
+  return {
+    contract: 'settings-coverage-evidence/v1',
+    hasAppShell: countRole('settings-shell') > 0,
+    hasTitlebar: countRole('settings-titlebar') > 0,
+    hasSidebar: countRole('settings-sidebar') > 0,
+    hasContent: countRole('settings-content') > 0,
+    hasContentBody: countRole('settings-content-body') > 0,
+    tabCount: navigation.tabCount,
+    activeTabCount: navigation.activeTabCount,
+    regionCount: navigation.regionCount,
+    activeRegionCount: navigation.activeRegionCount,
+    sectionCount: sections.length,
+    panelCount: countRole('settings-panel'),
+    controlCount: elements.filter(settingsControlElement).length,
+    textFieldCount: elements.filter(settingsTextFieldElement).length
+  };
+}
+
+function settingsDiagnosticElement(element, id, fallbackIndex) {
+  const evidence = settingElementEvidence(element);
+  return {
+    role: evidence.role,
+    id: id || evidence.id || null,
+    text: evidence.text,
+    bounds: evidence.bounds,
+    sourceBounds: evidence.sourceBounds || null,
+    selected: settingsElementSelected(element),
+    cursor: evidence.styles?.cursor || null,
+    controlKind: evidence.attributes?.controlKind || null,
+    enabled: typeof evidence.attributes?.disabled === 'boolean' ? !evidence.attributes.disabled : null,
+    visible: true,
+    checked: evidence.attributes?.checked ?? null,
+    value: evidence.attributes?.value ?? null,
+    index: Number.isFinite(Number(element.index)) ? Number(element.index) : fallbackIndex
+  };
+}
+
+function settingsTabId(element) {
+  const attributes = element.attributes || {};
+  if (attributes.tabId) return String(attributes.tabId);
+  const href = String(attributes.href || '');
+  if (href) {
+    try {
+      const parsed = new URL(href, 'http://localhost');
+      return parsed.searchParams.get('tab') || 'general';
+    } catch {
+      // Fall through to a text-derived id; evidence should still be useful if href parsing changes.
+    }
+  }
+  return slugId(element.text);
+}
+
+function settingsRegionId(element) {
+  const attributes = element.attributes || {};
+  if (attributes.regionId) return String(attributes.regionId);
+  const classRegion = String(element.className || '')
+    .split(/\s+/)
+    .map((item) => /^region-([a-z0-9-]+)$/i.exec(item)?.[1] || null)
+    .find((item) => item && item !== 'segment');
+  return classRegion || slugId(element.text);
+}
+
+function settingsSectionId(element, index) {
+  const attributes = element.attributes || {};
+  const role = String(element.role || 'section');
+  if ([
+    'settings-shell',
+    'settings-titlebar',
+    'settings-drag-zone',
+    'settings-body',
+    'settings-sidebar',
+    'settings-content',
+    'settings-content-header',
+    'settings-content-body',
+    'settings-region-tabs'
+  ].includes(role)) {
+    return role.replace(/^settings-/, '');
+  }
+  if (role === 'settings-region-segment') {
+    return settingsRegionId(element);
+  }
+  const textId = slugId(element.text);
+  return attributes.evidenceKey
+    || attributes.dataKey
+    || (textId ? `${role.replace(/^settings-/, '')}-${textId}` : `${role}-${index}`);
+}
+
+function slugId(value) {
+  const text = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return text || null;
+}
+
+function settingsElementSelected(element) {
+  const attributes = element.attributes || {};
+  return attributes.selected === true
+    || String(attributes.ariaSelected || '').toLowerCase() === 'true'
+    || String(attributes.ariaPressed || '').toLowerCase() === 'true'
+    || String(element.className || '').split(/\s+/).includes('active');
+}
+
+function settingsTextElementOverflows(element) {
+  if (!settingsTextFitRole(element.role)) return false;
+  const metrics = element.textMetrics || {};
+  return metrics.fitsWidth === false || metrics.fitsHeight === false;
+}
+
+function settingsTextFitRole(role) {
+  return [
+    'settings-sidebar-tab',
+    'settings-region-segment',
+    'settings-panel-title',
+    'settings-field-label',
+    'settings-field-value',
+    'settings-button',
+    'settings-toggle',
+    'settings-check',
+    'settings-stepper',
+    'settings-slider',
+    'settings-textbox',
+    'settings-segment-choice',
+    'settings-button-row',
+    'settings-preview-summary',
+    'settings-choice',
+    'settings-matrix-row',
+    'settings-matrix-cell'
+  ].includes(role);
+}
+
+function settingsElementIsClipped(element) {
+  const source = element.sourceBounds;
+  const bounds = element.bounds;
+  if (!source || !bounds) return false;
+  return numberOr(bounds.width, 0) + 0.5 < numberOr(source.width, 0)
+    || numberOr(bounds.height, 0) + 0.5 < numberOr(source.height, 0);
+}
+
+function settingsControlElement(element) {
+  return [
+    'settings-field-row',
+    'settings-button',
+    'settings-toggle',
+    'settings-check',
+    'settings-stepper',
+    'settings-slider',
+    'settings-textbox',
+    'settings-segmented',
+    'settings-segment-choice',
+    'settings-choice',
+    'settings-button-row',
+    'settings-preview-summary',
+    'settings-preview-stage',
+    'settings-preview-image',
+    'settings-matrix',
+    'settings-matrix-row',
+    'settings-matrix-cell'
+  ].includes(element.role);
+}
+
+function settingsTextFieldElement(element) {
+  return [
+    'settings-panel-title',
+    'settings-field-label',
+    'settings-field-value'
+  ].includes(element.role);
+}
+
+function rectWithin(inner, outer, tolerance = 0) {
+  if (!inner || !outer) return false;
+  const left = numberOr(inner.x, 0);
+  const top = numberOr(inner.y, 0);
+  const right = left + numberOr(inner.width, 0);
+  const bottom = top + numberOr(inner.height, 0);
+  const outerLeft = numberOr(outer.x, 0);
+  const outerTop = numberOr(outer.y, 0);
+  const outerRight = outerLeft + numberOr(outer.width, 0);
+  const outerBottom = outerTop + numberOr(outer.height, 0);
+  return left >= outerLeft - tolerance
+    && top >= outerTop - tolerance
+    && right <= outerRight + tolerance
+    && bottom <= outerBottom + tolerance;
+}
+
+function settingsInteractionEvidence(route, elements) {
+  const settingsElements = elements
+    .filter((element) => String(element.role || '').startsWith('settings-'))
+    .map(settingElementEvidence);
+  const cursorCounts = new Map();
+  for (const element of settingsElements) {
+    const cursor = String(element.styles?.cursor || '').trim() || 'unknown';
+    cursorCounts.set(cursor, (cursorCounts.get(cursor) || 0) + 1);
+  }
+  const moveCursorElements = settingsElements
+    .filter((element) => ['move', 'grab', 'grabbing', 'all-scroll'].includes(String(element.styles?.cursor || '').trim()))
+    .map((element) => ({
+      role: element.role,
+      text: element.text,
+      bounds: element.bounds,
+      cursor: element.styles?.cursor || null
+    }));
+  const interactiveCursorElements = settingsElements
+    .filter((element) => {
+      const cursor = String(element.styles?.cursor || '').trim();
+      const kind = String(element.attributes?.controlKind || '').trim();
+      return cursor === 'pointer' || ['button', 'checkbox', 'radio', 'range', 'tab-link'].includes(kind);
+    })
+    .slice(0, 24)
+    .map((element) => ({
+      role: element.role,
+      text: element.text,
+      bounds: element.bounds,
+      cursor: element.styles?.cursor || null,
+      controlKind: element.attributes?.controlKind || null
+    }));
+  const passiveChrome = settingsElements
+    .filter((element) => [
+      'settings-app',
+      'settings-titlebar',
+      'settings-drag-zone',
+      'settings-shell',
+      'settings-content',
+      'settings-content-header',
+      'settings-content-body'
+    ].includes(element.role))
+    .map((element) => ({
+      role: element.role,
+      text: element.text,
+      bounds: element.bounds,
+      cursor: element.styles?.cursor || null
+    }));
+
+  return {
+    contract: 'settings-interaction-evidence/v1',
+    v102: ['V102-001', 'V102-002'],
+    tab: route.tab || null,
+    requestedRegion: route.region || null,
+    settingsSurfaceDraggable: true,
+    dragHandlePolicy: 'settings-titlebar-drags-window',
+    cursorCounts: Object.fromEntries([...cursorCounts].sort((left, right) => left[0].localeCompare(right[0]))),
+    passiveChrome,
+    interactiveCursorElements,
+    moveCursorElements
+  };
+}
+
 function settingsPreviewEvidence(elements) {
   const previewRoles = new Set([
     'overlay',
     'header',
     'content',
     'source',
+    'settings-preview-stage',
+    'settings-preview-image',
     'table',
     'metric-list',
     'graph-panel',
@@ -1082,32 +1882,35 @@ function modelLayoutEvidence(model, layout) {
     metricSections: (Array.isArray(model.metricSections) ? model.metricSections : []).map((section) => ({
       title: stringOrNull(section?.title),
       bounds: renderedMetricSectionBounds(metricRendering, section?.title),
+      outerBounds: renderedMetricSectionOuterBounds(metricRendering, section?.title),
       rows: (Array.isArray(section?.rows) ? section.rows : []).map((row) =>
         metricEvidence(row, renderedMetricRowFor(metricRendering, row), metricRendering))
     })),
-    gridSections: (Array.isArray(model.gridSections) ? model.gridSections : []).map((section) => ({
-      title: stringOrNull(section?.title),
-      bounds: renderedMetricSectionBounds(metricRendering, section?.title),
-      headers: Array.isArray(section?.headers) ? section.headers.map((header) => String(header ?? '')) : [],
-      renderedHeaders: metricRendering.tireCells
-        .filter((cell) => String(cell.className || '').includes('tire-grid-header'))
-        .map((cell, index) => renderedCellEvidence(cell, index, null)),
-      rows: (Array.isArray(section?.rows) ? section.rows : []).map((row, index) => {
-        const renderedRow = metricRendering.tireRows[gridRowCursor++] || null;
-        const renderedCells = renderedGridCellsForRow(metricRendering, renderedRow?.bounds);
-        return {
-          index,
-          label: stringOrNull(row?.label),
-          tone: stringOrNull(row?.tone),
-          bounds: renderedRow?.bounds || null,
-          cells: (Array.isArray(row?.cells) ? row.cells : []).map((cell, cellIndex) => ({
-            value: stringOrNull(cell?.value),
-            tone: stringOrNull(cell?.tone),
-            bounds: renderedGridCellBounds(renderedCells, cellIndex, cell?.value)
-          }))
-        };
-      })
-    })),
+    gridSections: (Array.isArray(model.gridSections) ? model.gridSections : []).map((section, sectionIndex) => {
+      const grid = renderedGridForSection(metricRendering, section, sectionIndex);
+      const renderedHeaders = renderedGridHeaders(metricRendering, grid);
+      return {
+        title: stringOrNull(section?.title),
+        bounds: grid?.bounds || null,
+        headers: Array.isArray(section?.headers) ? section.headers.map((header) => String(header ?? '')) : [],
+        renderedHeaders: renderedHeaders.map((cell, index) => renderedCellEvidence(cell, index, cell?.text || null)),
+        rows: (Array.isArray(section?.rows) ? section.rows : []).map((row, index) => {
+          const renderedRow = metricRendering.tireRows[gridRowCursor++] || null;
+          const renderedCells = renderedGridCellsForRow(metricRendering, renderedRow?.bounds);
+          return {
+            index,
+            label: stringOrNull(row?.label),
+            tone: stringOrNull(row?.tone),
+            bounds: renderedRow?.bounds || null,
+            cells: (Array.isArray(row?.cells) ? row.cells : []).map((cell, cellIndex) => ({
+              value: stringOrNull(cell?.value),
+              tone: stringOrNull(cell?.tone),
+              bounds: renderedGridCellBounds(renderedCells, cellIndex, cell?.value)
+            }))
+          };
+        })
+      };
+    }),
     graph: graphModelEvidence(model, layout),
     inputs: model.inputs ? inputEvidence(model.inputs, layout) : null,
     flags: model.flags ? {
@@ -1153,9 +1956,13 @@ function tableRowEvidence(row, index, tableRendering) {
   return {
     index,
     kind: row?.rowKind || (row?.isClassHeader ? 'class-header' : 'row'),
+    isClassHeader: Boolean(row?.isClassHeader),
+    isPlaceholder: Boolean(row?.isPlaceholder),
     isReference: Boolean(row?.isReference || row?.isFocus || row?.isReferenceCar),
     isPartial: Boolean(row?.isPartial),
     classColorHex: stringOrNull(row?.carClassColorHex),
+    headerTitle: stringOrNull(row?.headerTitle),
+    headerDetail: stringOrNull(row?.headerDetail),
     relativeLapDelta: numberOrNull(row?.relativeLapDelta),
     text: rendered?.row?.text || null,
     foreground: rendered?.row?.styles?.color || null,
@@ -1181,6 +1988,28 @@ function renderedCellEvidence(cell, index, column) {
   };
 }
 
+function renderedGridForSection(metricRendering, section, sectionIndex) {
+  const grids = Array.isArray(metricRendering?.grids) ? metricRendering.grids : [];
+  if (grids.length === 1) return grids[0];
+  const title = String(section?.title || '').trim().toUpperCase();
+  if (title) {
+    const matching = grids.find((grid) => String(grid?.text || '').toUpperCase().includes(title));
+    if (matching) return matching;
+  }
+
+  return grids[sectionIndex] || null;
+}
+
+function renderedGridHeaders(metricRendering, grid) {
+  const headers = (Array.isArray(metricRendering?.tireCells) ? metricRendering.tireCells : [])
+    .filter((cell) => String(cell.className || '').includes('tire-grid-header'));
+  if (!grid?.bounds) {
+    return headers;
+  }
+
+  return headers.filter((cell) => rectWithin(cell.bounds, grid.bounds, 1));
+}
+
 function classListForElement(element) {
   return String(element?.className || '')
     .split(/\s+/)
@@ -1189,9 +2018,7 @@ function classListForElement(element) {
 }
 
 function garageCoverEvidence(garageCover, layout) {
-  const cover = findElementBounds(layout, 'garage-cover', 'garage-cover')
-    || findElementBounds(layout, 'content')
-    || null;
+  const cover = findElementBounds(layout, 'garage-cover', 'garage-cover') || null;
   const image = findElementBounds(layout, 'garage-cover-image') || null;
   return {
     shouldCover: booleanOrNull(garageCover?.shouldCover),
@@ -1206,11 +2033,11 @@ function garageCoverEvidence(garageCover, layout) {
 }
 
 function streamChatEvidence(streamChat, layout) {
+  const streamGeometry = geometry.streamChat || {};
+  const maxRows = Math.max(1, Math.round(numberOr(streamGeometry.maxRows, 36)));
   const renderedRows = elementsForRole(layout, 'chat-line').sort(compareBounds);
   const renderedNames = elementsForRole(layout, 'chat-name').sort(compareBounds);
   const renderedTexts = elementsForRole(layout, 'chat-text').sort(compareBounds);
-  const renderedBadges = elementsForRole(layout, 'chat-badge').sort(compareBounds);
-  const renderedMetadata = elementsForRole(layout, 'chat-meta').sort(compareBounds);
   const renderedEmotes = elementsForRole(layout, 'chat-emote').sort(compareBounds);
   const rows = Array.isArray(streamChat?.rows) ? streamChat.rows : [];
   return {
@@ -1219,10 +2046,10 @@ function streamChatEvidence(streamChat, layout) {
     renderedRowCount: renderedRows.length,
     firstRenderedText: renderedRows[0]?.text || null,
     lastRenderedText: renderedRows[renderedRows.length - 1]?.text || null,
-    badgeCount: renderedBadges.length,
-    metadataCount: renderedMetadata.length,
+    badgeCount: rows.reduce((count, row) => count + (Array.isArray(row?.badges) ? row.badges.length : 0), 0),
+    metadataCount: rows.reduce((count, row) => count + (Array.isArray(row?.metadata) ? row.metadata.length : 0), 0),
     emoteCount: renderedEmotes.length,
-    rows: rows.slice(-36).map((row, index) => ({
+    rows: rows.slice(-maxRows).map((row, index) => ({
       index,
       name: stringOrNull(row?.name),
       text: stringOrNull(row?.text),
@@ -1286,6 +2113,10 @@ function renderedMetricRowFor(metricRendering, row, fallbackIndex = null) {
 }
 
 function renderedMetricSectionBounds(metricRendering, title) {
+  return metricSectionTitleContentBounds(renderedMetricSectionOuterBounds(metricRendering, title));
+}
+
+function renderedMetricSectionOuterBounds(metricRendering, title) {
   const normalized = normalizeEvidenceText(title);
   if (!normalized) {
     return null;
@@ -1293,6 +2124,24 @@ function renderedMetricSectionBounds(metricRendering, title) {
 
   return metricRendering.sections.find((candidate) =>
     normalizeEvidenceText(candidate.text) === normalized)?.bounds || null;
+}
+
+function metricSectionTitleContentBounds(bounds) {
+  if (!bounds) {
+    return null;
+  }
+
+  const inset = numberOr(geometry.metricRows?.sectionTitleInsetX, 0);
+  if (inset <= 0) {
+    return bounds;
+  }
+
+  const width = Math.max(1, numberOr(bounds.width, 0) - inset * 2);
+  return {
+    ...bounds,
+    x: roundNumber(numberOr(bounds.x, 0) + inset),
+    width: roundNumber(width)
+  };
 }
 
 function metricEvidence(row, rendered = null, metricRendering = null) {
@@ -1362,12 +2211,8 @@ function flagCellEvidence(flags, layout) {
   const grid = flagGrid(renderedFlags.length);
   const svgBounds = findElementBounds(layout, 'flags', 'flags-v2') || findElementBounds(layout, 'content');
   const cells = svgBounds ? computedFlagCells(svgBounds, grid, renderedFlags.length) : elementsForRole(layout, 'flag-cell').map((element) => element.bounds);
-  const labelElements = elementsForRole(layout, 'flag-label');
   return renderedFlags.map((flag, index) => {
     const cellBounds = cells[index] || null;
-    const labelElement = labelElements.find((element) =>
-      rectIntersects(element.bounds, cellBounds)
-      && (!flag?.label || String(element.text || '').includes(String(flag.label))));
     return {
       index,
       row: Math.floor(index / Math.max(1, grid.columns)),
@@ -1379,22 +2224,23 @@ function flagCellEvidence(flags, layout) {
       fill: flagColor(flagVisualKind(flag)),
       bounds: cellBounds,
       clothBounds: cellBounds ? flagClothBounds(cellBounds) : null,
-      labelBounds: labelElement?.bounds || null
+      labelBounds: cellBounds ? flagLabelBounds(cellBounds) : null
     };
   });
 }
 
 function flagGrid(count) {
   if (count <= 1) return { columns: 1, rows: 1, compact: false };
-  if (count <= 2) return { columns: 2, rows: 1, compact: false };
-  if (count <= 4) return { columns: 2, rows: 2, compact: true };
-  if (count <= 6) return { columns: 3, rows: 2, compact: true };
-  return { columns: 4, rows: Math.ceil(count / 4), compact: true };
+  if (count <= flagGeometryNumber('gridTwoCountMaximum', 2)) return { columns: 2, rows: 1, compact: false };
+  if (count <= flagGeometryNumber('gridFourCountMaximum', 4)) return { columns: 2, rows: 2, compact: true };
+  if (count <= flagGeometryNumber('gridSixCountMaximum', 6)) return { columns: 3, rows: 2, compact: true };
+  const columns = flagGeometryNumber('gridMaximumColumns', 4);
+  return { columns, rows: Math.ceil(count / columns), compact: true };
 }
 
 function computedFlagCells(svgBounds, grid, count) {
-  const padding = 8;
-  const gap = 8;
+  const padding = flagGeometryNumber('outerPadding', 8);
+  const gap = flagGeometryNumber('cellGap', 8);
   const bounds = {
     x: svgBounds.x + padding,
     y: svgBounds.y + padding,
@@ -1416,20 +2262,37 @@ function computedFlagCells(svgBounds, grid, count) {
 }
 
 function flagClothBounds(cell) {
-  const compact = cell.height < 92 || cell.width < 132;
-  const labelHeight = compact ? 16 : 18;
-  const flagAreaHeight = Math.max(32, cell.height - labelHeight);
-  const poleX = cell.x + Math.max(12, cell.width * 0.16);
-  const clothLeft = poleX + 1;
-  const clothWidth = Math.max(48, cell.x + cell.width - clothLeft - 8);
-  const clothHeight = Math.max(24, Math.min(flagAreaHeight * 0.7, clothWidth * 0.58));
-  const clothTop = cell.y + Math.max(4, (flagAreaHeight - clothHeight) * 0.32);
+  const compact = cell.height < flagGeometryNumber('compactCellHeightThreshold', 92)
+    || cell.width < flagGeometryNumber('compactCellWidthThreshold', 132);
+  const labelHeight = compact ? flagGeometryNumber('compactLabelHeight', 16) : flagGeometryNumber('labelHeight', 18);
+  const flagAreaHeight = Math.max(flagGeometryNumber('flagAreaMinimumHeight', 32), cell.height - labelHeight);
+  const poleX = cell.x + Math.max(flagGeometryNumber('poleMinimumInsetX', 12), cell.width * flagGeometryNumber('poleInsetFractionX', 0.16));
+  const clothLeft = poleX + flagGeometryNumber('clothLeftOffset', 1);
+  const clothWidth = Math.max(flagGeometryNumber('clothMinimumWidth', 48), cell.x + cell.width - clothLeft - flagGeometryNumber('clothRightInset', 8));
+  const clothHeight = Math.max(
+    flagGeometryNumber('clothMinimumHeight', 24),
+    Math.min(flagAreaHeight * flagGeometryNumber('clothAreaHeightFraction', 0.7), clothWidth * flagGeometryNumber('clothWidthHeightFraction', 0.58)));
+  const clothTop = cell.y + Math.max(flagGeometryNumber('clothTopMinimum', 4), (flagAreaHeight - clothHeight) * flagGeometryNumber('clothTopFraction', 0.32));
   return rectEvidence({
     x: clothLeft,
     y: clothTop,
     width: clothWidth,
     height: clothHeight
   });
+}
+
+function flagLabelBounds(cell) {
+  const insetX = flagGeometryNumber('labelInsetX', 2);
+  return rectEvidence({
+    x: cell.x + insetX,
+    y: cell.y,
+    width: Math.max(1, cell.width - insetX * 2),
+    height: Math.max(1, cell.height - flagGeometryNumber('labelBottomInset', 1))
+  });
+}
+
+function flagGeometryNumber(key, fallback) {
+  return geometryNumber(flagsGeometry?.[key], fallback);
 }
 
 function flagVisualKind(flag) {
@@ -1463,15 +2326,16 @@ function carRadarVectorEvidence(renderModel, layout) {
     || findElementBounds(layout, 'car-radar', 'radar-v2')
     || findElementBounds(layout, 'content');
   const scale = vectorScale(target, sourceWidth, sourceHeight);
-  const primitives = [
+  const shouldRender = renderModel.shouldRender === true;
+  const primitives = shouldRender ? [
     vectorShapePrimitive('background', 'ellipse', renderModel.background, scale),
     ...(Array.isArray(renderModel.rings) ? renderModel.rings.map((ring, index) =>
       vectorShapePrimitive(`ring-${index + 1}`, 'ring', ring, scale)) : []),
     renderModel.multiclassArc
       ? vectorShapePrimitive('multiclass-arc', 'arc', renderModel.multiclassArc, scale)
       : null
-  ].filter(Boolean);
-  const items = (Array.isArray(renderModel.cars) ? renderModel.cars : []).map((car, index) => ({
+  ].filter(Boolean) : [];
+  const items = shouldRender ? (Array.isArray(renderModel.cars) ? renderModel.cars : []).map((car, index) => ({
     kind: stringOrNull(car?.kind) || 'car',
     id: stringOrNull(car?.id) || index,
     bounds: scaleRect(scale, car),
@@ -1479,18 +2343,18 @@ function carRadarVectorEvidence(renderModel, layout) {
     stroke: colorToCss(car?.stroke),
     strokeWidth: numberOrNull(car?.strokeWidth),
     label: stringOrNull(car?.label)
-  }));
-  const labels = (Array.isArray(renderModel.labels) ? renderModel.labels : []).map((label) => ({
+  })) : [];
+  const labels = shouldRender ? (Array.isArray(renderModel.labels) ? renderModel.labels : []).map((label) => ({
     text: stringOrNull(label?.text),
     bounds: scaleRect(scale, label),
     fontSize: numberOrNull(label?.fontSize),
     bold: Boolean(label?.bold),
     alignment: stringOrNull(label?.alignment),
     color: colorToCss(label?.color)
-  }));
+  })) : [];
 
   return {
-    shouldRender: booleanOrNull(renderModel.shouldRender),
+    shouldRender,
     width: numberOrNull(renderModel.width),
     height: numberOrNull(renderModel.height),
     targetBounds: target || null,
@@ -1500,8 +2364,8 @@ function carRadarVectorEvidence(renderModel, layout) {
     itemCount: items.length,
     primitiveCount: primitives.length,
     labelCount: labels.length,
-    ringCount: arrayLength(renderModel.rings),
-    surfaceAlpha: renderModel.shouldRender === true ? 1 : numberOrNull(renderModel.minimumVisibleAlpha),
+    ringCount: shouldRender ? arrayLength(renderModel.rings) : 0,
+    surfaceAlpha: shouldRender ? 1 : 0,
     items,
     primitives,
     labels
@@ -1788,6 +2652,7 @@ function scenarioEvidence(route, model, layout = null) {
     route.moduleAsset
   ].filter(Boolean).map(sourceFileEvidence);
   const modelSummary = model ? {
+    title: stringOrNull(model.title),
     status: stringOrNull(model.status),
     source: stringOrNull(model.source),
     bodyKind: stringOrNull(model.bodyKind),
@@ -1829,6 +2694,8 @@ function scenarioEvidence(route, model, layout = null) {
       unitSystem: route.unitSystem || screenshotUnitSystem,
       unitToggleLifecycle: 'browser-review-renders-model-values-without-native-form-lifecycle'
     },
+    provenance: model?.effectiveSettings?.rendered?.provenance || null,
+    v102Evidence: v102EvidenceForRoute(route),
     sourceFiles,
     modelSummary,
     modelHash: model ? stableHash(model) : null
@@ -1839,6 +2706,26 @@ function scenarioEvidence(route, model, layout = null) {
     sourceHash: stableHash(sourceFiles),
     scenarioHash: stableHash(base)
   };
+}
+
+function v102EvidenceForRoute(route) {
+  const ids = new Set();
+  if (route.surface?.includes('settings')) {
+    for (const id of v102EvidenceBySettingsTab.get(route.tab || 'general') || []) {
+      ids.add(id);
+    }
+  }
+  for (const id of v102EvidenceByOverlay.get(route.overlayId) || []) {
+    ids.add(id);
+  }
+  for (const id of v102EvidenceByFixture.get(route.fixtureVariant) || []) {
+    ids.add(id);
+  }
+  if (route.routeAlias) {
+    ids.add('V102-015');
+    ids.add('V102-027');
+  }
+  return [...ids].sort();
 }
 
 function sourceFileEvidence(relativePath) {
@@ -1910,6 +2797,8 @@ function graphEvidence(graph, layout) {
     selectedSeriesCount: numberOrNull(graph?.selectedSeriesCount),
     metricDeadbandSeconds: numberOrNull(graph?.metricDeadbandSeconds),
     comparisonLabel: stringOrNull(graph?.comparisonLabel),
+    showGraph: graph?.showGraph !== false,
+    showTrendMetrics: graph?.showTrendMetrics !== false,
     canvasBounds,
     gridLines: geometry?.gridLines || null,
     geometry,
@@ -1923,8 +2812,8 @@ function graphEvidence(graph, layout) {
       isStickyExit: Boolean(series?.isStickyExit),
       isStale: Boolean(series?.isStale),
       pointCount: arrayLength(series?.points),
-      baseColor: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.baseColor || null,
-      renderedColor: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.renderedColor || null,
+      baseColor: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.baseColor || stringOrNull(series?.baseColor),
+      renderedColor: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.renderedColor || stringOrNull(series?.renderedColor),
       effectiveAlpha: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.effectiveAlpha ?? null,
       strokeWidth: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.strokeWidth ?? null,
       isDashed: geometrySeries.find((candidate) => candidate.sourceIndex === index)?.isDashed ?? null,
@@ -1937,10 +2826,15 @@ function graphEvidence(graph, layout) {
     trendMetrics: (Array.isArray(graph?.trendMetrics) ? graph.trendMetrics : []).map((metric, index) => ({
       index,
       label: stringOrNull(metric?.label),
+      focusGapChangeSeconds: numberOrNull(metric?.focusGapChangeSeconds),
       state: stringOrNull(metric?.state),
       stateLabel: stringOrNull(metric?.stateLabel),
+      completedReferenceLaps: numberOrNull(metric?.completedReferenceLaps),
       valueText: graphMetricValueText(metric),
-      chaserText: graphMetricChaserText(metric)
+      chaserText: graphMetricChaserText(metric),
+      primaryText: stringOrNull(metric?.primaryText),
+      threatText: stringOrNull(metric?.threatText),
+      comparisonText: stringOrNull(metric?.comparisonText)
     })),
     weatherCount: arrayLength(graph?.weather),
     leaderChangeCount: arrayLength(graph?.leaderChanges),
@@ -1949,10 +2843,29 @@ function graphEvidence(graph, layout) {
 }
 
 function browserGraphGeometry(graph, canvasBounds) {
-  const local = browserGapGraphLayout(canvasBounds.width, canvasBounds.height);
+  const local = browserGapGraphLayout(canvasBounds.width, canvasBounds.height, graph);
   const scale = graph?.scale || { isFocusRelative: false, maxGapSeconds: graph?.maxGapSeconds };
   const maxGapSeconds = Math.max(1, numberOr(scale?.maxGapSeconds, graph?.maxGapSeconds, 1));
   const rawSeries = Array.isArray(graph?.series) ? graph.series : [];
+  if (graph?.showGraph === false) {
+    return {
+      frame: canvasBounds,
+      plot: null,
+      axis: null,
+      labelLane: null,
+      metricsTable: local.metricsRect ? offsetRect(canvasBounds, local.metricsRect) : null,
+      scale: scale?.isFocusRelative === true ? 'focus-relative' : 'leader',
+      aheadSeconds: scale?.isFocusRelative === true ? numberOrNull(scale?.aheadSeconds) : null,
+      behindSeconds: scale?.isFocusRelative === true ? numberOrNull(scale?.behindSeconds) : null,
+      latestReferenceGapSeconds: scale?.isFocusRelative === true ? numberOrNull(scale?.latestReferenceGapSeconds) : null,
+      gridLines: [],
+      weatherBands: [],
+      markers: [],
+      metricRows: graphMetricRows(local.metricsRect, graph, canvasBounds),
+      series: []
+    };
+  }
+
   if (rawSeries.length === 0 && Array.isArray(graph?.points) && graph.points.length > 0) {
     return browserFallbackGraphGeometry(graph, canvasBounds, local);
   }
@@ -2111,6 +3024,7 @@ function graphMarkers(graph, scale, plot, maxGapSeconds, canvasBounds) {
 
   for (const marker of Array.isArray(graph?.driverChanges) ? graph.driverChanges : []) {
     if (!Number.isFinite(marker?.axisSeconds) || !Number.isFinite(marker?.gapSeconds)) continue;
+    if (isGapReferenceSwitchMarker(marker)) continue;
     const point = graphPoint(graph, scale, plot, maxGapSeconds, marker.axisSeconds, marker.gapSeconds);
     markers.push({
       kind: 'driver-change',
@@ -2128,25 +3042,69 @@ function graphMarkers(graph, scale, plot, maxGapSeconds, canvasBounds) {
   return markers;
 }
 
+function isGapReferenceSwitchMarker(marker) {
+  const label = String(marker?.label || '').trim();
+  return Boolean(marker?.isReference) && label.toUpperCase() === 'REF';
+}
+
 function graphMetricRows(metricsRect, graph, canvasBounds) {
   const metrics = Array.isArray(graph?.trendMetrics) ? graph.trendMetrics.filter(Boolean) : [];
   if (!metricsRect || metrics.length === 0) return [];
-  const rowHeight = Math.max(9.5, Math.min(26, (metricsRect.height - 8 - 38) / Math.max(1, metrics.length)));
+  const layout = graphMetricTableLayout(metricsRect, metrics.length);
   return metrics.map((metric, index) => {
-    const y = metricsRect.y + 38 + index * rowHeight;
-    const row = { x: metricsRect.x + 8, y, width: metricsRect.width - 16, height: Math.max(10, Math.min(14, rowHeight)) };
+    const y = layout.rowsTop + index * layout.rowHeight;
+    const rowHeight = Math.max(10, Math.min(14, layout.rowHeight));
+    const textTop = y - rowHeight / 2;
+    const row = { x: metricsRect.x + 8, y: textTop, width: metricsRect.width - 16, height: rowHeight };
+    const columns = graphMetricColumnBounds(metricsRect, textTop, rowHeight);
     return {
       index,
       text: stringOrNull(metric?.label),
       state: stringOrNull(metric?.state),
       bounds: offsetRect(canvasBounds, row),
       cells: [
-        graphMetricCell('Metric', stringOrNull(metric?.label), { x: metricsRect.x + 8, y, width: 44, height: row.height }, canvasBounds),
-        graphMetricCell(stringOrNull(graph?.comparisonLabel) || '--', graphMetricValueText(metric), { x: metricsRect.x + 56, y, width: 72, height: row.height }, canvasBounds),
-        graphMetricCell('Threat', graphMetricChaserText(metric), { x: metricsRect.x + 136, y, width: metricsRect.width - 142, height: row.height }, canvasBounds)
+        graphMetricCell('Metric', stringOrNull(metric?.label), columns.label, canvasBounds),
+        graphMetricCell(stringOrNull(graph?.comparisonLabel) || '--', graphMetricValueText(metric), columns.value, canvasBounds),
+        graphMetricCell('Threat', graphMetricChaserText(metric), columns.threat, canvasBounds)
       ]
     };
   });
+}
+
+function graphMetricTableLayout(metricsRect, metricCount) {
+  const rowsTop = metricsRect.y + gapGeometryNumber('metricsRowsTopOffset', 48);
+  const availableHeight = Math.max(
+    1,
+    metricsRect.y + metricsRect.height - gapGeometryNumber('metricsBottomPadding', 8) - rowsTop);
+  return {
+    contentLeft: metricsRect.x + gapGeometryNumber('metricsTableInset', 10),
+    contentRight: metricsRect.x + metricsRect.width - gapGeometryNumber('metricsTableInset', 10),
+    rowsTop,
+    rowHeight: Math.max(
+      gapGeometryNumber('metricsRowMinHeight', 12),
+      Math.min(gapGeometryNumber('metricsRowMaxHeight', 26), availableHeight / Math.max(1, metricCount)))
+  };
+}
+
+function graphMetricColumnBounds(metricsRect, y, height) {
+  const inset = gapGeometryNumber('metricsTableInset', 10);
+  const gap = gapGeometryNumber('metricsColumnGap', 6);
+  const contentLeft = metricsRect.x + inset;
+  const contentWidth = Math.max(1, metricsRect.width - inset * 2);
+  const labelWidth = Math.max(48, Math.min(56, contentWidth * 0.25));
+  const valueWidth = Math.max(64, Math.min(76, contentWidth * 0.32));
+  const threatWidth = Math.max(1, contentWidth - labelWidth - valueWidth - gap * 2);
+  const valueLeft = contentLeft + labelWidth + gap;
+  const threatLeft = valueLeft + valueWidth + gap;
+  return {
+    label: { x: contentLeft, y, width: labelWidth, height },
+    value: { x: valueLeft, y, width: valueWidth, height },
+    threat: { x: threatLeft, y, width: threatWidth, height }
+  };
+}
+
+function gapGeometryNumber(key, fallback) {
+  return numberOr(gapGraphGeometry?.[key], fallback);
 }
 
 function graphMetricCell(column, text, bounds, canvasBounds) {
@@ -2386,26 +3344,42 @@ function inputTraceSeries(inputs, bounds) {
   }
 }
 
-function browserGapGraphLayout(width, height) {
-  const axisWidth = 58;
-  const xAxisHeight = 17;
-  const labelLaneWidth = 38;
-  const metricsWidth = gapMetricsTableWidth(width);
+function browserGapGraphLayout(width, height, graph = null) {
+  const axisWidth = gapGeometryNumber('axisWidth', 58);
+  const xAxisHeight = gapGeometryNumber('xAxisHeight', 17);
+  const labelLaneWidth = gapGeometryNumber('endpointLabelLaneWidth', 38);
+  const metricsWidth = gapMetricsTableWidth(width, graph);
   const plotHeight = Math.max(40, height - xAxisHeight);
-  const metricsRect = metricsWidth > 0
+  const metricsRect = graph?.showGraph === false && metricsWidth > 0
+    ? graphMetricOnlyRect(width, height)
+    : metricsWidth > 0
     ? { x: width - metricsWidth, y: 0, width: metricsWidth, height: plotHeight }
     : null;
-  const chartRight = metricsRect ? metricsRect.x - 10 : width - 4;
+  const chartRight = metricsRect ? metricsRect.x - gapGeometryNumber('metricsTableGap', 10) : width - 4;
   const labelLane = { x: chartRight - labelLaneWidth, y: 0, width: labelLaneWidth, height: plotHeight };
   const plot = { x: axisWidth, y: 0, width: Math.max(40, labelLane.x - axisWidth), height: plotHeight };
   const axis = { x: 0, y: 0, width: axisWidth - 8, height: plotHeight };
   return { plot, axis, labelLane, metricsRect };
 }
 
-function gapMetricsTableWidth(width) {
-  const metricsWidth = 220;
-  const availableAfterTable = width - 58 - 38 - 10 - metricsWidth;
-  return availableAfterTable >= 260 ? metricsWidth : 0;
+function graphMetricOnlyRect(width, height) {
+  if (gapGraphGeometry.metricOnlyUsesFullFrame !== false) {
+    return { x: 0, y: 0, width, height };
+  }
+
+  return { x: 0, y: 0, width, height: Math.max(1, height - gapGeometryNumber('xAxisHeight', 17)) };
+}
+
+function gapMetricsTableWidth(width, graph = null) {
+  if (graph?.showTrendMetrics === false) return 0;
+  if (graph?.showGraph === false) return width;
+  const metricsWidth = gapGeometryNumber('metricsTableWidth', 220);
+  const availableAfterTable = width
+    - gapGeometryNumber('axisWidth', 58)
+    - gapGeometryNumber('endpointLabelLaneWidth', 38)
+    - gapGeometryNumber('metricsTableGap', 10)
+    - metricsWidth;
+  return availableAfterTable >= gapGeometryNumber('metricsMinimumPlotWidth', 260) ? metricsWidth : 0;
 }
 
 function graphGridLines(graph, scale, plot, maxGapSeconds, canvasBounds) {
@@ -2664,6 +3638,10 @@ function numberOr(...values) {
     if (Number.isFinite(number)) return number;
   }
   return 0;
+}
+
+function geometryNumber(...values) {
+  return numberOr(...values);
 }
 
 function clamp01(value) {

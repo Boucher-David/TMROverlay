@@ -123,6 +123,7 @@ Useful local validation:
 ```bash
 npm run test:browser
 npm run test:localhost
+npm run test:evidence-contract # separate semantic evidence/provenance lane
 npm run test:browser:install # first run only, when Playwright's Chromium cache is missing
 npm run screenshots:browser-review
 python3 tools/validate_overlay_screenshots.py --profile browser-review-ci --root artifacts/browser-review-screenshots

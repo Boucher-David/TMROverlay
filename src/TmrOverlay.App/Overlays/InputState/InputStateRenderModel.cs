@@ -4,6 +4,7 @@ using TmrOverlay.App.Overlays.SimpleTelemetry;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
 using TmrOverlay.Core.Telemetry.Live;
+using InputGeometry = TmrOverlay.App.Overlays.OverlayGeometryContractValues.InputState;
 
 namespace TmrOverlay.App.Overlays.InputState;
 
@@ -16,6 +17,7 @@ internal sealed record InputStateRenderModel(
     double? Brake,
     double? Clutch,
     double? SteeringWheelAngle,
+    double? SteeringWheelVisualAngle,
     double? SpeedMetersPerSecond,
     int? Gear,
     string SpeedText,
@@ -46,10 +48,10 @@ internal sealed record InputStateTracePoint(
 
 internal static class InputStateRenderModelBuilder
 {
-    public const int RefreshIntervalMilliseconds = 50;
-    public const int MaximumTracePoints = 180;
-    public const int GraphOnlyBaseWidth = 380;
-    public const int RailOnlyBaseWidth = 276;
+    public const int RefreshIntervalMilliseconds = InputGeometry.RefreshIntervalMilliseconds;
+    public const int MaximumTracePoints = InputGeometry.MaximumTracePoints;
+    public const int GraphOnlyBaseWidth = InputGeometry.GraphOnlyBaseWidth;
+    public const int RailOnlyBaseWidth = InputGeometry.RailOnlyBaseWidth;
 
     public static InputStateRenderModel Build(
         LiveTelemetrySnapshot snapshot,
@@ -88,12 +90,19 @@ internal static class InputStateRenderModelBuilder
         var showSteering = BlockEnabled(settings, OverlayContentColumnSettings.InputSteeringBlockId, sessionKind);
         var showGear = BlockEnabled(settings, OverlayContentColumnSettings.InputGearBlockId, sessionKind);
         var showSpeed = BlockEnabled(settings, OverlayContentColumnSettings.InputSpeedBlockId, sessionKind);
-        var hasGraph = showThrottleTrace || showBrakeTrace || showClutchTrace;
-        var hasRail = showThrottle || showBrake || showClutch || showSteering || showGear || showSpeed;
+        var configuredGraph = showThrottleTrace || showBrakeTrace || showClutchTrace;
+        var configuredRail = showThrottle || showBrake || showClutch || showSteering || showGear || showSpeed;
+        var hasGraph = isAvailable && configuredGraph;
+        var hasRail = isAvailable && configuredRail;
         var hasContent = hasGraph || hasRail;
         var displayInputs = isAvailable ? inputs : LiveInputTelemetryModel.Empty;
+        var status = hasContent
+            ? viewModel.Status
+            : isAvailable
+                ? "no input content enabled"
+                : viewModel.Status;
         return new InputStateRenderModel(
-            hasContent ? viewModel.Status : "no input content enabled",
+            status,
             viewModel.Source,
             viewModel.Tone,
             isAvailable,
@@ -101,6 +110,7 @@ internal static class InputStateRenderModelBuilder
             displayInputs.Brake,
             displayInputs.Clutch,
             displayInputs.SteeringWheelAngle,
+            VisualSteeringWheelAngle(displayInputs.SteeringWheelAngle),
             displayInputs.SpeedMetersPerSecond,
             displayInputs.Gear,
             SimpleTelemetryOverlayViewModel.FormatSpeed(displayInputs.SpeedMetersPerSecond, unitSystem),
@@ -198,5 +208,10 @@ internal static class InputStateRenderModelBuilder
         return radians is { } value && double.IsFinite(value)
             ? $"{(value * 180d / Math.PI).ToString("+0;-0;0", CultureInfo.InvariantCulture)} deg"
             : "--";
+    }
+
+    public static double? VisualSteeringWheelAngle(double? radians)
+    {
+        return radians is { } value && double.IsFinite(value) ? -value : null;
     }
 }

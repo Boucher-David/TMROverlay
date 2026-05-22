@@ -52,7 +52,7 @@ public sealed class RelativeBrowserSettingsTests
     {
         var browserSettings = RelativeBrowserSettings.From(new ApplicationSettings());
 
-        Assert.Equal(5, browserSettings.CarsAhead);
-        Assert.Equal(5, browserSettings.CarsBehind);
+        Assert.Equal(3, browserSettings.CarsAhead);
+        Assert.Equal(3, browserSettings.CarsBehind);
     }
 }

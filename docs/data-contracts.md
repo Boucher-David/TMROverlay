@@ -107,6 +107,14 @@ current runtime contract: released settings must map into browser, localhost,
 and native overlays without relying on `LatestSample` as an overlay-rendering
 input.
 
+Overlay evidence contracts are not durable user data, but they are validation
+contracts. Browser/localhost/native evidence must preserve local-role context
+when it is known: `DriverInfo.DriverCarIdx`/`PlayerCarIdx`, focus car index,
+`DriverInfo.Drivers[].IsSpectator` for the local and focus rows, derived
+`localRole`, and a nullable `isSpotting` slot for a future true spotting signal.
+The v1.0-era durable snapshots do not bump for this because no persisted
+settings/history/map schema changed.
+
 On non-Windows machines without `dotnet`, the branch can still update fixtures
 and docs, but Windows/CI must run the test before release.
 

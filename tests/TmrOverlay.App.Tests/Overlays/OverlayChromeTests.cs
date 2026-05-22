@@ -1,4 +1,5 @@
 using TmrOverlay.App.Overlays.Abstractions;
+using TmrOverlay.App.Overlays.Styling;
 using Xunit;
 
 namespace TmrOverlay.App.Tests.Overlays;
@@ -31,5 +32,14 @@ public sealed class OverlayChromeTests
 
         Assert.DoesNotContain("disabled", selected);
         Assert.Contains("enabled", selected);
+    }
+
+    [Fact]
+    public void HeaderTimeRemainingTextColor_DoesNotInheritStatusTone()
+    {
+        Assert.Equal(OverlayTheme.Colors.TextMuted, OverlayChrome.HeaderTimeRemainingTextColor());
+        Assert.NotEqual(OverlayChrome.StatusTextColor(OverlayChromeTone.Info), OverlayChrome.HeaderTimeRemainingTextColor());
+        Assert.NotEqual(OverlayChrome.StatusTextColor(OverlayChromeTone.Warning), OverlayChrome.HeaderTimeRemainingTextColor());
+        Assert.NotEqual(OverlayChrome.StatusTextColor(OverlayChromeTone.Error), OverlayChrome.HeaderTimeRemainingTextColor());
     }
 }

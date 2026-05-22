@@ -10,5 +10,5 @@ internal static class SessionWeatherBrowserSource
         canonicalRoute: "/overlays/session-weather",
         fadeWhenTelemetryUnavailable: SessionWeatherOverlayDefinition.Definition.FadeWhenLiveTelemetryUnavailable,
         moduleAssetName: "session-weather",
-        bodyClass: "session-weather-page");
+        bodyClass: "session-weather-page metric-telemetry-page");
 }

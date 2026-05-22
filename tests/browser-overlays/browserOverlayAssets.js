@@ -7,6 +7,7 @@ export const browserAssetRoot = resolve(repoRoot, 'src/TmrOverlay.App/Overlays/B
 
 export const pages = {
   standings: pageDefinition('standings', 'Standings', '/overlays/standings', {
+    bodyClass: 'standings-page',
     fadeWhenTelemetryUnavailable: true,
     modelRoute: '/api/overlay-model/standings',
     settingsRoute: '/api/standings',
@@ -21,16 +22,17 @@ export const pages = {
   }),
   'fuel-calculator': pageDefinition('fuel-calculator', 'Fuel Calculator', '/overlays/fuel-calculator', {
     aliases: ['/overlays/calculator'],
-    bodyClass: 'fuel-calculator-page',
+    bodyClass: 'fuel-calculator-page metric-telemetry-page',
     fadeWhenTelemetryUnavailable: true,
     modelRoute: '/api/overlay-model/fuel-calculator'
   }),
   'session-weather': pageDefinition('session-weather', 'Session / Weather', '/overlays/session-weather', {
-    bodyClass: 'session-weather-page',
+    bodyClass: 'session-weather-page metric-telemetry-page',
     fadeWhenTelemetryUnavailable: true,
     modelRoute: '/api/overlay-model/session-weather'
   }),
   'pit-service': pageDefinition('pit-service', 'Pit Service', '/overlays/pit-service', {
+    bodyClass: 'pit-service-page metric-telemetry-page',
     fadeWhenTelemetryUnavailable: true,
     modelRoute: '/api/overlay-model/pit-service'
   }),
@@ -339,7 +341,8 @@ function renderSettingsReviewHtml({
   reviewState = null
 }) {
   const settingsCss = assetText('styles/settings-general.css')
-    .replace('{{THEME_CSS_VARIABLES}}', themeCssVariables());
+    .replace('{{THEME_CSS_VARIABLES}}', themeCssVariables())
+    .replace('{{GEOMETRY_CSS_VARIABLES}}', geometryCssVariables());
   const config = settingsAppConfig({
     previewMode,
     selectedTab,
@@ -349,6 +352,7 @@ function renderSettingsReviewHtml({
 
   return assetText('templates/settings-general.html')
     .replace('{{SETTINGS_CSS}}', settingsCss)
+    .replace('{{GEOMETRY_JSON}}', escapeHtml(overlayGeometryJson()))
     .replace('{{APP_CONFIG_JSON}}', escapeHtml(JSON.stringify(config)));
 }
 
@@ -364,9 +368,11 @@ function escapeHtml(value) {
 export function renderOverlayHtml(name) {
   const page = browserOverlayPage(name);
   const overlayCss = assetText('styles/overlay.css')
-    .replace('{{THEME_CSS_VARIABLES}}', themeCssVariables());
+    .replace('{{THEME_CSS_VARIABLES}}', themeCssVariables())
+    .replace('{{GEOMETRY_CSS_VARIABLES}}', geometryCssVariables());
   const overlayScript = assetText('scripts/overlay-shell.js')
     .replace('{{PAGE_JSON}}', JSON.stringify(page.page))
+    .replace('{{GEOMETRY_JSON}}', overlayGeometryJson())
     .replace('{{MODULE_SCRIPT}}', assetText(`modules/${page.module}.js`));
 
   return assetText('templates/overlay.html')
@@ -374,6 +380,178 @@ export function renderOverlayHtml(name) {
     .replace('{{BODY_CLASS}}', page.bodyClass)
     .replace('{{OVERLAY_CSS}}', overlayCss)
     .replace('{{OVERLAY_SCRIPT}}', overlayScript);
+}
+
+export function overlayGeometry() {
+  return JSON.parse(overlayGeometryJson());
+}
+
+function overlayGeometryJson() {
+  return assetText('contracts/overlay-geometry.json');
+}
+
+function geometryCssVariables() {
+  const {
+    gapGraph,
+    metricRows,
+    streamChat,
+    inputState = {},
+    flags = {},
+    canvasOverlays = {},
+    overlaySizes = {},
+    settingsGeometry = {}
+  } = overlayGeometry();
+  const variables = {
+    '--tmr-gap-panel-padding-x': px(gapGraph.browserPanelPaddingX),
+    '--tmr-gap-panel-padding-y': px(gapGraph.browserPanelPaddingY),
+    '--tmr-metric-min-simple-height': px(metricRows.minimumSimpleTelemetryHeight),
+    '--tmr-metric-min-simple-width': px(metricRows.minimumSimpleTelemetryWidth),
+    '--tmr-metric-non-race-height-reduction': px(metricRows.nonRaceSimpleTelemetryHeightReduction),
+    '--tmr-metric-pit-service-metric-only-width': px(metricRows.pitServiceMetricOnlyWidth),
+    '--tmr-metric-fuel-min-height': px(metricRows.minimumFuelCalculatorHeight),
+    '--tmr-metric-fuel-non-race-height': px(metricRows.fuelNonRaceHeight),
+    '--tmr-metric-header-height': px(metricRows.headerChromeHeight),
+    '--tmr-metric-footer-height': px(metricRows.footerChromeHeight),
+    '--tmr-metric-body-gap': px(metricRows.bodyGap),
+    '--tmr-metric-content-padding-x': px(metricRows.contentPaddingX),
+    '--tmr-metric-content-padding-top': px(metricRows.contentPaddingTop),
+    '--tmr-metric-content-padding-bottom': px(metricRows.contentPaddingBottom),
+    '--tmr-metric-collapsed-footer-reserve-height': px(metricRows.collapsedFooterReserveHeight),
+    '--tmr-metric-list-min-width': px(metricRows.metricListMinimumWidth),
+    '--tmr-metric-row-plain-height': px(metricRows.plainRowHeight),
+    '--tmr-metric-row-segmented-height': px(metricRows.segmentedRowHeight),
+    '--tmr-metric-row-directional-height': px(metricRows.directionalRowHeight),
+    '--tmr-metric-row-gap': px(metricRows.rowGap),
+    '--tmr-metric-section-title-height': px(metricRows.sectionTitleHeight),
+    '--tmr-metric-section-title-bottom-gap': px(metricRows.sectionTitleBottomGap),
+    '--tmr-metric-section-title-inset-x': px(metricRows.sectionTitleInsetX),
+    '--tmr-metric-section-gap': px(metricRows.sectionGap),
+    '--tmr-metric-row-radius': px(metricRows.rowRadius),
+    '--tmr-metric-label-column-width': px(metricRows.labelColumnWidth),
+    '--tmr-metric-label-padding-left': px(metricRows.labelPaddingLeft),
+    '--tmr-metric-label-padding-right': px(metricRows.labelPaddingRight),
+    '--tmr-metric-value-padding-left': px(metricRows.valuePaddingLeft),
+    '--tmr-metric-value-padding-right': px(metricRows.valuePaddingRight),
+    '--tmr-metric-cell-padding-y': px(metricRows.cellVerticalPadding),
+    '--tmr-metric-value-segment-gap': px(metricRows.valueSegmentGap),
+    '--tmr-metric-pit-service-section-gap': px(metricRows.pitServiceSectionGap),
+    '--tmr-metric-grid-gap': px(metricRows.metricGridGap),
+    '--tmr-metric-grid-header-height': px(metricRows.metricGridHeaderHeight),
+    '--tmr-metric-grid-header-bottom-gap': px(metricRows.metricGridHeaderBottomGap),
+    '--tmr-metric-grid-row-height': px(metricRows.metricGridRowHeight),
+    '--tmr-metric-grid-row-gap': px(metricRows.metricGridRowGap),
+    '--tmr-metric-grid-cell-inset': px(metricRows.metricGridCellInset),
+    '--tmr-metric-grid-cell-gap': px(metricRows.metricGridCellGap),
+    '--tmr-metric-grid-cell-min-width': px(metricRows.metricGridCellMinimumWidth),
+    '--tmr-metric-grid-cell-height': px(metricRows.metricGridCellHeight),
+    '--tmr-stream-chat-overlay-width': px(streamChat.overlayWidth),
+    '--tmr-stream-chat-overlay-height': px(streamChat.overlayHeight),
+    '--tmr-stream-chat-header-height': px(streamChat.headerHeight),
+    '--tmr-stream-chat-header-right-reserve': px(streamChat.headerRightReserve),
+    '--tmr-stream-chat-close-size': px(streamChat.closeButtonSize),
+    '--tmr-stream-chat-close-right': px(streamChat.closeButtonRight),
+    '--tmr-stream-chat-close-top': px(streamChat.closeButtonTop),
+    '--tmr-stream-chat-content-padding-x': px(streamChat.contentHorizontalPadding),
+    '--tmr-stream-chat-content-padding-top': px(streamChat.contentTopPadding),
+    '--tmr-stream-chat-content-padding-bottom': px(streamChat.contentBottomPadding),
+    '--tmr-stream-chat-body-max-height': px(streamChat.overlayHeight + 100),
+    '--tmr-stream-chat-body-viewport-height-offset': px(streamChat.availableHeightFallbackOffset),
+    '--tmr-stream-chat-row-gap': px(streamChat.rowGap),
+    '--tmr-stream-chat-row-min-height': px(streamChat.rowMinHeight),
+    '--tmr-stream-chat-row-padding-y': px(streamChat.rowPaddingY),
+    '--tmr-stream-chat-row-padding-x': px(streamChat.rowPaddingX),
+    '--tmr-stream-chat-row-radius': px(streamChat.rowRadius),
+    '--tmr-stream-chat-head-gap': px(streamChat.headGap),
+    '--tmr-stream-chat-head-height': px(streamChat.headHeight),
+    '--tmr-stream-chat-head-text-gap': px(streamChat.headTextGap),
+    '--tmr-stream-chat-badge-gap': px(streamChat.badgeGap),
+    '--tmr-stream-chat-badge-max-row-fraction': String(streamChat.badgeMaxRowFraction),
+    '--tmr-stream-chat-badge-max-row-width': `${Number(streamChat.badgeMaxRowFraction * 100).toFixed(3).replace(/\.?0+$/, '')}%`,
+    '--tmr-stream-chat-badge-min-width': px(streamChat.badgeMinWidth),
+    '--tmr-stream-chat-badge-max-width': px(streamChat.badgeMaxWidth),
+    '--tmr-stream-chat-badge-height': px(streamChat.badgeHeight),
+    '--tmr-stream-chat-badge-padding-x': px(streamChat.badgePaddingX),
+    '--tmr-stream-chat-badge-image-size': px(streamChat.badgeImageSize),
+    '--tmr-stream-chat-name-font-size': px(streamChat.nameFontSize),
+    '--tmr-stream-chat-name-font-weight': String(streamChat.nameFontWeight),
+    '--tmr-stream-chat-chip-gap': px(streamChat.chipGap),
+    '--tmr-stream-chat-chip-max-width': px(streamChat.chipMaxWidth),
+    '--tmr-stream-chat-chip-height': px(streamChat.chipHeight),
+    '--tmr-stream-chat-chip-padding-x': px(streamChat.chipPaddingX),
+    '--tmr-stream-chat-chip-radius': px(streamChat.chipRadius),
+    '--tmr-stream-chat-chip-font-size': px(streamChat.chipFontSize),
+    '--tmr-stream-chat-text-font-size': px(streamChat.textFontSize),
+    '--tmr-stream-chat-text-line-height': px(streamChat.textLineHeight),
+    '--tmr-stream-chat-emote-size': px(streamChat.emoteSize),
+    '--tmr-stream-chat-emote-margin-top': px(streamChat.emoteMarginTop),
+    '--tmr-stream-chat-emote-margin-x': px(streamChat.emoteMarginX),
+    '--tmr-stream-chat-emote-margin-bottom': px(streamChat.emoteMarginBottom)
+  };
+
+  addGeometryCssVariables(variables, 'tmr-overlay-sizes', overlaySizes);
+  addGeometryCssVariables(variables, 'tmr-input-state', inputState, new Set([
+    'refreshIntervalMilliseconds',
+    'maximumTracePoints',
+    'railPreferredWidthFraction',
+    'graphGridLines'
+  ]));
+  addGeometryCssVariables(variables, 'tmr-flags', flags, new Set([
+    'refreshIntervalMilliseconds',
+    'poleInsetFractionX',
+    'clothAreaHeightFraction',
+    'clothWidthHeightFraction',
+    'clothTopFraction',
+    'nativeLabelPointSize',
+    'nativeCompactLabelPointSize',
+    'checkeredColumns',
+    'checkeredRows',
+    'stripeWidthFraction',
+    'cautionStripeStrideMultiplier',
+    'debrisStripeStrideMultiplier',
+    'meatballDiameterFraction',
+    'pathControlOneFraction',
+    'pathControlTwoFraction',
+    'pathBottomWaveFraction',
+    'gridTwoCountMaximum',
+    'gridFourCountMaximum',
+    'gridSixCountMaximum',
+    'gridMaximumColumns'
+  ]));
+  addGeometryCssVariables(variables, 'tmr-canvas-overlays', canvasOverlays, new Set([
+    'garageCoverAspectWidth',
+    'garageCoverAspectHeight'
+  ]));
+  for (const [key, value] of Object.entries(settingsGeometry)) {
+    variables[`--tmr-settings-${kebabCase(key)}`] = px(value);
+  }
+
+  return Object.entries(variables)
+    .map(([key, value]) => `      ${key}: ${value};`)
+    .join('\n');
+}
+
+function addGeometryCssVariables(variables, prefix, section, unitlessKeys = new Set()) {
+  for (const [key, value] of Object.entries(section || {})) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      continue;
+    }
+    variables[`--${prefix}-${kebabCase(key)}`] = unitlessKeys.has(key) ? cssNumber(value) : px(value);
+  }
+}
+
+function kebabCase(value) {
+  return String(value)
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[_\s]+/g, '-')
+    .toLowerCase();
+}
+
+function px(value) {
+  return `${cssNumber(value)}px`;
+}
+
+function cssNumber(value) {
+  return Number(value).toFixed(3).replace(/\.?0+$/, '');
 }
 
 export function browserOverlayApiResponse(name, path, { live, settings = {}, model = null }) {
@@ -442,7 +620,9 @@ function settingsAppOverlays(reviewState = null, previewMode = 'off') {
 function settingsOverlayDefinition(id, reviewState = null, previewMode = 'off') {
   const page = pages[id];
   const overlayState = reviewState?.overlays?.[id] || {};
-  const sharedChrome = ['standings', 'relative', 'fuel-calculator', 'gap-to-leader', 'session-weather', 'pit-service'].includes(id);
+  const headerRows = settingsHeaderRows(id);
+  const footerRows = settingsFooterRows(id);
+  const supportsChrome = headerRows.length > 0 || footerRows.length > 0;
   const noSessionFilters = ['stream-chat', 'gap-to-leader', 'flags'].includes(id);
   const noOpacity = ['car-radar', 'flags', 'garage-cover'].includes(id);
   return {
@@ -457,7 +637,7 @@ function settingsOverlayDefinition(id, reviewState = null, previewMode = 'off') 
     showScale: true,
     showOpacity: !noOpacity,
     showSessionFilters: !noSessionFilters && id !== 'garage-cover',
-    supportsChrome: sharedChrome,
+    supportsChrome,
     content: overlayState.content || {},
     sessions: overlayState.sessions ?? (id === 'gap-to-leader'
       ? { test: false, practice: false, qualifying: false, race: true }
@@ -473,17 +653,31 @@ function settingsOverlayDefinition(id, reviewState = null, previewMode = 'off') 
       'standings.class-separators.enabled',
       'Multiclass sections',
       contentStateValue(overlayState, 'standings.class-separators.enabled', 'Class separators', true)),
+    showMulticlassWarning: contentStateValue(overlayState, 'radar.multiclass-warning', 'Faster-class warning', true),
+    multiclassWarningSeconds: clampInteger(overlayState.multiclassWarningSeconds, 5, 3, 10),
+    radarVisibilitySeconds: clampInteger(overlayState.radarVisibilitySeconds, 2, 2, 5),
+    carsInClass: clampInteger(overlayState.carsInClass, 14, 1, 24),
     otherClassRows: overlayState.otherClassRows ?? 2,
-    carsEachSide: overlayState.carsEachSide ?? 5,
+    carsEachSide: overlayState.carsEachSide ?? 3,
     carsAhead: overlayState.carsAhead ?? 5,
     carsBehind: overlayState.carsBehind ?? 5,
     chrome: overlayState.chrome || {},
-    headerRows: sharedChrome ? ['Time remaining'] : [],
-    footerRows: [],
+    headerRows,
+    footerRows,
     contentTitle: settingsContentTitle(id),
     gridColumns: ['session-weather', 'pit-service', 'stream-chat'].includes(id) ? 2 : 1,
     contentRows: settingsContentRows(id, overlayState)
   };
+}
+
+function settingsHeaderRows(id) {
+  return ['standings', 'relative', 'fuel-calculator', 'gap-to-leader', 'session-weather', 'pit-service'].includes(id)
+    ? ['Time remaining']
+    : [];
+}
+
+function settingsFooterRows(_id) {
+  return [];
 }
 
 function providerLabelFromState(provider) {
@@ -508,24 +702,15 @@ function settingsOverlaySubtitle(id) {
 }
 
 export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = 'off') {
-  const base = {
-    standings: [677, 313],
-    relative: [360, 352],
-    'gap-to-leader': [654, 336],
-    'track-map': [360, 360],
-    'stream-chat': [380, 520],
-    'garage-cover': [1280, 720],
-    'fuel-calculator': [503, 315],
-    'input-state': [520, 260],
-    'car-radar': [300, 300],
-    flags: [360, 170],
-    'session-weather': [464, 496],
-    'pit-service': [530, 722]
-  }[id] || [400, 300];
+  const base = browserBaseSize(id);
   if (id === 'input-state') {
     base[0] = inputStateBaseWidth(overlayState, base[0], previewMode);
+  } else if (id === 'gap-to-leader') {
+    const gapSize = gapToLeaderBaseSize(overlayState, base[0], base[1], previewMode);
+    base[0] = gapSize[0];
+    base[1] = gapSize[1];
   } else if (id === 'fuel-calculator') {
-    base[1] = fuelCalculatorBaseHeight(previewMode, base[1]);
+    base[1] = fuelCalculatorBaseHeight(overlayState, previewMode, base[1]);
   } else if (id === 'standings' || id === 'relative') {
     base[0] = tableBaseWidth(id, overlayState, base[0], previewMode);
     if (id === 'relative') {
@@ -548,18 +733,67 @@ export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = '
   };
 }
 
+function browserBaseSize(id) {
+  return {
+    standings: [
+      overlaySizeNumber('standingsBrowserReviewWidth', overlaySizeNumber('standingsWidth', 677)),
+      overlaySizeNumber('standingsHeight', 313)
+    ],
+    relative: [overlaySizeNumber('relativeWidth', 360), overlaySizeNumber('relativeHeight', 308)],
+    'gap-to-leader': [overlaySizeNumber('gapToLeaderWidth', 654), overlaySizeNumber('gapToLeaderHeight', 336)],
+    'track-map': [overlaySizeNumber('trackMapWidth', 360), overlaySizeNumber('trackMapHeight', 360)],
+    'stream-chat': [overlaySizeNumber('streamChatWidth', 380), overlaySizeNumber('streamChatHeight', 520)],
+    'garage-cover': [overlaySizeNumber('garageCoverWidth', 1280), overlaySizeNumber('garageCoverHeight', 720)],
+    'fuel-calculator': [overlaySizeNumber('fuelCalculatorWidth', 503), overlaySizeNumber('fuelCalculatorHeight', 315)],
+    'input-state': [overlaySizeNumber('inputStateWidth', 520), overlaySizeNumber('inputStateHeight', 260)],
+    'car-radar': [overlaySizeNumber('carRadarWidth', 300), overlaySizeNumber('carRadarHeight', 300)],
+    flags: [overlaySizeNumber('flagsWidth', 360), overlaySizeNumber('flagsHeight', 170)],
+    'session-weather': [overlaySizeNumber('sessionWeatherWidth', 464), overlaySizeNumber('sessionWeatherHeight', 496)],
+    'pit-service': [overlaySizeNumber('pitServiceWidth', 530), overlaySizeNumber('pitServiceHeight', 707)]
+  }[id] || [400, 300];
+}
+
+function overlaySizeNumber(key, fallback) {
+  const value = Number(overlayGeometry().overlaySizes?.[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
 function settingsBrowserSize(id, overlayState = {}, previewMode = 'off') {
   const size = settingsBrowserSourceSize(id, overlayState, previewMode);
   return `${size.width} x ${size.height}`;
 }
 
-function fuelCalculatorBaseHeight(previewMode, fullHeight) {
+function fuelCalculatorBaseHeight(overlayState, previewMode, fullHeight) {
   const session = sizingSession('fuel-calculator', previewMode);
-  return session === 'practice' || session === 'qualifying' ? 184 : fullHeight;
+  if (session === 'practice' || session === 'qualifying') {
+    const rows = [
+      ['fuel-calculator.range.fuel.enabled', 'Fuel range'],
+      ['fuel-calculator.usage.enabled', 'Fuel usage']
+    ].filter(([key, label]) => contentStateValueForSession(overlayState, key, label, true, session)).length;
+    return fuelCalculatorContentHeight(rows, rows) || 184;
+  }
+
+  const showPlan = contentStateValueForSession(overlayState, 'fuel-calculator.race.plan.enabled', 'Plan', true, session);
+  const showFuel = contentStateValueForSession(overlayState, 'fuel-calculator.race.fuel.enabled', 'Fuel', true, session);
+  const showStints = contentStateValueForSession(overlayState, 'fuel-calculator.race.stint-targets.enabled', 'Stint targets', true, session);
+  const raceRows = (showPlan ? 1 : 0) + (showFuel ? 1 : 0);
+  const stintRows = showStints ? 3 : 0;
+  const sectionCount = (raceRows > 0 ? 1 : 0) + (stintRows > 0 ? 1 : 0);
+  return fuelCalculatorContentHeight(raceRows + stintRows, sectionCount) || fullHeight;
+}
+
+function fuelCalculatorContentHeight(rowCount, sectionCount) {
+  if (rowCount <= 0 || sectionCount <= 0) return 126;
+  const rowGaps = Math.max(0, rowCount - sectionCount) * 5;
+  const sectionGaps = Math.max(0, sectionCount - 1) * 8;
+  const height = 38 + 26 + sectionCount * 14 + rowCount * 35 + rowGaps + sectionGaps + 8;
+  return Math.max(126, Math.min(315, height));
 }
 
 function settingsChromeAdjustedBaseHeight(id, overlayState, fullHeight, previewMode = 'off') {
-  const titleHeaderHeight = 38;
+  const titleHeaderHeight = id === 'relative'
+    ? overlaySizeNumber('relativeHeaderChromeCollapseHeight', 34)
+    : 38;
   const minimumHeaderlessHeight = 80;
   if (!usesCollapsibleHeaderHeight(id) || headerChromeEnabledForSizing(id, overlayState, previewMode)) {
     return fullHeight;
@@ -594,64 +828,174 @@ function sizingSession(id, previewMode = 'off') {
     return normalized;
   }
 
-  return id === 'gap-to-leader' ? 'race' : 'practice';
+  return null;
 }
 
 function tableBaseWidth(id, overlayState, fullWidth, previewMode = 'off') {
   const session = sizingSession(id, previewMode);
-  const widths = {
-    standings: {
-      'Class position': 35,
-      'Car number': 50,
-      Driver: 250,
-      'Class gap': 60,
-      'Previous interval': 60,
-      'Fastest lap': 70,
-      'Last lap': 70,
-      'Pit status': 48
-    },
-    relative: {
-      'Relative position': 38,
-      Driver: 250,
-      'Relative delta': 70,
-      'Pit status': 48
-    }
-  }[id] || {};
-  const rows = settingsContentRows(id, overlayState);
-  const defaultWidth = rows
-    .filter((item) => item.defaultEnabled !== false)
-    .reduce((total, item) => total + (widths[item.label] || 0), 0);
+  const widths = tableColumnWidths(id);
+  const rows = settingsContentRows(id, overlayState)
+    .filter((item) => contentRowRelevantForSizingSession(id, item.label, session));
   let visibleWidth = rows
     .filter((item) => contentStateValueForSession(overlayState, item.key, item.label, item.defaultEnabled !== false, session))
     .reduce((total, item) => total + (widths[item.label] || 0), 0);
-  if (visibleWidth <= 0 && widths.Driver) {
+  if (visibleWidth <= 0 && id !== 'relative' && widths.Driver) {
     visibleWidth = widths.Driver;
   }
-  if (visibleWidth <= 0 || defaultWidth <= 0) return fullWidth;
-  if (visibleWidth <= defaultWidth) {
-    return Math.max(360, Math.round(fullWidth * visibleWidth / defaultWidth));
+  if (visibleWidth <= 0) return fullWidth;
+  return visibleWidth + tableGeometryNumber('browserWidthPadding', 34);
+}
+
+function tableColumnWidths(id) {
+  return {
+    standings: {
+      'Class position': tableGeometryNumber('standingsClassPositionWidth', 35),
+      'Car number': tableGeometryNumber('standingsCarNumberWidth', 50),
+      Driver: tableGeometryNumber('standingsDriverWidth', 250),
+      'Class gap': tableGeometryNumber('standingsClassGapWidth', 60),
+      'Previous interval': tableGeometryNumber('standingsPreviousIntervalWidth', 60),
+      'Fastest lap': tableGeometryNumber('standingsFastestLapWidth', 70),
+      'Last lap': tableGeometryNumber('standingsLastLapWidth', 70),
+      'Pit status': tableGeometryNumber('standingsPitStatusWidth', 48)
+    },
+    relative: {
+      'Relative position': tableGeometryNumber('relativePositionWidth', 48),
+      Driver: tableGeometryNumber('relativeDriverWidth', 240),
+      'Relative delta': tableGeometryNumber('relativeDeltaWidth', 70),
+      'Pit status': tableGeometryNumber('relativePitStatusWidth', 48)
+    }
+  }[id] || {};
+}
+
+function tableGeometryNumber(key, fallback) {
+  const value = Number(overlayGeometry().tableGeometry?.[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function contentRowRelevantForSizingSession(id, label, session) {
+  const isNonRaceSession = session === 'practice' || session === 'qualifying';
+  if (id === 'standings' && isNonRaceSession && ['Class gap', 'Previous interval'].includes(label)) {
+    return false;
   }
-  return Math.max(fullWidth, visibleWidth + 34);
+
+  if (id === 'session-weather' && isNonRaceSession && ['Laps remaining', 'Laps total'].includes(label)) {
+    return false;
+  }
+
+  if (id === 'pit-service' && isNonRaceSession && label === 'Session laps') {
+    return false;
+  }
+
+  return true;
 }
 
 function relativeBaseHeight(overlayState, fullHeight) {
-  const carsEachSide = Math.max(0, Math.min(8, Number(overlayState.carsEachSide ?? 5)));
+  const carsEachSide = Math.max(0, Math.min(8, Number(overlayState.carsEachSide ?? 3)));
   const rows = carsEachSide * 2 + 1;
-  return Math.max(160, fullHeight - Math.max(0, 11 - rows) * 26);
+  return Math.max(
+    tableGeometryNumber('relativeMinimumHeight', 160),
+    tableGeometryNumber('relativeHeightChrome', 96)
+      + rows * tableGeometryNumber('relativeRowHeight', 26)
+      + Math.max(0, rows - 1) * tableGeometryNumber('relativeRowGap', 5));
+}
+
+function clampInteger(value, fallback, minimum, maximum) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(minimum, Math.min(maximum, parsed));
 }
 
 function simpleTelemetryBaseSize(id, overlayState, fullWidth, fullHeight, previewMode = 'off') {
+  const geometry = overlayGeometry().metricRows;
   const session = sizingSession(id, previewMode);
-  const rows = settingsContentRows(id, overlayState);
+  const rows = settingsContentRows(id, overlayState)
+    .filter((item) => contentRowRelevantForSizingSession(id, item.label, session));
+  if (id === 'pit-service') {
+    return pitServiceBaseSize(rows, overlayState, fullWidth, fullHeight, session);
+  }
+
+  const sessionFullHeight = simpleTelemetryFullHeightForSizingSession(id, fullHeight, session);
   const defaultCount = rows.filter((item) => item.defaultEnabled !== false).length;
   const enabledCount = rows.filter((item) => contentStateValueForSession(overlayState, item.key, item.label, item.defaultEnabled !== false, session)).length;
   if (enabledCount <= 0 || enabledCount >= defaultCount || defaultCount <= 1) {
-    return [fullWidth, fullHeight];
+    return [fullWidth, sessionFullHeight];
   }
 
   const progress = (enabledCount - 1) / Math.max(1, defaultCount - 1);
-  const compactHeight = 184 + Math.round((fullHeight - 184) * progress);
-  return [Math.min(fullWidth, 464), Math.max(184, Math.min(fullHeight, compactHeight))];
+  const compactHeight = geometry.minimumSimpleTelemetryHeight
+    + Math.round((sessionFullHeight - geometry.minimumSimpleTelemetryHeight) * progress);
+  return [
+    Math.min(fullWidth, geometry.minimumSimpleTelemetryWidth),
+    Math.max(geometry.minimumSimpleTelemetryHeight, Math.min(sessionFullHeight, compactHeight))
+  ];
+}
+
+function pitServiceBaseSize(rows, overlayState, fullWidth, fullHeight, session) {
+  const geometry = overlayGeometry().metricRows;
+  const enabled = new Set(rows
+    .filter((item) => contentStateValueForSession(overlayState, item.key, item.label, item.defaultEnabled !== false, session))
+    .map((item) => item.label));
+  if (enabled.size <= 0) {
+    return [fullWidth, geometry.minimumSimpleTelemetryHeight];
+  }
+
+  const sectionHeights = [];
+  const sessionRows = enabled.has('Session time') || (session === 'race' && enabled.has('Session laps')) ? 1 : 0;
+  addMetricSectionHeight(sectionHeights, sessionRows, sessionRows);
+  const signalRows = Number(enabled.has('Release')) + Number(enabled.has('Pit status'));
+  addMetricSectionHeight(sectionHeights, signalRows, signalRows);
+  let serviceRows = 0;
+  if (enabled.has('Fuel requested') || enabled.has('Fuel selected')) serviceRows += 1;
+  if (enabled.has('Tearoff requested')) serviceRows += 1;
+  if (enabled.has('Required repair') || enabled.has('Optional repair')) serviceRows += 1;
+  if (enabled.has('Fast repair selected') || enabled.has('Fast repairs available')) serviceRows += 1;
+  addMetricSectionHeight(sectionHeights, serviceRows, serviceRows);
+  const metricHeight = sectionHeights.reduce((total, value) => total + value, 0)
+    + Math.max(0, sectionHeights.length - 1) * geometry.pitServiceSectionGap;
+  const tireRows = [
+    'Compound',
+    'Change request',
+    'Set limit',
+    'Sets available',
+    'Sets used',
+    'Pressure',
+    'Temperature',
+    'Wear',
+    'Distance'
+  ].filter((label) => enabled.has(label)).length;
+  const gridHeight = tireRows <= 0
+    ? 0
+    : geometry.metricGridHeaderHeight
+      + geometry.metricGridHeaderBottomGap
+      + tireRows * geometry.metricGridRowHeight
+      + Math.max(0, tireRows - 1) * geometry.metricGridRowGap;
+  const contentHeight = metricHeight
+    + (metricHeight > 0 && gridHeight > 0 ? geometry.metricGridGap : 0)
+    + gridHeight;
+  const width = tireRows > 0 ? fullWidth : Math.min(fullWidth, geometry.pitServiceMetricOnlyWidth);
+  return [width, Math.max(geometry.minimumSimpleTelemetryHeight, Math.min(fullHeight, contentHeight + geometry.pitServiceContentChromeHeight))];
+}
+
+function addMetricSectionHeight(sectionHeights, rowCount, segmentedRows) {
+  if (rowCount <= 0) return;
+  const geometry = overlayGeometry().metricRows;
+  const plainRows = Math.max(0, rowCount - segmentedRows);
+  sectionHeights.push(
+    geometry.sectionTitleHeight
+    + geometry.sectionTitleBottomGap
+    + segmentedRows * geometry.segmentedRowHeight
+    + plainRows * geometry.plainRowHeight
+    + Math.max(0, rowCount - 1) * geometry.rowGap
+  );
+}
+
+function simpleTelemetryFullHeightForSizingSession(id, fullHeight, session) {
+  if (id === 'session-weather' && (session === 'practice' || session === 'qualifying')) {
+    const geometry = overlayGeometry().metricRows;
+    return Math.max(geometry.minimumSimpleTelemetryHeight, fullHeight - geometry.nonRaceSimpleTelemetryHeightReduction);
+  }
+
+  return fullHeight;
 }
 
 function inputStateBaseWidth(overlayState, fullWidth, previewMode = 'off') {
@@ -668,6 +1012,36 @@ function inputStateBaseWidth(overlayState, fullWidth, previewMode = 'off') {
   if (hasGraph && hasRail) return fullWidth;
   if (hasGraph) return 380;
   return 276;
+}
+
+function gapToLeaderBaseSize(overlayState, fullWidth, fullHeight, previewMode = 'race') {
+  const session = sizingSession('gap-to-leader', previewMode);
+  const carsEnabled = Number(overlayState?.carsAhead ?? 5) > 0 || Number(overlayState?.carsBehind ?? 5) > 0;
+  const hasGraph = carsEnabled && contentStateValueForSession(overlayState, 'gap.graph.enabled', 'Graph', true, session);
+  const hasTrend = gapTrendRows().some(([key, label]) =>
+    contentStateValueForSession(overlayState, key, label, true, session));
+  if (!hasGraph && !hasTrend) {
+    return [
+      overlaySizeNumber('gapToLeaderMinimumWidth', 360),
+      overlaySizeNumber('gapToLeaderMinimumHeight', 196)
+    ];
+  }
+  if (!hasGraph) return [overlaySizeNumber('gapToLeaderTrendOnlyWidth', 360), fullHeight];
+  if (!hasTrend) return [overlaySizeNumber('gapToLeaderGraphOnlyWidth', 444), fullHeight];
+  return [fullWidth, fullHeight];
+}
+
+function gapTrendRows() {
+  return [
+    ['gap.trend.last.enabled', 'Last'],
+    ['gap.trend.5l.enabled', '5L'],
+    ['gap.trend.10l.enabled', '10L'],
+    ['gap.trend.pit.enabled', 'Pit'],
+    ['gap.trend.pit-lap.enabled', 'PLap'],
+    ['gap.trend.stint.enabled', 'Stint'],
+    ['gap.trend.tire.enabled', 'Tire'],
+    ['gap.trend.status.enabled', 'Status']
+  ];
 }
 
 function settingsContentTitle(id) {
@@ -709,9 +1083,25 @@ function settingsContentRows(id, overlayState = {}) {
         enabled('Pit status', false)
       ];
     case 'gap-to-leader':
-      return [];
+      return [
+        enabled('Graph', true, { key: 'gap.graph.enabled' }),
+        enabled('Last', true, { key: 'gap.trend.last.enabled' }),
+        enabled('5L', true, { key: 'gap.trend.5l.enabled' }),
+        enabled('10L', true, { key: 'gap.trend.10l.enabled' }),
+        enabled('Pit', true, { key: 'gap.trend.pit.enabled' }),
+        enabled('PLap', true, { key: 'gap.trend.pit-lap.enabled' }),
+        enabled('Stint', true, { key: 'gap.trend.stint.enabled' }),
+        enabled('Tire', true, { key: 'gap.trend.tire.enabled' }),
+        enabled('Status', true, { key: 'gap.trend.status.enabled' })
+      ];
     case 'fuel-calculator':
-      return [];
+      return [
+        enabled('Plan', true, { key: 'fuel-calculator.race.plan.enabled' }),
+        enabled('Fuel', true, { key: 'fuel-calculator.race.fuel.enabled' }),
+        enabled('Stint targets', true, { key: 'fuel-calculator.race.stint-targets.enabled' }),
+        enabled('Fuel range', true, { key: 'fuel-calculator.range.fuel.enabled' }),
+        enabled('Fuel usage', true, { key: 'fuel-calculator.usage.enabled' })
+      ];
     case 'track-map':
       return [
         enabled('Sector boundaries')
@@ -741,16 +1131,14 @@ function settingsContentRows(id, overlayState = {}) {
         enabled('Speed')
       ];
     case 'car-radar':
-      return [
-        enabled('Faster-class warning')
-      ];
+      return [];
     case 'flags':
       return [
-        enabled('Green'),
+        enabled('Green / start / ready'),
         enabled('Blue'),
-        enabled('Yellow'),
-        enabled('Red / black'),
-        enabled('White / checkered')
+        enabled('Yellow / debris / caution'),
+        enabled('Red / black / repair'),
+        enabled('White / checkered / final laps')
       ];
     case 'session-weather':
       return [
@@ -848,7 +1236,13 @@ function settingsContentOptionKey(id, label) {
       'Relative delta': 'relative.content.relative.gap.enabled',
       'Pit status': 'relative.content.relative.pit.enabled'
     },
-    'fuel-calculator': {},
+    'fuel-calculator': {
+      Plan: 'fuel-calculator.race.plan.enabled',
+      Fuel: 'fuel-calculator.race.fuel.enabled',
+      'Stint targets': 'fuel-calculator.race.stint-targets.enabled',
+      'Fuel range': 'fuel-calculator.range.fuel.enabled',
+      'Fuel usage': 'fuel-calculator.usage.enabled'
+    },
     'track-map': {
       'Sector boundaries': 'track-map.sector-boundaries.enabled',
       'Local map building': 'track-map.build-from-telemetry'
@@ -868,11 +1262,11 @@ function settingsContentOptionKey(id, label) {
       'Faster-class warning': 'radar.multiclass-warning'
     },
     flags: {
-      Green: 'flags.show-green',
+      'Green / start / ready': 'flags.show-green',
       Blue: 'flags.show-blue',
-      Yellow: 'flags.show-yellow',
-      'Red / black': 'flags.show-critical',
-      'White / checkered': 'flags.show-finish'
+      'Yellow / debris / caution': 'flags.show-yellow',
+      'Red / black / repair': 'flags.show-critical',
+      'White / checkered / final laps': 'flags.show-finish'
     },
     'stream-chat': {
       'Author color': 'stream-chat.twitch.author-color',
@@ -1094,15 +1488,17 @@ function fuelCalculatorDisplayModel(page, live, settings) {
     };
   }
 
-  const strategy = fuelStrategy(live, unitSystem);
+  const strategy = fuelStrategy(live, unitSystem, settings);
+  const shouldRender = strategy.metricSections.length > 0;
   return {
     ...emptyDisplayModel(page.page.id, page.title),
-    status: strategy.status,
+    status: shouldRender ? strategy.status : 'hidden | no enabled content',
     source: fuelSourceFromSettings(settings, strategy.source),
     bodyKind: 'metrics',
     metrics: strategy.metricSections.flatMap((section) => section.rows),
     headerItems: fuelHeaderItems(strategy.status, live, settings),
-    metricSections: strategy.metricSections
+    metricSections: strategy.metricSections,
+    shouldRender
   };
 }
 
@@ -1166,7 +1562,7 @@ function isPitRoadTrackSurface(value) {
   return value === 1 || value === 2;
 }
 
-function fuelStrategy(live, unitSystem) {
+function fuelStrategy(live, unitSystem, settings = {}) {
   const models = live?.models || {};
   const fuelPit = models.fuelPit || {};
   const fuel = fuelPit.fuel || live?.fuel || {};
@@ -1178,9 +1574,11 @@ function fuelStrategy(live, unitSystem) {
   const fuelPerLap = fuelConfidence === 'measured-green-lap'
     ? positiveNumber(fuel.fuelPerLapLiters ?? live?.fuel?.fuelPerLapLiters)
     : null;
+  const hasTrustedBurn = fuelPerLap != null;
   const fuelPercent = positiveNumber(fuel.fuelLevelPercent ?? live?.fuel?.fuelLevelPercent);
   const maxFuel = fuelTankLiters(live, fuelPit, currentFuel, fuelPercent);
   const usageLabel = fuelUsageLabel(session);
+  const sessionKey = usageLabel === 'Quali Usage' ? 'qualifying' : usageLabel === 'Practice Usage' ? 'practice' : 'race';
   const lapTime = validLapTime(fuel.lapTimeSeconds)
     ?? validLapTime(progress.strategyLapTimeSeconds)
     ?? validLapTime(projection.overallLeaderPaceSeconds)
@@ -1189,22 +1587,23 @@ function fuelStrategy(live, unitSystem) {
   const fuelToFinish = fuelPerLap != null && raceLapsRemaining != null ? fuelPerLap * raceLapsRemaining : null;
   const additionalFuel = fuelToFinish != null && currentFuel != null ? Math.max(0, fuelToFinish - currentFuel) : null;
   const fullTankLaps = maxFuel != null && fuelPerLap != null ? maxFuel / fuelPerLap : null;
+  const hasTrustedStrategy = hasTrustedBurn && raceLapsRemaining != null && additionalFuel != null;
   const stintPlan = fuelStintPlan(currentFuel, fuelPerLap, maxFuel, raceLapsRemaining);
-  const status = fuelStatus(currentFuel, fuelPerLap, raceLapsRemaining, additionalFuel, stintPlan);
-  const planRow = fuelMetricRow('Plan', fuelPlanText(stintPlan.plannedRaceLaps, stintPlan.plannedStintCount, stintPlan.plannedStopCount), fuelStrategyTone(stintPlan), [
+  const status = fuelStatus(currentFuel, fuelPerLap, raceLapsRemaining, additionalFuel, stintPlan, hasTrustedStrategy);
+  const planRow = fuelMetricRow('Plan', fuelPlanText(stintPlan.plannedRaceLaps, stintPlan.plannedStintCount, stintPlan.plannedStopCount, hasTrustedStrategy), hasTrustedStrategy ? fuelStrategyTone(stintPlan) : 'waiting', [
     fuelMetricSegment('Race', formatLapCount(stintPlan.plannedRaceLaps), stintPlan.plannedRaceLaps == null ? 'waiting' : 'info'),
     fuelMetricSegment('Remain', formatFuelLaps(raceLapsRemaining), raceLapsRemaining == null ? 'waiting' : 'info'),
-    fuelMetricSegment('Stints', formatCount(stintPlan.plannedStintCount), stintPlan.plannedStintCount == null ? 'waiting' : stintPlan.plannedStintCount <= 1 ? 'success' : 'info'),
-    fuelMetricSegment('Stops', formatCount(stintPlan.plannedStopCount), stintPlan.plannedStopCount == null ? 'waiting' : 'info'),
-    fuelMetricSegment('Save', formatFuelSaving(stintPlan.requiredFuelSavingLitersPerLap, unitSystem), fuelSavingTone(stintPlan.requiredFuelSavingLitersPerLap))
+    fuelMetricSegment('Stints', formatTrustedCount(stintPlan.plannedStintCount, hasTrustedStrategy), hasTrustedStrategy && stintPlan.plannedStintCount != null ? stintPlan.plannedStintCount <= 1 ? 'success' : 'info' : 'waiting'),
+    fuelMetricSegment('Stops', formatTrustedCount(stintPlan.plannedStopCount, hasTrustedStrategy), hasTrustedStrategy && stintPlan.plannedStopCount != null ? 'info' : 'waiting'),
+    fuelMetricSegment('Save', formatFuelSaving(stintPlan.requiredFuelSavingLitersPerLap, unitSystem, hasTrustedStrategy && stintPlan.plannedStintCount != null), fuelSavingTone(stintPlan.requiredFuelSavingLitersPerLap, hasTrustedStrategy && stintPlan.plannedStintCount != null))
   ]);
-  const fuelRow = fuelMetricRow('Fuel', fuelFuelText(currentFuel, fuelPerLap, additionalFuel, unitSystem), fuelNeedTone(additionalFuel), [
+  const fuelRow = fuelMetricRow('Fuel', fuelFuelText(currentFuel, fuelPerLap, additionalFuel, unitSystem, hasTrustedBurn, hasTrustedStrategy), fuelNeedTone(additionalFuel, hasTrustedStrategy), [
     fuelMetricSegment('Current', formatFuelVolume(currentFuel, unitSystem), currentFuel == null ? 'waiting' : 'info'),
-    fuelMetricSegment('Burn', formatFuelPerLap(fuelPerLap, unitSystem), fuelPerLap == null ? 'waiting' : 'info'),
-    fuelMetricSegment('Tank', formatFuelLaps(fullTankLaps), fullTankLaps == null ? 'waiting' : 'info'),
-    fuelMetricSegment('Need', formatFuelNeed(additionalFuel, unitSystem), fuelNeedTone(additionalFuel))
+    fuelMetricSegment('Burn', formatTrustedFuelPerLap(fuelPerLap, unitSystem, hasTrustedBurn), hasTrustedBurn ? 'info' : 'waiting'),
+    fuelMetricSegment('Tank', formatTrustedFuelLaps(fullTankLaps, hasTrustedBurn), hasTrustedBurn && fullTankLaps != null ? 'info' : 'waiting'),
+    fuelMetricSegment('Need', formatFuelNeed(additionalFuel, unitSystem, hasTrustedStrategy), fuelNeedTone(additionalFuel, hasTrustedStrategy))
   ]);
-  const stintRows = stintPlan.stints
+  const stintRows = hasTrustedStrategy ? stintPlan.stints
     .filter((stint) => stint.lengthLaps > 0.05 || stint.source === 'finish')
     .slice(0, 4)
     .map((stint) => fuelMetricRow(
@@ -1214,8 +1613,8 @@ function fuelStrategy(live, unitSystem) {
       [
         fuelMetricSegment('Laps', formatStintLaps(stint), 'info'),
         fuelMetricSegment('Target', formatStintTarget(stint, unitSystem), fuelStintTargetTone(stint)),
-        fuelMetricSegment('Save', formatFuelSaving(stint.requiredFuelSavingLitersPerLap, unitSystem), fuelSavingTone(stint.requiredFuelSavingLitersPerLap))
-      ]));
+        fuelMetricSegment('Save', formatFuelSaving(stint.requiredFuelSavingLitersPerLap, unitSystem, true), fuelSavingTone(stint.requiredFuelSavingLitersPerLap, true))
+      ])) : [];
   const metricSections = [
     { title: 'Race Information', rows: [planRow, fuelRow] }
   ];
@@ -1223,33 +1622,70 @@ function fuelStrategy(live, unitSystem) {
     const nonRaceSections = [
       {
         title: 'Fuel Range',
-        rows: [fuelMetricRow('Fuel', fuelNonRaceFuelText(currentFuel, fuelPerLap, fullTankLaps, unitSystem), currentFuel == null ? 'waiting' : 'info', [
+        rows: [fuelMetricRow('Fuel', fuelNonRaceFuelText(currentFuel, fuelPerLap, fullTankLaps, unitSystem, hasTrustedBurn), currentFuel == null ? 'waiting' : 'info', [
           fuelMetricSegment('Level', formatFuelVolume(currentFuel, unitSystem), currentFuel == null ? 'waiting' : 'info'),
-          fuelMetricSegment('Usage', formatFuelPerLap(fuelPerLap, unitSystem), fuelPerLap == null ? 'waiting' : 'info'),
-          fuelMetricSegment('Range', formatFuelLaps(currentFuel != null && fuelPerLap != null ? currentFuel / fuelPerLap : null), currentFuel != null && fuelPerLap != null ? 'info' : 'waiting'),
-          fuelMetricSegment('Tank', formatFuelLaps(fullTankLaps), fullTankLaps == null ? 'waiting' : 'info')
+          fuelMetricSegment('Usage', formatTrustedFuelPerLap(fuelPerLap, unitSystem, hasTrustedBurn), hasTrustedBurn ? 'info' : 'waiting'),
+          fuelMetricSegment('Range', formatTrustedFuelLaps(currentFuel != null && fuelPerLap != null ? currentFuel / fuelPerLap : null, hasTrustedBurn), currentFuel != null && hasTrustedBurn ? 'info' : 'waiting'),
+          fuelMetricSegment('Tank', formatTrustedFuelLaps(fullTankLaps, hasTrustedBurn), hasTrustedBurn && fullTankLaps != null ? 'info' : 'waiting')
         ])]
       },
       { title: 'Fuel Usage', rows: [fuelUsageRow(usageLabel, fuel, unitSystem)] }
     ];
-    const source = fuelPerLap != null
-      ? `usage ${formatFuelPerLap(fuelPerLap, unitSystem)} (measured green lap) | range ${formatFuelLaps(currentFuel != null ? currentFuel / fuelPerLap : null)} | ${formatFuelLaps(fullTankLaps, ' laps/tank')} | history none`
+    const source = currentFuel != null
+      ? `usage ${formatTrustedFuelPerLap(fuelPerLap, unitSystem, hasTrustedBurn)} (${hasTrustedBurn ? 'measured green lap' : 'unavailable'}) | range ${formatTrustedFuelLaps(currentFuel != null && fuelPerLap != null ? currentFuel / fuelPerLap : null, hasTrustedBurn)} | ${formatTrustedFuelLaps(fullTankLaps, hasTrustedBurn, ' laps/tank')} | history none`
       : 'source: waiting';
-    return { status: currentFuel == null ? 'waiting for fuel' : fuelPerLap == null ? 'fuel level' : 'fuel range', metricSections: nonRaceSections, source };
+    return {
+      status: currentFuel == null ? 'waiting for fuel' : hasTrustedBurn ? 'fuel range' : 'fuel level',
+      metricSections: filterFuelMetricSections(nonRaceSections, settings, sessionKey),
+      source
+    };
   }
   if (stintRows.length > 0) {
     metricSections.push({ title: 'Stint Targets', rows: stintRows });
   }
 
-  const source = fuelPerLap != null
-    ? `burn ${formatFuelPerLap(fuelPerLap, unitSystem)} (measured green lap) | ${formatFuelLaps(fullTankLaps, ' laps/tank')} | history none`
+  const source = currentFuel != null
+    ? `burn ${formatTrustedFuelPerLap(fuelPerLap, unitSystem, hasTrustedBurn)} (${hasTrustedBurn ? 'measured green lap' : 'unavailable'}) | ${formatTrustedFuelLaps(fullTankLaps, hasTrustedBurn, ' laps/tank')} | history none`
     : 'source: waiting';
-  return { status, metricSections, source };
+  return { status, metricSections: filterFuelMetricSections(metricSections, settings, sessionKey), source };
 }
 
-function fuelNonRaceFuelText(currentFuel, fuelPerLap, fullTankLaps, unitSystem) {
+function filterFuelMetricSections(sections, settings, session) {
+  return sections
+    .map((section) => ({
+      ...section,
+      rows: section.rows.filter((row) => fuelMetricRowEnabled(section.title, row.label, settings, session))
+    }))
+    .filter((section) => section.rows.length > 0);
+}
+
+function fuelMetricRowEnabled(sectionTitle, rowLabel, settings, session) {
+  if (sectionTitle === 'Stint Targets') {
+    return contentStateValueForSession(settings, 'fuel-calculator.race.stint-targets.enabled', 'Stint targets', true, session);
+  }
+
+  if (sectionTitle === 'Fuel Range') {
+    return contentStateValueForSession(settings, 'fuel-calculator.range.fuel.enabled', 'Fuel range', true, session);
+  }
+
+  if (sectionTitle === 'Fuel Usage') {
+    return contentStateValueForSession(settings, 'fuel-calculator.usage.enabled', 'Fuel usage', true, session);
+  }
+
+  if (sectionTitle === 'Race Information' && rowLabel === 'Plan') {
+    return contentStateValueForSession(settings, 'fuel-calculator.race.plan.enabled', 'Plan', true, session);
+  }
+
+  if (sectionTitle === 'Race Information' && rowLabel === 'Fuel') {
+    return contentStateValueForSession(settings, 'fuel-calculator.race.fuel.enabled', 'Fuel', true, session);
+  }
+
+  return true;
+}
+
+function fuelNonRaceFuelText(currentFuel, fuelPerLap, fullTankLaps, unitSystem, hasTrustedBurn) {
   const range = currentFuel != null && fuelPerLap != null ? currentFuel / fuelPerLap : null;
-  return `${formatFuelVolume(currentFuel, unitSystem)} | range ${formatFuelLaps(range)} | tank ${formatFuelLaps(fullTankLaps)}`;
+  return `${formatFuelVolume(currentFuel, unitSystem)} | range ${formatTrustedFuelLaps(range, hasTrustedBurn)} | tank ${formatTrustedFuelLaps(fullTankLaps, hasTrustedBurn)}`;
 }
 
 function fuelUsageLabel(session) {
@@ -1302,7 +1738,7 @@ function fuelRaceLapsRemaining(session, progress, projection, lapTime) {
   if (lapBased != null && lapBased < 10000) return lapBased;
 
   const timeRemaining = positiveNumber(session.sessionTimeRemainSeconds);
-  if (!isRacePreGreen(session) && timeRemaining != null && lapTime != null) {
+  if (!isRacePreGreen(session) && !sessionTimeIsUnlimited(session) && timeRemaining != null && lapTime != null) {
     const leaderProgress = positiveNumber(progress.overallLeaderProgressLaps)
       ?? positiveNumber(progress.classLeaderProgressLaps);
     const carProgress = positiveNumber(progress.strategyCarProgressLaps)
@@ -1433,13 +1869,12 @@ function requiredSavingPerLap(targetLaps, fuelPerLap, availableFuel) {
   return extraFuelRequired > 0 ? extraFuelRequired / targetLaps : null;
 }
 
-function fuelStatus(currentFuel, fuelPerLap, raceLapsRemaining, additionalFuel, stintPlan) {
+function fuelStatus(currentFuel, fuelPerLap, raceLapsRemaining, additionalFuel, stintPlan, hasTrustedStrategy) {
   if (currentFuel == null && (fuelPerLap == null || raceLapsRemaining == null || stintPlan.plannedStintCount == null)) {
     return 'waiting for fuel';
   }
 
-  if (fuelPerLap == null) return 'waiting for burn';
-  if (raceLapsRemaining == null) return 'stint estimate';
+  if (!hasTrustedStrategy) return 'calculating strategy';
 
   if (stintPlan.plannedStintCount != null && stintPlan.plannedStopCount != null) {
     return stintPlan.plannedStintCount <= 1
@@ -1462,15 +1897,15 @@ function fuelMetricSegment(label, value, tone = 'normal') {
   return { label, value, tone };
 }
 
-function fuelPlanText(plannedRaceLaps, plannedStintCount, plannedStopCount) {
+function fuelPlanText(plannedRaceLaps, plannedStintCount, plannedStopCount, hasTrustedStrategy) {
   const laps = plannedRaceLaps != null ? `${plannedRaceLaps} laps` : '--';
-  const stints = plannedStintCount != null ? plannedStintCount <= 1 ? 'no stop' : `${plannedStintCount} stints` : '--';
-  const stops = plannedStopCount != null ? `${plannedStopCount} ${plannedStopCount === 1 ? 'stop' : 'stops'}` : '--';
+  const stints = hasTrustedStrategy && plannedStintCount != null ? plannedStintCount <= 1 ? 'no stop' : `${plannedStintCount} stints` : 'Calculating';
+  const stops = hasTrustedStrategy && plannedStopCount != null ? `${plannedStopCount} ${plannedStopCount === 1 ? 'stop' : 'stops'}` : 'Calculating';
   return `${laps} | ${stints} | ${stops}`;
 }
 
-function fuelFuelText(currentFuel, fuelPerLap, additionalFuel, unitSystem) {
-  return `${formatFuelVolume(currentFuel, unitSystem)} | ${formatFuelPerLap(fuelPerLap, unitSystem)} | ${formatFuelNeed(additionalFuel, unitSystem)}`;
+function fuelFuelText(currentFuel, fuelPerLap, additionalFuel, unitSystem, hasTrustedBurn, hasTrustedStrategy) {
+  return `${formatFuelVolume(currentFuel, unitSystem)} | ${formatTrustedFuelPerLap(fuelPerLap, unitSystem, hasTrustedBurn)} | ${formatFuelNeed(additionalFuel, unitSystem, hasTrustedStrategy)}`;
 }
 
 function fuelStintText(stint, unitSystem) {
@@ -1510,21 +1945,37 @@ function fuelStintTargetTone(stint) {
   return stint.targetFuelPerLapLiters == null ? 'waiting' : fuelStintTone(stint);
 }
 
-function fuelSavingTone(value) {
+function fuelSavingTone(value, known = true) {
+  if (!known) return 'waiting';
   return value != null && value > 0.01 ? 'warning' : 'success';
 }
 
-function fuelNeedTone(value) {
+function fuelNeedTone(value, known = true) {
+  if (!known) return 'waiting';
   if (value == null) return 'waiting';
   return value > 0.1 ? 'warning' : 'success';
 }
 
-function formatFuelNeed(value, unitSystem) {
+function formatFuelNeed(value, unitSystem, known = true) {
+  if (!known) return 'Calculating';
   return value != null && value > 0.1 ? `+${formatFuelVolume(value, unitSystem)}` : 'Covered';
 }
 
-function formatFuelSaving(value, unitSystem) {
+function formatFuelSaving(value, unitSystem, known = true) {
+  if (!known) return 'Calculating';
   return value != null && value > 0.01 ? formatFuelPerLap(value, unitSystem) : 'None';
+}
+
+function formatTrustedCount(value, known) {
+  return known ? formatCount(value) : 'Calculating';
+}
+
+function formatTrustedFuelPerLap(value, unitSystem, known) {
+  return known ? formatFuelPerLap(value, unitSystem) : 'Calculating';
+}
+
+function formatTrustedFuelLaps(value, known, suffix = ' laps') {
+  return known ? formatFuelLaps(value, suffix) : 'Calculating';
 }
 
 function formatLapCount(value) {
@@ -1583,20 +2034,33 @@ function fuelHeaderItems(status, live, settings) {
 }
 
 function fuelHeaderTone(status) {
-  const text = String(status || '').toLowerCase();
-  return text.includes('waiting') || text.includes('disconnected')
-    ? 'waiting'
-    : 'success';
+  return 'normal';
 }
 
 function formatFuelHeaderTimeRemaining(session) {
   const seconds = session?.sessionTimeRemainSeconds;
   if (!Number.isFinite(seconds) || seconds < 0) return null;
+  if (isRacePreGreen(session)) {
+    if (looksLikeUnlimitedSessionTime(seconds)) return null;
+  } else if (sessionTimeIsUnlimited(session)) {
+    return null;
+  }
+
   const totalSeconds = Math.ceil(seconds);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const remainingSeconds = totalSeconds % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function sessionTimeIsUnlimited(session) {
+  return String(session?.sessionTime || '').toLowerCase().includes('unlimited')
+    || looksLikeUnlimitedSessionTime(session?.sessionTimeTotalSeconds)
+    || looksLikeUnlimitedSessionTime(session?.sessionTimeRemainSeconds);
+}
+
+function looksLikeUnlimitedSessionTime(seconds) {
+  return Number.isFinite(seconds) && Math.abs(seconds - 604800) <= 1;
 }
 
 function fuelSourceFromSettings(settings, source) {
@@ -1621,8 +2085,10 @@ function inputStateDisplayModel(page, live, settings) {
   const showSteering = settings.showSteering ?? true;
   const showGear = settings.showGear ?? true;
   const showSpeed = settings.showSpeed ?? true;
-  const hasGraph = showThrottleTrace || showBrakeTrace || showClutchTrace;
-  const hasRail = showThrottle || showBrake || showClutch || showSteering || showGear || showSpeed;
+  const configuredGraph = showThrottleTrace || showBrakeTrace || showClutchTrace;
+  const configuredRail = showThrottle || showBrake || showClutch || showSteering || showGear || showSpeed;
+  const hasGraph = isAvailable && configuredGraph;
+  const hasRail = isAvailable && configuredRail;
   const hasContent = hasGraph || hasRail;
   const status = !inCar
     ? 'waiting for player in car'
@@ -1631,12 +2097,23 @@ function inputStateDisplayModel(page, live, settings) {
       : hasContent
         ? [gearText, rpmText, brakeAbsActive ? 'ABS' : null].filter(Boolean).join(' | ')
         : 'no input content enabled';
+  const trace = isAvailable
+    ? Array.isArray(inputs.trace)
+      ? inputs.trace
+      : [{
+        throttle: clamp01(displayInputs.throttle),
+        brake: clamp01(displayInputs.brake),
+        clutch: clamp01(displayInputs.clutch),
+        brakeAbsActive
+      }]
+    : [];
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
     source: '',
     headerItems: [],
     bodyKind: 'inputs',
+    shouldRender: hasContent,
     inputs: {
       isAvailable,
       throttle: displayInputs.throttle,
@@ -1666,16 +2143,8 @@ function inputStateDisplayModel(page, live, settings) {
       hasContent,
       sampleIntervalMilliseconds: 50,
       maximumTracePoints: 180,
-      trace: isAvailable
-        ? Array.isArray(inputs.trace)
-          ? inputs.trace
-          : [{
-            throttle: clamp01(displayInputs.throttle),
-            brake: clamp01(displayInputs.brake),
-            clutch: clamp01(displayInputs.clutch),
-            brakeAbsActive
-          }]
-        : []
+      tracePointCount: trace.length,
+      trace
     }
   };
 }
@@ -1710,13 +2179,15 @@ function clamp01(value) {
 function carRadarDisplayModel(page, live, settings = {}) {
   const spatial = live?.models?.spatial || {};
   const inCar = isPlayerInCar(live);
-  const strongestMulticlassApproach = carRadarMulticlassApproach(spatial);
   const showMulticlassWarning = settings?.showMulticlassWarning ?? true;
+  const multiclassWarningSeconds = clampInteger(settings?.multiclassWarningSeconds, 5, 3, 10);
+  const radarVisibilitySeconds = clampInteger(settings?.radarVisibilitySeconds, 2, 2, 5);
+  const strongestMulticlassApproach = carRadarMulticlassApproach(spatial, multiclassWarningSeconds);
   const hasCurrentSignal = Boolean(
     spatial.hasCarLeft
     || spatial.hasCarRight
     || (showMulticlassWarning && strongestMulticlassApproach)
-    || spatial.cars?.length);
+    || spatial.cars?.some((car) => isInRadarRange(car, radarVisibilitySeconds)));
   const status = !inCar
     ? 'waiting for player in car'
     : spatial.hasData === false
@@ -1727,15 +2198,29 @@ function carRadarDisplayModel(page, live, settings = {}) {
         ? 'car left'
         : spatial.hasCarRight
           ? 'car right'
-            : strongestMulticlassApproach
+            : showMulticlassWarning && strongestMulticlassApproach
               ? 'faster class'
               : 'clear';
+  const renderModel = carRadarRenderModelFromState({
+    isAvailable: inCar,
+    hasCarLeft: spatial.hasCarLeft === true,
+    hasCarRight: spatial.hasCarRight === true,
+    cars: spatial.cars || [],
+    strongestMulticlassApproach: showMulticlassWarning ? strongestMulticlassApproach : null,
+    showMulticlassWarning,
+    multiclassWarningSeconds,
+    radarVisibilitySeconds,
+    previewVisible: false,
+    hasCurrentSignal,
+    referenceCarClassColorHex: spatial.referenceCarClassColorHex
+  });
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
     headerItems: [],
     source: inCar && spatial.hasData !== false ? 'source: spatial telemetry' : 'source: waiting',
     bodyKind: 'car-radar',
+    shouldRender: renderModel.shouldRender,
     carRadar: {
       isAvailable: inCar,
       hasCarLeft: spatial.hasCarLeft === true,
@@ -1743,40 +2228,33 @@ function carRadarDisplayModel(page, live, settings = {}) {
       cars: spatial.cars || [],
       strongestMulticlassApproach: showMulticlassWarning ? strongestMulticlassApproach : null,
       showMulticlassWarning,
+      multiclassWarningRangeSeconds: multiclassWarningSeconds,
+      radarVisibilitySeconds,
       previewVisible: false,
       hasCurrentSignal,
-      renderModel: carRadarRenderModelFromState({
-        isAvailable: inCar,
-        hasCarLeft: spatial.hasCarLeft === true,
-        hasCarRight: spatial.hasCarRight === true,
-        cars: spatial.cars || [],
-        strongestMulticlassApproach: showMulticlassWarning ? strongestMulticlassApproach : null,
-        showMulticlassWarning,
-        previewVisible: false,
-        hasCurrentSignal,
-        referenceCarClassColorHex: spatial.referenceCarClassColorHex
-      })
+      renderModel
     }
   };
 }
 
-function carRadarMulticlassApproach(spatial) {
+function carRadarMulticlassApproach(spatial, multiclassWarningSeconds = 5) {
   const approaches = Array.isArray(spatial?.multiclassApproaches)
     ? spatial.multiclassApproaches
     : spatial?.strongestMulticlassApproach
       ? [spatial.strongestMulticlassApproach]
       : [];
   return approaches
-    .filter(isInCarRadarMulticlassWarningRange)
+    .filter((approach) => isInCarRadarMulticlassWarningRange(approach, multiclassWarningSeconds))
     .sort((left, right) =>
       Math.abs(left?.relativeSeconds ?? Number.POSITIVE_INFINITY)
         - Math.abs(right?.relativeSeconds ?? Number.POSITIVE_INFINITY)
       || Number(right?.urgency || 0) - Number(left?.urgency || 0))[0] || null;
 }
 
-function isInCarRadarMulticlassWarningRange(approach) {
+function isInCarRadarMulticlassWarningRange(approach, multiclassWarningSeconds = 5) {
   const seconds = approach?.relativeSeconds;
-  return Number.isFinite(seconds) && seconds < -2 && seconds >= -5;
+  const warningSeconds = clampInteger(multiclassWarningSeconds, 5, 3, 10);
+  return Number.isFinite(seconds) && seconds < -2 && seconds >= -warningSeconds;
 }
 
 export function carRadarRenderModelFromState({
@@ -1786,6 +2264,8 @@ export function carRadarRenderModelFromState({
   cars = [],
   strongestMulticlassApproach = null,
   showMulticlassWarning = true,
+  multiclassWarningSeconds = 5,
+  radarVisibilitySeconds = 2,
   previewVisible = false,
   hasCurrentSignal = false,
   referenceCarClassColorHex = null
@@ -1806,16 +2286,19 @@ export function carRadarRenderModelFromState({
   });
   if (!shouldRender) return empty();
 
-  const currentCars = uniqueRadarCars((Array.isArray(cars) ? cars : []).filter(isInRadarRange));
-  const sideAttachments = sideWarningAttachments(hasCarLeft, hasCarRight, currentCars);
+  const currentCars = uniqueRadarCars(
+    (Array.isArray(cars) ? cars : []).filter((car) => isInRadarRange(car, radarVisibilitySeconds)),
+    radarVisibilitySeconds);
+  const sideAttachments = sideWarningAttachments(hasCarLeft, hasCarRight, currentCars, radarVisibilitySeconds);
   const renderCars = [
-    ...radarCarPlacements(currentCars, sideAttachments).map(nearbyCarRectangle),
-    ...sideWarningRectangles(hasCarLeft, hasCarRight, sideAttachments),
+    ...radarCarPlacements(currentCars, sideAttachments, radarVisibilitySeconds).map((placement) => nearbyCarRectangle(placement, radarVisibilitySeconds)),
+    ...sideWarningRectangles(hasCarLeft, hasCarRight, sideAttachments, radarVisibilitySeconds),
     playerCarRectangle(referenceCarClassColorHex)
   ];
   const rings = [distanceRing(1), distanceRing(2)];
   const labels = rings.map((ring) => ring.label).filter(Boolean);
   const multiclassArc = showMulticlassWarning && strongestMulticlassApproach
+    && isInCarRadarMulticlassWarningRange(strongestMulticlassApproach, multiclassWarningSeconds)
     ? multiclassApproachArc(strongestMulticlassApproach)
     : null;
   if (multiclassArc?.label) labels.push(multiclassArc.label);
@@ -1924,45 +2407,45 @@ function distanceForLongitudinalOffset(offsetPixels) {
     + (absOffset - separatedCenterOffset) / radarConstants.distinctRowPixelsPerMeter;
 }
 
-function uniqueRadarCars(cars) {
+function uniqueRadarCars(cars, radarVisibilitySeconds = 2) {
   const byCar = new Map();
   for (const car of cars) {
     const current = byCar.get(car.carIdx);
-    if (!current || Math.abs(rangeRatio(car)) < Math.abs(rangeRatio(current))) {
+    if (!current || Math.abs(rangeRatio(car, radarVisibilitySeconds)) < Math.abs(rangeRatio(current, radarVisibilitySeconds))) {
       byCar.set(car.carIdx, car);
     }
   }
   return [...byCar.values()];
 }
 
-function sideWarningAttachments(hasCarLeft, hasCarRight, cars) {
+function sideWarningAttachments(hasCarLeft, hasCarRight, cars, radarVisibilitySeconds = 2) {
   const used = new Set();
-  const left = hasCarLeft ? selectSideAttachment(cars, used) : null;
+  const left = hasCarLeft ? selectSideAttachment(cars, used, radarVisibilitySeconds) : null;
   if (left) used.add(left.carIdx);
-  const right = hasCarRight ? selectSideAttachment(cars, used) : null;
+  const right = hasCarRight ? selectSideAttachment(cars, used, radarVisibilitySeconds) : null;
   return { left, right };
 }
 
-function selectSideAttachment(cars, used) {
+function selectSideAttachment(cars, used, radarVisibilitySeconds = 2) {
   return cars
-    .filter((car) => !used.has(car.carIdx) && isSideAttachmentCandidate(car))
-    .sort((a, b) => Math.abs(rangeRatio(a)) - Math.abs(rangeRatio(b)) || a.carIdx - b.carIdx)[0] || null;
+    .filter((car) => !used.has(car.carIdx) && isSideAttachmentCandidate(car, radarVisibilitySeconds))
+    .sort((a, b) => Math.abs(rangeRatio(a, radarVisibilitySeconds)) - Math.abs(rangeRatio(b, radarVisibilitySeconds)) || a.carIdx - b.carIdx)[0] || null;
 }
 
-function isSideAttachmentCandidate(car) {
-  return isInRadarRange(car)
+function isSideAttachmentCandidate(car, radarVisibilitySeconds = 2) {
+  return isInRadarRange(car, radarVisibilitySeconds)
     && Number.isFinite(car.relativeMeters)
     && Math.abs(car.relativeMeters) <= radarConstants.sideAttachmentWindowMeters;
 }
 
-function radarCarPlacements(cars, sideAttachments) {
+function radarCarPlacements(cars, sideAttachments, radarVisibilitySeconds = 2) {
   const usableRadius = radarConstants.usableRadarRadius;
   const visibleCars = cars
     .filter((car) => car.carIdx !== sideAttachments.left?.carIdx && car.carIdx !== sideAttachments.right?.carIdx)
-    .sort((a, b) => Math.abs(rangeRatio(a)) - Math.abs(rangeRatio(b)))
+    .sort((a, b) => Math.abs(rangeRatio(a, radarVisibilitySeconds)) - Math.abs(rangeRatio(b, radarVisibilitySeconds)))
     .slice(0, radarConstants.maxWideRowRadarCars);
   const candidates = visibleCars.map((car, index) => {
-    const offset = longitudinalOffset(car, usableRadius);
+    const offset = longitudinalOffset(car, usableRadius, radarVisibilitySeconds);
     return {
       car,
       sourceIndex: index,
@@ -2051,8 +2534,8 @@ function focusAvoidingXOffsets(count, maxCenterOffset) {
   return offsets.length ? offsets : centeredXOffsets(count);
 }
 
-function nearbyCarRectangle(placement) {
-  const visualAlpha = radarEntryOpacity(placement.car);
+function nearbyCarRectangle(placement, radarVisibilitySeconds = 2) {
+  const visualAlpha = radarEntryOpacity(placement.car, radarVisibilitySeconds);
   return {
     kind: 'nearby',
     carIdx: placement.car.carIdx,
@@ -2067,14 +2550,14 @@ function nearbyCarRectangle(placement) {
   };
 }
 
-function sideWarningRectangles(hasCarLeft, hasCarRight, sideAttachments) {
+function sideWarningRectangles(hasCarLeft, hasCarRight, sideAttachments, radarVisibilitySeconds = 2) {
   const rectangles = [];
   const usableRadius = radarConstants.usableRadarRadius;
   if (hasCarLeft) {
-    rectangles.push(sideWarningRectangle('left', radarConstants.radarCenter - 42, sideWarningCenterY(usableRadius, sideAttachments.left), sideAttachments.left));
+    rectangles.push(sideWarningRectangle('left', radarConstants.radarCenter - 42, sideWarningCenterY(usableRadius, sideAttachments.left, radarVisibilitySeconds), sideAttachments.left));
   }
   if (hasCarRight) {
-    rectangles.push(sideWarningRectangle('right', radarConstants.radarCenter + 42, sideWarningCenterY(usableRadius, sideAttachments.right), sideAttachments.right));
+    rectangles.push(sideWarningRectangle('right', radarConstants.radarCenter + 42, sideWarningCenterY(usableRadius, sideAttachments.right, radarVisibilitySeconds), sideAttachments.right));
   }
   return rectangles;
 }
@@ -2095,10 +2578,10 @@ function sideWarningRectangle(side, centerX, centerY, attachment) {
   };
 }
 
-function sideWarningCenterY(usableRadius, car) {
+function sideWarningCenterY(usableRadius, car, radarVisibilitySeconds = 2) {
   if (!car) return radarConstants.radarCenter;
   const maximumBias = radarConstants.focusedCarHeight * 0.55;
-  const offset = Math.max(-maximumBias, Math.min(maximumBias, longitudinalOffset(car, usableRadius)));
+  const offset = Math.max(-maximumBias, Math.min(maximumBias, longitudinalOffset(car, usableRadius, radarVisibilitySeconds)));
   return radarConstants.radarCenter - offset;
 }
 
@@ -2145,7 +2628,7 @@ function multiclassApproachArc(approach) {
   };
 }
 
-function longitudinalOffset(car, usableRadius) {
+function longitudinalOffset(car, usableRadius, radarVisibilitySeconds = 2) {
   if (Number.isFinite(car.relativeMeters)) {
     return longitudinalOffsetFromDistance(placementMeters(car.relativeMeters), usableRadius);
   }
@@ -2174,15 +2657,15 @@ function placementDirection(car, index, idealOffset) {
   return index % 2 === 0 ? 1 : -1;
 }
 
-function rangeRatio(car) {
+function rangeRatio(car, radarVisibilitySeconds = 2) {
   if (Number.isFinite(car.relativeMeters)) {
-    return Math.max(-1, Math.min(1, car.relativeMeters / visualRadarRangeMeters(car)));
+    return Math.max(-1, Math.min(1, car.relativeMeters / visualRadarRangeMeters(car, radarVisibilitySeconds)));
   }
   return Math.sign(car.relativeLaps || 0);
 }
 
-function isInRadarRange(car) {
-  return Number.isFinite(car?.relativeMeters) && Math.abs(car.relativeMeters) <= visualRadarRangeMeters(car);
+function isInRadarRange(car, radarVisibilitySeconds = 2) {
+  return Number.isFinite(car?.relativeMeters) && Math.abs(car.relativeMeters) <= visualRadarRangeMeters(car, radarVisibilitySeconds);
 }
 
 function proximityColor(proximityTintValue, visualAlpha) {
@@ -2201,7 +2684,7 @@ function proximityTint(car) {
   return Number.isFinite(car.relativeMeters) ? bumperGapProximity(Math.abs(car.relativeMeters)) : 0;
 }
 
-function radarEntryOpacity(car) {
+function radarEntryOpacity(car, radarVisibilitySeconds = 2) {
   if (!Number.isFinite(car.relativeMeters)) return 0;
   const physicalOpacity = opacityBetweenRangeEdgeAndWarningStart(
     Math.abs(car.relativeMeters),
@@ -2209,7 +2692,7 @@ function radarEntryOpacity(car) {
     radarConstants.radarRangeMeters);
   const timingAwareOpacity = timingAwareEntryOpacity(
     Math.abs(car.relativeMeters),
-    visualRadarRangeMeters(car));
+    visualRadarRangeMeters(car, radarVisibilitySeconds));
   return Math.max(physicalOpacity, timingAwareOpacity);
 }
 
@@ -2226,7 +2709,7 @@ function placementMeters(meters) {
   return Math.sign(meters) * Math.min(Math.abs(meters), radarConstants.radarRangeMeters);
 }
 
-function visualRadarRangeMeters(car) {
+function visualRadarRangeMeters(car, radarVisibilitySeconds = 2) {
   const range = radarConstants.radarRangeMeters;
   if (!Number.isFinite(car?.relativeMeters) || !Number.isFinite(car?.relativeSeconds)) return range;
   const absMeters = Math.abs(car.relativeMeters);
@@ -2234,7 +2717,7 @@ function visualRadarRangeMeters(car) {
   if (absMeters <= range || absSeconds <= 0.05) return range;
   const inferredMetersPerSecond = absMeters / absSeconds;
   if (!Number.isFinite(inferredMetersPerSecond) || inferredMetersPerSecond <= 0) return range;
-  const timingAwareRange = inferredMetersPerSecond * radarConstants.timingAwareVisibilitySeconds;
+  const timingAwareRange = inferredMetersPerSecond * clampInteger(radarVisibilitySeconds, 2, 2, 5);
   return Math.max(
     range,
     Math.min(radarConstants.maximumTimingAwareRangeMeters, timingAwareRange));
@@ -2289,24 +2772,40 @@ function rgba(red, green, blue, alpha) {
 
 function trackMapDisplayModel(page, live, settings) {
   const includeUserMaps = settings?.trackMapSettings?.includeUserMaps ?? settings?.includeUserMaps ?? true;
-  const hasGeneratedTrackMap = settings?.trackMap?.racingLine?.points?.length >= 3;
+  const hasGeneratedTrackMap = hasGeneratedTrackMapAsset(settings?.trackMap);
+  const renderModel = trackMapRenderModel(live, settings);
+  const markers = trackMapMarkers(live);
   return {
     ...emptyDisplayModel(page.page.id, page.title),
-    status: 'live',
+    status: hasGeneratedTrackMap ? 'live' : 'track map | circle fallback',
     headerItems: [],
     source: hasGeneratedTrackMap
       ? 'source: IBT-derived Nurburgring 24h track map | live position telemetry'
-      : 'source: live position telemetry',
+      : 'source: live position telemetry | map fallback: no generated track map',
     bodyKind: 'track-map',
+    shouldRender: telemetryIsAvailable(live) && renderModel.markers.length > 0,
     trackMap: {
-      markers: trackMapMarkers(live),
+      markers,
       sectors: live?.models?.trackMap?.sectors || [],
       showSectorBoundaries: settings?.trackMapSettings?.showSectorBoundaries ?? settings?.showSectorBoundaries ?? true,
       internalOpacity: settings?.trackMapSettings?.internalOpacity ?? settings?.internalOpacity ?? 0,
       includeUserMaps,
-      renderModel: trackMapRenderModel(live, settings)
+      renderModel
     }
   };
+}
+
+function telemetryIsAvailable(live) {
+  if (live?.isConnected === false || live?.isCollecting === false) {
+    return false;
+  }
+
+  const lastUpdated = Date.parse(live?.lastUpdatedAtUtc || '');
+  if (!Number.isFinite(lastUpdated)) {
+    return false;
+  }
+
+  return Date.now() - lastUpdated <= 2500;
 }
 
 function garageCoverDisplayModel(page, live, settings) {
@@ -2314,6 +2813,7 @@ function garageCoverDisplayModel(page, live, settings) {
   const browserSettings = settings?.garageCover || settings || {};
   const previewVisible = browserSettings.previewVisible === true;
   const detection = garageCoverDetection(live, garageVisible);
+  const shouldCover = previewVisible || !detection.isFresh || garageVisible;
   const status = previewVisible ? 'preview visible' : detection.displayText;
   return {
     ...emptyDisplayModel(page.page.id, page.title),
@@ -2321,8 +2821,9 @@ function garageCoverDisplayModel(page, live, settings) {
     headerItems: [],
     source: 'source: garage telemetry/settings',
     bodyKind: 'garage-cover',
+    shouldRender: shouldCover,
     garageCover: {
-      shouldCover: previewVisible || !detection.isFresh || garageVisible,
+      shouldCover,
       browserSettings,
       detection
     }
@@ -2352,12 +2853,12 @@ function streamChatDisplayModel(page, live, settings) {
   const status = replayRows.length > 0
     ? streamSettings.replayStatus || 'replay chat'
     : !browserSettings.isConfigured
-      ? 'waiting for chat source'
-      : isTwitch
-        ? 'connecting | twitch'
-        : isStreamlabs
-          ? 'streamlabs unavailable'
-          : 'chat provider unavailable';
+      ? 'chat source not configured'
+    : isTwitch
+      ? 'connecting | twitch'
+      : isStreamlabs
+        ? 'streamlabs browser-source only'
+        : 'chat provider not configured';
   const rows = replayRows.length > 0
     ? replayRows
     : [{ name: 'TMR', text: message, kind: isStreamlabs || (browserSettings.isConfigured && !isTwitch) ? 'error' : 'system' }];
@@ -2421,7 +2922,7 @@ function normalizeStreamChatRows(rows) {
       return normalized;
     })
     .filter((row) => row.text.length > 0)
-    .slice(-36);
+    .slice(-Math.max(1, Math.round(overlayGeometry().streamChat?.maxRows ?? 36)));
 }
 
 function normalizeStreamChatTwitchPayload(value) {
@@ -2500,20 +3001,24 @@ function trackMapMarkers(live) {
     ...(live?.models?.timing?.classRows || [])
   ];
   const reference = live?.models?.reference || {};
+  const scoringRows = live?.models?.scoring?.rows || [];
+  const scoringByCarIdx = new Map(scoringRows.map((row) => [row.carIdx, row]));
   const referenceCarIdx = live?.models?.reference?.focusCarIdx
     ?? live?.models?.timing?.focusCarIdx
     ?? live?.models?.driverDirectory?.focusCarIdx;
   const markers = new Map();
   for (const row of rows) {
     if (row.hasSpatialProgress === false || !Number.isFinite(row.lapDistPct) || row.lapDistPct < 0) continue;
-    const isFocus = row.isFocus === true || row.carIdx === referenceCarIdx;
+    const scoringRow = scoringByCarIdx.get(row.carIdx) || null;
+    const isFocus = row.isFocus === true || row.carIdx === referenceCarIdx || scoringRow?.isFocus === true;
     if (!isFocus && row.hasTakenGrid !== true) continue;
     markers.set(row.carIdx, {
       carIdx: row.carIdx,
       lapDistPct: normalizeProgress(row.lapDistPct),
       isFocus,
-      classColorHex: row.carClassColorHex || null,
-      position: row.classPosition ?? row.overallPosition ?? null,
+      isPlayerFocus: trackMapIsPlayerFocus(reference, row.carIdx, isFocus, row.isPlayer === true || scoringRow?.isPlayer === true),
+      classColorHex: scoringRow?.carClassColorHex || row.carClassColorHex || null,
+      position: scoringRow?.classPosition ?? scoringRow?.overallPosition ?? row.classPosition ?? row.overallPosition ?? null,
       trackSurface: Number.isFinite(row.trackSurface) ? row.trackSurface : null,
       alertKind: isFocus ? null : row.trackMapAlertKind ?? row.alertKind ?? null,
       alertPulseProgress: isFocus ? 0 : row.trackMapAlertPulseProgress ?? row.alertPulseProgress ?? 0
@@ -2521,7 +3026,8 @@ function trackMapMarkers(live) {
   }
 
   const referenceProgress = Number.isFinite(reference.lapDistPct) ? reference.lapDistPct : null;
-  const referenceTrackSurface = Number.isFinite(reference.playerTrackSurface)
+  const referenceIsPlayerFocus = trackMapIsPlayerFocus(reference, referenceCarIdx, true, false);
+  const referenceTrackSurface = referenceIsPlayerFocus && Number.isFinite(reference.playerTrackSurface)
     ? reference.playerTrackSurface
     : Number.isFinite(reference.trackSurface)
       ? reference.trackSurface
@@ -2529,18 +3035,30 @@ function trackMapMarkers(live) {
   if (Number.isFinite(referenceCarIdx)
     && referenceProgress !== null
     && referenceProgress >= 0
-    && reference.onPitRoad !== true
-    && reference.playerOnPitRoad !== true
-    && referenceTrackSurface !== 1
-    && referenceTrackSurface !== 2) {
+    && (!referenceIsPlayerFocus
+      || (reference.onPitRoad !== true
+        && reference.playerOnPitRoad !== true
+        && referenceTrackSurface !== 1
+        && referenceTrackSurface !== 2))) {
     const existing = markers.get(referenceCarIdx);
     const focusRow = live?.models?.timing?.focusRow;
+    const scoringRow = scoringByCarIdx.get(referenceCarIdx) || null;
     markers.set(referenceCarIdx, {
       carIdx: referenceCarIdx,
       lapDistPct: normalizeProgress(referenceProgress),
       isFocus: true,
-      classColorHex: null,
+      isPlayerFocus: trackMapIsPlayerFocus(
+        reference,
+        referenceCarIdx,
+        true,
+        existing?.isPlayerFocus === true || focusRow?.isPlayer === true || scoringRow?.isPlayer === true),
+      classColorHex: existing?.classColorHex
+        ?? scoringRow?.carClassColorHex
+        ?? focusRow?.carClassColorHex
+        ?? null,
       position: existing?.position
+        ?? scoringRow?.classPosition
+        ?? scoringRow?.overallPosition
         ?? focusRow?.classPosition
         ?? focusRow?.overallPosition
         ?? reference.classPosition
@@ -2555,23 +3073,43 @@ function trackMapMarkers(live) {
   return [...markers.values()].sort((left, right) => Number(left.isFocus) - Number(right.isFocus) || left.carIdx - right.carIdx);
 }
 
+function trackMapIsPlayerFocus(reference, carIdx, isFocus, fallback) {
+  if (!isFocus) return false;
+  const focusCarIdx = reference?.focusCarIdx;
+  const playerCarIdx = reference?.playerCarIdx;
+  if (Number.isFinite(focusCarIdx) && focusCarIdx === carIdx) {
+    if (reference?.focusIsPlayer === true) return true;
+    if (reference?.hasExplicitNonPlayerFocus === true) return false;
+    return Number.isFinite(playerCarIdx) ? focusCarIdx === playerCarIdx : fallback === true;
+  }
+
+  return fallback === true || (Number.isFinite(playerCarIdx) && playerCarIdx === carIdx);
+}
+
 function trackMapRenderModel(live, settings) {
   const markers = trackMapMarkers(live);
   const sectors = live?.models?.trackMap?.sectors || [];
   const trackMap = settings?.trackMap ?? null;
   const internalOpacity = settings?.trackMapSettings?.internalOpacity ?? settings?.internalOpacity ?? 0;
   const showSectorBoundaries = settings?.trackMapSettings?.showSectorBoundaries ?? settings?.showSectorBoundaries ?? true;
-  const primitives = trackMap?.racingLine?.points?.length >= 3
+  const hasGeneratedTrackMap = hasGeneratedTrackMapAsset(trackMap);
+  const primitives = hasGeneratedTrackMap
     ? generatedTrackMapPrimitives(trackMap, sectors, internalOpacity, showSectorBoundaries)
     : circleTrackMapPrimitives(sectors, internalOpacity, showSectorBoundaries);
   return {
     width: 360,
     height: 360,
     isAvailable: true,
-    mapKind: trackMap?.racingLine?.points?.length >= 3 ? 'generated' : 'circle',
+    mapKind: hasGeneratedTrackMap ? 'generated' : 'circle',
     primitives,
     markers: markers.map((marker) => trackMapRenderMarker(marker, trackMap))
   };
+}
+
+function hasGeneratedTrackMapAsset(trackMap) {
+  return (trackMap?.racingLine?.points || [])
+    .filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.y))
+    .length >= 3;
 }
 
 function generatedTrackMapPrimitives(trackMap, sectors, internalOpacity, showSectorBoundaries) {
@@ -2647,7 +3185,7 @@ function circleTrackMapPrimitives(sectors, internalOpacity, showSectorBoundaries
 }
 
 function trackMapRenderMarker(marker, trackMap) {
-  const transform = trackMap?.racingLine?.points?.length >= 3 ? trackMapTransform(trackMap) : null;
+  const transform = hasGeneratedTrackMapAsset(trackMap) ? trackMapTransform(trackMap) : null;
   const point = transform ? pointOnGeometry(trackMap.racingLine, transform, marker.lapDistPct) : pointOnCircle(marker.lapDistPct);
   const label = Number.isFinite(marker.position) && marker.position > 0 ? String(marker.position) : null;
   const labelFontSize = marker.isFocus ? 7.6 : 5.4;
@@ -2668,9 +3206,10 @@ function trackMapRenderMarker(marker, trackMap) {
     y: point.y,
     radius,
     isFocus: marker.isFocus,
+    isPlayerFocus: marker.isPlayerFocus === true,
     fill: marker.alertKind === 'off-track'
       ? rgba(255, 218, 89, 255)
-      : marker.isFocus ? rgba(0, 232, 255, 255) : classBorderColor(marker.classColorHex, 1),
+      : marker.isFocus && marker.isPlayerFocus === true ? rgba(0, 232, 255, 255) : classBorderColor(marker.classColorHex, 1),
     stroke: rgba(8, 14, 18, 230),
     strokeWidth: marker.isFocus ? 2 : 1.4,
     label,

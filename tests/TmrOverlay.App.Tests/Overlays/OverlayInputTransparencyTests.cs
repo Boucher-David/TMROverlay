@@ -270,6 +270,77 @@ public sealed class OverlayInputTransparencyTests
     }
 
     [Fact]
+    public void CarRadarSettings_ControlMulticlassWarningWindow()
+    {
+        var approach = new LiveMulticlassApproach(
+            CarIdx: 51,
+            CarClass: 4099,
+            RelativeLaps: -0.07d,
+            RelativeSeconds: -8.5d,
+            ClosingRateSecondsPerSecond: null,
+            Urgency: 0.2d);
+        var spatial = LiveSpatialModel.Empty with
+        {
+            HasData = true,
+            ReferenceCarIdx = 10,
+            ReferenceCarClass = 4098,
+            MulticlassApproaches = [approach],
+            StrongestMulticlassApproach = approach
+        };
+        var settings = new OverlaySettings { Id = "car-radar" };
+
+        var defaultBody = DesignV2LiveOverlayForm.RadarBodyFromSpatial(
+            spatial,
+            overlayAvailable: true,
+            previewVisible: false,
+            settings);
+        Assert.Null(defaultBody.StrongestMulticlassApproach);
+        Assert.Null(defaultBody.RenderModel.MulticlassArc);
+
+        settings.SetIntegerOption(OverlayOptionKeys.RadarMulticlassWarningSeconds, 10, 3, 10);
+        var widenedBody = DesignV2LiveOverlayForm.RadarBodyFromSpatial(
+            spatial,
+            overlayAvailable: true,
+            previewVisible: false,
+            settings);
+
+        Assert.Same(approach, widenedBody.StrongestMulticlassApproach);
+        Assert.Equal("Faster class approaching 8.5s", widenedBody.RenderModel.MulticlassArc!.Label!.Text);
+    }
+
+    [Fact]
+    public void CarRadarSettings_ControlTimingAwareRadarRange()
+    {
+        var approachingCar = SpatialCar(51, relativeMeters: -60d, relativeSeconds: -4d);
+        var spatial = LiveSpatialModel.Empty with
+        {
+            HasData = true,
+            ReferenceCarIdx = 10,
+            ReferenceCarClass = 4098,
+            Cars = [approachingCar]
+        };
+        var settings = new OverlaySettings { Id = "car-radar" };
+
+        var defaultBody = DesignV2LiveOverlayForm.RadarBodyFromSpatial(
+            spatial,
+            overlayAvailable: true,
+            previewVisible: false,
+            settings);
+        Assert.Empty(defaultBody.Cars);
+        Assert.False(defaultBody.RenderModel.ShouldRender);
+
+        settings.SetIntegerOption(OverlayOptionKeys.RadarVisibilitySeconds, 5, 2, 5);
+        var widenedBody = DesignV2LiveOverlayForm.RadarBodyFromSpatial(
+            spatial,
+            overlayAvailable: true,
+            previewVisible: false,
+            settings);
+
+        Assert.Same(approachingCar, Assert.Single(widenedBody.Cars));
+        Assert.Contains(widenedBody.RenderModel.Cars, car => car.Kind == "nearby" && car.CarIdx == approachingCar.CarIdx);
+    }
+
+    [Fact]
     public void CarRadarRenderModel_AttachesSideWarningToCloseSpatialCar()
     {
         var closeSideCar = new LiveSpatialCar(
@@ -526,6 +597,32 @@ public sealed class OverlayInputTransparencyTests
         Assert.Contains(layout.Items, item => item.Kind == DesignV2InputRailItemKind.SteeringWheel);
         Assert.Contains(layout.Items, item => item.Kind == DesignV2InputRailItemKind.Gear);
         Assert.Contains(layout.Items, item => item.Kind == DesignV2InputRailItemKind.Speed);
+        Assert.All(layout.Items, item =>
+        {
+            Assert.True(item.Bounds.Top >= rail.Top, $"{item.Kind} starts above rail.");
+            Assert.True(item.Bounds.Bottom <= rail.Bottom + 0.001f, $"{item.Kind} ends below rail.");
+        });
+    }
+
+    [Fact]
+    public void DesignV2InputRailLayout_KeepsCompactSteeringWheelVisible()
+    {
+        var rail = new RectangleF(0, 0, 93, 129);
+
+        var layout = DesignV2LiveOverlayForm.BuildInputRailLayout(
+            rail,
+            showThrottle: true,
+            showBrake: true,
+            showClutch: true,
+            showSteering: true,
+            showGear: true,
+            showSpeed: true);
+
+        var steering = Assert.Single(layout.Items, item => item.Kind == DesignV2InputRailItemKind.SteeringWheel);
+        var gear = Assert.Single(layout.Items, item => item.Kind == DesignV2InputRailItemKind.Gear);
+
+        Assert.True(steering.Bounds.Height >= 36f, $"compact steering wheel height was {steering.Bounds.Height}.");
+        Assert.True(steering.Bounds.Bottom <= gear.Bounds.Top + 0.001f, "compact steering wheel overlaps readouts.");
         Assert.All(layout.Items, item =>
         {
             Assert.True(item.Bounds.Top >= rail.Top, $"{item.Kind} starts above rail.");

@@ -22,10 +22,11 @@ internal sealed record RelativeOverlayViewModel(
             return Waiting(availability.StatusText);
         }
 
-        var isRaceSession = OverlayAvailabilityEvaluator.NormalizeSessionKind(availability.SessionKind) == OverlaySessionKind.Race;
-        var showLapRelationship = isRaceSession;
+        var sessionKind = OverlayAvailabilityEvaluator.NormalizeSessionKind(availability.SessionKind);
+        var usesFullRelativeTiming = sessionKind is OverlaySessionKind.Practice or OverlaySessionKind.Race;
+        var showLapRelationship = usesFullRelativeTiming;
         var reference = ReferenceRow(snapshot, showLapRelationship);
-        var relativeRows = RowsForSession(snapshot.Models.Relative.Rows, isRaceSession);
+        var relativeRows = RowsForSession(snapshot.Models.Relative.Rows, usesFullRelativeTiming);
         if (reference is null)
         {
             return Waiting("waiting for focus-relative telemetry");
@@ -56,9 +57,9 @@ internal sealed record RelativeOverlayViewModel(
 
     private static IReadOnlyList<LiveRelativeRow> RowsForSession(
         IReadOnlyList<LiveRelativeRow> rows,
-        bool isRaceSession)
+        bool usesFullRelativeTiming)
     {
-        return isRaceSession
+        return usesFullRelativeTiming
             ? rows
             : rows
                 .Where(IsUsableNonRaceProximityRow)
@@ -222,7 +223,14 @@ internal sealed record RelativeOverlayViewModel(
         var prefix = string.IsNullOrWhiteSpace(position) ? "live relative" : position;
         return availableRows > shownRows
             ? $"{prefix} - {shownRows}/{availableRows} cars"
-            : $"{prefix} - {shownRows} cars";
+            : $"{prefix} - {FormatCarCount(shownRows)}";
+    }
+
+    private static string FormatCarCount(int count)
+    {
+        return count == 1
+            ? "1 car"
+            : $"{count.ToString(CultureInfo.InvariantCulture)} cars";
     }
 
     private static string BuildSource(
@@ -289,7 +297,7 @@ internal sealed record RelativeOverlayViewModel(
         var sign = direction == RelativeRowDirection.Ahead ? "-" : "+";
         if (row.RelativeSeconds is { } seconds && IsFinite(seconds))
         {
-            return $"{sign}{Math.Abs(seconds).ToString("0.000", CultureInfo.InvariantCulture)}";
+            return FormatRelativeSeconds(Math.Abs(seconds), sign);
         }
 
         if (row.RelativeMeters is { } meters && IsFinite(meters))
@@ -298,6 +306,21 @@ internal sealed record RelativeOverlayViewModel(
         }
 
         return "--";
+    }
+
+    private static string FormatRelativeSeconds(double seconds, string sign)
+    {
+        if (seconds < 60d)
+        {
+            return $"{sign}{seconds.ToString("0.000", CultureInfo.InvariantCulture)}";
+        }
+
+        var totalHundredths = (int)Math.Round(seconds * 100d, MidpointRounding.AwayFromZero);
+        var minutes = totalHundredths / 6000;
+        var remainder = totalHundredths - minutes * 6000;
+        var wholeSeconds = remainder / 100;
+        var hundredths = remainder % 100;
+        return FormattableString.Invariant($"{sign}{minutes}:{wholeSeconds:00}:{hundredths:00}");
     }
 
     private static LiveTimingRow? MatchingTimingRow(LiveTimingRow? row, int carIdx)

@@ -10,6 +10,7 @@ using TmrOverlay.App.Overlays.Content;
 using TmrOverlay.App.Overlays.Flags;
 using TmrOverlay.App.Overlays.GarageCover;
 using TmrOverlay.App.Overlays.GapToLeader;
+using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Overlays.TrackMap;
 using TmrOverlay.App.Overlays.Styling;
@@ -66,6 +67,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
     private readonly ILiveTelemetrySource _liveTelemetrySource;
     private readonly DiagnosticsBundleService _diagnosticsBundleService;
     private readonly AppEventRecorder _events;
+    private readonly OverlaySettings _settingsOverlaySettings;
     private readonly Action _saveSettings;
     private readonly Action _applyOverlaySettings;
     private readonly Action _requestApplicationExit;
@@ -107,6 +109,9 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
     private ReleaseUpdateStatus? _lastReleaseUpdateUiStatus;
     private string? _cachedLatestDiagnosticsBundlePath;
     private int _pendingSaveApplyRequestCount;
+    private bool _draggingSettingsWindow;
+    private Point _settingsDragCursorOrigin;
+    private Point _settingsDragFormOrigin;
 
     public SettingsOverlayForm(
         ApplicationSettings applicationSettings,
@@ -153,6 +158,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         _liveTelemetrySource = liveTelemetrySource;
         _diagnosticsBundleService = diagnosticsBundleService;
         _events = events;
+        _settingsOverlaySettings = settings;
         _saveSettings = saveSettings;
         _applyOverlaySettings = applyOverlaySettings;
         _requestApplicationExit = requestApplicationExit;
@@ -299,15 +305,19 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
                 ImportGarageCoverImage = ImportGarageCoverImage,
                 ClearGarageCoverImage = ClearGarageCoverImage,
                 LatestDiagnosticsBundlePath = LatestDiagnosticsBundlePath,
-                AdvancedDiagnosticsText = AdvancedDiagnosticsText
+                AdvancedDiagnosticsText = AdvancedDiagnosticsText,
+                BeginWindowDrag = BeginSettingsWindowDrag,
+                MoveWindowDrag = MoveSettingsWindowDrag,
+                EndWindowDrag = EndSettingsWindowDrag
             })
         {
-            Location = Point.Empty,
-            Size = ClientSize,
-            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+            Location = DesignV2SettingsSurface.WindowCanvasOffset,
+            Size = DesignV2SettingsSurface.LogicalCanvasSize,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left
         };
         Controls.Add(_v2Surface);
         _v2Surface.BringToFront();
+        ApplySettingsWindowRegion();
 
         _releaseUpdates.StateChanged += ReleaseUpdatesStateChanged;
         _sessionPreviewState.Changed += SessionPreviewStateChanged;
@@ -387,11 +397,21 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         _closeButton.Location = new Point(ClientSize.Width - 36, 8);
         if (_v2Surface is not null)
         {
-            _v2Surface.Size = ClientSize;
+            _v2Surface.Location = DesignV2SettingsSurface.WindowCanvasOffset;
+            _v2Surface.Size = DesignV2SettingsSurface.LogicalCanvasSize;
         }
+        ApplySettingsWindowRegion();
 
         LayoutUpdateBanner();
         LayoutSettingsTabs();
+    }
+
+    private void ApplySettingsWindowRegion()
+    {
+        using var path = DesignV2SettingsSurface.CreateWindowRegionPath();
+        var previous = Region;
+        Region = new Region(path);
+        previous?.Dispose();
     }
 
     private Button CreateBannerButton(string text, int left)
@@ -478,15 +498,48 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
 
     protected override void PersistOverlayFrame()
     {
-        // The settings window is an access point, not a trackside overlay. Keep it
-        // centered on each open instead of carrying monitor-specific placement.
+        PersistSettingsWindowFrame();
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    private void BeginSettingsWindowDrag(Point cursor)
     {
-        base.OnPaint(e);
-        using var borderPen = new Pen(OverlayTheme.Colors.WindowBorder);
-        e.Graphics.DrawRectangle(borderPen, 0, 0, Width - 1, Height - 1);
+        _draggingSettingsWindow = true;
+        _settingsDragCursorOrigin = cursor;
+        _settingsDragFormOrigin = Location;
+    }
+
+    private void MoveSettingsWindowDrag(Point cursor)
+    {
+        if (!_draggingSettingsWindow)
+        {
+            return;
+        }
+
+        Location = new Point(
+            _settingsDragFormOrigin.X + cursor.X - _settingsDragCursorOrigin.X,
+            _settingsDragFormOrigin.Y + cursor.Y - _settingsDragCursorOrigin.Y);
+    }
+
+    private void EndSettingsWindowDrag()
+    {
+        if (!_draggingSettingsWindow)
+        {
+            return;
+        }
+
+        _draggingSettingsWindow = false;
+        PersistSettingsWindowFrame();
+    }
+
+    private void PersistSettingsWindowFrame()
+    {
+        _settingsOverlaySettings.X = Location.X;
+        _settingsOverlaySettings.Y = Location.Y;
+        _settingsOverlaySettings.Width = ClientSize.Width;
+        _settingsOverlaySettings.Height = ClientSize.Height;
+        _settingsOverlaySettings.Opacity = 1d;
+        _settingsOverlaySettings.AlwaysOnTop = false;
+        _saveSettings();
     }
 
     private void BuildTabs()
@@ -977,9 +1030,9 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
 
     private void AddSupportCaptureControls(TabPage page, int x, int top, int width)
     {
-        var title = CreateSectionLabel("Diagnostic telemetry", x, top, width);
+        var title = CreateSectionLabel("Enhanced iRacing Telemetry Capture", x, top, width);
         var note = CreateMutedLabel("If we ask for a repro, enable this before joining/driving, then create a diagnostics bundle after.", x + 4, top + 30, width);
-        _rawCaptureCheckBox = CreateCheckBox("Capture diagnostic telemetry", _captureState.Snapshot().RawCaptureEnabled, x + 4, top + 66, 320);
+        _rawCaptureCheckBox = CreateCheckBox("Capture future live telemetry", _captureState.Snapshot().RawCaptureEnabled, x + 4, top + 66, 320);
         _rawCaptureCheckBox.CheckedChanged += (_, _) => RawCaptureCheckBoxChanged();
 
         page.Controls.Add(title);
@@ -1019,28 +1072,6 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         page.Controls.Add(_releaseUpdatePrimaryButton);
     }
 
-    private void AddSupportStorageControls(TabPage page, int x, int top, int width)
-    {
-        var title = CreateSectionLabel("Support folders", x, top, width);
-        var note = CreateMutedLabel("Open local folders if we ask for a specific file instead of the diagnostics zip.", x + 4, top + 30, width);
-
-        var logsButton = CreateActionButton("Logs", x + 4, top + 66, 96);
-        logsButton.Click += (_, _) => OpenSupportDirectory(_storageOptions.LogsRoot, "logs");
-        var diagnosticsButton = CreateActionButton("Diagnostics", x + 110, top + 66, 110);
-        diagnosticsButton.Click += (_, _) => OpenSupportDirectory(_storageOptions.DiagnosticsRoot, "diagnostics");
-        var capturesButton = CreateActionButton("Captures", x + 230, top + 66, 96);
-        capturesButton.Click += (_, _) => OpenSupportDirectory(_storageOptions.CaptureRoot, "captures");
-        var historyButton = CreateActionButton("History", x + 336, top + 66, 96);
-        historyButton.Click += (_, _) => OpenSupportDirectory(_storageOptions.UserHistoryRoot, "history");
-
-        page.Controls.Add(title);
-        page.Controls.Add(note);
-        page.Controls.Add(logsButton);
-        page.Controls.Add(diagnosticsButton);
-        page.Controls.Add(capturesButton);
-        page.Controls.Add(historyButton);
-    }
-
     private TabPage CreateSupportTab()
     {
         var page = CreateTabPage("Support");
@@ -1058,9 +1089,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         var actionsNote = CreateMutedLabel("After testing or reproducing an issue, create a bundle and send back the zip path.", x + 4, 262, width);
         var createBundleButton = CreateActionButton("Create Bundle", x + 4, 298, 140);
         createBundleButton.Click += (_, _) => CreateDiagnosticsBundleFromTab();
-        var copyBundleButton = CreateActionButton("Copy Latest Path", x + 154, 298, 140);
-        copyBundleButton.Click += (_, _) => CopyLatestDiagnosticsBundlePath();
-        var openDiagnosticsButton = CreateActionButton("Open Diagnostics", x + 304, 298, 150);
+        var openDiagnosticsButton = CreateActionButton("Open Bundle Folder", x + 154, 298, 170);
         openDiagnosticsButton.Click += (_, _) => OpenSupportDirectory(_storageOptions.DiagnosticsRoot, "diagnostics");
         _latestDiagnosticsBundleLabel = CreateMutedLabel(string.Empty, x + 4, 336, width);
         _supportStatusLabel = CreateMutedLabel(string.Empty, x + 4, 362, width);
@@ -1076,8 +1105,6 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         var issueLabel = CreateLabel("Issue", x + 4, 472, 100);
         _currentIssueLabel = CreateMultiLineValueLabel(string.Empty, x + 104, 466, 626, 42);
 
-        AddSupportStorageControls(page, x, 520, width);
-
         page.Controls.Add(title);
         page.Controls.Add(note);
         page.Controls.Add(versionLabel);
@@ -1085,7 +1112,6 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         page.Controls.Add(actionsTitle);
         page.Controls.Add(actionsNote);
         page.Controls.Add(createBundleButton);
-        page.Controls.Add(copyBundleButton);
         page.Controls.Add(openDiagnosticsButton);
         page.Controls.Add(_latestDiagnosticsBundleLabel);
         page.Controls.Add(_supportStatusLabel);
@@ -1137,9 +1163,13 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
 
         regionTabs.TabPages.Add(CreateOverlayGeneralPage(definition, settings));
         regionTabs.TabPages.Add(CreateOverlayContentPage(definition, settings));
-        if (!SuppressHeaderFooterTabs(definition.Id))
+        if (HasHeaderControls(definition.Id))
         {
             regionTabs.TabPages.Add(CreateOverlayHeaderPage(definition, settings));
+        }
+
+        if (HasFooterControls(definition.Id))
+        {
             regionTabs.TabPages.Add(CreateOverlayFooterPage(definition, settings));
         }
 
@@ -1212,38 +1242,24 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
     private TabPage CreateOverlayHeaderPage(OverlayDefinition definition, OverlaySettings settings)
     {
         var page = CreateTabPage("Header");
-        if (SupportsSharedChromeSettings(definition.Id))
-        {
-            SettingsOverlayTabSections.AddChromeSettingsPage(
-                page,
-                settings,
-                "Header",
-                HeaderChromeRows,
-                SaveAndApply);
-            return page;
-        }
-
-        page.Controls.Add(CreateSectionLabel("Header", 18, 18, 500));
-        page.Controls.Add(CreateMutedLabel("No header controls yet.", 22, 54, 420));
+        SettingsOverlayTabSections.AddChromeSettingsPage(
+            page,
+            settings,
+            "Header",
+            HeaderChromeRowsFor(definition.Id),
+            SaveAndApply);
         return page;
     }
 
     private TabPage CreateOverlayFooterPage(OverlayDefinition definition, OverlaySettings settings)
     {
         var page = CreateTabPage("Footer");
-        if (SupportsSharedChromeSettings(definition.Id))
-        {
-            SettingsOverlayTabSections.AddChromeSettingsPage(
-                page,
-                settings,
-                "Footer",
-                FooterChromeRowsFor(definition.Id),
-                SaveAndApply);
-            return page;
-        }
-
-        page.Controls.Add(CreateSectionLabel("Footer", 18, 18, 500));
-        page.Controls.Add(CreateMutedLabel("No footer controls yet.", 22, 54, 420));
+        SettingsOverlayTabSections.AddChromeSettingsPage(
+            page,
+            settings,
+            "Footer",
+            FooterChromeRowsFor(definition.Id),
+            SaveAndApply);
         return page;
     }
 
@@ -1262,7 +1278,17 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         }
     }
 
-    private static bool SupportsSharedChromeSettings(string overlayId)
+    private static bool HasHeaderControls(string overlayId)
+    {
+        return HeaderChromeRowsFor(overlayId).Count > 0;
+    }
+
+    private static bool HasFooterControls(string overlayId)
+    {
+        return FooterChromeRowsFor(overlayId).Count > 0;
+    }
+
+    private static IReadOnlyList<SettingsOverlayTabSections.OverlayChromeSettingsRow> HeaderChromeRowsFor(string overlayId)
     {
         return overlayId is
             "standings"
@@ -1270,7 +1296,9 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             or "fuel-calculator"
             or "gap-to-leader"
             or "session-weather"
-            or "pit-service";
+            or "pit-service"
+                ? HeaderChromeRows
+                : [];
     }
 
     private static readonly SettingsOverlayTabSections.OverlayChromeSettingsRow[] HeaderChromeRows =
@@ -1290,11 +1318,6 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         return string.Equals(overlayId, "session-weather", StringComparison.OrdinalIgnoreCase)
             ? []
             : FooterChromeRows;
-    }
-
-    private static bool SuppressHeaderFooterTabs(string overlayId)
-    {
-        return overlayId is "input-state";
     }
 
     private bool AddOverlaySpecificOptions(TabPage page, OverlayDefinition definition, OverlaySettings settings, int top)
@@ -1317,6 +1340,12 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             return true;
         }
 
+        if (string.Equals(definition.Id, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            AddStandingsOptions(page, settings, top);
+            return true;
+        }
+
         if (string.Equals(definition.Id, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
             AddGapToLeaderOptions(page, settings, top);
@@ -1330,6 +1359,32 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
 
         SettingsOverlayTabSections.AddDescriptorOptions(page, definition.SettingsOptions, settings, top, SaveAndApply);
         return true;
+    }
+
+    private void AddStandingsOptions(TabPage page, OverlaySettings settings, int top)
+    {
+        page.Controls.Add(CreateSectionLabel("Class rows", 18, top, 500));
+        page.Controls.Add(CreateLabel("Cars in class", 22, top + 42, 130));
+        var input = SettingsUi.CreateIntegerInput(
+            settings.GetIntegerOption(
+                OverlayOptionKeys.StandingsCarsInClass,
+                StandingsBrowserSettings.Default.MaximumRows,
+                StandingsBrowserSettings.MinimumCarsInClass,
+                StandingsBrowserSettings.MaximumCarsInClass),
+            StandingsBrowserSettings.MinimumCarsInClass,
+            StandingsBrowserSettings.MaximumCarsInClass,
+            158,
+            top + 38);
+        input.ValueChanged += (_, _) =>
+        {
+            settings.SetIntegerOption(
+                OverlayOptionKeys.StandingsCarsInClass,
+                (int)input.Value,
+                StandingsBrowserSettings.MinimumCarsInClass,
+                StandingsBrowserSettings.MaximumCarsInClass);
+            SaveAndApply();
+        };
+        page.Controls.Add(input);
     }
 
     private void AddGapToLeaderOptions(TabPage page, OverlaySettings settings, int top)
@@ -1703,7 +1758,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         AddFlagDisplayRow(
             page,
             settings,
-            label: "Green start/resume",
+            label: "Green / start / ready",
             enabledKey: OverlayOptionKeys.FlagsShowGreen,
             defaultEnabled: true,
             rowTop: top + 38);
@@ -1717,21 +1772,21 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         AddFlagDisplayRow(
             page,
             settings,
-            label: "Yellow",
+            label: "Yellow / debris / caution",
             enabledKey: OverlayOptionKeys.FlagsShowYellow,
             defaultEnabled: true,
             rowTop: top + 110);
         AddFlagDisplayRow(
             page,
             settings,
-            label: "Red / black",
+            label: "Red / black / repair",
             enabledKey: OverlayOptionKeys.FlagsShowCritical,
             defaultEnabled: true,
             rowTop: top + 146);
         AddFlagDisplayRow(
             page,
             settings,
-            label: "White / checkered",
+            label: "White / checkered / final laps",
             enabledKey: OverlayOptionKeys.FlagsShowFinish,
             defaultEnabled: true,
             rowTop: top + 182);
@@ -1914,8 +1969,8 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             SetCheckedIfChanged(_rawCaptureCheckBox, snapshot.RawCaptureEnabled || snapshot.RawCaptureActive);
             SetEnabledIfChanged(_rawCaptureCheckBox, !snapshot.RawCaptureActive);
             SetTextIfChanged(_rawCaptureCheckBox, snapshot.RawCaptureActive
-                ? "Diagnostic telemetry capture active"
-                : "Capture diagnostic telemetry");
+                ? "Enhanced iRacing telemetry capture active"
+                : "Capture future live telemetry");
         }
         finally
         {

@@ -10,8 +10,8 @@ internal sealed record RelativeBrowserSettings(
     IReadOnlyList<OverlayContentBrowserColumn> Columns)
 {
     public static RelativeBrowserSettings Default { get; } = new(
-        CarsAhead: 5,
-        CarsBehind: 5,
+        CarsAhead: 3,
+        CarsBehind: 3,
         Columns: OverlayContentColumnSettings.BrowserColumnsFor(null, OverlayContentColumnSettings.Relative));
 
     public static RelativeBrowserSettings From(

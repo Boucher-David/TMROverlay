@@ -100,12 +100,13 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private readonly Dictionary<string, double> _lastRawPitCommands = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, PositionState> _positionStates = [];
     private readonly Dictionary<int, SectorTimingState> _sectorStates = [];
+    private readonly Dictionary<string, DateTimeOffset> _lastSampledFrameAtUtcBySessionKind = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _sampleFrameCountsBySessionKind = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<PitWindowDiagnosticsSample> _pitWindows = [];
     private readonly List<LiveOverlayDiagnosticsFrameSample> _sampleFrames = [];
     private readonly List<LiveOverlayDiagnosticsEventSample> _eventSamples = [];
     private string? _sourceId;
     private DateTimeOffset? _startedAtUtc;
-    private DateTimeOffset? _lastSampledFrameAtUtc;
     private string? _lastArtifactPath;
     private int _frameCount;
     private int _sampledFrameCount;
@@ -292,7 +293,8 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         {
             _sourceId = sourceId;
             _startedAtUtc = startedAtUtc;
-            _lastSampledFrameAtUtc = null;
+            _lastSampledFrameAtUtcBySessionKind.Clear();
+            _sampleFrameCountsBySessionKind.Clear();
             _lastArtifactPath = null;
             _frameCount = 0;
             _sampledFrameCount = 0;
@@ -2768,13 +2770,15 @@ internal sealed class LiveOverlayDiagnosticsRecorder
 
     private void RecordSampleFrame(LiveTelemetrySnapshot snapshot, DateTimeOffset capturedAtUtc)
     {
-        if (_lastSampledFrameAtUtc is not null
-            && (capturedAtUtc - _lastSampledFrameAtUtc.Value).TotalSeconds < _options.MinimumFrameSpacingSeconds)
+        var sessionKind = SessionKind(snapshot);
+        if (_lastSampledFrameAtUtcBySessionKind.TryGetValue(sessionKind, out var lastSampledAtUtc)
+            && (capturedAtUtc - lastSampledAtUtc).TotalSeconds < _options.MinimumFrameSpacingSeconds)
         {
             return;
         }
 
-        if (_sampleFrames.Count >= _options.MaxSampleFramesPerSession)
+        _sampleFrameCountsBySessionKind.TryGetValue(sessionKind, out var sampledSessionFrameCount);
+        if (sampledSessionFrameCount >= _options.MaxSampleFramesPerSession)
         {
             _droppedFrameSampleCount++;
             return;
@@ -2783,12 +2787,13 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         var playerCarIdx = snapshot.Models.DriverDirectory.PlayerCarIdx ?? snapshot.LatestSample?.PlayerCarIdx;
         var focusCarIdx = snapshot.Models.DriverDirectory.FocusCarIdx
             ?? snapshot.LatestSample?.FocusCarIdx;
+        var roleContext = RoleContext(snapshot, playerCarIdx, focusCarIdx);
         var flagViewModel = FlagsOverlayViewModel.ForDisplay(snapshot, capturedAtUtc);
         _sampleFrames.Add(new LiveOverlayDiagnosticsFrameSample(
             CapturedAtUtc: capturedAtUtc,
             Sequence: snapshot.Sequence,
             SessionTimeSeconds: Round(snapshot.LatestSample?.SessionTime),
-            SessionKind: SessionKind(snapshot),
+            SessionKind: sessionKind,
             SessionState: snapshot.LatestSample?.SessionState,
             SessionFlags: snapshot.Models.Session.SessionFlags ?? snapshot.LatestSample?.SessionFlags,
             SessionFlagsHex: FormatRawFlagsHex(snapshot.Models.Session.SessionFlags ?? snapshot.LatestSample?.SessionFlags),
@@ -2803,6 +2808,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             FocusCarIdx: focusCarIdx,
             FocusUnavailableReason: FocusUnavailableReason(snapshot),
             FocusKind: FocusKind(playerCarIdx, focusCarIdx),
+            RoleContext: roleContext,
             ScoringSource: snapshot.Models.Scoring.Source.ToString(),
             ScoringRowCount: snapshot.Models.Scoring.Rows.Count,
             ScoringClassGroupCount: snapshot.Models.Scoring.ClassGroups.Count,
@@ -2825,7 +2831,8 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             FuelLevelEvidence: EvidenceKey(snapshot.Models.FuelPit.FuelLevelEvidence),
             FuelBurnEvidence: EvidenceKey(snapshot.Models.FuelPit.InstantaneousBurnEvidence)));
         _sampledFrameCount++;
-        _lastSampledFrameAtUtc = capturedAtUtc;
+        _sampleFrameCountsBySessionKind[sessionKind] = sampledSessionFrameCount + 1;
+        _lastSampledFrameAtUtcBySessionKind[sessionKind] = capturedAtUtc;
     }
 
     private void AddEvent(
@@ -2839,6 +2846,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         var playerCarIdx = snapshot.Models.DriverDirectory.PlayerCarIdx ?? snapshot.LatestSample?.PlayerCarIdx;
         var focusCarIdx = snapshot.Models.DriverDirectory.FocusCarIdx
             ?? snapshot.LatestSample?.FocusCarIdx;
+        var roleContext = RoleContext(snapshot, playerCarIdx, focusCarIdx);
         var sessionKind = SessionKind(snapshot);
         var flagViewModel = FlagsOverlayViewModel.ForDisplay(snapshot, capturedAtUtc);
         var eventKey = string.Join(
@@ -2890,6 +2898,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             FocusCarIdx: focusCarIdx,
             FocusUnavailableReason: FocusUnavailableReason(snapshot),
             FocusKind: FocusKind(playerCarIdx, focusCarIdx),
+            RoleContext: roleContext,
             ScoringSource: snapshot.Models.Scoring.Source.ToString(),
             ScoringRowCount: snapshot.Models.Scoring.Rows.Count,
             ScoringClassGroupCount: snapshot.Models.Scoring.ClassGroups.Count,
@@ -3165,6 +3174,74 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         return sample.RawCamCarIdx is < 0 or >= 64
             ? "cam_car_idx_invalid"
             : "cam_car_progress_unavailable";
+    }
+
+    private static LiveOverlayDiagnosticsRoleContext RoleContext(
+        LiveTelemetrySnapshot snapshot,
+        int? playerCarIdx,
+        int? focusCarIdx)
+    {
+        var directory = snapshot.Models.DriverDirectory;
+        var reference = snapshot.Models.Reference;
+        var playerDriver = DriverForCar(directory, playerCarIdx, directory.PlayerDriver);
+        var focusDriver = DriverForCar(directory, focusCarIdx, directory.FocusDriver);
+        var playerIsSpectator = playerDriver?.IsSpectator;
+        var focusIsSpectator = focusDriver?.IsSpectator;
+        var focusIsPlayer = reference.HasData
+            ? reference.FocusIsPlayer
+            : playerCarIdx is not null && focusCarIdx is not null && playerCarIdx == focusCarIdx;
+        var hasExplicitNonPlayerFocus = reference.HasData
+            ? reference.HasExplicitNonPlayerFocus
+            : playerCarIdx is not null && focusCarIdx is not null && playerCarIdx != focusCarIdx;
+
+        return new LiveOverlayDiagnosticsRoleContext(
+            PlayerCarIdx: playerCarIdx,
+            FocusCarIdx: focusCarIdx,
+            FocusIsPlayer: focusIsPlayer,
+            HasExplicitNonPlayerFocus: hasExplicitNonPlayerFocus,
+            PlayerIsSpectator: playerIsSpectator,
+            FocusIsSpectator: focusIsSpectator,
+            LocalRole: LocalRole(playerIsSpectator),
+            RoleSource: RoleSource(playerCarIdx, playerIsSpectator),
+            IsSpotting: null,
+            SpottingSignalStatus: "not-observed");
+    }
+
+    private static LiveDriverIdentity? DriverForCar(
+        LiveDriverDirectoryModel directory,
+        int? carIdx,
+        LiveDriverIdentity? preferred)
+    {
+        if (preferred is not null && preferred.CarIdx == carIdx)
+        {
+            return preferred;
+        }
+
+        return carIdx is { } value
+            ? directory.Drivers.FirstOrDefault(driver => driver.CarIdx == value)
+            : null;
+    }
+
+    private static string LocalRole(bool? playerIsSpectator)
+    {
+        return playerIsSpectator switch
+        {
+            true => "spectator",
+            false => "driver",
+            _ => "unknown"
+        };
+    }
+
+    private static string RoleSource(int? playerCarIdx, bool? playerIsSpectator)
+    {
+        if (playerIsSpectator is not null)
+        {
+            return "DriverInfo.Drivers[].IsSpectator";
+        }
+
+        return playerCarIdx is null
+            ? "player-car-missing"
+            : "driver-info-missing";
     }
 
     private static string FocusUnavailableDetail(LiveTelemetrySnapshot snapshot, string reason)
@@ -3993,6 +4070,7 @@ internal sealed record LiveOverlayDiagnosticsFrameSample(
     int? FocusCarIdx,
     string FocusUnavailableReason,
     string FocusKind,
+    LiveOverlayDiagnosticsRoleContext RoleContext,
     string ScoringSource,
     int ScoringRowCount,
     int ScoringClassGroupCount,
@@ -4036,6 +4114,7 @@ internal sealed record LiveOverlayDiagnosticsEventSample(
     int? FocusCarIdx,
     string FocusUnavailableReason,
     string FocusKind,
+    LiveOverlayDiagnosticsRoleContext RoleContext,
     string ScoringSource,
     int ScoringRowCount,
     int ScoringClassGroupCount,
@@ -4053,3 +4132,16 @@ internal sealed record LiveOverlayDiagnosticsEventSample(
     int NearbyCarCount,
     int TimingRowCount,
     int SpatialCarCount);
+
+internal sealed record LiveOverlayDiagnosticsRoleContext(
+    int? PlayerCarIdx,
+    int? FocusCarIdx,
+    bool FocusIsPlayer,
+    bool HasExplicitNonPlayerFocus,
+    bool? PlayerIsSpectator,
+    bool? FocusIsSpectator,
+    string LocalRole,
+    string RoleSource,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    bool? IsSpotting,
+    string SpottingSignalStatus);

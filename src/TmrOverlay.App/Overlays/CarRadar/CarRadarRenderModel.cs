@@ -76,7 +76,8 @@ internal sealed record CarRadarRenderModel(
             viewModel.PreviewVisible,
             viewModel.HasCurrentSignal,
             viewModel.Spatial.ReferenceCarClassColorHex,
-            calibrationProfile);
+            calibrationProfile,
+            viewModel.RadarVisibilitySeconds);
     }
 
     public static CarRadarRenderModel FromState(
@@ -89,7 +90,8 @@ internal sealed record CarRadarRenderModel(
         bool previewVisible,
         bool hasCurrentSignal,
         string? referenceCarClassColorHex = null,
-        CarRadarCalibrationProfile? calibrationProfile = null)
+        CarRadarCalibrationProfile? calibrationProfile = null,
+        int radarVisibilitySeconds = CarRadarOverlayViewModel.DefaultRadarVisibilitySeconds)
     {
         var shouldRender = (isAvailable && hasCurrentSignal) || previewVisible;
         if (!shouldRender)
@@ -97,7 +99,7 @@ internal sealed record CarRadarRenderModel(
             return Empty;
         }
 
-        var geometry = CarRadarGeometry.From(calibrationProfile);
+        var geometry = CarRadarGeometry.From(calibrationProfile, radarVisibilitySeconds);
         var background = BackgroundCircle();
         var rings = DistanceRings(geometry);
         var labels = new List<CarRadarRenderText>(rings.Count + 1);
@@ -755,7 +757,7 @@ internal sealed record CarRadarRenderModel(
             return range;
         }
 
-        var timingAwareRange = inferredMetersPerSecond * CarRadarOverlayViewModel.TimingAwareVisibilitySeconds;
+        var timingAwareRange = inferredMetersPerSecond * geometry.TimingAwareVisibilitySeconds;
         return Math.Clamp(
             Math.Max(range, timingAwareRange),
             range,
@@ -815,9 +817,12 @@ internal sealed record CarRadarRenderModel(
         double PhysicalRadarRangeMeters,
         double ContactWindowMeters,
         double SideAttachmentWindowMeters,
-        double MaximumTimingAwareRangeMeters)
+        double MaximumTimingAwareRangeMeters,
+        double TimingAwareVisibilitySeconds)
     {
-        public static CarRadarGeometry From(CarRadarCalibrationProfile? calibrationProfile)
+        public static CarRadarGeometry From(
+            CarRadarCalibrationProfile? calibrationProfile,
+            int radarVisibilitySeconds = CarRadarOverlayViewModel.DefaultRadarVisibilitySeconds)
         {
             var bodyLengthMeters = calibrationProfile?.BodyLengthMeters ?? CarRadarCalibrationProfile.DefaultBodyLengthMeters;
             if (double.IsNaN(bodyLengthMeters) || double.IsInfinity(bodyLengthMeters) || bodyLengthMeters <= 0d)
@@ -830,7 +835,8 @@ internal sealed record CarRadarRenderModel(
                 PhysicalRadarRangeMeters: bodyLengthMeters * 6d,
                 ContactWindowMeters: bodyLengthMeters,
                 SideAttachmentWindowMeters: bodyLengthMeters * 2d,
-                MaximumTimingAwareRangeMeters: bodyLengthMeters * 15d);
+                MaximumTimingAwareRangeMeters: bodyLengthMeters * 15d,
+                TimingAwareVisibilitySeconds: CarRadarOverlayViewModel.ClampRadarVisibilitySeconds(radarVisibilitySeconds));
         }
     }
 }

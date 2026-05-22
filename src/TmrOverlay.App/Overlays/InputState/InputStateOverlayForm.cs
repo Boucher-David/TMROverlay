@@ -173,7 +173,7 @@ internal sealed class InputStateOverlayForm : PersistentOverlayForm, IUnitSystem
             }
             else if (!snapshot.Models.Inputs.HasData)
             {
-                ResetInputState(snapshot, "waiting for inputs");
+                ResetInputState(snapshot, "waiting for car telemetry");
             }
             else
             {
@@ -841,7 +841,7 @@ internal sealed class InputStateOverlayForm : PersistentOverlayForm, IUnitSystem
         var center = new PointF(wheelRect.Left + wheelRect.Width / 2f, wheelRect.Top + wheelRect.Height / 2f);
         using var rimPen = new Pen(OverlayTheme.Colors.TextSecondary, 4f);
         graphics.DrawEllipse(rimPen, wheelRect);
-        var angle = (float)(_latestInputs.SteeringWheelAngle ?? 0d);
+        var angle = (float)(InputStateRenderModelBuilder.VisualSteeringWheelAngle(_latestInputs.SteeringWheelAngle) ?? 0d);
         var spokeLength = wheelRect.Width * 0.4f;
         using var spokePen = new Pen(OverlayTheme.Colors.InfoText, 3f);
         for (var spoke = 0; spoke < 3; spoke++)

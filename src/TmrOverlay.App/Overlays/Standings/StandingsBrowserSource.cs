@@ -9,5 +9,6 @@ internal static class StandingsBrowserSource
         title: StandingsOverlayDefinition.Definition.DisplayName,
         canonicalRoute: "/overlays/standings",
         fadeWhenTelemetryUnavailable: StandingsOverlayDefinition.Definition.FadeWhenLiveTelemetryUnavailable,
-        moduleAssetName: "standings");
+        moduleAssetName: "standings",
+        bodyClass: "standings-page");
 }

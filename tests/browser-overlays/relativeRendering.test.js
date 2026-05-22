@@ -33,6 +33,8 @@ describe('relative browser rendering', () => {
     expect(rows[3].classList.contains('focus')).toBe(true);
     expect(rows[3].classList.contains('class-colored')).toBe(true);
     expect(rows[4].classList.contains('lap-behind-2')).toBe(true);
+    expect(currentOverlay.document.querySelector('.overlay').style.getPropertyValue('--relative-overlay-width')).toBe('440px');
+    expect(currentOverlay.document.querySelector('.overlay').style.getPropertyValue('--relative-overlay-height')).toBe('308px');
     expect(currentOverlay.document.getElementById('status')).toBeNull();
     expect(currentOverlay.document.body.textContent).not.toContain('Far Ahead');
     expect(currentOverlay.document.body.textContent).not.toContain('Far Behind');
@@ -49,6 +51,25 @@ describe('relative browser rendering', () => {
     expect(rows.some((row) => row.classList.contains('lap-ahead-1'))).toBe(false);
     expect(rows.some((row) => row.classList.contains('lap-behind-2'))).toBe(false);
   });
+
+  it('hides the shell when relative has no renderable content', async () => {
+    currentOverlay = await renderBrowserOverlay('relative', {
+      live: freshLiveSnapshot({}),
+      model: {
+        ...relativeDisplayModel(),
+        status: 'hidden | no enabled content',
+        shouldRender: false,
+        columns: [],
+        rows: [],
+        headerItems: []
+      },
+      waitForSelector: null
+    });
+
+    expect(currentOverlay.document.querySelector('.overlay').style.opacity).toBe('0');
+    expect(currentOverlay.document.getElementById('content').textContent.trim()).toBe('');
+    expect(currentOverlay.document.querySelector('.header').hidden).toBe(true);
+  });
 });
 
 function relativeDisplayModel({ includeLapDeltas = true } = {}) {
@@ -59,8 +80,8 @@ function relativeDisplayModel({ includeLapDeltas = true } = {}) {
     source: 'source: live proximity telemetry',
     bodyKind: 'table',
     columns: [
-      { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 38, alignment: 'right' },
-      { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
+      { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 48, alignment: 'right' },
+      { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 240, alignment: 'left' },
       { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
       { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 48, alignment: 'right' }
     ],

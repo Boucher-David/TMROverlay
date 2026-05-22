@@ -21,7 +21,6 @@ internal sealed class CarRadarForm : PersistentOverlayForm
     private const double ContactWindowMeters = FocusedCarLengthMeters;
     private const double SideAttachmentWindowMeters = FocusedCarLengthMeters * 2d;
     private const double ProximityWarningGapMeters = 2.0d;
-    private const double MulticlassWarningRangeSeconds = 5d;
     private const double FadeInSeconds = 0.25d;
     private const double FadeOutSeconds = 0.85d;
     private const double MinimumVisibleAlpha = 0.02d;
@@ -65,6 +64,20 @@ internal sealed class CarRadarForm : PersistentOverlayForm
 
     private bool ShowMulticlassWarning =>
         _settings.GetBooleanOption(OverlayOptionKeys.RadarMulticlassWarning, defaultValue: true);
+
+    private int MulticlassWarningRangeSeconds =>
+        _settings.GetIntegerOption(
+            OverlayOptionKeys.RadarMulticlassWarningSeconds,
+            CarRadarOverlayViewModel.DefaultMulticlassWarningRangeSeconds,
+            CarRadarOverlayViewModel.MinimumMulticlassWarningRangeSeconds,
+            CarRadarOverlayViewModel.MaximumMulticlassWarningRangeSeconds);
+
+    private int RadarVisibilitySeconds =>
+        _settings.GetIntegerOption(
+            OverlayOptionKeys.RadarVisibilitySeconds,
+            CarRadarOverlayViewModel.DefaultRadarVisibilitySeconds,
+            CarRadarOverlayViewModel.MinimumRadarVisibilitySeconds,
+            CarRadarOverlayViewModel.MaximumRadarVisibilitySeconds);
 
     public CarRadarForm(
         ILiveTelemetrySource liveTelemetrySource,
@@ -231,8 +244,10 @@ internal sealed class CarRadarForm : PersistentOverlayForm
                 _viewModel = CarRadarOverlayViewModel.From(
                     snapshot,
                     now,
-                    _settingsPreviewVisible,
-                    ShowMulticlassWarning);
+                    previewVisible: _settingsPreviewVisible,
+                    showMulticlassWarning: ShowMulticlassWarning,
+                    multiclassWarningRangeSeconds: MulticlassWarningRangeSeconds,
+                    radarVisibilitySeconds: RadarVisibilitySeconds);
                 snapshotSucceeded = true;
             }
             finally

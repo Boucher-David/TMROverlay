@@ -14,7 +14,6 @@ namespace TmrOverlay.App.Overlays.Standings;
 
 internal sealed class StandingsForm : PersistentOverlayForm
 {
-    private const int MaximumRows = StandingsOverlayViewModel.DefaultMaximumRows;
     private const int AllocatedRows = StandingsOverlayViewModel.MaximumRenderedRows;
     private const int MinimumTableHeight = 390;
     private const int RefreshIntervalMilliseconds = 500;
@@ -260,7 +259,7 @@ internal sealed class StandingsForm : PersistentOverlayForm
                 viewModel = StandingsOverlayViewModel.From(
                     snapshot,
                     DateTimeOffset.UtcNow,
-                    MaximumRows,
+                    CarsInClass(),
                     OtherClassRowsPerClass(),
                     ClassSeparatorsEnabled());
                 viewModelSucceeded = true;
@@ -533,6 +532,15 @@ internal sealed class StandingsForm : PersistentOverlayForm
             maximum: 6);
     }
 
+    private int CarsInClass()
+    {
+        return _settings.GetIntegerOption(
+            OverlayOptionKeys.StandingsCarsInClass,
+            defaultValue: StandingsOverlayViewModel.DefaultMaximumRows,
+            minimum: StandingsBrowserSettings.MinimumCarsInClass,
+            maximum: StandingsBrowserSettings.MaximumCarsInClass);
+    }
+
     private bool ClassSeparatorsEnabled()
     {
         var block = OverlayContentColumnSettings.Standings.Blocks?
@@ -560,6 +568,7 @@ internal sealed class StandingsForm : PersistentOverlayForm
                 .Select(column => $"{column.Id}:{column.DataKey}:{column.Enabled}:{column.Order}:{column.Width}:{column.Alignment}")
                 .Prepend(ClassSeparatorsEnabled() ? "true" : "false")
                 .Prepend(OtherClassRowsPerClass().ToString(CultureInfo.InvariantCulture))
+                .Prepend(CarsInClass().ToString(CultureInfo.InvariantCulture))
                 .Prepend(OverlayChromeSettings.SettingsSignature(_settings)));
     }
 

@@ -110,6 +110,66 @@ public sealed class IbtAnalysisServiceTests
     }
 
     [Fact]
+    public async Task WriteAsync_SelectsLongerCandidateWhenNewerWarmupOnlyFileIsInsufficient()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-selection-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var telemetryRoot = Path.Combine(root, "ibt");
+            var captureDirectory = Path.Combine(root, "captures", "capture-test");
+            Directory.CreateDirectory(telemetryRoot);
+            Directory.CreateDirectory(captureDirectory);
+
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-20T18:03:06Z");
+            var longerPath = Path.Combine(telemetryRoot, "race-full.ibt");
+            var warmupPath = Path.Combine(telemetryRoot, "warmup-newer.ibt");
+            WriteSyntheticIbt(
+                longerPath,
+                startedAtUtc,
+                recordCount: 40_000,
+                endSessionTime: 670d,
+                lastWriteAtUtc: startedAtUtc.AddMinutes(12));
+            WriteSyntheticIbt(
+                warmupPath,
+                startedAtUtc.AddMinutes(2),
+                recordCount: 355,
+                endSessionTime: 6d,
+                lastWriteAtUtc: startedAtUtc.AddMinutes(13));
+            WriteCaptureManifest(captureDirectory, startedAtUtc, frameCount: 40_606);
+            WriteLiveSchema(captureDirectory);
+
+            var service = new IbtAnalysisService(
+                new IbtAnalysisOptions
+                {
+                    Enabled = true,
+                    TelemetryRoot = telemetryRoot,
+                    MaxCandidateAgeMinutes = 60,
+                    MaxAnalysisMilliseconds = 10_000,
+                    MaxSampledRecords = 100,
+                    MinStableAgeSeconds = 0
+                },
+                NullLogger<IbtAnalysisService>.Instance);
+
+            var result = await service.WriteAsync(captureDirectory);
+
+            Assert.Equal(IbtAnalysisStatus.Succeeded, result.Status);
+            Assert.Equal(longerPath, result.SourcePath);
+            using var status = JsonDocument.Parse(File.ReadAllText(Path.Combine(captureDirectory, "ibt-analysis", "status.json")));
+            var selection = status.RootElement.GetProperty("candidateSelection");
+            Assert.Equal(longerPath, selection.GetProperty("selectedPath").GetString());
+            Assert.Equal(40_000, selection.GetProperty("candidateRecordCount").GetInt32());
+            Assert.True(selection.GetProperty("candidateCaptureCoverageRatio").GetDouble() > 0.9d);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task WriteAsync_WritesSkippedStatusWhenTelemetryRootIsMissing()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-missing-root-test", Guid.NewGuid().ToString("N"));
@@ -144,7 +204,13 @@ public sealed class IbtAnalysisServiceTests
         }
     }
 
-    private static void WriteSyntheticIbt(string path, DateTimeOffset startedAtUtc)
+    private static void WriteSyntheticIbt(
+        string path,
+        DateTimeOffset startedAtUtc,
+        int recordCount = 4,
+        double startSessionTime = 0d,
+        double endSessionTime = 3d,
+        DateTimeOffset? lastWriteAtUtc = null)
     {
         var fields = new[]
         {
@@ -162,7 +228,6 @@ public sealed class IbtAnalysisServiceTests
         const int diskHeaderBytes = 32;
         const int varHeaderBytes = 144;
         const int bufferLength = 52;
-        const int recordCount = 4;
         var varHeaderOffset = telemetryHeaderBytes + diskHeaderBytes;
         var sessionInfo = Encoding.UTF8.GetBytes("""
             WeekendInfo:
@@ -173,52 +238,58 @@ public sealed class IbtAnalysisServiceTests
         var sessionInfoOffset = varHeaderOffset + fields.Length * varHeaderBytes;
         var bufferOffset = sessionInfoOffset + sessionInfo.Length;
 
-        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
-        using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
-        writer.Write(2);
-        writer.Write(1);
-        writer.Write(60);
-        writer.Write(0);
-        writer.Write(sessionInfo.Length);
-        writer.Write(sessionInfoOffset);
-        writer.Write(fields.Length);
-        writer.Write(varHeaderOffset);
-        writer.Write(1);
-        writer.Write(bufferLength);
-        writer.Write(new byte[12]);
-        writer.Write(bufferOffset);
-        writer.Write(new byte[telemetryHeaderBytes - 56]);
-
-        writer.Write(startedAtUtc.ToUnixTimeSeconds());
-        writer.Write(0d);
-        writer.Write(3d);
-        writer.Write(1);
-        writer.Write(recordCount);
-
-        foreach (var field in fields)
+        using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false))
         {
-            writer.Write(field.TypeCode);
-            writer.Write(field.Offset);
-            writer.Write(field.Count);
+            writer.Write(2);
+            writer.Write(1);
+            writer.Write(60);
             writer.Write(0);
-            WriteFixedString(writer, field.Name, 32);
-            WriteFixedString(writer, field.Description, 64);
-            WriteFixedString(writer, field.Unit, 32);
-        }
+            writer.Write(sessionInfo.Length);
+            writer.Write(sessionInfoOffset);
+            writer.Write(fields.Length);
+            writer.Write(varHeaderOffset);
+            writer.Write(1);
+            writer.Write(bufferLength);
+            writer.Write(new byte[12]);
+            writer.Write(bufferOffset);
+            writer.Write(new byte[telemetryHeaderBytes - 56]);
 
-        writer.Write(sessionInfo);
-        for (var record = 0; record < recordCount; record++)
-        {
-            writer.Write(record * 0.5d);
-            writer.Write(100f + record);
-            writer.Write(0.1f + record * 0.01f);
-            writer.Write(35.1d + record * 0.001d);
-            writer.Write(-80.2d - record * 0.001d);
-            writer.Write(280d + record);
-            writer.Write(42f - record);
-            writer.Write(20f + record);
-            writer.Write(record);
+            writer.Write(startedAtUtc.ToUnixTimeSeconds());
+            writer.Write(startSessionTime);
+            writer.Write(endSessionTime);
+            writer.Write(1);
+            writer.Write(recordCount);
+
+            foreach (var field in fields)
+            {
+                writer.Write(field.TypeCode);
+                writer.Write(field.Offset);
+                writer.Write(field.Count);
+                writer.Write(0);
+                WriteFixedString(writer, field.Name, 32);
+                WriteFixedString(writer, field.Description, 64);
+                WriteFixedString(writer, field.Unit, 32);
+            }
+
+            writer.Write(sessionInfo);
+            for (var record = 0; record < recordCount; record++)
+            {
+                writer.Write(record * 0.5d);
+                writer.Write(100f + record);
+                writer.Write(0.1f + record * 0.01f);
+                writer.Write(35.1d + record * 0.001d);
+                writer.Write(-80.2d - record * 0.001d);
+                writer.Write(280d + record);
+                writer.Write(42f - record);
+                writer.Write(20f + record);
+                writer.Write(record);
+            }
+
+            writer.Flush();
         }
+        var lastWrite = lastWriteAtUtc ?? startedAtUtc.AddSeconds(Math.Max(0d, endSessionTime - startSessionTime));
+        File.SetLastWriteTimeUtc(path, lastWrite.UtcDateTime);
     }
 
     private static void WriteFixedString(BinaryWriter writer, string value, int byteCount)
@@ -229,7 +300,10 @@ public sealed class IbtAnalysisServiceTests
         writer.Write(bytes);
     }
 
-    private static void WriteCaptureManifest(string captureDirectory, DateTimeOffset startedAtUtc)
+    private static void WriteCaptureManifest(
+        string captureDirectory,
+        DateTimeOffset startedAtUtc,
+        int frameCount = 10)
     {
         File.WriteAllText(
             Path.Combine(captureDirectory, "capture-manifest.json"),
@@ -246,7 +320,7 @@ public sealed class IbtAnalysisServiceTests
                 TickRate = 60,
                 BufferLength = 32,
                 VariableCount = 2,
-                FrameCount = 10
+                FrameCount = frameCount
             }));
     }
 

@@ -5,6 +5,7 @@ import {
   renderOverlayHtml
 } from './browserOverlayTestHost.js';
 import {
+  overlayGeometry,
   renderAppValidatorReviewHtml,
   renderInstallerReviewHtml,
   renderSettingsGeneralReviewHtml
@@ -33,6 +34,72 @@ test.describe('browser overlay Playwright integration', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(requests).toContain('/api/overlay-model/standings');
     expect(requests).not.toContain('/api/snapshot');
+  });
+
+  test('uses native normal table height constants in browser layout', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'standings', {
+      live: freshLiveSnapshot({}),
+      model: standingsDisplayModel()
+    });
+
+    await page.setViewportSize({ width: 692, height: 520 });
+    await page.goto('http://localhost:8765/overlays/standings');
+
+    await expect(page.locator('tbody tr')).toHaveCount(6);
+    await expectElementHeight(page.locator('thead th').first(), 25);
+    await expectElementHeight(page.locator('tbody tr:not(.class-header) td').first(), 28);
+    await expectElementHeight(page.locator('tbody tr.class-header td').first(), 35);
+    await expectElementHeight(page.locator('.class-header-band').first(), 24);
+
+    const tableOffsets = await page.evaluate(() => {
+      const table = document.querySelector('table').getBoundingClientRect();
+      const header = document.querySelector('thead th').getBoundingClientRect();
+      const firstBodyRow = document.querySelector('tbody tr td').getBoundingClientRect();
+      const band = document.querySelector('.class-header-band').getBoundingClientRect();
+      return {
+        headerTop: header.top - table.top,
+        bodyTop: firstBodyRow.top - table.top,
+        classBandTop: band.top - firstBodyRow.top
+      };
+    });
+    expect(tableOffsets.headerTop).toBeCloseTo(5, 0);
+    expect(tableOffsets.bodyTop).toBeCloseTo(35, 0);
+    expect(tableOffsets.classBandTop).toBeCloseTo(11, 0);
+  });
+
+  test('uses configured table width for compact standings columns', async ({ page }) => {
+    const full = standingsDisplayModel();
+    const driverOnly = standingsDisplayModel({
+      columns: full.columns.filter((column) => column.dataKey === 'driver'),
+      rows: full.rows.map((row) => row.cells.length > 0
+        ? { ...row, cells: [row.cells[2]] }
+        : row)
+    });
+    await installBrowserOverlayRoutes(page, 'standings', {
+      live: freshLiveSnapshot({}),
+      model: driverOnly
+    });
+
+    await page.setViewportSize({ width: 320, height: 360 });
+    await page.goto('http://localhost:8765/overlays/standings');
+
+    await expect(page.locator('thead th')).toHaveText(['Driver']);
+    const overlayBox = await page.locator('.overlay').boundingBox();
+    expect(overlayBox?.width).toBeCloseTo(284, 0);
+  });
+
+  test('uses native relative table row height in browser layout', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'relative', {
+      live: freshLiveSnapshot({}),
+      model: relativeDisplayModel()
+    });
+
+    await page.setViewportSize({ width: 360, height: 308 });
+    await page.goto('http://localhost:8765/overlays/relative');
+
+    await expect(page.locator('tbody tr')).toHaveCount(3);
+    await expectElementHeight(page.locator('thead th').first(), 25);
+    await expectElementHeight(page.locator('tbody tr:not(.class-header) td').first(), 26);
   });
 
   test('applies production model root opacity in localhost overlay routes', async ({ page }) => {
@@ -83,6 +150,10 @@ test.describe('browser overlay Playwright integration', () => {
     const overlayBox = await page.locator('.overlay').boundingBox();
     expect(overlayBox?.width).toBe(380);
     expect(overlayBox?.height).toBe(520);
+    const geometry = overlayGeometry().streamChat;
+    const rowBox = await page.locator('.chat-line').boundingBox();
+    expect(rowBox?.x).toBeCloseTo(1 + geometry.contentHorizontalPadding, 0);
+    expect(rowBox?.width).toBeCloseTo(geometry.overlayWidth - 2 - geometry.contentHorizontalPadding * 2, 0);
     expect(requests).toContain('/api/overlay-model/stream-chat');
   });
 
@@ -340,7 +411,36 @@ test.describe('browser overlay Playwright integration', () => {
     expect(wheel.x + wheel.width).toBeLessThanOrEqual(rail.x + rail.width);
   });
 
+  test('keeps input steering wheel visible at minimum scale', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'input-state', {
+      live: inputStateLiveSnapshot(0, 0.72)
+    });
+
+    await page.setViewportSize({ width: 328, height: 172 });
+    await page.goto('http://localhost:8765/overlays/input-state');
+
+    await expect(page.locator('.input-wheel svg')).toBeVisible();
+    const wheel = await page.locator('.input-wheel svg').boundingBox();
+    const rail = await page.locator('.input-rail').boundingBox();
+    const graph = await page.locator('.input-graph-panel').boundingBox();
+
+    expect(wheel).not.toBeNull();
+    expect(rail).not.toBeNull();
+    expect(graph).not.toBeNull();
+    expect(wheel?.width).toBeGreaterThanOrEqual(14);
+    expect(wheel?.height).toBeGreaterThanOrEqual(14);
+    expect(wheel?.width).toBeLessThanOrEqual(32);
+    expect(wheel?.height).toBeLessThanOrEqual(32);
+    expect(wheel.x).toBeGreaterThanOrEqual(rail.x);
+    expect(wheel.y).toBeGreaterThanOrEqual(rail.y);
+    expect(wheel.x + wheel.width).toBeLessThanOrEqual(rail.x + rail.width);
+    expect(wheel.y + wheel.height).toBeLessThanOrEqual(rail.y + rail.height);
+    expect(graph.x + graph.width).toBeLessThanOrEqual(rail.x - 8);
+  });
+
   test('renders fuel practice as compact range and usage sections', async ({ page }) => {
+    const geometry = overlayGeometry().metricRows;
+    const expectedHeight = fuelCalculatorHeightFromGeometry(2, 2, geometry);
     await installBrowserOverlayRoutes(page, 'fuel-calculator', {
       live: freshLiveSnapshot({}),
       model: fuelPracticeDisplayModel()
@@ -354,11 +454,148 @@ test.describe('browser overlay Playwright integration', () => {
     await expect(page.locator('#content')).toContainText('Practice Usage');
     await expect(page.locator('#content')).not.toContainText('Race Information');
     await expect(page.locator('#content')).not.toContainText('Stint Targets');
+    await expectElementHeight(page.locator('.metric.segmented').first(), geometry.segmentedRowHeight);
+    await expectElementHeight(page.locator('.metric-section-title').first(), geometry.sectionTitleHeight);
+    await expect(page.locator('.metric-section-title').first()).toHaveCSS('margin-bottom', `${geometry.sectionTitleBottomGap}px`);
+    const fuelContentHeight = await page.locator('.overlay').evaluate((overlay) =>
+      window.getComputedStyle(overlay).getPropertyValue('--fuel-content-height').trim()
+    );
+    expect(fuelContentHeight).toBe(`${expectedHeight}px`);
 
     const overlay = await page.locator('.overlay').boundingBox();
     expect(overlay?.width).toBe(503);
-    expect(overlay?.height).toBe(184);
+    expect(overlay?.height).toBe(expectedHeight);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('uses metricRows geometry constants for browser metric overlay rows and tire grids', async ({ page }) => {
+    const geometry = overlayGeometry().metricRows;
+    await installBrowserOverlayRoutes(page, 'session-weather', {
+      live: freshLiveSnapshot({}),
+      model: sessionWeatherMetricDisplayModel()
+    });
+
+    await page.setViewportSize({ width: 520, height: 520 });
+    await page.goto('http://localhost:8765/overlays/session-weather?preview=race');
+
+    await expectElementHeight(page.locator('.metric:not(.segmented)').first(), geometry.plainRowHeight);
+    await expectElementHeight(page.locator('.metric.segmented').first(), geometry.segmentedRowHeight);
+    await expectElementHeight(page.locator('.metric.directional').first(), geometry.directionalRowHeight);
+    await expectElementHeight(page.locator('.metric-section-title').first(), geometry.sectionTitleHeight);
+    const sessionSectionGap = await page.locator('.metric-section').evaluateAll((sections) => {
+      const first = sections[0].getBoundingClientRect();
+      const second = sections[1].getBoundingClientRect();
+      return second.top - first.bottom;
+    });
+    expect(sessionSectionGap).toBeCloseTo(geometry.sectionGap, 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('sizes session weather missing review fixture from effective weather-off content', async ({ page }) => {
+    const reviewServer = await startReviewServer();
+    const geometry = overlayGeometry().metricRows;
+    const expectedHeight = geometry.minimumSimpleTelemetryHeight
+      + Math.round((496 - geometry.minimumSimpleTelemetryHeight) * ((12 - 1) / (26 - 1)));
+    try {
+      const modelResponse = await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-missing');
+      expect(modelResponse.model.metricSections).toHaveLength(1);
+      expect(modelResponse.model.metricSections[0].title).toBe('Session');
+      expect(modelResponse.model.effectiveSettings.rendered.browserSource).toMatchObject({
+        baseWidth: 464,
+        baseHeight: expectedHeight,
+        width: 464,
+        height: expectedHeight
+      });
+
+      await page.setViewportSize({ width: 520, height: 520 });
+      await page.goto(`${reviewServer.baseUrl}/review/overlays/session-weather?preview=race&fixture=session-weather-missing`);
+
+      await expect(page.locator('.metric-section-title')).toHaveText(['Session']);
+      const overlayBox = await page.locator('.overlay').boundingBox();
+      expect(overlayBox?.width).toBe(464);
+      expect(overlayBox?.height).toBe(expectedHeight);
+    } finally {
+      await reviewServer.stop();
+    }
+  });
+
+  test('uses metricRows geometry constants for browser pit service metric and grid rows', async ({ page }) => {
+    const geometry = overlayGeometry().metricRows;
+    await installBrowserOverlayRoutes(page, 'pit-service', {
+      live: freshLiveSnapshot({}),
+      model: pitServiceMetricDisplayModel()
+    });
+
+    await page.setViewportSize({ width: 560, height: 740 });
+    await page.goto('http://localhost:8765/overlays/pit-service?preview=race');
+
+    await expectElementHeight(page.locator('.metric.segmented').first(), geometry.segmentedRowHeight);
+    await expectElementHeight(page.locator('.tire-grid-head').first(), geometry.metricGridHeaderHeight);
+    await expectElementHeight(page.locator('.tire-grid-row').first(), geometry.metricGridRowHeight);
+    const gridSectionGap = await page.locator('.metric-section').evaluateAll((sections) => {
+      const metrics = sections[0].getBoundingClientRect();
+      const grid = sections[1].getBoundingClientRect();
+      return grid.top - metrics.bottom;
+    });
+    expect(gridSectionGap).toBeCloseTo(geometry.sectionGap, 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('application browser source sizes use metricRows geometry contract for metric overlays', async ({ page }) => {
+    const geometry = overlayGeometry().metricRows;
+    const tireAnalysisOff = Object.fromEntries([
+      'Compound',
+      'Change request',
+      'Set limit',
+      'Sets available',
+      'Sets used',
+      'Pressure',
+      'Temperature',
+      'Wear',
+      'Distance'
+    ].map((label) => [label, false]));
+    await page.route('**/*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.hostname === 'localhost' && url.pathname === '/review/app') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/html; charset=utf-8',
+          body: renderAppValidatorReviewHtml({
+            previewMode: 'practice',
+            selectedTab: url.searchParams.get('tab') || 'fuel-calculator',
+            selectedRegion: 'general',
+            reviewState: {
+              overlays: {
+                'pit-service': {
+                  content: tireAnalysisOff
+                }
+              }
+            }
+          })
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 404,
+        contentType: 'text/plain; charset=utf-8',
+        body: 'not found'
+      });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('http://localhost:8765/review/app?preview=practice&tab=fuel-calculator&region=general');
+
+    await expect(page.locator('[data-evidence-key="fuel-calculator.browser-source.size.value"]'))
+      .toHaveText(`OBS size 503 x ${fuelCalculatorHeightFromGeometry(2, 2, geometry)}`);
+
+    await page.getByRole('link', { name: 'Session / Weather' }).click();
+    await expect(page.locator('[data-evidence-key="session-weather.browser-source.size.value"]'))
+      .toHaveText(`OBS size ${Math.min(464, geometry.minimumSimpleTelemetryWidth)} x ${Math.max(geometry.minimumSimpleTelemetryHeight, 496 - geometry.nonRaceSimpleTelemetryHeightReduction)}`);
+
+    await page.getByRole('link', { name: 'Pit Service' }).click();
+    await expect(page.locator('[data-evidence-key="pit-service.browser-source.size.value"]'))
+      .toHaveText(`OBS size ${geometry.pitServiceMetricOnlyWidth} x ${pitServiceMetricOnlyHeightFromGeometry(geometry)}`);
   });
 
   test('updates table chrome and columns while localhost overlay stays mounted', async ({ page }) => {
@@ -376,7 +613,7 @@ test.describe('browser overlay Playwright integration', () => {
     await page.setViewportSize({ width: 692, height: 520 });
     await page.goto('http://localhost:8765/overlays/standings');
 
-    await expect(page.locator('thead th')).toHaveText(['CLS', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST', 'PIT']);
+    await expect(page.locator('thead th')).toHaveText(['Pos', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST', 'PIT']);
     await expect(page.locator('.header-item')).toHaveAttribute('data-tone', 'success');
     await expect(page.locator('tbody tr').last()).toContainText('IN');
 
@@ -385,7 +622,7 @@ test.describe('browser overlay Playwright integration', () => {
     }).toBe('warning');
     await expect(page.locator('.header-item')).toHaveAttribute('data-key', 'timeRemaining');
     await expect(page.locator('.header-item')).toHaveText('00:42');
-    await expect(page.locator('thead th')).toHaveText(['CLS', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST']);
+    await expect(page.locator('thead th')).toHaveText(['Pos', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST']);
     await expect(page.locator('tbody tr').last()).not.toContainText('IN');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
@@ -444,7 +681,11 @@ test.describe('browser overlay Playwright integration', () => {
     ), { timeout: 3500 }).toBe(true);
     await expect(page.locator('.input-graph')).toHaveCount(0);
     await expect(page.locator('.input-rail')).toHaveCount(0);
-    await expect(page.locator('.empty')).toHaveText('no input content enabled');
+    await expect(page.locator('.empty')).toHaveCount(0);
+    await expect(page.locator('#content')).toBeEmpty();
+    await expect.poll(async () => page.locator('.overlay').evaluate((element) =>
+      window.getComputedStyle(element).opacity
+    ), { timeout: 3500 }).toBe('0');
   });
 
   test('renders General settings preview controls without forcing hidden overlays', async ({ page }) => {
@@ -481,6 +722,14 @@ test.describe('browser overlay Playwright integration', () => {
     await expect(page.getByText('Race preview active')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Race' })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.body-lines')).toContainText('Hidden overlays stay hidden; Stream Chat is not forced open.');
+    await expect.poll(async () => page.locator('.preview-panel').evaluate((panel) => {
+      const bodyLines = panel.querySelector('.body-lines');
+      if (!bodyLines) return false;
+
+      const panelRect = panel.getBoundingClientRect();
+      const bodyLinesRect = bodyLines.getBoundingClientRect();
+      return panel.scrollHeight <= panel.clientHeight && bodyLinesRect.bottom <= panelRect.bottom;
+    }), { timeout: 3500 }).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
@@ -510,12 +759,19 @@ test.describe('browser overlay Playwright integration', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('http://localhost:8765/review/app?preview=qualifying&tab=pit-service&region=content');
 
+    await expect(page.locator('#settings-app')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(page.locator('#settings-app')).toHaveJSProperty('clientWidth', 1152);
+    await expect(page.locator('#settings-app')).toHaveJSProperty('clientHeight', 608);
+    await expect(page.locator('.settings-window')).toHaveCSS('border-top-left-radius', '18px');
+    await expect(page.locator('.titlebar')).toHaveCSS('cursor', 'move');
     await expect(page.locator('h1')).toHaveText('Pit Service');
     await expect(page.locator('.sidebar-tab.active')).toHaveText('Pit Service');
     await expect(page.locator('.region-segment.active')).toHaveText('Content');
     await expect(page.locator('h2')).toContainText('Pit Service Cells');
     await expect(page.locator('.grid-toggle-row')).toHaveCount(20);
-    await expect(page.locator('.compact-matrix-legend span')).toHaveText(['Item', 'P', 'Q', 'R']);
+    await expect(page.locator('.compact-matrix-legend')).toHaveCount(2);
+    await expect(page.locator('.compact-matrix-legend').first().locator('span')).toHaveText(['Item', 'P', 'Q', 'R']);
+    await expect(page.locator('.compact-matrix-legend').nth(1).locator('span')).toHaveText(['Item', 'P', 'Q', 'R']);
     await expect(page.locator('.grid-toggle-row.sessions').first()).toHaveCSS('grid-template-columns', /24px 24px 24px/);
     await expect(page.locator('.grid-toggle-row.sessions').first()).not.toContainText('Test');
     await expect(page.locator('.overlay-frame')).toHaveCount(0);
@@ -524,26 +780,26 @@ test.describe('browser overlay Playwright integration', () => {
     await expect(page.locator('.mini-check')).toHaveCount(0);
     await expect(page.getByText('Sessions')).toHaveCount(0);
 
+    await expect(page.locator('.region-segment')).toHaveText(['General', 'Content', 'Header']);
     await page.getByRole('tab', { name: 'Header' }).click();
+    await expect(page.locator('.region-segment.active')).toHaveText('Header');
     await expect(page.locator('.chrome-head')).toHaveText(['Item', 'Practice', 'Qualifying', 'Race']);
-    await page.getByRole('tab', { name: 'Footer' }).click();
-    await expect(page.locator('.region-segment.active')).toHaveText('Footer');
-    await expect(page.locator('h2')).toContainText('Footer');
-    await expect(page.locator('.chrome-head')).toHaveCount(0);
-    await expect(page.locator('.chrome-check')).toHaveCount(0);
-    await expect(page.getByText('No footer controls for this overlay.')).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Footer' })).toHaveCount(0);
+
+    await page.goto('http://localhost:8765/review/app?preview=qualifying&tab=pit-service&region=footer');
+    await expect(page.locator('.region-segment')).toHaveText(['General', 'Content', 'Header']);
+    await expect(page.locator('.region-segment.active')).toHaveText('General');
+    await expect(page.getByRole('tab', { name: 'Footer' })).toHaveCount(0);
 
     await page.getByRole('link', { name: 'Stream Chat' }).click();
-    await expect(page.locator('.region-segment')).toHaveText(['General', 'Content', 'Twitch', 'Streamlabs']);
+    await expect(page.locator('.region-segment')).toHaveText(['General', 'Content', 'Twitch']);
     await page.getByRole('tab', { name: 'Content' }).click();
     await expect(page.locator('h2')).toContainText('Chat Source');
     await expect(page.locator('.content-body').getByText('Visible')).toHaveCount(0);
     await page.getByRole('tab', { name: 'Twitch' }).click();
     await expect(page.locator('h2')).toContainText('Twitch Metadata');
     await expect(page.getByText('Badges')).toBeVisible();
-    await page.getByRole('tab', { name: 'Streamlabs' }).click();
-    await expect(page.locator('h2')).toContainText('Streamlabs');
-    await expect(page.getByText('Streamlabs-specific message controls')).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Streamlabs' })).toHaveCount(0);
 
     await page.getByRole('link', { name: 'Track Map' }).click();
     await expect(page.locator('.content-heading-copy p')).toHaveText('Live car location and sector context.');
@@ -638,7 +894,7 @@ test.describe('browser overlay Playwright integration', () => {
           contentType: 'text/html; charset=utf-8',
           body: renderAppValidatorReviewHtml({
             selectedTab: 'gap-to-leader',
-            selectedRegion: 'content',
+            selectedRegion: 'general',
             reviewState
           })
         });
@@ -690,15 +946,14 @@ test.describe('browser overlay Playwright integration', () => {
     });
 
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto('http://localhost:8765/review/app?tab=gap-to-leader&region=content');
+    await page.goto('http://localhost:8765/review/app?tab=gap-to-leader');
 
     await expect(page.getByText('Class gap window')).toBeVisible();
-    await expect(page.getByText('Cars each side')).toBeVisible();
     await expect(page.getByText('1 each side')).toBeVisible();
     await expect(page.getByText('Cars ahead')).toHaveCount(0);
     await expect(page.getByText('Cars behind')).toHaveCount(0);
 
-    await page.locator('.matrix-control-count .stepper .action-button').first().click();
+    await page.locator('.field-row', { hasText: 'Class gap window' }).locator('.stepper .action-button').first().click();
 
     await expect.poll(() => patches.filter((patch) => patch.kind === 'number').length).toBe(2);
     expect(patches.filter((patch) => patch.kind === 'number')).toEqual([
@@ -712,7 +967,48 @@ test.describe('browser overlay Playwright integration', () => {
     expect(modelResponse.model.shouldRender).toBe(false);
   });
 
+  test('uses native settings geometry for shell gaps and controls', async ({ page }) => {
+    await page.route('**/*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.hostname === 'localhost' && url.pathname === '/review/app') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/html; charset=utf-8',
+          body: renderAppValidatorReviewHtml({
+            selectedTab: url.searchParams.get('tab') || 'relative',
+            selectedRegion: url.searchParams.get('region') || 'general'
+          })
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 404,
+        contentType: 'text/plain; charset=utf-8',
+        body: 'not found'
+      });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('http://localhost:8765/review/app?tab=relative&region=general');
+    await expectRelativeRect(page, '.settings-window', '.region-segments', { x: 262, y: 166, height: 42 });
+    await expectRelativeRect(page, '.settings-window', '.overlay-controls', { x: 262, y: 236, width: 392, height: 266 });
+    await expectRelativeRect(page, '.settings-window', '.browser-source-panel', { x: 682, y: 236, width: 414, height: 132 });
+    await expectRelativeRect(page, '.settings-window', '.browser-source-panel .action-button', { x: 1004, y: 338, width: 70, height: 30 });
+    await expectRelativeRect(page, '.settings-window', '.slider', { x: 410, width: 180, height: 28 });
+    await expectRelativeRect(page, '.settings-window', '.stepper', { x: 410, width: 180, height: 32 });
+
+    await page.goto('http://localhost:8765/review/app?tab=stream-chat&region=content');
+    await expectRelativeRect(page, '.settings-window', '.segmented.provider-choice', { x: 410, width: 300, height: 30 });
+    await expectRelativeRect(page, '.settings-window', '.text-input.streamlabs-url-input', { x: 410, width: 420, height: 28 });
+    await expectRelativeRect(page, '.settings-window', '.text-input.twitch-channel-input', { x: 410, width: 210, height: 28 });
+
+    await page.goto('http://localhost:8765/review/app?tab=support');
+    await expectRelativeRect(page, '.settings-window', '.support-grid .panel:first-child', { x: 262, y: 178, width: 392, height: 278 });
+  });
+
   test('application settings controls post native-shaped review setting changes', async ({ page }) => {
+    const overlaySizes = overlayGeometry().overlaySizes;
     const patches = [];
     await page.route('**/*', async (route) => {
       const request = route.request();
@@ -765,7 +1061,8 @@ test.describe('browser overlay Playwright integration', () => {
     await page.locator('.matrix-session button').nth(3).click();
     await page.locator('.matrix-session button').nth(6).click();
     await page.getByRole('tab', { name: 'General' }).click();
-    await expect(page.getByText('OBS size 276 x 260')).toBeVisible();
+    await expect(page.locator('[data-evidence-key="input-state.browser-source.size.value"]'))
+      .toHaveText(`OBS size ${overlaySizes.inputStateWidth} x ${overlaySizes.inputStateHeight}`);
 
     await page.getByRole('link', { name: 'Pit Service' }).click();
     await page.getByRole('tab', { name: 'Header' }).click();
@@ -780,7 +1077,91 @@ test.describe('browser overlay Playwright integration', () => {
       enabled: false
     });
     await page.getByRole('tab', { name: 'General' }).click();
-    await expect(page.getByText('OBS size 530 x 684')).toBeVisible();
+    await expect(page.locator('[data-evidence-key="pit-service.browser-source.size.value"]'))
+      .toHaveText(`OBS size ${overlaySizes.pitServiceWidth} x ${overlaySizes.pitServiceHeight}`);
+  });
+
+  test('application diagnostics buttons update real review-server support state', async ({ page }) => {
+    const reviewServer = await startReviewServer();
+    const patches = [];
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (text) => {
+            window.__tmrCopiedText = text;
+          }
+        }
+      });
+    });
+
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname === '/api/review/settings' && request.method() === 'POST') {
+        patches.push(JSON.parse(request.postData() || '{}'));
+      }
+    });
+
+    const hasPatch = (expected) => patches.some((patch) => Object.entries(expected)
+      .every(([key, value]) => patch[key] === value));
+
+    try {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.goto(`${reviewServer.baseUrl}/review/app?tab=support`);
+
+      await expect(page.locator('h1')).toHaveText('Diagnostics');
+      await expect(page.getByText('Data Analysis Opt-out')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Car / track history' })).toBeDisabled();
+      await page.getByRole('button', { name: 'Enhanced iRacing Telemetry Capture' }).click();
+      await expect(page.getByText('Enhanced iRacing telemetry capture will start with live data.')).toBeVisible();
+      await expect.poll(() => hasPatch({ kind: 'support', action: 'rawCapture', enabled: true })).toBe(true);
+      await page.reload();
+      await expect(page.getByRole('button', { name: 'Enhanced iRacing Telemetry Capture' })).toHaveAttribute('aria-pressed', 'true');
+
+      await page.getByRole('button', { name: 'Local map building' }).click();
+      await expect(page.getByText('Local map building disabled.')).toBeVisible();
+      await expect.poll(() => hasPatch({
+        kind: 'content',
+        overlayId: 'track-map',
+        key: 'track-map.build-from-telemetry',
+        label: 'Local map building',
+        enabled: false
+      })).toBe(true);
+
+      await page.getByRole('button', { name: 'Create Bundle' }).click();
+      await expect(page.getByText('Created diagnostics bundle.')).toBeVisible();
+      await expect(page.getByText('review-diagnostics-bundle.zip')).toBeVisible();
+      await expect.poll(() => hasPatch({
+        kind: 'support',
+        action: 'createBundle',
+        path: '/tmp/tmr-overlay-review/diagnostics/review-diagnostics-bundle.zip'
+      })).toBe(true);
+
+      await reviewServer.postReviewPatch({
+        kind: 'support',
+        action: 'createBundle',
+        path: '/tmp/tmr-overlay-review/diagnostics/bmw-m4-gt3-evo-gesamtstrecke-vln-history-analysis-20260520-142233-123.zip'
+      });
+      await page.reload();
+      const latestBundleValue = page.locator('[data-evidence-key="support.bundle.latest.value"]');
+      await expect(latestBundleValue).toHaveText('bmw-m4-gt3-e...-142233-123.zip');
+      const latestBundleMetrics = await latestBundleValue.evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        textLength: element.textContent?.length || 0
+      }));
+      expect(latestBundleMetrics.textLength).toBeLessThanOrEqual(30);
+      expect(latestBundleMetrics.scrollWidth).toBeLessThanOrEqual(latestBundleMetrics.clientWidth);
+
+      await page.getByRole('button', { name: 'Open Bundle Folder' }).click();
+      await expect(page.getByText('Opened diagnostics folder.')).toBeVisible();
+      await expect.poll(() => hasPatch({ kind: 'support', action: 'openDiagnostics' })).toBe(true);
+
+      await page.reload();
+      await expect(page.getByText('Opened diagnostics folder.')).toBeVisible();
+    } finally {
+      await reviewServer.stop();
+    }
   });
 
   test('application scale and opacity sliders update UI state and localhost model settings', async ({ page }) => {
@@ -864,52 +1245,80 @@ test.describe('browser overlay Playwright integration', () => {
     await page.goto('http://localhost:8765/review/app?tab=input-state&region=general');
 
     const scaleSlider = page.getByRole('slider', { name: 'Scale' });
+    await expect(scaleSlider).toHaveAttribute('min', '60');
+    await expect(scaleSlider).toHaveAttribute('max', '200');
+    await expect(scaleSlider).toHaveAttribute('step', '1');
     await scaleSlider.focus();
     await page.keyboard.press('ArrowRight');
-    await expect(page.getByText('125%')).toBeVisible();
-    await expect(page.getByText('OBS size 650 x 325')).toBeVisible();
+    await expect(page.getByText('101%')).toBeVisible();
+    await expect(page.getByText('OBS size 525 x 263')).toBeVisible();
     expect(patches).toContainEqual({
       kind: 'number',
       overlayId: 'input-state',
       key: 'scalePercent',
-      value: 125
+      value: 101
+    });
+    const draggedScale = await dragPercentSliderTo(page, scaleSlider, 137, 60, 200);
+    expect(draggedScale).toBeGreaterThanOrEqual(136);
+    expect(draggedScale).toBeLessThanOrEqual(138);
+    expect([60, 75, 100, 125, 150, 175, 200]).not.toContain(draggedScale);
+    await expect(page.getByText(`${draggedScale}%`)).toBeVisible();
+    expect(patches).toContainEqual({
+      kind: 'number',
+      overlayId: 'input-state',
+      key: 'scalePercent',
+      value: draggedScale
     });
 
     const opacitySlider = page.getByRole('slider', { name: 'Opacity' });
+    await expect(opacitySlider).toHaveAttribute('min', '20');
+    await expect(opacitySlider).toHaveAttribute('max', '100');
+    await expect(opacitySlider).toHaveAttribute('step', '1');
     await opacitySlider.focus();
     await page.keyboard.press('ArrowLeft');
-    await expect(page.getByText('90%')).toBeVisible();
+    await expect(page.getByText('99%')).toBeVisible();
     expect(patches).toContainEqual({
       kind: 'number',
       overlayId: 'input-state',
       key: 'opacityPercent',
-      value: 90
+      value: 99
+    });
+    const draggedOpacity = await dragPercentSliderTo(page, opacitySlider, 83, 20, 100);
+    expect(draggedOpacity).toBeGreaterThanOrEqual(82);
+    expect(draggedOpacity).toBeLessThanOrEqual(87);
+    expect([20, 30, 40, 50, 60, 70, 80, 90, 100]).not.toContain(draggedOpacity);
+    await expect(page.getByText(`${draggedOpacity}%`)).toBeVisible();
+    expect(patches).toContainEqual({
+      kind: 'number',
+      overlayId: 'input-state',
+      key: 'opacityPercent',
+      value: draggedOpacity
     });
 
     const modelResponse = await page.evaluate(async () => {
       const response = await fetch('/api/overlay-model/input-state');
       return response.json();
     });
-    expect(modelResponse.model.rootOpacity).toBe(0.9);
+    expect(modelResponse.model.rootOpacity).toBe(draggedOpacity / 100);
 
     await page.getByRole('link', { name: 'Stream Chat' }).click();
     await expect(page.getByRole('slider', { name: 'Opacity' })).toBeVisible();
     const streamChatOpacitySlider = page.getByRole('slider', { name: 'Opacity' });
     await streamChatOpacitySlider.focus();
     await page.keyboard.press('ArrowLeft');
-    await expect(page.getByText('90%')).toBeVisible();
+    await expect(page.getByText('99%')).toBeVisible();
     expect(patches).toContainEqual({
       kind: 'number',
       overlayId: 'stream-chat',
       key: 'opacityPercent',
-      value: 90
+      value: 99
     });
 
     const streamChatModelResponse = await page.evaluate(async () => {
       const response = await fetch('/api/overlay-model/stream-chat');
       return response.json();
     });
-    expect(streamChatModelResponse.model.rootOpacity).toBe(0.9);
+    expect(streamChatModelResponse.model.rootOpacity).toBe(0.99);
   });
 
   test('application settings patches update real review-server model evidence', async ({ page }) => {
@@ -925,6 +1334,12 @@ test.describe('browser overlay Playwright integration', () => {
       }, { timeout: 3500 }).toBe(true);
 
       const modelWithPit = await fetchOverlayModelFromPage(page, 'relative', 'race');
+      expect(modelWithPit.effectiveSettings.rendered.browserSource).toMatchObject({
+        baseWidth: 440,
+        baseHeight: 308,
+        width: 440,
+        height: 308
+      });
       expect(modelWithPit.effectiveSettings.settings).toContainEqual(expect.objectContaining({
         key: 'relative.content.relative.pit.enabled',
         session: 'race',
@@ -943,21 +1358,21 @@ test.describe('browser overlay Playwright integration', () => {
         session: 'race',
         value: false
       }));
-      expect(modelWithoutPit.effectiveSettings.rendered.rowCount).toBe(11);
+      expect(modelWithoutPit.effectiveSettings.rendered.rowCount).toBe(7);
 
       await page.getByRole('tab', { name: 'Header' }).click();
       await page.locator('.chrome-check button').nth(2).click();
       await page.getByRole('tab', { name: 'General' }).click();
 
-      await expect(page.getByText('OBS size 360 x 314')).toBeVisible();
+      await expect(page.getByText('OBS size 392 x 274')).toBeVisible();
       const modelWithoutHeader = await fetchOverlayModelFromPage(page, 'relative', 'race');
       expect(modelWithoutHeader.headerItems || []).toEqual([]);
       expect(modelWithoutHeader.effectiveSettings.rendered.headerItems).toEqual([]);
       expect(modelWithoutHeader.effectiveSettings.rendered.browserSource).toMatchObject({
-        baseWidth: 360,
-        baseHeight: 314,
-        width: 360,
-        height: 314,
+        baseWidth: 392,
+        baseHeight: 274,
+        width: 392,
+        height: 274,
         scalePercent: 100
       });
       expect(modelWithoutHeader.effectiveSettings.settings).toContainEqual(expect.objectContaining({
@@ -1022,7 +1437,7 @@ test.describe('browser overlay Playwright integration', () => {
           contentType: 'text/html; charset=utf-8',
           body: renderAppValidatorReviewHtml({
             selectedTab: 'car-radar',
-            selectedRegion: 'content',
+            selectedRegion: 'general',
             reviewState
           })
         });
@@ -1042,6 +1457,9 @@ test.describe('browser overlay Playwright integration', () => {
             reviewState.overlays[patch.overlayId].content[patch.label] = patch.enabled;
           }
         }
+        if (patch.kind === 'number' && Number.isFinite(Number(patch.value))) {
+          reviewState.overlays[patch.overlayId][patch.key] = Number(patch.value);
+        }
         await route.fulfill({
           status: 200,
           contentType: 'application/json; charset=utf-8',
@@ -1052,8 +1470,8 @@ test.describe('browser overlay Playwright integration', () => {
 
       if (url.hostname === 'localhost' && url.pathname === '/api/overlay-model/car-radar') {
         const content = reviewState.overlays['car-radar']?.content || {};
-        const warningEnabled = content['radar.multiclass-warning.practice'] !== false
-          && content['Faster-class warning.practice'] !== false;
+        const warningEnabled = content['radar.multiclass-warning'] !== false
+          && content['Faster-class warning'] !== false;
         await route.fulfill({
           status: 200,
           contentType: 'application/json; charset=utf-8',
@@ -1065,6 +1483,8 @@ test.describe('browser overlay Playwright integration', () => {
               status: warningEnabled ? 'faster class' : 'clear',
               carRadar: {
                 showMulticlassWarning: warningEnabled,
+                multiclassWarningRangeSeconds: reviewState.overlays['car-radar']?.multiclassWarningSeconds ?? 5,
+                radarVisibilitySeconds: reviewState.overlays['car-radar']?.radarVisibilitySeconds ?? 2,
                 strongestMulticlassApproach: warningEnabled ? { relativeSeconds: -3.2 } : null,
                 renderModel: { shouldRender: warningEnabled, width: 300, height: 300 }
               }
@@ -1082,10 +1502,16 @@ test.describe('browser overlay Playwright integration', () => {
     });
 
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto('http://localhost:8765/review/app?tab=car-radar&region=content');
+    await page.goto('http://localhost:8765/review/app?tab=car-radar');
 
     await expect(page.getByText('Radar proximity')).toHaveCount(0);
-    await page.locator('.matrix-session button').first().click();
+    await expect(page.locator('.region-segment')).toHaveText(['General']);
+    await expect(page.getByText('Warning window')).toHaveCount(0);
+    await expect(page.getByText('Multiclass window')).toBeVisible();
+    await expect(page.getByText('Radar range')).toBeVisible();
+    await page.locator('.field-row', { hasText: 'Faster-class warning' }).getByRole('button').click();
+    await expect(page.getByText('Multiclass window')).toHaveCount(0);
+    await expect(page.getByText('Radar range')).toBeVisible();
 
     const modelResponse = await page.evaluate(async () => {
       const response = await fetch('/api/overlay-model/car-radar');
@@ -1110,6 +1536,21 @@ test.describe('browser overlay Playwright integration', () => {
     expect(requests).toContain('/api/overlay-model/standings?preview=race&rel=0');
   });
 });
+
+async function dragPercentSliderTo(page, slider, value, min, max) {
+  const box = await slider.boundingBox();
+  expect(box).not.toBeNull();
+
+  const ratio = (value - min) / Math.max(1, max - min);
+  const startX = box.x + box.width / 2;
+  const targetX = box.x + Math.max(0, Math.min(1, ratio)) * box.width;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(targetX, y, { steps: 8 });
+  await page.mouse.up();
+  return Number(await slider.inputValue());
+}
 
 async function installBrowserOverlayRoutes(page, overlayId, fixture) {
   const requests = [];
@@ -1174,6 +1615,78 @@ async function boundingBoxWidth(locator) {
     return width;
   }, { timeout: 3500 }).toBeGreaterThan(0);
   return width;
+}
+
+async function expectElementHeight(locator, expectedHeight) {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  expect(Math.abs(box.height - expectedHeight)).toBeLessThanOrEqual(0.25);
+}
+
+async function expectRelativeRect(page, originSelector, targetSelector, expected) {
+  const actual = await page.evaluate(({ originSelector: origin, targetSelector: target }) => {
+    const originElement = document.querySelector(origin);
+    const targetElement = document.querySelector(target);
+    if (!originElement || !targetElement) {
+      return null;
+    }
+
+    const originRect = originElement.getBoundingClientRect();
+    const targetRect = targetElement.getBoundingClientRect();
+    return {
+      x: targetRect.left - originRect.left,
+      y: targetRect.top - originRect.top,
+      width: targetRect.width,
+      height: targetRect.height
+    };
+  }, { originSelector, targetSelector });
+
+  expect(actual, `${targetSelector} should exist`).not.toBeNull();
+  for (const [key, value] of Object.entries(expected)) {
+    expect(Math.abs(actual[key] - value), `${targetSelector}.${key}`).toBeLessThanOrEqual(3.5);
+  }
+}
+
+function fuelCalculatorHeightFromGeometry(rowCount, sectionCount, geometry) {
+  if (rowCount <= 0 || sectionCount <= 0) {
+    return geometry.minimumFuelCalculatorHeight;
+  }
+
+  const rowGaps = Math.max(0, rowCount - sectionCount) * geometry.rowGap;
+  const sectionGaps = Math.max(0, sectionCount - 1) * geometry.sectionGap;
+  const height = geometry.headerChromeHeight
+    + geometry.fuelContentVerticalPadding
+    + sectionCount * geometry.fuelSectionTitleReserveHeight
+    + rowCount * geometry.segmentedRowHeight
+    + rowGaps
+    + sectionGaps
+    + geometry.collapsedFooterReserveHeight;
+  return Math.max(geometry.minimumFuelCalculatorHeight, Math.min(315, height));
+}
+
+function metricSectionHeightFromGeometry(rowCount, segmentedRows, geometry) {
+  if (rowCount <= 0) return 0;
+  const plainRows = Math.max(0, rowCount - segmentedRows);
+  return geometry.sectionTitleHeight
+    + geometry.sectionTitleBottomGap
+    + segmentedRows * geometry.segmentedRowHeight
+    + plainRows * geometry.plainRowHeight
+    + Math.max(0, rowCount - 1) * geometry.rowGap;
+}
+
+function pitServiceMetricOnlyHeightFromGeometry(geometry) {
+  const sectionHeights = [
+    metricSectionHeightFromGeometry(1, 1, geometry),
+    metricSectionHeightFromGeometry(2, 2, geometry),
+    metricSectionHeightFromGeometry(4, 4, geometry)
+  ];
+  const metricHeight = sectionHeights.reduce((total, value) => total + value, 0)
+    + Math.max(0, sectionHeights.length - 1) * geometry.pitServiceSectionGap;
+  return Math.max(
+    geometry.minimumSimpleTelemetryHeight,
+    Math.min(707, metricHeight + geometry.pitServiceContentChromeHeight)
+  );
 }
 
 function resolveFrameFixture(value, path, frameIndex) {
@@ -1260,7 +1773,7 @@ function standingsDisplayModel(overrides = {}) {
     source: 'source: scoring snapshot + live timing',
     bodyKind: 'table',
     columns: [
-      { id: 'standings.class-position', label: 'CLS', dataKey: 'class-position', width: 35, alignment: 'right' },
+      { id: 'standings.class-position', label: 'Pos', dataKey: 'class-position', width: 35, alignment: 'right' },
       { id: 'standings.car-number', label: 'CAR', dataKey: 'car-number', width: 50, alignment: 'right' },
       { id: 'standings.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
       { id: 'standings.gap', label: 'GAP', dataKey: 'gap', width: 60, alignment: 'right' },
@@ -1270,9 +1783,9 @@ function standingsDisplayModel(overrides = {}) {
       { id: 'standings.pit', label: 'PIT', dataKey: 'pit', width: 48, alignment: 'right' }
     ],
     rows: [
-      headerRow('LMP2', '2 cars | ~10 laps', '#33CEFF'),
+      headerRow('LMP2', '2 cars | 10.00 laps', '#33CEFF'),
       carRow(['1', '#8', 'Proto One', 'Lap 22', '-45.0', '1:45.884', '1:46.210', '']),
-      headerRow('GT3', '3 cars | ~12.4 laps', '#FFAA00'),
+      headerRow('GT3', '3 cars | 12.40 laps', '#FFAA00'),
       carRow(['1', '#11', 'GT3 Leader', 'Lap 21', '-2.0', '1:53.112', '1:53.112', '']),
       carRow(['2', '#71', 'Focus Racer', '+3.4', '0.0', '1:54.228', '1:54.901', ''], { isReference: true }),
       carRow(['3', '#91', 'Chaser', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
@@ -1295,6 +1808,29 @@ function standingsWithoutPitColumn(overrides = {}) {
           isPit: false
         }
       : row)
+  };
+}
+
+function relativeDisplayModel(overrides = {}) {
+  return {
+    overlayId: 'relative',
+    title: 'Relative',
+    status: '5 - 2/4 cars',
+    source: 'source: scoring snapshot + live timing',
+    bodyKind: 'table',
+    columns: [
+      { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 48, alignment: 'right' },
+      { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 240, alignment: 'left' },
+      { id: 'relative.interval', label: 'INT', dataKey: 'interval', width: 58, alignment: 'right' }
+    ],
+    rows: [
+      carRow(['4', 'Ahead Driver', '-1.2']),
+      carRow(['5', 'Focus Driver', '0.0'], { isReference: true }),
+      carRow(['6', 'Behind Driver', '+1.5'])
+    ],
+    metrics: [],
+    headerItems: [],
+    ...overrides
   };
 }
 
@@ -1334,6 +1870,98 @@ function fuelPracticeDisplayModel(overrides = {}) {
             { label: 'Laps', value: '3 laps', tone: 'info' }
           ]
         }]
+      }
+    ],
+    headerItems: [{ key: 'timeRemaining', value: '06:37:08', tone: 'success' }],
+    ...overrides
+  };
+}
+
+function sessionWeatherMetricDisplayModel(overrides = {}) {
+  return {
+    overlayId: 'session-weather',
+    title: 'Session / Weather',
+    status: 'live',
+    source: 'session 06:37:08 | weather clear',
+    bodyKind: 'metrics',
+    metrics: [],
+    metricSections: [
+      {
+        title: 'Session',
+        rows: [
+          { label: 'Session', value: 'Practice', tone: 'info' },
+          {
+            label: 'Clock',
+            value: 'Elapsed 12:34 | Remaining 06:37',
+            tone: 'info',
+            segments: [
+              { label: 'Elapsed', value: '12:34', tone: 'info' },
+              { label: 'Remaining', value: '06:37', tone: 'success' }
+            ]
+          }
+        ]
+      },
+      {
+        title: 'Weather',
+        rows: [
+          {
+            label: 'Wind',
+            value: 'Facing NW | 11 mph',
+            tone: 'info',
+            segments: [
+              { label: 'Facing', value: 'NW', tone: 'info', rotationDegrees: 315 },
+              { label: 'Speed', value: '11 mph', tone: 'info' }
+            ]
+          }
+        ]
+      }
+    ],
+    gridSections: [],
+    headerItems: [{ key: 'timeRemaining', value: '06:37:08', tone: 'success' }],
+    ...overrides
+  };
+}
+
+function pitServiceMetricDisplayModel(overrides = {}) {
+  return {
+    overlayId: 'pit-service',
+    title: 'Pit Service',
+    status: 'armed',
+    source: 'pit service live',
+    bodyKind: 'metrics',
+    metrics: [],
+    metricSections: [
+      {
+        title: 'Service',
+        rows: [
+          {
+            label: 'Fuel',
+            value: 'Request 12.0 L | Selected 12.0 L',
+            tone: 'info',
+            segments: [
+              { label: 'Request', value: '12.0 L', tone: 'info' },
+              { label: 'Selected', value: '12.0 L', tone: 'success' }
+            ]
+          }
+        ]
+      }
+    ],
+    gridSections: [
+      {
+        title: 'Tires',
+        headers: ['Info', 'FL', 'FR', 'RL', 'RR'],
+        rows: [
+          {
+            label: 'Pressure',
+            tone: 'info',
+            cells: [
+              { value: '27.5', tone: 'info' },
+              { value: '27.6', tone: 'info' },
+              { value: '27.3', tone: 'info' },
+              { value: '27.4', tone: 'info' }
+            ]
+          }
+        ]
       }
     ],
     headerItems: [{ key: 'timeRemaining', value: '06:37:08', tone: 'success' }],

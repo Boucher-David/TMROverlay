@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import {
@@ -43,9 +44,162 @@ const opacityExcludedOverlayIds = new Set([
 const collapsibleBrowserSourceChromeIds = new Set([
   'standings',
   'relative',
+  'fuel-calculator',
   'gap-to-leader',
   'session-weather',
   'pit-service'
+]);
+const sessionWeatherWeatherContentLabels = [
+  'Wetness',
+  'Declared surface',
+  'Rubber',
+  'Skies',
+  'Weather',
+  'Rain',
+  'Wind direction',
+  'Wind speed',
+  'Facing wind',
+  'Air temp',
+  'Track temp',
+  'Humidity',
+  'Fog',
+  'Pressure'
+];
+const sectionOffContentLabelsByFixture = new Map([
+  ['input-no-content', [
+    'Throttle trace',
+    'Brake trace',
+    'Clutch trace',
+    'Throttle %',
+    'Brake %',
+    'Clutch %',
+    'Steering wheel',
+    'Gear',
+    'Speed'
+  ]],
+  ['input-graph-only', [
+    'Throttle %',
+    'Brake %',
+    'Clutch %',
+    'Steering wheel',
+    'Gear',
+    'Speed'
+  ]],
+  ['input-rail-only', [
+    'Throttle trace',
+    'Brake trace',
+    'Clutch trace'
+  ]],
+  ['relative-driver-only', [
+    'Relative position',
+    'Relative delta',
+    'Pit status'
+  ]],
+  ['relative-position-driver', [
+    'Relative delta',
+    'Pit status'
+  ]],
+  ['relative-no-content', [
+    'Relative position',
+    'Driver',
+    'Relative delta',
+    'Pit status'
+  ]],
+  ['standings-no-pit', [
+    'Pit status'
+  ]],
+  ['standings-driver-only', [
+    'Class position',
+    'Car number',
+    'Class gap',
+    'Previous interval',
+    'Fastest lap',
+    'Last lap',
+    'Pit status'
+  ]],
+  ['standings-no-content', [
+    'Class position',
+    'Car number',
+    'Driver',
+    'Class gap',
+    'Previous interval',
+    'Fastest lap',
+    'Last lap',
+    'Pit status'
+  ]],
+  ['fuel-plan-off', [
+    'Plan'
+  ]],
+  ['fuel-fuel-off', [
+    'Fuel'
+  ]],
+  ['fuel-stint-targets-off', [
+    'Stint targets'
+  ]],
+  ['fuel-race-information-off', [
+    'Plan',
+    'Fuel'
+  ]],
+  ['session-weather-session-off', [
+    'Session type',
+    'Session name',
+    'Session mode',
+    'Elapsed time',
+    'Remaining time',
+    'Total time',
+    'Event type',
+    'Car',
+    'Track name',
+    'Track length',
+    'Laps remaining',
+    'Laps total'
+  ]],
+  ['session-weather-weather-off', sessionWeatherWeatherContentLabels],
+  ['session-weather-missing', sessionWeatherWeatherContentLabels],
+  ['pit-service-session-off', [
+    'Session time',
+    'Session laps'
+  ]],
+  ['pit-service-signal-off', [
+    'Release',
+    'Pit status'
+  ]],
+  ['pit-service-service-off', [
+    'Fuel requested',
+    'Fuel selected',
+    'Tearoff requested',
+    'Required repair',
+    'Optional repair',
+    'Fast repair selected',
+    'Fast repairs available'
+  ]],
+  ['pit-service-tire-analysis-off', [
+    'Compound',
+    'Change request',
+    'Set limit',
+    'Sets available',
+    'Sets used',
+    'Pressure',
+    'Temperature',
+    'Wear',
+    'Distance'
+  ]],
+  ['gap-trend-row-off', [
+    'Tire'
+  ]],
+  ['gap-trend-off', [
+    'Last',
+    '5L',
+    '10L',
+    'Pit',
+    'PLap',
+    'Stint',
+    'Tire',
+    'Status'
+  ]],
+  ['gap-graph-off', [
+    'Graph'
+  ]]
 ]);
 let reloadTimer = null;
 
@@ -96,7 +250,7 @@ const server = createServer((request, response) => {
         previewMode: url.searchParams.get('preview') || 'off',
         selectedTab: url.searchParams.get('tab') || 'general',
         selectedRegion: url.searchParams.get('region') || 'general',
-        reviewState: reviewAppState
+        reviewState: reviewStateForRequest(url.searchParams)
       })));
       return;
     }
@@ -144,7 +298,8 @@ function createReviewAppState() {
       latestBundlePath: '',
       statusText: '',
       statusTone: 'neutral',
-      updateText: 'No update available.',
+      updateText: 'Current v1.0.3.',
+      updateTone: 'success',
       canCheckUpdates: true,
       canInstallUpdate: false,
       canRestartUpdate: false,
@@ -152,6 +307,116 @@ function createReviewAppState() {
     },
     overlays: Object.create(null)
   };
+}
+
+function reviewStateForRequest(searchParams) {
+  const updateStatus = String(searchParams.get('update') || '').trim().toLowerCase();
+  const update = updateStatusFixture(updateStatus);
+  if (!update) return reviewAppState;
+  return {
+    ...reviewAppState,
+    support: {
+      ...reviewAppState.support,
+      ...update
+    }
+  };
+}
+
+function updateStatusFixture(updateStatus) {
+  switch (updateStatus) {
+    case 'disabled':
+      return {
+        updateText: 'Disabled.',
+        updateTone: 'muted',
+        canCheckUpdates: false,
+        canInstallUpdate: false,
+        canRestartUpdate: false,
+        updatePendingRestart: false
+      };
+    case 'not-installed':
+      return {
+        updateText: 'Dev run.',
+        updateTone: 'muted',
+        canCheckUpdates: false,
+        canInstallUpdate: false,
+        canRestartUpdate: false,
+        updatePendingRestart: false
+      };
+    case 'idle':
+      return {
+        updateText: 'Ready.',
+        updateTone: 'muted',
+        canCheckUpdates: true,
+        canInstallUpdate: false,
+        canRestartUpdate: false,
+        updatePendingRestart: false
+      };
+    case 'up-to-date':
+      return {
+        updateText: 'Current v1.0.3.',
+        updateTone: 'success',
+        canCheckUpdates: true,
+        canInstallUpdate: false,
+        canRestartUpdate: false,
+        updatePendingRestart: false
+      };
+    case 'available':
+      return {
+        updateText: 'v1.0.4 available.',
+        updateTone: 'warning',
+        canCheckUpdates: true,
+        canInstallUpdate: true,
+        canRestartUpdate: false,
+        updatePendingRestart: false
+      };
+    case 'checking':
+      return {
+        updateText: 'Checking...',
+        updateTone: 'info',
+        canCheckUpdates: false,
+        canInstallUpdate: false,
+        canRestartUpdate: false,
+        updatePendingRestart: false
+      };
+    case 'downloading':
+      return {
+        updateText: 'Downloading v1.0.4: 42%.',
+        updateTone: 'info',
+        canCheckUpdates: false,
+        canInstallUpdate: false,
+        canRestartUpdate: false,
+        updatePendingRestart: false
+      };
+    case 'pending-restart':
+      return {
+        updateText: 'v1.0.4 pending restart.',
+        updateTone: 'warning',
+        canCheckUpdates: true,
+        canInstallUpdate: false,
+        canRestartUpdate: true,
+        updatePendingRestart: true
+      };
+    case 'applying':
+      return {
+        updateText: 'Restarting for v1.0.4.',
+        updateTone: 'info',
+        canCheckUpdates: false,
+        canInstallUpdate: false,
+        canRestartUpdate: false,
+        updatePendingRestart: false
+      };
+    case 'failed':
+      return {
+        updateText: 'Check failed.',
+        updateTone: 'error',
+        canCheckUpdates: true,
+        canInstallUpdate: false,
+        canRestartUpdate: false,
+        updatePendingRestart: false
+      };
+    default:
+      return null;
+  }
 }
 
 async function handleReviewSettingsPost(request, response) {
@@ -281,7 +546,8 @@ function applyReviewSupportPatch(patch) {
       latestBundlePath: '',
       statusText: '',
       statusTone: 'neutral',
-      updateText: 'No update available.',
+      updateText: 'Current v1.0.3.',
+      updateTone: 'success',
       canCheckUpdates: true,
       canInstallUpdate: false,
       canRestartUpdate: false,
@@ -293,8 +559,8 @@ function applyReviewSupportPatch(patch) {
     case 'rawCapture':
       support.rawCaptureEnabled = patch.enabled === true;
       support.statusText = support.rawCaptureEnabled
-        ? 'Diagnostic telemetry will start with live data.'
-        : 'Diagnostic telemetry capture disabled.';
+        ? 'Enhanced iRacing telemetry capture will start with live data.'
+        : 'Enhanced iRacing telemetry capture disabled.';
       support.statusTone = 'success';
       break;
     case 'createBundle':
@@ -311,7 +577,8 @@ function applyReviewSupportPatch(patch) {
       support.statusTone = patch.ok === true ? 'success' : 'error';
       break;
     case 'checkUpdates':
-      support.updateText = 'No update available.';
+      support.updateText = 'Current v1.0.3.';
+      support.updateTone = 'success';
       support.statusText = 'Checked for updates.';
       support.statusTone = 'success';
       break;
@@ -586,7 +853,31 @@ function applyReviewFixtureToLiveSnapshot(live, fixture) {
   }
 
   const models = live.models;
-  if (fixture === 'input-waiting') {
+  if (fixture === 'input-state-mock-data') {
+    const inputTrace = reviewInputTrace();
+    const currentInputs = inputTrace[inputTrace.length - 1] || {
+      throttle: 0,
+      brake: 0,
+      clutch: 0,
+      brakeAbsActive: false
+    };
+    models.inputs = {
+      ...(models.inputs || {}),
+      hasData: true,
+      throttle: currentInputs.throttle,
+      brake: currentInputs.brake,
+      clutch: currentInputs.clutch,
+      steeringWheelAngle: -0.18,
+      gear: 6,
+      rpm: 7900,
+      speedMetersPerSecond: 77.889366,
+      brakeAbsActive: currentInputs.brakeAbsActive,
+      trace: inputTrace
+    };
+    return live;
+  }
+
+  if (fixture === 'input-waiting' || fixture === 'input-no-data') {
     models.inputs = {
       ...(models.inputs || {}),
       hasData: false,
@@ -671,7 +962,11 @@ function applyReviewFixtureToLiveSnapshot(live, fixture) {
 }
 
 function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
-  const overlayState = reviewAppState.overlays[overlayId] || {};
+  const overlayState = effectiveSettingsOverlayState(
+    overlayId,
+    reviewAppState.overlays[overlayId] || {},
+    previewMode,
+    searchParams);
   const unitSystem = reviewAppState.unitSystem;
   const session = sessionKeyFromPreview(previewMode);
   if (overlayId === 'stream-chat') {
@@ -745,9 +1040,28 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
   }
 
   if (overlayId === 'input-state') {
+    if (fixtureMatches(searchParams, 'input-state-mock-data')) {
+      return inputStateReviewSettings(unitSystem);
+    }
+    if (fixtureMatches(searchParams, 'input-graph-only')) {
+      return inputStateReviewSettings(unitSystem, {
+        showThrottle: false,
+        showBrake: false,
+        showClutch: false,
+        showSteering: false,
+        showGear: false,
+        showSpeed: false
+      });
+    }
+    if (fixtureMatches(searchParams, 'input-rail-only')) {
+      return inputStateReviewSettings(unitSystem, {
+        showThrottleTrace: false,
+        showBrakeTrace: false,
+        showClutchTrace: false
+      });
+    }
     if (fixtureMatches(searchParams, 'input-no-content')) {
-      return {
-        unitSystem,
+      return inputStateReviewSettings(unitSystem, {
         showThrottleTrace: false,
         showBrakeTrace: false,
         showClutchTrace: false,
@@ -757,7 +1071,7 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
         showSteering: false,
         showGear: false,
         showSpeed: false
-      };
+      });
     }
     return {
       unitSystem,
@@ -775,7 +1089,9 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
 
   if (overlayId === 'car-radar') {
     return {
-      showMulticlassWarning: contentEnabled(overlayState, 'Faster-class warning', true, [], session)
+      showMulticlassWarning: contentEnabled(overlayState, 'Faster-class warning', true, ['radar.multiclass-warning'], session),
+      multiclassWarningSeconds: clampInteger(overlayState?.multiclassWarningSeconds, 5, 3, 10),
+      radarVisibilitySeconds: clampInteger(overlayState?.radarVisibilitySeconds, 2, 2, 5)
     };
   }
 
@@ -792,17 +1108,33 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
     }
     return {
       flags: reviewFlagsForSession(session),
-      showGreen: contentEnabled(overlayState, 'Green', true),
+      showGreen: contentEnabled(overlayState, 'Green / start / ready', true, ['Green']),
       showBlue: contentEnabled(overlayState, 'Blue', true),
-      showYellow: contentEnabled(overlayState, 'Yellow', true),
-      showCritical: contentEnabled(overlayState, 'Red / black', true),
-      showFinish: contentEnabled(overlayState, 'White / checkered', true)
+      showYellow: contentEnabled(overlayState, 'Yellow / debris / caution', true, ['Yellow']),
+      showCritical: contentEnabled(overlayState, 'Red / black / repair', true, ['Red / black']),
+      showFinish: contentEnabled(overlayState, 'White / checkered / final laps', true, ['White / checkered'])
     };
   }
 
   return {
     unitSystem,
     reviewOverlayState: overlayState
+  };
+}
+
+function inputStateReviewSettings(unitSystem, overrides = {}) {
+  return {
+    unitSystem,
+    showThrottleTrace: true,
+    showBrakeTrace: true,
+    showClutchTrace: true,
+    showThrottle: true,
+    showBrake: true,
+    showClutch: true,
+    showSteering: true,
+    showGear: true,
+    showSpeed: true,
+    ...overrides
   };
 }
 
@@ -978,7 +1310,7 @@ function inputPulse(index, center, width) {
 }
 
 function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
-  const hiddenModel = hiddenProductDisplayModel(overlayId, previewMode);
+  const hiddenModel = hiddenProductDisplayModel(overlayId, previewMode, searchParams);
   if (hiddenModel) {
     return withEffectiveSettingsEvidence({ ...hiddenModel, rootOpacity: 1 }, overlayId, previewMode, searchParams);
   }
@@ -992,19 +1324,29 @@ function reviewDisplayModelWithRootOpacity(overlayId, previewMode = 'off', searc
     return withEffectiveSettingsEvidence({ ...model, rootOpacity: 1 }, overlayId, previewMode, searchParams);
   }
 
-  const overlayState = reviewAppState.overlays[overlayId] || {};
+  const overlayState = effectiveSettingsOverlayState(
+    overlayId,
+    reviewAppState.overlays[overlayId] || {},
+    previewMode,
+    searchParams);
   const percent = Number(overlayState.opacityPercent ?? 100);
   const opacity = Number.isFinite(percent) ? Math.max(0.2, Math.min(1, percent / 100)) : 1;
   return withEffectiveSettingsEvidence({ ...model, rootOpacity: opacity }, overlayId, previewMode, searchParams);
 }
 
-function hiddenProductDisplayModel(overlayId, previewMode = 'off') {
-  const overlayState = reviewAppState.overlays[overlayId] || {};
+function hiddenProductDisplayModel(overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
+  const overlayState = effectiveSettingsOverlayState(
+    overlayId,
+    reviewAppState.overlays[overlayId] || {},
+    previewMode,
+    searchParams);
+  const normalizedPreviewMode = normalizePreviewMode(previewMode);
   const session = sessionKeyFromPreview(previewMode);
   const overlayDisabled = Object.hasOwn(overlayState, 'enabled') && overlayState.enabled === false;
   const sessionDisabled = Object.hasOwn(overlayState?.sessions || {}, session) && overlayState.sessions[session] === false;
+  const relativeQualifying = overlayId === 'relative' && normalizedPreviewMode === 'qualifying';
   const noRenderableContent = !reviewHasRenderableContent(overlayId, overlayState, session);
-  if (!overlayDisabled && !sessionDisabled && !noRenderableContent) {
+  if (!overlayDisabled && !sessionDisabled && !relativeQualifying && !noRenderableContent) {
     return null;
   }
 
@@ -1016,7 +1358,9 @@ function hiddenProductDisplayModel(overlayId, previewMode = 'off') {
       ? 'disabled | product hidden'
       : sessionDisabled
         ? 'hidden | session disabled'
-        : 'hidden | no enabled content',
+        : relativeQualifying
+          ? 'hidden | qualifying unsupported'
+          : 'hidden | no enabled content',
     source: '',
     bodyKind: hiddenBodyKind(overlayId),
     columns: [],
@@ -1030,12 +1374,13 @@ function hiddenProductDisplayModel(overlayId, previewMode = 'off') {
 
 function reviewHasRenderableContent(overlayId, overlayState, session) {
   if (overlayId === 'gap-to-leader') {
-    return Number(overlayState?.carsAhead ?? 5) > 0 || Number(overlayState?.carsBehind ?? 5) > 0;
+    return reviewGapHasRenderableContent(overlayState, session);
   }
 
   const renderableContentOverlays = new Set([
     'standings',
     'relative',
+    'fuel-calculator',
     'session-weather',
     'pit-service',
     'input-state',
@@ -1045,8 +1390,19 @@ function reviewHasRenderableContent(overlayId, overlayState, session) {
     return true;
   }
 
-  return reviewEffectiveContentRows(overlayId)
+  return reviewRenderableContentRows(overlayId, session)
     .some((row) => contentLabelsEnabled(overlayState, [row.key, row.label].filter(Boolean), row.defaultEnabled, session));
+}
+
+function reviewRenderableContentRows(overlayId, session) {
+  const rows = reviewEffectiveContentRows(overlayId);
+  if (overlayId !== 'fuel-calculator') {
+    return rows;
+  }
+
+  return session === 'practice' || session === 'qualifying'
+    ? rows.filter((row) => ['Fuel range', 'Fuel usage'].includes(row.label))
+    : rows.filter((row) => ['Plan', 'Fuel', 'Stint targets'].includes(row.label));
 }
 
 function hiddenBodyKind(overlayId) {
@@ -1067,9 +1423,135 @@ function hiddenBodyKind(overlayId) {
 }
 
 function withEffectiveSettingsEvidence(model, overlayId, previewMode = 'off', searchParams = new URLSearchParams()) {
+  const renderModel = suppressUnavailableRenderedContent(withoutOrdinaryOverlayTitle(model));
+  return {
+    ...renderModel,
+    effectiveSettings: reviewEffectiveSettings(renderModel, overlayId, previewMode, searchParams)
+  };
+}
+
+function withoutOrdinaryOverlayTitle(model) {
+  if (!model || model.overlayId === 'garage-cover') {
+    return model;
+  }
+
+  return String(model.title || '').trim()
+    ? { ...model, title: '' }
+    : model;
+}
+
+function suppressUnavailableRenderedContent(model) {
+  if (!isUnavailableModel(model)
+    || unavailableContentPolicy(model) === 'section-aware-placeholders') {
+    return model;
+  }
+
   return {
     ...model,
-    effectiveSettings: reviewEffectiveSettings(model, overlayId, previewMode, searchParams)
+    shouldRender: false,
+    columns: [],
+    rows: [],
+    metrics: [],
+    points: [],
+    headerItems: [],
+    graph: emptyGraphModel(model.graph),
+    gridSections: [],
+    metricSections: [],
+    carRadar: emptyCarRadarModel(model.carRadar),
+    trackMap: emptyTrackMapModel(model.trackMap),
+    inputs: emptyInputModel(model.inputs),
+    flags: emptyFlagsModel(model.flags),
+    streamChat: emptyStreamChatModel(model.streamChat)
+  };
+}
+
+function emptyGraphModel(graph) {
+  if (!graph) return graph;
+  return {
+    ...graph,
+    series: [],
+    weather: [],
+    leaderChanges: [],
+    driverChanges: [],
+    selectedSeriesCount: 0,
+    trendMetrics: [],
+    activeThreat: null,
+    threatCarIdx: null,
+    scale: null
+  };
+}
+
+function emptyInputModel(inputs) {
+  if (!inputs) return inputs;
+  return {
+    ...inputs,
+    hasGraph: false,
+    hasRail: false,
+    hasContent: false,
+    trace: [],
+    tracePointCount: 0
+  };
+}
+
+function emptyFlagsModel(flags) {
+  if (!flags) return flags;
+  return {
+    ...flags,
+    flags: []
+  };
+}
+
+function emptyCarRadarModel(carRadar) {
+  if (!carRadar) return carRadar;
+  return {
+    ...carRadar,
+    isAvailable: false,
+    hasCarLeft: false,
+    hasCarRight: false,
+    cars: [],
+    strongestMulticlassApproach: null,
+    hasCurrentSignal: false,
+    renderModel: emptyCarRadarRenderModel(carRadar.renderModel)
+  };
+}
+
+function emptyCarRadarRenderModel(renderModel) {
+  return {
+    ...(renderModel || {}),
+    shouldRender: false,
+    cars: [],
+    labels: [],
+    rings: [],
+    multiclassArc: null
+  };
+}
+
+function emptyTrackMapModel(trackMap) {
+  if (!trackMap) return trackMap;
+  return {
+    ...trackMap,
+    markers: [],
+    sectors: [],
+    renderModel: emptyTrackMapRenderModel(trackMap.renderModel)
+  };
+}
+
+function emptyTrackMapRenderModel(renderModel) {
+  return {
+    ...(renderModel || {}),
+    isAvailable: false,
+    shouldRender: false,
+    markers: [],
+    primitives: [],
+    labels: []
+  };
+}
+
+function emptyStreamChatModel(streamChat) {
+  if (!streamChat) return streamChat;
+  return {
+    ...streamChat,
+    rows: []
   };
 }
 
@@ -1079,31 +1561,113 @@ function reviewEffectiveSettings(model, overlayId, previewMode = 'off', searchPa
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const effectiveOverlayState = effectiveSettingsOverlayState(overlayId, overlayState, previewMode, searchParams);
   const fixture = fixtureVariant(searchParams) || null;
+  const settings = reviewEffectiveSettingList(overlayId, effectiveOverlayState, session, searchParams);
+  const sharedSettingsHash = stableEvidenceHash(settings.filter((item) => sharedEffectiveSettingKeys.has(item.key)));
+  const overlaySettingsHash = stableEvidenceHash(settings);
+  const browserSource = reviewEffectiveBrowserSource(overlayId, effectiveOverlayState, normalizedPreviewMode, model);
   return {
     overlayId,
     previewMode: normalizedPreviewMode,
     sources: {
-      browserReview: { applied: true, fixtureVariant: fixture },
-      localhostObs: { applied: true, fixtureVariant: fixture },
-      windowsNative: { applied: true, fixtureVariant: fixture }
+      browserReview: {
+        applied: true,
+        fixtureVariant: fixture,
+        sharedSettingsHash,
+        overlaySettingsHash,
+        routePath: `/review/overlays/${overlayId}`
+      },
+      localhostObs: {
+        applied: true,
+        fixtureVariant: fixture,
+        sharedSettingsHash,
+        overlaySettingsHash,
+        routePath: `/overlays/${overlayId}`
+      },
+      windowsNative: {
+        applied: true,
+        fixtureVariant: fixture,
+        sharedSettingsHash,
+        overlaySettingsHash,
+        routePath: `native://${overlayId}`,
+        pixelEvidence: {
+          status: 'unsupported',
+          reason: 'browser-review model contract; native pixels are validated by Windows screenshot artifacts'
+        }
+      }
     },
     rendered: {
       bodyKind: model?.bodyKind || null,
       shouldRender: model?.shouldRender !== false,
       rowCount: effectiveRenderedRowCount(model),
+      columnKeys: tableColumnKeys(model),
+      rowIdentities: tableRowIdentities(model),
+      placeholderRowCount: placeholderRowCount(model),
       headerItems: (model?.headerItems || []).map((item) => ({
         key: item?.key || null,
         value: item?.value || '',
         tone: normalizeHeaderTone(item?.tone)
       })),
-      browserSource: reviewEffectiveBrowserSource(overlayId, effectiveOverlayState, normalizedPreviewMode)
+      browserSource,
+      provenance: reviewRenderedProvenance(model, fixture),
+      relativeTimingEvidence: relativeTimingEvidence(overlayId, normalizedPreviewMode, model),
+      tableStatus: tableStatusEvidence(overlayId, model),
+      timingSanity: timingSanityEvidence(overlayId, model),
+      fuelStrategy: fuelStrategyEvidence(overlayId, model),
+      layout: layoutDensityEvidence(overlayId, model, browserSource),
+      inputAvailability: inputAvailabilityEvidence(overlayId, model),
+      mapFallback: mapFallbackEvidence(overlayId, model),
+      unavailableContentPolicy: unavailableContentPolicy(model),
+      roleContext: reviewRoleContext(searchParams)
     },
-    settings: reviewEffectiveSettingList(overlayId, effectiveOverlayState, session, searchParams)
+    settings
   };
 }
 
-function reviewEffectiveBrowserSource(overlayId, overlayState, previewMode) {
+function reviewRoleContext(searchParams = new URLSearchParams()) {
+  const fixture = fixtureVariant(searchParams);
+  if (fixture === 'spectator-role') {
+    return {
+      playerCarIdx: 63,
+      focusCarIdx: 42,
+      focusIsPlayer: false,
+      hasExplicitNonPlayerFocus: true,
+      playerIsSpectator: true,
+      focusIsSpectator: false,
+      localRole: 'spectator',
+      roleSource: 'DriverInfo.Drivers[].IsSpectator',
+      isSpotting: null,
+      spottingSignalStatus: 'not-observed'
+    };
+  }
+
+  return {
+    playerCarIdx: 42,
+    focusCarIdx: 42,
+    focusIsPlayer: true,
+    hasExplicitNonPlayerFocus: false,
+    playerIsSpectator: false,
+    focusIsSpectator: false,
+    localRole: 'driver',
+    roleSource: 'DriverInfo.Drivers[].IsSpectator',
+    isSpotting: null,
+    spottingSignalStatus: 'not-observed'
+  };
+}
+
+const sharedEffectiveSettingKeys = new Set([
+  'general.unitSystem',
+  'scalePercent',
+  'opacityPercent'
+]);
+
+function reviewEffectiveBrowserSource(overlayId, overlayState, previewMode, model = null) {
   const sourceSize = settingsBrowserSourceSize(overlayId, overlayState, previewMode);
+  if (overlayId === 'fuel-calculator') {
+    const baseHeight = fuelBrowserSourceHeightForModel(model, sourceSize.baseHeight);
+    sourceSize.baseHeight = baseHeight;
+    sourceSize.height = Math.round(baseHeight * sourceSize.scale);
+  }
+
   const opacityPercent = opacityExcludedOverlayIds.has(overlayId)
     ? 100
     : clampInteger(overlayState?.opacityPercent, 100, overlayId === 'track-map' ? 0 : 20, 100);
@@ -1114,6 +1678,37 @@ function reviewEffectiveBrowserSource(overlayId, overlayState, previewMode) {
   };
 }
 
+function fuelBrowserSourceHeightForModel(model, fallbackHeight) {
+  if (model?.shouldRender === false) {
+    return 88;
+  }
+
+  const sections = Array.isArray(model?.metricSections)
+    ? model.metricSections.filter((section) => Array.isArray(section?.rows) && section.rows.length > 0)
+    : [];
+  const rowCount = sections.reduce((total, section) => total + section.rows.length, 0);
+  if (rowCount <= 0 || sections.length <= 0) {
+    return fallbackHeight;
+  }
+
+  let height = fuelContentHeight(rowCount, sections.length);
+  const hasHeader = Array.isArray(model?.headerItems)
+    && model.headerItems.some((item) => String(item?.value || '').trim());
+  if (!hasHeader) {
+    height = Math.max(80, height - 38);
+  }
+
+  return height;
+}
+
+function fuelContentHeight(rowCount, sectionCount) {
+  if (rowCount <= 0 || sectionCount <= 0) return 126;
+  const rowGaps = Math.max(0, rowCount - sectionCount) * 5;
+  const sectionGaps = Math.max(0, sectionCount - 1) * 8;
+  const height = 38 + 26 + sectionCount * 14 + rowCount * 35 + rowGaps + sectionGaps + 8;
+  return Math.max(126, Math.min(315, height));
+}
+
 function effectiveRenderedRowCount(model) {
   if (model?.bodyKind === 'stream-chat' && Array.isArray(model?.streamChat?.rows)) {
     return model.streamChat.rows.length;
@@ -1122,8 +1717,237 @@ function effectiveRenderedRowCount(model) {
   return (model?.rows || []).length;
 }
 
+function tableColumnKeys(model) {
+  return (model?.columns || []).map((column) => String(column?.dataKey || column?.label || ''));
+}
+
+function tableRowIdentities(model) {
+  return (model?.rows || []).map((row) => {
+    const cells = (row?.cells || []).map((cell) => String(cell ?? ''));
+    const kind = row?.isClassHeader ? 'class-header' : row?.isPlaceholder ? 'placeholder' : 'row';
+    const primary = row?.headerTitle || cells.slice(0, 2).join('/');
+    return [kind, primary, visibleRowDetail(row), row?.isReference ? 'reference' : ''].join('|');
+  });
+}
+
+function visibleRowDetail(row) {
+  const detail = row?.headerDetail || '';
+  return row?.isClassHeader ? String(detail).toUpperCase() : detail;
+}
+
+function placeholderRowCount(model) {
+  return (model?.rows || []).filter((row) =>
+    row?.isPlaceholder || !(row?.cells || []).some((cell) => String(cell || '').trim())).length;
+}
+
+function reviewRenderedProvenance(model, fixture) {
+  return {
+    evidenceClass: isUnavailableModel(model) ? 'unavailable' : 'synthetic-preview',
+    captureSpecific: false,
+    sourceContract: 'tools/browser-review/server.mjs',
+    syntheticStateKind: fixture ? syntheticStateKind(fixture) : null
+  };
+}
+
+function syntheticStateKind(fixture) {
+  const normalized = String(fixture || '').trim();
+  if (!normalized) return null;
+  if (normalized === 'input-state-mock-data') return 'input-state-mock-data';
+  if (/waiting|no-cars|no-content|no-data|hidden|unavailable/i.test(normalized)) return 'forced-unavailable';
+  if (/right|all-kinds|twitch|rich|evidence|graph-only|rail-only|min-scale/i.test(normalized)) return 'forced-preview-state';
+  return 'fixture-variant';
+}
+
+function isUnavailableModel(model) {
+  return model?.shouldRender === false || /waiting|unavailable|hidden/i.test(String(model?.status || ''));
+}
+
+function relativeTimingEvidence(overlayId, previewMode, model) {
+  if (overlayId !== 'relative') return null;
+  return {
+    sessionKind: previewMode,
+    physicalProximityAvailable: previewMode === 'practice' || previewMode === 'race',
+    timingColumnKeys: tableColumnKeys(model).filter((key) => /gap|interval|delta/i.test(key))
+  };
+}
+
+function tableStatusEvidence(overlayId, model) {
+  if (overlayId !== 'standings') return null;
+  const rows = model?.rows || [];
+  const classHeaderCount = rows.filter((row) => row?.isClassHeader).length;
+  const placeholderCount = placeholderRowCount(model);
+  const dataRowCount = Math.max(0, rows.length - classHeaderCount - placeholderCount);
+  return {
+    dataRowCount,
+    classHeaderCount,
+    placeholderRowCount: placeholderCount,
+    clippedRowCount: 0,
+    statusCarCount: dataRowCount
+  };
+}
+
+function timingSanityEvidence(overlayId, model) {
+  if (overlayId !== 'standings') return null;
+  const timingValues = (model?.rows || [])
+    .flatMap((row) => row?.cells || [])
+    .map((cell) => parseTimingSeconds(cell))
+    .filter(Number.isFinite);
+  const maximum = timingValues.length ? Math.max(...timingValues.map(Math.abs)) : 0;
+  return {
+    maxIntervalGapRatio: Number((maximum / Math.max(1, maximum)).toFixed(3)),
+    absurdIntervalCount: timingValues.filter((value) => Math.abs(value) > 600).length
+  };
+}
+
+function fuelStrategyEvidence(overlayId, model) {
+  if (overlayId !== 'fuel-calculator') return null;
+  const text = metricModelText(model);
+  let additionalFuelNeedState = 'unavailable';
+  if (/\bNeed\s+Covered\b|\bCovered\b/i.test(text)) {
+    additionalFuelNeedState = 'not-needed';
+  } else if (/\bNeed\s+\+\d/i.test(text)) {
+    additionalFuelNeedState = 'measured';
+  }
+
+  return {
+    additionalFuelNeedState: model?.shouldRender === false ? 'unavailable' : additionalFuelNeedState,
+    successCopyRequiresMeasuredNeed: true
+  };
+}
+
+function metricModelText(model) {
+  const sections = [
+    ...(model?.metricSections || []),
+    ...(model?.gridSections || [])
+  ];
+  return JSON.stringify({
+    status: model?.status || '',
+    source: model?.source || '',
+    metrics: model?.metrics || [],
+    sections
+  });
+}
+
+function layoutDensityEvidence(overlayId, model, browserSource) {
+  if (!['fuel-calculator', 'pit-service'].includes(overlayId)) return null;
+  const contentRowCount = semanticContentRowCount(model);
+  const sectionCount = (model?.metricSections || []).length + (model?.gridSections || []).length;
+  const estimatedContentHeight = Math.max(0, 38 + contentRowCount * 30 + sectionCount * 18);
+  const height = Number(browserSource?.height || 0);
+  const unusedHeightRatio = height > 0
+    ? Math.max(0, Math.min(1, (height - estimatedContentHeight) / height))
+    : 0;
+  return {
+    contentRowCount,
+    unusedHeightRatio: Number(unusedHeightRatio.toFixed(3))
+  };
+}
+
+function inputAvailabilityEvidence(overlayId, model) {
+  if (overlayId !== 'input-state') return null;
+  const inputs = model?.inputs || {};
+  return {
+    fixtureControlsAvailable: true,
+    isAvailable: inputs.isAvailable === true,
+    tracePointCount: inputTracePointCount(inputs),
+    hasGraph: inputs.hasGraph === true,
+    hasRail: inputs.hasRail === true
+  };
+}
+
+function mapFallbackEvidence(overlayId, model) {
+  if (overlayId !== 'track-map') return null;
+  if (model?.shouldRender === false) return null;
+  const trackMap = model?.trackMap || {};
+  const mapKind = trackMap.mapKind || trackMap.renderModel?.mapKind || null;
+  if (mapKind !== 'circle') return null;
+  return {
+    kind: 'circle',
+    reason: 'no-generated-track-map',
+    currentTrackKey: 'review-fixture-track'
+  };
+}
+
+function unavailableContentPolicy(model) {
+  if (!isUnavailableModel(model)) return null;
+  if (isSectionAwareUnavailablePlaceholderModel(model)) return 'section-aware-placeholders';
+  if (!hasSemanticRenderedContent(model)) {
+    return 'suppress-rendered-content';
+  }
+  return null;
+}
+
+function isSectionAwareUnavailablePlaceholderModel(model) {
+  return model?.overlayId === 'session-weather'
+    && Array.isArray(model?.metricSections)
+    && model.metricSections.some((section) => (section?.rows || []).length)
+    && /weather unavailable/i.test(String(model?.status || ''));
+}
+
+function hasSemanticRenderedContent(model) {
+  return Boolean(
+    (model?.rows || []).length
+    || (model?.points || []).length
+    || (model?.metrics || []).length
+    || (model?.metricSections || []).some((section) => (section.rows || []).length)
+    || (model?.gridSections || []).some((section) => (section.rows || []).length)
+    || (model?.graph?.series || []).length
+    || (model?.graph?.trendMetrics || []).length
+    || model?.inputs?.hasGraph
+    || model?.inputs?.hasRail
+    || inputTracePointCount(model?.inputs) > 0
+    || model?.carRadar?.renderModel?.shouldRender === true
+    || (model?.trackMap?.renderModel?.markers || []).length
+    || (model?.flags?.flags || []).length
+    || (model?.streamChat?.rows || []).length
+  );
+}
+
+function semanticContentRowCount(model) {
+  return (model?.metrics || []).length
+    + (model?.metricSections || []).reduce((total, section) => total + (section.rows || []).length, 0)
+    + (model?.gridSections || []).reduce((total, section) => total + (section.rows || []).length, 0)
+    + (model?.rows || []).length
+    + (model?.streamChat?.rows || []).length;
+}
+
+function inputTracePointCount(inputs) {
+  if (Number.isFinite(inputs?.tracePointCount)) return inputs.tracePointCount;
+  return Array.isArray(inputs?.trace) ? inputs.trace.length : 0;
+}
+
+function parseTimingSeconds(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/^([+-])?(?:(\d+):)?(\d+(?:\.\d+)?)s?$/i);
+  if (!match) return null;
+  const sign = match[1] === '-' ? -1 : 1;
+  const minutes = match[2] ? Number(match[2]) : 0;
+  const seconds = Number(match[3]);
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+  return sign * (minutes * 60 + seconds);
+}
+
+function stableEvidenceHash(value) {
+  return createHash('sha256').update(stableEvidenceJson(value)).digest('hex').slice(0, 16);
+}
+
+function stableEvidenceJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableEvidenceJson).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableEvidenceJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function effectiveSettingsOverlayState(overlayId, overlayState, previewMode = 'off', searchParams = new URLSearchParams()) {
   let effectiveState = overlayState;
+  const sectionOffLabels = sectionOffContentLabelsByFixture.get(fixtureVariant(searchParams));
+  if (sectionOffLabels) {
+    effectiveState = withDisabledContentLabels(effectiveState, sectionOffLabels);
+  }
+
   if (overlayId === 'relative' && fixtureVariant(searchParams) === 'rightmost-evidence') {
     effectiveState = {
       ...effectiveState,
@@ -1134,6 +1958,35 @@ function effectiveSettingsOverlayState(overlayId, overlayState, previewMode = 'o
         'relative.content.relative.pit.enabled': true,
         'relative.content.relative.pit.enabled.race': true
       }
+    };
+  }
+
+  if (overlayId === 'relative' && fixtureVariant(searchParams) === 'relative-rows-2') {
+    effectiveState = {
+      ...effectiveState,
+      carsEachSide: 2
+    };
+  }
+
+  if (overlayId === 'standings' && fixtureVariant(searchParams) === 'standings-class-separators-off') {
+    effectiveState = {
+      ...effectiveState,
+      content: {
+        ...(effectiveState.content || {}),
+        'standings.class-separators.enabled': false,
+        'standings.class-separators.enabled.practice': false,
+        'standings.class-separators.enabled.qualifying': false,
+        'standings.class-separators.enabled.race': false,
+        'Class separators': false,
+        'Multiclass sections': false
+      }
+    };
+  }
+
+  if (overlayId === 'standings' && fixtureVariant(searchParams) === 'standings-focused-class-only') {
+    effectiveState = {
+      ...effectiveState,
+      otherClassRows: 0
     };
   }
 
@@ -1157,6 +2010,20 @@ function effectiveSettingsOverlayState(overlayId, overlayState, previewMode = 'o
   return effectiveState;
 }
 
+function withDisabledContentLabels(overlayState, labels) {
+  const content = {
+    ...(overlayState?.content || {})
+  };
+  for (const label of labels) {
+    content[label] = false;
+  }
+
+  return {
+    ...overlayState,
+    content
+  };
+}
+
 function reviewEffectiveSettingList(overlayId, overlayState, session, searchParams = new URLSearchParams()) {
   const settings = [
     effectiveSetting('overlayEnabled', overlayState.enabled === true),
@@ -1173,12 +2040,13 @@ function reviewEffectiveSettingList(overlayId, overlayState, session, searchPara
   ];
 
   if (overlayId === 'relative') {
-    settings.push(effectiveSetting('carsEachSide', clampInteger(overlayState?.carsEachSide, 5, 0, 8)));
+    settings.push(effectiveSetting('carsEachSide', clampInteger(overlayState?.carsEachSide, 3, 0, 8)));
   }
 
   if (overlayId === 'standings') {
     settings.push(
       effectiveContentSetting(overlayState, session, 'standings.class-separators.enabled', 'Class separators', true),
+      effectiveSetting('carsInClass', clampInteger(overlayState?.carsInClass, 14, 1, 24)),
       effectiveSetting('otherClassRows', clampInteger(overlayState?.otherClassRows, 2, 0, 6))
     );
   }
@@ -1195,6 +2063,13 @@ function reviewEffectiveSettingList(overlayId, overlayState, session, searchPara
 
   if (overlayId === 'stream-chat') {
     settings.push(effectiveSetting('stream-chat.provider', reviewSettings(overlayId, 'race', searchParams).provider));
+  }
+
+  if (overlayId === 'car-radar') {
+    settings.push(
+      effectiveContentSetting(overlayState, session, 'radar.multiclass-warning', 'Faster-class warning', true),
+      effectiveSetting('radar.multiclass-warning-seconds', clampInteger(overlayState?.multiclassWarningSeconds, 5, 3, 10)),
+      effectiveSetting('radar.visibility-seconds', clampInteger(overlayState?.radarVisibilitySeconds, 2, 2, 5)));
   }
 
   if (overlayId === 'garage-cover') {
@@ -1271,6 +2146,24 @@ function reviewEffectiveContentRows(overlayId) {
       ['relative.content.relative.gap.enabled', 'Relative delta', true],
       ['relative.content.relative.pit.enabled', 'Pit status', false]
     ],
+    'fuel-calculator': [
+      ['fuel-calculator.race.plan.enabled', 'Plan', true],
+      ['fuel-calculator.race.fuel.enabled', 'Fuel', true],
+      ['fuel-calculator.race.stint-targets.enabled', 'Stint targets', true],
+      ['fuel-calculator.range.fuel.enabled', 'Fuel range', true],
+      ['fuel-calculator.usage.enabled', 'Fuel usage', true]
+    ],
+    'gap-to-leader': [
+      ['gap.graph.enabled', 'Graph', true],
+      ['gap.trend.last.enabled', 'Last', true],
+      ['gap.trend.5l.enabled', '5L', true],
+      ['gap.trend.10l.enabled', '10L', true],
+      ['gap.trend.pit.enabled', 'Pit', true],
+      ['gap.trend.pit-lap.enabled', 'PLap', true],
+      ['gap.trend.stint.enabled', 'Stint', true],
+      ['gap.trend.tire.enabled', 'Tire', true],
+      ['gap.trend.status.enabled', 'Status', true]
+    ],
     'track-map': [
       ['track-map.sector-boundaries.enabled', 'Sector boundaries', true]
     ],
@@ -1296,15 +2189,13 @@ function reviewEffectiveContentRows(overlayId) {
       ['input-state.current.gear', 'Gear', true],
       ['input-state.current.speed', 'Speed', true]
     ],
-    'car-radar': [
-      ['radar.multiclass-warning', 'Faster-class warning', true]
-    ],
+    'car-radar': [],
     flags: [
-      ['flags.show-green', 'Green', true],
+      ['flags.show-green', 'Green / start / ready', true],
       ['flags.show-blue', 'Blue', true],
-      ['flags.show-yellow', 'Yellow', true],
-      ['flags.show-critical', 'Red / black', true],
-      ['flags.show-finish', 'White / checkered', true]
+      ['flags.show-yellow', 'Yellow / debris / caution', true],
+      ['flags.show-critical', 'Red / black / repair', true],
+      ['flags.show-finish', 'White / checkered / final laps', true]
     ],
     'session-weather': [
       ['session-weather.session.type.enabled', 'Session type', true],
@@ -1367,7 +2258,11 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
     return withChrome(reviewAssetBackedDisplayModel(overlayId, previewMode, searchParams));
   }
 
-  const overlayState = reviewAppState.overlays[overlayId] || {};
+  const overlayState = effectiveSettingsOverlayState(
+    overlayId,
+    reviewAppState.overlays[overlayId] || {},
+    previewMode,
+    searchParams);
   const session = sessionKeyFromPreview(previewMode);
   const previewLabel = previewMode === 'off' ? 'review fixture' : `${previewMode} preview`;
   // BrowserOverlayModelFactory is a C# application service and cannot be executed
@@ -1375,7 +2270,7 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
   // BrowserOverlayDisplayModel JSON contract used by production browser sources.
   switch (overlayId) {
     case 'standings':
-      return withChrome(filterTableModelContent(filterStandingsReviewRows(standingsDisplayModel(previewLabel), overlayState), 'standings', overlayState, session));
+      return withChrome(filterTableModelContent(filterStandingsReviewRows(standingsDisplayModel(previewLabel, session, fixture), overlayState), 'standings', overlayState, session));
     case 'relative':
       {
         const effectiveOverlayState = fixture === 'rightmost-evidence'
@@ -1389,41 +2284,62 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
                 'relative.content.relative.pit.enabled.race': true
               }
             }
+          : fixture === 'relative-rows-2'
+            ? {
+                ...overlayState,
+                carsEachSide: 2
+              }
           : overlayState;
         return withChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), effectiveOverlayState), 'relative', effectiveOverlayState, session));
       }
     case 'fuel-calculator':
       {
-        if (fixture === 'fuel-waiting') {
+        if (fixture === 'fuel-waiting' || fixture === 'fuel-no-data') {
           return withChrome(metricsModel(
             'fuel-calculator',
             'Fuel Calculator',
-            'waiting for local fuel context',
+            fixture === 'fuel-no-data' ? 'waiting for fuel telemetry' : 'waiting for local fuel context',
             [],
             'source: waiting',
             [],
             [],
-            [
-              { key: 'timeRemaining', value: '--' }
-            ],
+            [],
             false));
         }
-        const raceRows = [
-          metricRow('Plan', '31 laps | 3 stints | 2 stops', 'info', [
-            metricSegment('Race', '31 laps', 'info'),
-            metricSegment('Remain', '30.4 laps', 'info'),
-            metricSegment('Stints', '3', 'info'),
-            metricSegment('Stops', '2', 'info'),
-            metricSegment('Save', formatFuelPerLap(0.2), 'warning')
-          ]),
-          metricRow('Fuel', `${formatFuelVolume(74.0)} | ${formatFuelPerLap(3.1)} | Covered`, 'success', [
-            metricSegment('Current', formatFuelVolume(74.0), 'info'),
-            metricSegment('Burn', formatFuelPerLap(3.1), 'info'),
-            metricSegment('Tank', '34.2 laps', 'info'),
-            metricSegment('Need', 'Covered', 'success')
-          ])
-        ];
-        const stintRows = [
+
+        const calculating = fixture === 'fuel-calculating';
+        const raceRows = calculating
+          ? [
+              metricRow('Plan', '31 laps | Calculating | Calculating', 'waiting', [
+                metricSegment('Race', '31 laps', 'info'),
+                metricSegment('Remain', '30.4 laps', 'info'),
+                metricSegment('Stints', 'Calculating', 'waiting'),
+                metricSegment('Stops', 'Calculating', 'waiting'),
+                metricSegment('Save', 'Calculating', 'waiting')
+              ]),
+              metricRow('Fuel', `${formatFuelVolume(74.0)} | Calculating | Calculating`, 'waiting', [
+                metricSegment('Current', formatFuelVolume(74.0), 'info'),
+                metricSegment('Burn', 'Calculating', 'waiting'),
+                metricSegment('Tank', 'Calculating', 'waiting'),
+                metricSegment('Need', 'Calculating', 'waiting')
+              ])
+            ]
+          : [
+              metricRow('Plan', '31 laps | 3 stints | 2 stops', 'info', [
+                metricSegment('Race', '31 laps', 'info'),
+                metricSegment('Remain', '30.4 laps', 'info'),
+                metricSegment('Stints', '3', 'info'),
+                metricSegment('Stops', '2', 'info'),
+                metricSegment('Save', formatFuelPerLap(0.2), 'warning')
+              ]),
+              metricRow('Fuel', `${formatFuelVolume(74.0)} | ${formatFuelPerLap(3.1)} | Covered`, 'success', [
+                metricSegment('Current', formatFuelVolume(74.0), 'info'),
+                metricSegment('Burn', formatFuelPerLap(3.1), 'info'),
+                metricSegment('Tank', '34.2 laps', 'info'),
+                metricSegment('Need', 'Covered', 'success')
+              ])
+            ];
+        const stintRows = calculating ? [] : [
           metricRow('Stint 1', `12 laps | target ${formatFuelPerLap(3.1)}`, 'info', [
             metricSegment('Laps', '12 laps', 'info'),
             metricSegment('Target', formatFuelPerLap(3.1), 'info'),
@@ -1456,7 +2372,7 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
             ])
           ]
         };
-        const metricSections = usageLabel == null
+        let metricSections = usageLabel == null
           ? [{ title: 'Race Information', rows: raceRows }]
           : [
               {
@@ -1473,6 +2389,7 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
               usageSection
             ].filter(Boolean);
         if (usageLabel != null) {
+          metricSections = filterMetricSectionsByContent('fuel-calculator', metricSections, overlayState, session);
           return withChrome(metricsModel(
             'fuel-calculator',
             'Fuel Calculator',
@@ -1485,13 +2402,18 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
               { key: 'timeRemaining', value: '06:37:08' }
             ]));
         }
-        metricSections.push({ title: 'Stint Targets', rows: stintRows });
+        if (stintRows.length > 0) {
+          metricSections.push({ title: 'Stint Targets', rows: stintRows });
+        }
+        metricSections = filterMetricSectionsByContent('fuel-calculator', metricSections, overlayState, session);
         return withChrome(metricsModel(
           'fuel-calculator',
           'Fuel Calculator',
-          '3 stints / 2 stops',
+          calculating ? 'calculating strategy' : '3 stints / 2 stops',
           metricSections.flatMap((section) => section.rows),
-          `burn ${formatFuelPerLap(3.1)} (measured green lap) | 34.2 laps/tank | history user | gap O0.18 C0.04`,
+          calculating
+            ? 'burn Calculating (unavailable) | Calculating | history user | gap O0.18 C0.04'
+            : `burn ${formatFuelPerLap(3.1)} (measured green lap) | 34.2 laps/tank | history user | gap O0.18 C0.04`,
           [],
           metricSections,
           [
@@ -1500,6 +2422,19 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
       }
     case 'session-weather':
       {
+        if (fixture === 'session-weather-no-data') {
+          return withChrome(metricsModel(
+            'session-weather',
+            'Session / Weather',
+            'waiting for session telemetry',
+            [],
+            '',
+            [],
+            [],
+            [],
+            false));
+        }
+
         if (fixture === 'session-weather-missing') {
           const sessionRows = [
             metricRow('Session', 'Race | race preview | Team', 'normal', [
@@ -1525,35 +2460,8 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
               metricSegment('Total', '--', 'waiting')
             ])
           ];
-          const weatherRows = [
-            metricRow('Surface', 'Unknown | -- | --', 'waiting', [
-              metricSegment('Wetness', 'Unknown', 'waiting'),
-              metricSegment('Declared', '--', 'waiting'),
-              metricSegment('Rubber', '--', 'waiting')
-            ]),
-            metricRow('Sky', 'Unknown | -- | --', 'waiting', [
-              metricSegment('Skies', 'Unknown', 'waiting'),
-              metricSegment('Weather', '--', 'waiting'),
-              metricSegment('Rain', '--', 'waiting')
-            ]),
-            metricRow('Wind', '-- | -- | --', 'waiting', [
-              metricSegment('Dir', '--', 'waiting'),
-              metricSegment('Speed', '--', 'waiting'),
-              metricSegment('Facing', '--', 'waiting', { rotationDegrees: 0 })
-            ]),
-            metricRow('Temps', '-- | --', 'waiting', [
-              metricSegment('Air', '--', 'waiting'),
-              metricSegment('Track', '--', 'waiting')
-            ]),
-            metricRow('Atmosphere', '-- | -- | --', 'waiting', [
-              metricSegment('Hum', '--', 'waiting'),
-              metricSegment('Fog', '--', 'waiting'),
-              metricSegment('Pressure', '--', 'waiting')
-            ])
-          ];
           const metricSections = [
-            { title: 'Session', rows: sessionRows },
-            { title: 'Weather', rows: weatherRows }
+            { title: 'Session', rows: sessionRows }
           ];
           return withChrome(metricsModel('session-weather', 'Session / Weather', 'weather unavailable', metricSections.flatMap((section) => section.rows), '', [], metricSections, [
             { key: 'timeRemaining', value: '--' }
@@ -1584,12 +2492,14 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           metricRow('Track', `Gesamtstrecke 24h | ${formatDistance(25380)}`, 'normal', [
             metricSegment('Name', 'Gesamtstrecke 24h', 'normal'),
             metricSegment('Length', formatDistance(25380), 'normal')
-          ]),
-          metricRow('Laps', `${laps.remaining} | ${laps.total}`, 'normal', [
-            metricSegment('Remaining', laps.remaining, 'normal'),
-            metricSegment('Total', laps.total, 'normal')
           ])
         ];
+        if (session === 'race') {
+          sessionRows.push(metricRow('Laps', `${laps.remaining} | ${laps.total}`, 'normal', [
+            metricSegment('Remaining', laps.remaining, 'normal'),
+            metricSegment('Total', laps.total, 'normal')
+          ]));
+        }
         const weatherRows = [
           metricRow('Surface', `Unknown | Dry | ${rubber}`, 'normal', [
             metricSegment('Wetness', 'Unknown', 'waiting'),
@@ -1626,6 +2536,19 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
       }
     case 'pit-service':
       {
+        if (fixture === 'pit-service-no-data') {
+          return withChrome(metricsModel(
+            'pit-service',
+            'Pit Service',
+            'waiting for pit telemetry',
+            [],
+            'source: waiting',
+            [],
+            [],
+            [],
+            false));
+        }
+
         if (fixture === 'pit-service-idle') {
           const pitSections = [
             {
@@ -1686,15 +2609,22 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
             { key: 'timeRemaining', value: '00:03:58' }
           ]));
         }
+        const pitSessionRows = session === 'race'
+          ? [
+              metricRow('Time / Laps', '03:58 | 148/179 laps', 'normal', [
+                metricSegment('Time', '03:58', 'normal'),
+                metricSegment('Laps', '148/179 laps', 'normal')
+              ])
+            ]
+          : [
+              metricRow('Time', '03:58', 'normal', [
+                metricSegment('Time', '03:58', 'normal')
+              ])
+            ];
         const pitSections = filterMetricSectionsByContent('pit-service', [
           {
           title: 'Session',
-          rows: [
-            metricRow('Time / Laps', '03:58 | 148/179 laps', 'normal', [
-              metricSegment('Time', '03:58', 'normal'),
-              metricSegment('Laps', '148/179 laps', 'normal')
-            ])
-          ]
+          rows: pitSessionRows
           },
           {
           title: 'Pit Signal',
@@ -1788,7 +2718,7 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
         });
       }
 
-      if (Number(overlayState.carsAhead ?? 5) <= 0 && Number(overlayState.carsBehind ?? 5) <= 0) {
+      if (!reviewGapHasRenderableContent(overlayState, session)) {
         return withChrome({
           overlayId,
           title: 'Gap To Leader',
@@ -1814,7 +2744,7 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
         rows: [],
         metrics: [],
         points: reviewGapPoints(overlayState),
-        graph: reviewGapGraph(),
+        graph: reviewGapGraph(overlayState, session),
         headerItems: [
           { key: 'timeRemaining', value: '06:37:08' }
         ],
@@ -1834,11 +2764,43 @@ function reviewGapCarCount(overlayState) {
 }
 
 function reviewGapPoints(overlayState) {
-  if (Number(overlayState?.carsAhead ?? 5) <= 0 && Number(overlayState?.carsBehind ?? 5) <= 0) {
+  if (!reviewGapGraphEnabled(overlayState, 'race')) {
     return [];
   }
 
   return [240.8, 240.1, 239.5, 238.8, 238.2, 237.6, 237.1, 236.5];
+}
+
+function reviewGapHasRenderableContent(overlayState, session) {
+  return reviewGapWindowEnabled(overlayState)
+    && (reviewGapGraphEnabled(overlayState, session) || reviewGapTrendEnabled(overlayState, session));
+}
+
+function reviewGapWindowEnabled(overlayState) {
+  return Number(overlayState?.carsAhead ?? 5) > 0 || Number(overlayState?.carsBehind ?? 5) > 0;
+}
+
+function reviewGapGraphEnabled(overlayState, session) {
+  return reviewGapWindowEnabled(overlayState)
+    && contentLabelsEnabled(overlayState, ['gap.graph.enabled', 'Graph'], true, session);
+}
+
+function reviewGapTrendEnabled(overlayState, session) {
+  return reviewGapTrendRows()
+    .some((row) => contentLabelsEnabled(overlayState, [row.key, row.label], true, session));
+}
+
+function reviewGapTrendRows() {
+  return [
+    { label: 'Last', key: 'gap.trend.last.enabled' },
+    { label: '5L', key: 'gap.trend.5l.enabled' },
+    { label: '10L', key: 'gap.trend.10l.enabled' },
+    { label: 'Pit', key: 'gap.trend.pit.enabled' },
+    { label: 'PLap', key: 'gap.trend.pit-lap.enabled' },
+    { label: 'Stint', key: 'gap.trend.stint.enabled' },
+    { label: 'Tire', key: 'gap.trend.tire.enabled' },
+    { label: 'Status', key: 'gap.trend.status.enabled' }
+  ];
 }
 
 function reviewEmptyGapGraph() {
@@ -1856,7 +2818,9 @@ function reviewEmptyGapGraph() {
     activeThreat: null,
     threatCarIdx: null,
     metricDeadbandSeconds: 0.25,
-    comparisonLabel: 'P1',
+    comparisonLabel: '--',
+    showGraph: false,
+    showTrendMetrics: false,
     scale: {
       maxGapSeconds: 500,
       isFocusRelative: false,
@@ -1868,7 +2832,7 @@ function reviewEmptyGapGraph() {
   };
 }
 
-function reviewGapGraph() {
+function reviewGapGraph(overlayState = {}, session = 'race') {
   const startSeconds = 62571.436719;
   const endSeconds = startSeconds + 420;
   const timestampStart = Date.parse('2026-05-17T12:00:00.000Z');
@@ -1890,6 +2854,7 @@ function reviewGapGraph() {
     isReference,
     isClassLeader,
     classPosition,
+    completedLap: 120 + index,
     startsSegment: index === 0
   });
   const referencePoints = trend.map((sample, index) => point(sample, 42, sample.focus, true, false, 24, index));
@@ -1900,14 +2865,31 @@ function reviewGapGraph() {
   const focusTire = { label: 'Dry', shortLabel: 'D', isWet: false };
   const comparisonTire = { label: 'Dry', shortLabel: 'D', isWet: false };
   const threatTire = { label: 'Wet', shortLabel: 'W', isWet: true };
+  const showGraph = reviewGapGraphEnabled(overlayState, session);
+  const trendMetrics = [
+    { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, primaryText: '0.0', comparisonText: '+0.4', threatText: '-0.7' },
+    { label: '5L', focusGapChangeSeconds: -1.8, chaser: threat, state: 'ready', stateLabel: null, completedReferenceLaps: 10 },
+    { label: '10L', focusGapChangeSeconds: -3.4, chaser: threat, state: 'ready', stateLabel: null, completedReferenceLaps: 10 },
+    { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'pit', stateLabel: null, primaryPit: focusPit, comparisonPit, threatPit },
+    { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'pitLap', stateLabel: null, primaryPit: focusPit, comparisonPit, threatPit },
+    { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, comparisonText: '18L', threatText: '17L' },
+    { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null, primaryTire: focusTire, comparisonTire, threatTire },
+    { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track', threatText: 'Track' }
+  ].filter((metric) => contentLabelsEnabled(
+    overlayState,
+    [reviewGapTrendRows().find((row) => row.label === metric.label)?.key, metric.label].filter(Boolean),
+    true,
+    session));
+  const activeThreat = trendMetrics.find((metric) => metric.label === '5L') || trendMetrics.find((metric) => metric.chaser) || null;
+  const threatCarIdx = activeThreat?.chaser?.carIdx ?? null;
   const series = [
-    reviewGapSeries(8, false, true, 1, trend.map((sample, index) => point(sample, 8, sample.leader, false, true, 1, index))),
-    reviewGapSeries(41, false, false, 23, trend.map((sample, index) => point(sample, 41, sample.ahead, false, false, 23, index))),
-    reviewGapSeries(42, true, false, 24, referencePoints),
-    reviewGapSeries(43, false, false, 25, trend.map((sample, index) => point(sample, 43, sample.threat, false, false, 25, index)))
+    reviewGapSeries(8, false, true, 1, trend.map((sample, index) => point(sample, 8, sample.leader, false, true, 1, index)), 0, threatCarIdx),
+    reviewGapSeries(41, false, false, 23, trend.map((sample, index) => point(sample, 41, sample.ahead, false, false, 23, index)), 1, threatCarIdx),
+    reviewGapSeries(42, true, false, 24, referencePoints, 2, threatCarIdx),
+    reviewGapSeries(43, false, false, 25, trend.map((sample, index) => point(sample, 43, sample.threat, false, false, 25, index)), 3, threatCarIdx)
   ];
   return {
-    series,
+    series: showGraph ? series : [],
     weather: [],
     leaderChanges: [],
     driverChanges: [],
@@ -1915,21 +2897,14 @@ function reviewGapGraph() {
     endSeconds,
     maxGapSeconds: 250,
     lapReferenceSeconds: 525.8,
-    selectedSeriesCount: series.length,
-    trendMetrics: [
-      { label: '5L', focusGapChangeSeconds: -1.8, chaser: threat, state: 'ready', stateLabel: null },
-      { label: '10L', focusGapChangeSeconds: -3.4, chaser: threat, state: 'ready', stateLabel: null },
-      { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'pit', stateLabel: null, primaryPit: focusPit, comparisonPit, threatPit },
-      { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'pitLap', stateLabel: null, primaryPit: focusPit, comparisonPit, threatPit },
-      { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, comparisonText: '18L', threatText: '17L' },
-      { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null, primaryTire: focusTire, comparisonTire, threatTire },
-      { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, comparisonText: '8:13.000', threatText: '8:12.120' },
-      { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track', threatText: 'Track' }
-    ],
-    activeThreat: { label: '5L', chaser: threat, state: 'ready', focusGapChangeSeconds: null },
-    threatCarIdx: 43,
+    selectedSeriesCount: showGraph ? series.length : 0,
+    trendMetrics,
+    activeThreat,
+    threatCarIdx,
     metricDeadbandSeconds: 0.25,
     comparisonLabel: 'P23',
+    showGraph,
+    showTrendMetrics: trendMetrics.length > 0,
     scale: {
       maxGapSeconds: 20,
       isFocusRelative: true,
@@ -1941,7 +2916,9 @@ function reviewGapGraph() {
   };
 }
 
-function reviewGapSeries(carIdx, isReference, isClassLeader, classPosition, points) {
+function reviewGapSeries(carIdx, isReference, isClassLeader, classPosition, points, index, threatCarIdx) {
+  const baseColor = reviewGapSeriesColor({ carIdx, isReference, isClassLeader }, index, threatCarIdx);
+  const alpha = isReference || isClassLeader || carIdx === threatCarIdx ? 1 : 0.48;
   return {
     carIdx,
     isReference,
@@ -1950,8 +2927,27 @@ function reviewGapSeries(carIdx, isReference, isClassLeader, classPosition, poin
     alpha: 1,
     isStickyExit: false,
     isStale: false,
+    baseColor,
+    renderedColor: reviewGapColorWithAlpha(baseColor, alpha),
     points
   };
+}
+
+function reviewGapSeriesColor(series, index, threatCarIdx) {
+  if (series.carIdx === threatCarIdx) return '#ff6274';
+  if (series.isReference) return '#00e8ff';
+  if (series.isClassLeader) return '#fff7ff';
+  return ['#ffd15b', '#62ff9f', '#ff2aa7'][index % 3];
+}
+
+function reviewGapColorWithAlpha(hex, alpha) {
+  const normalized = String(hex || '').replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) return hex;
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  const clampedAlpha = Math.max(0, Math.min(1, Number(alpha)));
+  return `rgba(${red}, ${green}, ${blue}, ${Number.isFinite(clampedAlpha) ? clampedAlpha.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') : '1'})`;
 }
 
 function applyReviewChrome(model, overlayId, previewMode, forceChromeOff = false) {
@@ -1959,10 +2955,17 @@ function applyReviewChrome(model, overlayId, previewMode, forceChromeOff = false
     return model;
   }
 
+  if (model?.shouldRender === false) {
+    return {
+      ...model,
+      headerItems: []
+    };
+  }
+
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const session = sessionKeyFromPreview(previewMode);
   const showTime = !forceChromeOff && chromeEnabled(overlayState, 'header', 'Time remaining', session, true);
-  const fallbackTone = headerToneForModel(overlayId, model);
+  const fallbackTone = headerToneForItem('timeRemaining');
   return {
     ...model,
     headerItems: (model.headerItems || []).filter((item) => {
@@ -1978,19 +2981,13 @@ function applyReviewChrome(model, overlayId, previewMode, forceChromeOff = false
 }
 
 function headerToneForModel(overlayId, model) {
-  const status = String(model?.status || '').toLowerCase();
-  if (model?.shouldRender === false) return 'waiting';
-  if (overlayId === 'standings') return status.includes('waiting') ? 'waiting' : 'info';
-  if (overlayId === 'relative') return status.includes('waiting') ? 'waiting' : 'info';
-  if (overlayId === 'fuel-calculator') return status.includes('waiting') || status.includes('disconnected') ? 'waiting' : 'success';
-  if (overlayId === 'session-weather') return status.includes('unavailable') || status.includes('unknown') ? 'waiting' : 'info';
-  if (overlayId === 'pit-service') {
-    if (status.includes('service active')) return 'error';
-    if (status.includes('ready')) return 'success';
-    return 'info';
-  }
-  if (overlayId === 'gap-to-leader') return status.includes('live') ? 'info' : 'waiting';
-  return status.includes('waiting') || status.includes('hidden') || status.includes('disabled') ? 'waiting' : 'info';
+  return headerToneForItem('timeRemaining');
+}
+
+function headerToneForItem(key) {
+  return String(key || '').toLowerCase() === 'timeremaining'
+    ? 'normal'
+    : 'normal';
 }
 
 function normalizeHeaderTone(tone) {
@@ -2054,7 +3051,8 @@ function reviewAssetBackedDisplayModel(overlayId, previewMode = 'off', searchPar
 }
 
 function relativeDisplayModel(previewLabel = 'review fixture', session = 'practice') {
-  const showLapRelationship = session === 'race';
+  const showLapRelationship = session === 'race' || session === 'practice';
+  const timingLabel = session === 'race' || session === 'practice' ? 'Delta' : 'Est';
   return {
     overlayId: 'relative',
     title: 'Relative',
@@ -2062,9 +3060,9 @@ function relativeDisplayModel(previewLabel = 'review fixture', session = 'practi
     source: 'source: review fixture',
     bodyKind: 'table',
     columns: [
-      { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 38, alignment: 'right' },
-      { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
-      { id: 'relative.gap', label: 'Delta', dataKey: 'gap', width: 70, alignment: 'right' },
+      { id: 'relative.position', label: 'Pos', dataKey: 'relative-position', width: 48, alignment: 'right' },
+      { id: 'relative.driver', label: 'Driver', dataKey: 'driver', width: 240, alignment: 'left' },
+      { id: 'relative.gap', label: timingLabel, dataKey: 'gap', width: 70, alignment: 'right' },
       { id: 'relative.pit', label: 'Pit', dataKey: 'pit', width: 48, alignment: 'right' }
     ],
     rows: [
@@ -2082,7 +3080,7 @@ function relativeDisplayModel(previewLabel = 'review fixture', session = 'practi
 }
 
 function filterRelativeReviewRows(model, overlayState) {
-  const eachSide = clampInteger(overlayState?.carsEachSide, 5, 0, 8);
+  const eachSide = clampInteger(overlayState?.carsEachSide, 3, 0, 8);
   const rows = model.rows || [];
   const focusIndex = rows.findIndex((row) => row.isReference);
   if (focusIndex < 0) {
@@ -2119,10 +3117,14 @@ function filterStandingsReviewRows(model, overlayState) {
     overlayState,
     ['standings.class-separators.enabled', 'Multiclass sections', 'Class separators'],
     true);
+  const carsInClass = clampInteger(overlayState?.carsInClass, 14, 1, 24);
   const otherClassRows = clampInteger(overlayState?.otherClassRows, 2, 0, 6);
   const rows = model.rows || [];
   const referenceIndex = rows.findIndex((row) => row.isReference);
   const referenceClassHeaderIndex = findClassHeaderBefore(rows, referenceIndex);
+  const primaryRowIndexes = primaryClassRowIndexes(rows, referenceIndex, referenceClassHeaderIndex);
+  const primaryRows = new Set(primaryRowIndexes);
+  const visiblePrimaryRows = new Set(selectRowsAroundReference(primaryRowIndexes, referenceIndex, carsInClass));
   let currentOtherClassHeaderIndex = null;
   let currentOtherCount = 0;
   const filteredRows = rows.filter((row, index) => {
@@ -2134,6 +3136,10 @@ function filterStandingsReviewRows(model, overlayState) {
       }
 
       return showClassHeaders;
+    }
+
+    if (primaryRows.has(index) && !visiblePrimaryRows.has(index)) {
+      return false;
     }
 
     if (currentOtherClassHeaderIndex === null || index === referenceIndex || referenceClassHeaderIndex < 0) {
@@ -2149,6 +3155,43 @@ function filterStandingsReviewRows(model, overlayState) {
   });
 
   return { ...model, rows: filteredRows };
+}
+
+function primaryClassRowIndexes(rows, referenceIndex, referenceClassHeaderIndex) {
+  if (referenceIndex < 0) {
+    return rows
+      .map((row, index) => row.isClassHeader ? null : index)
+      .filter((index) => index !== null);
+  }
+
+  const start = referenceClassHeaderIndex >= 0 ? referenceClassHeaderIndex + 1 : 0;
+  let end = rows.length;
+  for (let index = referenceIndex + 1; index < rows.length; index += 1) {
+    if (rows[index]?.isClassHeader) {
+      end = index;
+      break;
+    }
+  }
+
+  return rows
+    .map((row, index) => index >= start && index < end && !row.isClassHeader ? index : null)
+    .filter((index) => index !== null);
+}
+
+function selectRowsAroundReference(rowIndexes, referenceIndex, maximumRows) {
+  if (rowIndexes.length <= maximumRows) {
+    return rowIndexes;
+  }
+
+  const referenceSlot = rowIndexes.indexOf(referenceIndex);
+  if (referenceSlot < 0) {
+    return rowIndexes.slice(0, maximumRows);
+  }
+
+  const before = Math.floor((maximumRows - 1) / 2);
+  let start = Math.max(0, referenceSlot - before);
+  start = Math.min(start, Math.max(0, rowIndexes.length - maximumRows));
+  return rowIndexes.slice(start, start + maximumRows);
 }
 
 function findClassHeaderBefore(rows, index) {
@@ -2169,7 +3212,11 @@ function filterTableModelContent(model, overlayId, overlayState, session = null)
     contentLabel: labelForColumn(column)
   }));
   const visible = columnsWithIndex.filter((entry) => contentEnabled(overlayState, entry.contentLabel, tableContentDefault(overlayId, entry.contentLabel), [], session));
-  const retained = visible.length ? visible : columnsWithIndex.filter((entry) => entry.contentLabel === 'Driver').slice(0, 1);
+  const retained = visible.length
+    ? visible
+    : overlayId === 'relative'
+      ? []
+      : columnsWithIndex.filter((entry) => entry.contentLabel === 'Driver').slice(0, 1);
   return {
     ...model,
     columns: retained.map((entry) => entry.column),
@@ -2311,17 +3358,17 @@ function filterMetricSectionsByContent(overlayId, sections, overlayState, sessio
     .map((section) => ({
       ...section,
       rows: (section.rows || [])
-        .map((row) => filterMetricRowByContent(overlayId, row, overlayState, session))
+        .map((row) => filterMetricRowByContent(overlayId, row, overlayState, session, section.title))
         .filter(Boolean)
     }))
     .filter((section) => section.rows.length > 0);
 }
 
-function filterMetricRowByContent(overlayId, row, overlayState, session = null) {
+function filterMetricRowByContent(overlayId, row, overlayState, session = null, sectionTitle = null) {
   const metric = Array.isArray(row)
     ? metricRow(row[0], row[1], row[2])
     : row;
-  const rowLabels = metricContentLabels(overlayId, metric.label, null);
+  const rowLabels = metricContentLabels(overlayId, metric.label, null, sectionTitle);
 
   if (!Array.isArray(metric.segments) || metric.segments.length === 0) {
     if (contentLabelsEnabled(overlayState, rowLabels, true, session)) {
@@ -2332,7 +3379,7 @@ function filterMetricRowByContent(overlayId, row, overlayState, session = null) 
   }
 
   const segments = metric.segments.filter((segment) => {
-    const labels = metricContentLabels(overlayId, metric.label, segment.label);
+    const labels = metricContentLabels(overlayId, metric.label, segment.label, sectionTitle);
     return contentLabelsEnabled(overlayState, labels, true, session);
   });
   if (segments.length === 0) {
@@ -2342,7 +3389,9 @@ function filterMetricRowByContent(overlayId, row, overlayState, session = null) 
   return {
     ...metric,
     segments,
-    value: segments.map((segment) => segment.value).filter(Boolean).join(' | ') || metric.value
+    value: segments.length === metric.segments.length
+      ? metric.value
+      : segments.map((segment) => segment.value).filter(Boolean).join(' | ') || metric.value
   };
 }
 
@@ -2353,7 +3402,11 @@ function filterGridRowsByContent(overlayId, rows, overlayState, session = null) 
   });
 }
 
-function metricContentLabels(overlayId, rowLabel, segmentLabel) {
+function metricContentLabels(overlayId, rowLabel, segmentLabel, sectionTitle = null) {
+  if (overlayId === 'fuel-calculator') {
+    return fuelMetricContentLabels(sectionTitle, rowLabel, segmentLabel);
+  }
+
   const key = segmentLabel ? `${rowLabel}|${segmentLabel}` : rowLabel;
   const maps = {
     'session-weather': {
@@ -2411,6 +3464,30 @@ function metricContentLabels(overlayId, rowLabel, segmentLabel) {
   return maps[overlayId]?.[key] || maps[overlayId]?.[rowLabel] || [];
 }
 
+function fuelMetricContentLabels(sectionTitle, rowLabel, segmentLabel) {
+  if (sectionTitle === 'Race Information' && rowLabel === 'Plan') {
+    return ['Plan'];
+  }
+
+  if (sectionTitle === 'Race Information' && rowLabel === 'Fuel') {
+    return ['Fuel'];
+  }
+
+  if (sectionTitle === 'Stint Targets') {
+    return ['Stint targets'];
+  }
+
+  if (sectionTitle === 'Fuel Range') {
+    return ['Fuel range'];
+  }
+
+  if (sectionTitle === 'Fuel Usage') {
+    return ['Fuel usage'];
+  }
+
+  return segmentLabel ? [`${rowLabel}|${segmentLabel}`] : [rowLabel];
+}
+
 function metricModelRow(row) {
   if (!Array.isArray(row)) {
     return {
@@ -2440,31 +3517,91 @@ function gridCell(value, tone) {
   return { value, tone };
 }
 
-function standingsDisplayModel(previewLabel = 'review fixture') {
+function standingsDisplayModel(previewLabel = 'review fixture', session = 'race', fixture = '') {
+  const raceColumns = session === 'race';
+  const columns = raceColumns
+    ? [
+        { label: 'Pos', dataKey: 'class-position', width: 35, alignment: 'right' },
+        { label: 'CAR', dataKey: 'car-number', width: 50, alignment: 'right' },
+        { label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
+        { label: 'GAP', dataKey: 'gap', width: 60, alignment: 'right' },
+        { label: 'INT', dataKey: 'interval', width: 60, alignment: 'right' },
+        { label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
+        { label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
+        { label: 'PIT', dataKey: 'pit', width: 48, alignment: 'right' }
+      ]
+    : [
+        { label: 'Pos', dataKey: 'class-position', width: 35, alignment: 'right' },
+        { label: 'CAR', dataKey: 'car-number', width: 50, alignment: 'right' },
+        { label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
+        { label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
+        { label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
+        { label: 'PIT', dataKey: 'pit', width: 48, alignment: 'right' }
+      ];
+  const isStartingGrid = fixture === 'standings-starting-grid';
+  const classLayoutFixture = {
+    'standings-one-class': 'one-class layout',
+    'standings-two-class': 'two-class layout',
+    'standings-three-class': 'three-class layout'
+  }[fixture] || '';
+  const statusPrefix = isStartingGrid ? 'starting grid' : 'scoring';
+  const source = isStartingGrid
+    ? 'source: starting grid + live timing'
+    : classLayoutFixture
+      ? `source: preview fixture ${classLayoutFixture}`
+      : 'source: preview fixture extremes';
+  const rows = isStartingGrid
+    ? [
+        headerRow('LMP2', '2 cars', '#33CEFF'),
+        carRow(['1', '#8', 'Kousuke Konishi', 'Leader', '--', '1:45.884', '1:46.210', '']),
+        headerRow('GT3', '3 cars', '#FFAA00'),
+        carRow(['1', '#000', 'Kauan Vigliazzi Teixeira Lemos', 'Leader', '--', '1:53.112', '1:53.112', ''], { cellTones: [null, null, null, null, null, 'best-lap', 'best-lap', null] }),
+        carRow(['24', '#3094', 'Tech Mates Racing', '--', '--', '--', '--', ''], { isReference: true }),
+        carRow(['49', '#60', 'Tommie Wittens', '--', '--', '--', '--', ''], { isPendingGrid: true })
+      ]
+    : fixture === 'standings-one-class'
+      ? [
+          headerRow('GT3', '3 cars | 12.40 laps', '#FFAA00'),
+          carRow(['1', '#000', 'Kauan Vigliazzi Teixeira Lemos', 'Leader', '-2.0', '1:53.112', '1:53.112', ''], { cellTones: [null, null, null, null, null, 'best-lap', 'best-lap', null] }),
+          carRow(['24', '#3094', 'Tech Mates Racing', '+3.4', '0.0', '1:54.228', '1:54.228', ''], { isReference: true, cellTones: [null, null, null, null, null, 'personal-best', 'personal-best', null] }),
+          carRow(['49', '#60', 'Tommie Wittens', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
+        ]
+      : fixture === 'standings-three-class'
+        ? [
+            headerRow('GTP', '2 cars | 9.00 laps', '#FF6274'),
+            carRow(['1', '#4', 'Mika Alvarez', 'Leader', '-73.0', '1:38.502', '1:39.004', ''], { cellTones: [null, null, null, null, null, 'best-lap', null, null] }),
+            headerRow('LMP2', '2 cars | 10.00 laps', '#33CEFF'),
+            carRow(['1', '#8', 'Kousuke Konishi', 'Leader', '-45.0', '1:45.884', '1:46.210', ''], { cellTones: [null, null, null, null, null, 'best-lap', null, null] }),
+            headerRow('GT3', '3 cars | 12.40 laps', '#FFAA00'),
+            carRow(['1', '#000', 'Kauan Vigliazzi Teixeira Lemos', 'Leader', '-2.0', '1:53.112', '1:53.112', ''], { cellTones: [null, null, null, null, null, 'best-lap', 'best-lap', null] }),
+            carRow(['24', '#3094', 'Tech Mates Racing', '+3.4', '0.0', '1:54.228', '1:54.228', ''], { isReference: true, cellTones: [null, null, null, null, null, 'personal-best', 'personal-best', null] }),
+            carRow(['49', '#60', 'Tommie Wittens', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
+          ]
+    : raceColumns
+    ? [
+        headerRow('LMP2', '2 cars | 10.00 laps', '#33CEFF'),
+        carRow(['1', '#8', 'Kousuke Konishi', 'Leader', '-45.0', '1:45.884', '1:46.210', ''], { cellTones: [null, null, null, null, null, 'best-lap', null, null] }),
+        headerRow('GT3', '3 cars | 12.40 laps', '#FFAA00'),
+        carRow(['1', '#000', 'Kauan Vigliazzi Teixeira Lemos', 'Leader', '-2.0', '1:53.112', '1:53.112', ''], { cellTones: [null, null, null, null, null, 'best-lap', 'best-lap', null] }),
+        carRow(['24', '#3094', 'Tech Mates Racing', '+3.4', '0.0', '1:54.228', '1:54.228', ''], { isReference: true, cellTones: [null, null, null, null, null, 'personal-best', 'personal-best', null] }),
+        carRow(['49', '#60', 'Tommie Wittens', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
+      ]
+    : [
+        headerRow('LMP2', '2 cars', '#33CEFF'),
+        carRow(['1', '#8', 'Kousuke Konishi', '1:45.884', '1:46.210', ''], { cellTones: [null, null, null, 'best-lap', null, null] }),
+        headerRow('GT3', '3 cars', '#FFAA00'),
+        carRow(['1', '#000', 'Kauan Vigliazzi Teixeira Lemos', '1:53.112', '1:53.112', ''], { cellTones: [null, null, null, 'best-lap', 'best-lap', null] }),
+        carRow(['24', '#3094', 'Tech Mates Racing', '1:54.228', '1:54.228', ''], { isReference: true, cellTones: [null, null, null, 'personal-best', 'personal-best', null] }),
+        carRow(['49', '#60', 'Tommie Wittens', '1:55.480', '1:56.004', 'IN'], { isPit: true })
+      ];
   return {
     overlayId: 'standings',
     title: 'Standings',
-    status: `scoring | ${previewLabel}`,
-    source: 'source: preview fixture extremes',
+    status: `${statusPrefix} | ${previewLabel}`,
+    source,
     bodyKind: 'table',
-    columns: [
-      { label: 'CLS', dataKey: 'class-position', width: 35, alignment: 'right' },
-      { label: 'CAR', dataKey: 'car-number', width: 50, alignment: 'right' },
-      { label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' },
-      { label: 'GAP', dataKey: 'gap', width: 60, alignment: 'right' },
-      { label: 'INT', dataKey: 'interval', width: 60, alignment: 'right' },
-      { label: 'FAST', dataKey: 'fastest-lap', width: 70, alignment: 'right' },
-      { label: 'LAST', dataKey: 'last-lap', width: 70, alignment: 'right' },
-      { label: 'PIT', dataKey: 'pit', width: 48, alignment: 'right' }
-    ],
-    rows: [
-      headerRow('LMP2', '2 cars | ~10 laps', '#33CEFF'),
-      carRow(['1', '#8', 'Kousuke Konishi', 'Leader', '-45.0', '1:45.884', '1:46.210', ''], { cellTones: [null, null, null, null, null, 'best-lap', null, null] }),
-      headerRow('GT3', '3 cars | ~12.4 laps', '#FFAA00'),
-      carRow(['1', '#000', 'Kauan Vigliazzi Teixeira Lemos', 'Leader', '-2.0', '1:53.112', '1:53.112', ''], { cellTones: [null, null, null, null, null, 'best-lap', 'best-lap', null] }),
-      carRow(['24', '#3094', 'Tech Mates Racing', '+3.4', '0.0', '1:54.228', '1:54.228', ''], { isReference: true, cellTones: [null, null, null, null, null, 'personal-best', 'personal-best', null] }),
-      carRow(['49', '#60', 'Tommie Wittens', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN'], { isPit: true })
-    ],
+    columns,
+    rows,
     metrics: [],
     shouldRender: true,
     headerItems: [

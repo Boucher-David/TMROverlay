@@ -1,6 +1,9 @@
+using System.Collections;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -27,6 +30,7 @@ using TmrOverlay.App.Overlays.SettingsPanel;
 using TmrOverlay.App.Overlays.SimpleTelemetry;
 using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.App.Overlays.StreamChat;
+using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.Styling;
 using TmrOverlay.App.Overlays.TrackMap;
 using TmrOverlay.App.Performance;
@@ -41,6 +45,7 @@ using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
 using TmrOverlay.Core.Telemetry.Live;
 using TmrOverlay.Core.TrackMaps;
+using SettingsGeometry = TmrOverlay.App.Overlays.OverlayGeometryContractValues.SettingsGeometry;
 
 namespace TmrOverlay.WindowsScreenshots;
 
@@ -56,6 +61,84 @@ internal static class Program
     private static Size SettingsScreenshotClientSize => new(
         SettingsOverlayDefinition.Definition.DefaultWidth,
         SettingsOverlayDefinition.Definition.DefaultHeight);
+    private static readonly SettingsMatrixColumnSpec SettingsMatrixVisibleColumn = new("visible", "Visible", null);
+    private static readonly SettingsMatrixColumnSpec SettingsMatrixCompactVisibleColumn = new("visible", "On", null);
+    private static readonly SettingsMatrixColumnSpec[] SettingsMatrixSessionColumns = OverlaySettingsSessionColumns.Display.Select(column => new SettingsMatrixColumnSpec(SessionColumnKey(column.Kind), column.Label, column.Kind)).ToArray();
+    private static readonly SettingsMatrixColumnSpec[] SettingsMatrixShortSessionColumns = OverlaySettingsSessionColumns.Display.Select(column => new SettingsMatrixColumnSpec(SessionColumnKey(column.Kind), column.ShortLabel, column.Kind)).ToArray();
+    private const int SettingsShellX = SettingsGeometry.NativeCanvasOffsetX;
+    private const int SettingsShellY = SettingsGeometry.NativeCanvasOffsetY;
+    private const int SettingsShellWidth = SettingsGeometry.ShellWidth;
+    private const int SettingsShellHeight = SettingsGeometry.ShellHeight;
+    private const int SettingsTitlebarHeight = SettingsGeometry.TitlebarHeight;
+    private const int SettingsBodyHeight = SettingsGeometry.BodyHeight;
+    private const int SettingsSidebarX = SettingsShellX + SettingsGeometry.SidebarX;
+    private const int SettingsSidebarY = SettingsShellY + SettingsGeometry.SidebarY;
+    private const int SettingsSidebarWidth = SettingsGeometry.SidebarWidth;
+    private const int SettingsSidebarHeight = SettingsGeometry.SidebarHeight;
+    private const int SettingsContentX = SettingsShellX + SettingsGeometry.ContentX;
+    private const int SettingsContentY = SettingsShellY + SettingsGeometry.ContentY;
+    private const int SettingsContentWidth = SettingsGeometry.ContentWidth;
+    private const int SettingsContentHeight = SettingsGeometry.ContentHeight;
+    private const int SettingsContentHeaderHeight = SettingsGeometry.ContentHeaderHeight;
+    private const int SettingsContentBodyY = SettingsShellY + SettingsGeometry.ContentBodyY;
+    private const int SettingsContentBodyHeight = SettingsGeometry.ContentBodyHeight;
+    private const int SettingsPanelX = SettingsShellX + SettingsGeometry.PanelX;
+    private const int SettingsPanelNoRegionsY = SettingsShellY + SettingsGeometry.PanelNoRegionsY;
+    private const int SettingsPanelWithRegionsY = SettingsShellY + SettingsGeometry.PanelWithRegionsY;
+    private const int SettingsPanelSmallWidth = SettingsGeometry.PanelSmallWidth;
+    private const int SettingsPanelMediumWidth = SettingsGeometry.PanelMediumWidth;
+    private const int SettingsPanelWideWidth = SettingsGeometry.PanelWideWidth;
+    private const int SettingsPanelPaddingX = SettingsGeometry.PanelPaddingX;
+    private const int SettingsGeneralGridGap = SettingsGeometry.GeneralGridGap;
+    private const int SettingsBrowserSourcePanelWidth = SettingsGeometry.BrowserSourcePanelWidth;
+    private const int SettingsBrowserSourcePanelHeight = SettingsGeometry.BrowserSourcePanelHeight;
+    private const int SettingsRegionSegmentShellHeight = SettingsGeometry.RegionSegmentShellHeight;
+    private const int SettingsRegionSegmentGap = SettingsGeometry.RegionSegmentGap;
+    private const int SettingsRegionSegmentPadding = SettingsGeometry.RegionSegmentPadding;
+    private const int SettingsRegionSegmentHeight = SettingsGeometry.RegionSegmentHeight;
+    private const int SettingsFieldRowDefaultWidth = SettingsGeometry.FieldRowDefaultWidth;
+    private const int SettingsFieldRowHeight = SettingsGeometry.FieldRowHeight;
+    private const int SettingsFieldLabelWidth = SettingsGeometry.FieldLabelWidth;
+    private const float SettingsSupportBundleValueFontSize = SettingsGeometry.SupportBundleValueFontSize;
+    private const int SettingsToggleWidth = SettingsGeometry.ToggleWidth;
+    private const int SettingsToggleHeight = SettingsGeometry.ToggleHeight;
+    private const int SettingsSliderWidth = SettingsGeometry.SliderWidth;
+    private const int SettingsSliderHeight = SettingsGeometry.SliderHeight;
+    private const int SettingsStepperWidth = SettingsGeometry.StepperWidth;
+    private const int SettingsStepperHeight = SettingsGeometry.StepperHeight;
+    private const int SettingsCopyButtonWidth = SettingsGeometry.CopyButtonWidth;
+    private const int SettingsCopyButtonHeight = SettingsGeometry.CopyButtonHeight;
+    private const int SettingsMatrixContentInsetX = SettingsGeometry.MatrixContentInsetX;
+    private const int SettingsMatrixHeaderOffsetY = SettingsGeometry.MatrixHeaderOffsetY;
+    private const int SettingsMatrixFirstRowOffsetY = SettingsGeometry.MatrixFirstRowOffsetY;
+    private const int SettingsMatrixHeaderHeight = SettingsGeometry.MatrixHeaderHeight;
+    private const int SettingsMatrixRowHeight = SettingsGeometry.MatrixRowHeight;
+    private const int SettingsMatrixRowGap = SettingsGeometry.MatrixRowGap;
+    private const int SettingsMatrixPanelBottomPadding = SettingsGeometry.MatrixPanelBottomPadding;
+    private const int SettingsMatrixColumnGap = SettingsGeometry.MatrixColumnGap;
+    private const int SettingsMatrixSessionColumnWidth = SettingsGeometry.SessionColumnWidth;
+    private const int SettingsMatrixVisibleColumnWidth = SettingsGeometry.SessionColumnWidth;
+    private const int SettingsBlockGridContentInsetX = SettingsGeometry.BlockGridContentInsetX;
+    private const int SettingsBlockGridHeaderOffsetY = SettingsGeometry.BlockGridHeaderOffsetY;
+    private const int SettingsBlockGridFirstRowOffsetY = SettingsGeometry.BlockGridFirstRowOffsetY;
+    private const int SettingsBlockGridPanelBottomPadding = SettingsGeometry.BlockGridPanelBottomPadding;
+    private const int SettingsBlockGridColumnGap = SettingsGeometry.BlockGridColumnGap;
+    private const int SettingsBlockGridRowHeight = SettingsGeometry.BlockGridRowHeight;
+    private const int SettingsBlockGridRowGap = SettingsGeometry.BlockGridRowGap;
+    private const int SettingsBlockGridSessionCellsRightInset = SettingsGeometry.BlockGridSessionCellsRightInset;
+    private const int SettingsBlockGridVisibleCellRightInset = SettingsGeometry.BlockGridVisibleCellRightInset;
+    private const int SettingsBlockGridCompactCellWidth = SettingsGeometry.CompactSessionColumnWidth;
+    private const int SettingsBlockGridSessionColumnStride = SettingsGeometry.BlockGridSessionColumnStride;
+    private const int SettingsBlockGridCheckSize = SettingsGeometry.BlockGridCheckSize;
+    private static readonly HashSet<string> SettingsSharedHeaderOverlayIds =
+    [
+        "standings",
+        "relative",
+        "fuel-calculator",
+        "gap-to-leader",
+        "session-weather",
+        "pit-service"
+    ];
 
     [STAThread]
     private static int Main(string[] args)
@@ -394,8 +477,68 @@ internal static class Program
                 outputRoot,
                 "settings-general",
                 "Settings - General",
-                () => CreateSettingsForm("General"),
-                metadata: SettingsMetadata(null, "general", null)),
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.UpToDate)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "up-to-date" }),
+            RenderForm(
+                outputRoot,
+                "settings-general-update-available",
+                "Settings - General - Update Available",
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.Available)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "available" }),
+            RenderForm(
+                outputRoot,
+                "settings-general-update-disabled",
+                "Settings - General - Update Disabled",
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.Disabled)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "disabled" }),
+            RenderForm(
+                outputRoot,
+                "settings-general-update-not-installed",
+                "Settings - General - Update Not Installed",
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.NotInstalled)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "not-installed" }),
+            RenderForm(
+                outputRoot,
+                "settings-general-update-idle",
+                "Settings - General - Update Idle",
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.Idle)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "idle" }),
+            RenderForm(
+                outputRoot,
+                "settings-general-update-up-to-date",
+                "Settings - General - Update Up To Date",
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.UpToDate)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "up-to-date" }),
+            RenderForm(
+                outputRoot,
+                "settings-general-update-checking",
+                "Settings - General - Update Checking",
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.Checking)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "checking" }),
+            RenderForm(
+                outputRoot,
+                "settings-general-update-downloading",
+                "Settings - General - Update Downloading",
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.Downloading)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "downloading" }),
+            RenderForm(
+                outputRoot,
+                "settings-general-update-pending-restart",
+                "Settings - General - Update Pending Restart",
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.PendingRestart)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "pending-restart" }),
+            RenderForm(
+                outputRoot,
+                "settings-general-update-applying",
+                "Settings - General - Update Applying",
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.Applying)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "applying" }),
+            RenderForm(
+                outputRoot,
+                "settings-general-update-failed",
+                "Settings - General - Update Failed",
+                () => CreateSettingsForm("General", releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.Failed)),
+                metadata: SettingsMetadata(null, "general", null) with { Status = "failed" }),
             RenderForm(
                 outputRoot,
                 "settings-support",
@@ -427,8 +570,11 @@ internal static class Program
                 outputRoot,
                 $"settings-general-preview-{previewMode.FileStem}",
                 $"Settings - General - {previewMode.Label} Preview",
-                () => CreateSettingsForm("General", previewMode: previewMode.Kind),
-                metadata: SettingsMetadata(null, "general", previewMode.FileStem)));
+                () => CreateSettingsForm(
+                    "General",
+                    previewMode: previewMode.Kind,
+                    releaseUpdateSnapshot: ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus.UpToDate)),
+                metadata: SettingsMetadata(null, "general", previewMode.FileStem) with { Status = "up-to-date" }));
         }
 
         return screenshots;
@@ -442,17 +588,21 @@ internal static class Program
         {
             foreach (var previewMode in PreviewModesForOverlay(overlay.Definition.Id))
             {
+                var settings = OverlaySettingsFor(overlay.Definition);
                 screenshots.Add(RenderForm(
                     outputRoot,
                     $"{overlay.Definition.Id}-{previewMode.FileStem}",
                     $"Native {overlay.Definition.DisplayName} - {previewMode.Label}",
-                    () => CreateDesignV2LiveOverlayForm(overlay, previewMode.Kind),
+                    () => CreateDesignV2LiveOverlayForm(overlay, previewMode.Kind, settings),
                     postProcess: overlay.UsesTransparentBackdrop
                         ? bitmap => ReplaceColorWithReviewBackdrop(bitmap, Color.FromArgb(1, 2, 3))
                         : null,
                     refreshPasses: NativeRefreshPassesFor(overlay.Kind),
                     relativeDirectory: "native-overlays",
-                    metadata: NativeOverlayMetadata(overlay.Definition.Id, previewMode.FileStem),
+                    metadata: NativeOverlayMetadata(overlay.Definition.Id, previewMode.FileStem) with
+                    {
+                        Settings = settings
+                    },
                     beforeCapture: form => ApplyReviewAlignedNativeModelIfAvailable(form, overlay.Definition.Id, previewMode.Kind)));
             }
         }
@@ -461,6 +611,8 @@ internal static class Program
         {
             var overlay = nativeOverlays.First(candidate =>
                 string.Equals(candidate.Definition.Id, variant.OverlayId, StringComparison.OrdinalIgnoreCase));
+            var settings = NativeVariantSettings(overlay.Definition, variant.Slug)
+                ?? OverlaySettingsFor(overlay.Definition);
             screenshots.Add(RenderForm(
                 outputRoot,
                 $"{variant.OverlayId}-{variant.Slug}",
@@ -468,22 +620,27 @@ internal static class Program
                 () => CreateDesignV2LiveOverlayForm(
                     overlay,
                     OverlaySessionKind.Race,
-                    NativeVariantSettings(overlay.Definition, variant.Slug)),
+                    settings),
                 postProcess: overlay.UsesTransparentBackdrop
                     ? bitmap => ReplaceColorWithReviewBackdrop(bitmap, Color.FromArgb(1, 2, 3))
                     : null,
                 refreshPasses: NativeRefreshPassesFor(overlay.Kind),
                 relativeDirectory: "native-overlays",
-                metadata: NativeOverlayMetadata(variant.OverlayId, "race", variant.Slug),
+                metadata: NativeOverlayMetadata(variant.OverlayId, "race", variant.Slug) with
+                {
+                    Settings = settings
+                },
                 beforeCapture: form =>
                 {
                     if (form is DesignV2LiveOverlayForm designV2)
                     {
+                        ApplyNativeVariantCaptureSize(designV2, variant.OverlayId, variant.Slug);
                         SetDesignV2Model(designV2, ReviewNativeVariantModel(variant.OverlayId, variant.Slug));
                     }
                 }));
         }
 
+        var previewSizingSettings = OverlaySettingsFor(StandingsOverlayDefinition.Definition);
         screenshots.Add(RenderForm(
             outputRoot,
             "standings-preview-sizing-race",
@@ -491,11 +648,10 @@ internal static class Program
             () =>
             {
                 var overlay = new NativeOverlaySpec(DesignV2LiveOverlayKind.Standings, StandingsOverlayDefinition.Definition);
-                var settings = OverlaySettingsFor(StandingsOverlayDefinition.Definition);
-                var form = CreateDesignV2LiveOverlayForm(overlay, OverlaySessionKind.Race, settings);
+                var form = CreateDesignV2LiveOverlayForm(overlay, OverlaySessionKind.Race, previewSizingSettings);
                 form.ClientSize = OverlayManager.TargetOverlayClientSizeForApply(
                     StandingsOverlayDefinition.Definition,
-                    settings,
+                    previewSizingSettings,
                     form.ClientSize,
                     sessionPreviewActive: true);
                 return form;
@@ -504,6 +660,7 @@ internal static class Program
             relativeDirectory: "native-overlays",
             metadata: NativeOverlayMetadata("standings", "race") with
             {
+                Settings = previewSizingSettings,
                 Fixture = "browser-review/static-overlay-model + windows-native-preview-sizing",
                 FixtureParity = "model-data-aligned-with-browser-review-and-localhost",
                 ComparisonLimit = "This screenshot validates that race preview sizing uses the current recommended Standings size instead of carrying stale expanded preview height."
@@ -523,56 +680,56 @@ internal static class Program
                 "Settings Components - Sidebar Tabs",
                 "General",
                 null,
-                new Rectangle(64, 116, 190, 506)),
+                new Rectangle(SettingsGeometry.SidebarX, SettingsGeometry.SidebarY, SettingsGeometry.SidebarWidth, SettingsGeometry.SidebarHeight)),
             RenderSettingsCrop(
                 outputRoot,
                 "region-tabs",
                 "Settings Components - Region Tabs",
                 "Relative",
                 null,
-                new Rectangle(300, 198, 420, 52)),
+                SettingsRegionTabsLogicalCropBounds()),
             RenderSettingsCrop(
                 outputRoot,
                 "unit-choice",
                 "Settings Components - Unit Choice",
                 "General",
                 null,
-                new Rectangle(306, 214, 392, 132)),
+                new Rectangle(SettingsGeometry.PanelX, SettingsGeometry.PanelNoRegionsY, SettingsGeometry.UnitsPanelWidth, SettingsGeometry.UnitsPanelHeight)),
             RenderSettingsCrop(
                 outputRoot,
                 "overlay-controls",
                 "Settings Components - Overlay Controls",
                 "Relative",
                 null,
-                new Rectangle(306, 272, 392, 226)),
+                new Rectangle(SettingsGeometry.PanelX, SettingsGeometry.PanelWithRegionsY, SettingsGeometry.PanelSmallWidth, SettingsGeometry.OverlayControlsPanelHeight)),
             RenderSettingsCrop(
                 outputRoot,
                 "content-matrix",
                 "Settings Components - Content Matrix",
                 "Relative",
                 "Content",
-                new Rectangle(306, 272, 690, 222)),
+                new Rectangle(SettingsGeometry.PanelX, SettingsGeometry.PanelWithRegionsY, SettingsGeometry.ContentMatrixWidth, SettingsGeometry.ContentMatrixPreviewHeight)),
             RenderSettingsCrop(
                 outputRoot,
                 "chat-inputs",
                 "Settings Components - Chat Inputs",
                 "Stream Chat",
                 "Content",
-                new Rectangle(306, 272, 650, 204)),
+                new Rectangle(SettingsGeometry.PanelX, SettingsGeometry.PanelWithRegionsY, SettingsGeometry.ChatInputsWidth, SettingsGeometry.ChatInputsHeight)),
             RenderSettingsCrop(
                 outputRoot,
                 "support-buttons",
                 "Settings Components - Support Buttons",
                 "Support",
                 null,
-                new Rectangle(306, 410, 716, 202)),
+                new Rectangle(SettingsGeometry.PanelX, SettingsGeometry.PanelNoRegionsY, SettingsGeometry.PanelWideWidth, SettingsGeometry.SupportPanelHeight)),
             RenderSettingsCrop(
                 outputRoot,
                 "browser-source",
                 "Settings Components - Browser Source",
                 "Relative",
                 null,
-                new Rectangle(726, 272, 296, 132))
+                new Rectangle(SettingsGeometry.PanelX + SettingsGeometry.PanelSmallWidth + SettingsGeometry.GeneralGridGap, SettingsGeometry.PanelWithRegionsY, SettingsGeometry.BrowserSourcePanelWidth, SettingsGeometry.BrowserSourcePanelHeight))
         ];
     }
 
@@ -598,13 +755,30 @@ internal static class Program
                 Tab: DesignV2TabId(selectedTabText),
                 Region: selectedRegionText?.Trim().ToLowerInvariant() ?? "general",
                 Fixture: "deterministic-settings-fixture",
-                SourceContract: "src/TmrOverlay.App/Overlays/SettingsPanel/DesignV2SettingsSurface.cs"));
+                ComparisonMode: "browser-review-settings-component-vs-windows-settings-component",
+                ComparisonLimit: "same-design-coordinate-crop",
+                SourceContract: "src/TmrOverlay.App/Overlays/SettingsPanel/DesignV2SettingsSurface.cs",
+                CaptureMode: "settings-component-crop",
+                CropBounds: RectEvidence(cropBounds)));
+    }
+
+    private static Rectangle SettingsRegionTabsLogicalCropBounds()
+    {
+        var shellY = SettingsGeometry.PanelWithRegionsY
+            - SettingsGeometry.RegionSegmentMarginBottom
+            - SettingsGeometry.RegionSegmentShellHeight;
+        return new Rectangle(
+            SettingsGeometry.PanelX - SettingsGeometry.RegionSegmentPadding,
+            shellY - SettingsGeometry.RegionTabsCropTopInset,
+            SettingsGeometry.PanelMediumWidth + SettingsGeometry.RegionSegmentPadding,
+            SettingsGeometry.RegionSegmentShellHeight + SettingsGeometry.RegionTabsCropExtraHeight);
     }
 
     private static SettingsOverlayForm CreateSettingsForm(
         string selectedTabText,
         string? selectedRegionText = null,
-        OverlaySessionKind? previewMode = null)
+        OverlaySessionKind? previewMode = null,
+        ReleaseUpdateSnapshot? releaseUpdateSnapshot = null)
     {
         var storage = StorageOptionsFor(Path.Combine(Path.GetTempPath(), "tmr-overlay-windows-screenshots", Guid.NewGuid().ToString("N")));
         var captureState = new TelemetryCaptureState();
@@ -616,10 +790,28 @@ internal static class Program
         var localhostOptions = new LocalhostOverlayOptions();
         var localhostState = new LocalhostOverlayState(localhostOptions);
         var settingsStore = new AppSettingsStore(storage);
+        var trackMapStore = new TrackMapStore(storage);
+        var streamChatSource = new StreamChatOverlaySource(
+            NullLogger<StreamChatOverlaySource>.Instance,
+            performanceState);
+        var browserModelFactory = new BrowserOverlayModelFactory(
+            new SessionHistoryQueryService(new SessionHistoryOptions
+            {
+                Enabled = false,
+                UseBaselineHistory = false,
+                ResolvedUserHistoryRoot = storage.UserHistoryRoot,
+                ResolvedBaselineHistoryRoot = storage.BaselineHistoryRoot
+            }),
+            trackMapStore,
+            streamChatSource);
         var releaseUpdates = new ReleaseUpdateService(
             new ReleaseUpdateOptions { Enabled = false },
             new AppEventRecorder(storage),
             NullLogger<ReleaseUpdateService>.Instance);
+        if (releaseUpdateSnapshot is not null)
+        {
+            SetReviewReleaseUpdateSnapshot(releaseUpdates, releaseUpdateSnapshot);
+        }
         var liveTelemetry = new SequenceTelemetrySource(_ => LiveTelemetrySnapshot.Empty with
         {
             IsConnected = true,
@@ -640,18 +832,17 @@ internal static class Program
             },
             captureState,
             localhostState,
-            new TrackMapStore(storage),
+            trackMapStore,
             settingsStore,
             liveTelemetry,
+            browserModelFactory,
             sessionPreview,
             performanceState,
             new AppPerformanceSnapshotRecorder(storage),
             new LiveOverlayWindowCaptureStore(storage),
             new ForegroundWindowTracker(),
             releaseUpdates,
-            new StreamChatOverlaySource(
-                NullLogger<StreamChatOverlaySource>.Instance,
-                performanceState),
+            streamChatSource,
             NullLogger<DiagnosticsBundleService>.Instance);
         var settings = CreateApplicationSettings();
 
@@ -687,6 +878,49 @@ internal static class Program
             SelectRegion(form, selectedRegionText);
         }
         return form;
+    }
+
+    private static ReleaseUpdateSnapshot ReviewReleaseUpdateSnapshot(ReleaseUpdateStatus status)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var enabled = status != ReleaseUpdateStatus.Disabled;
+        var installed = status != ReleaseUpdateStatus.Disabled && status != ReleaseUpdateStatus.NotInstalled;
+        var latestVersion = status is ReleaseUpdateStatus.Available
+            or ReleaseUpdateStatus.Downloading
+            or ReleaseUpdateStatus.PendingRestart
+            or ReleaseUpdateStatus.Applying
+                ? "1.0.4"
+                : null;
+        var latestFileName = latestVersion is null ? null : "TmrOverlay-1.0.4-win-x64.msi";
+        return new ReleaseUpdateSnapshot(
+            status,
+            Enabled: enabled,
+            IsInstalled: installed,
+            IsPortable: false,
+            CheckInProgress: status == ReleaseUpdateStatus.Checking,
+            SourceName: "review-fixture",
+            RepositoryUrl: "https://example.invalid/tmroverlay/releases",
+            CurrentVersion: "1.0.3",
+            LatestVersion: latestVersion,
+            LatestFileName: latestFileName,
+            DeltaCount: latestVersion is null ? 0 : 1,
+            LastCheckedAtUtc: installed && status != ReleaseUpdateStatus.Idle ? now : null,
+            LastDownloadStartedAtUtc: status == ReleaseUpdateStatus.Downloading ? now : null,
+            LastDownloadedAtUtc: status == ReleaseUpdateStatus.PendingRestart ? now : null,
+            DownloadProgressPercent: status == ReleaseUpdateStatus.Downloading ? 42 : null,
+            LastApplyStartedAtUtc: status == ReleaseUpdateStatus.Applying ? now : null,
+            LastFailedAtUtc: status == ReleaseUpdateStatus.Failed ? now : null,
+            LastError: status == ReleaseUpdateStatus.Failed ? "Check failed." : null,
+            ReleasePageUrl: latestVersion is null ? "https://example.invalid/tmroverlay/releases" : "https://example.invalid/tmroverlay/releases/1.0.4");
+    }
+
+    private static void SetReviewReleaseUpdateSnapshot(
+        ReleaseUpdateService releaseUpdates,
+        ReleaseUpdateSnapshot snapshot)
+    {
+        var field = typeof(ReleaseUpdateService).GetField("_snapshot", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("ReleaseUpdateService snapshot field was not found.");
+        field.SetValue(releaseUpdates, snapshot);
     }
 
     private static Form CreateDesignV2LiveOverlayForm(
@@ -788,30 +1022,33 @@ internal static class Program
             [
                 new SettingsRegionSpec("general", "General"),
                 new SettingsRegionSpec("content", "Content"),
-                new SettingsRegionSpec("twitch", "Twitch"),
-                new SettingsRegionSpec("streamlabs", "Streamlabs")
+                new SettingsRegionSpec("twitch", "Twitch")
             ];
         }
 
-        if (SupportsSharedChromeSettings(overlayId))
+        var regions = new List<SettingsRegionSpec>
         {
-            return
-            [
-                new SettingsRegionSpec("general", "General"),
-                new SettingsRegionSpec("content", "Content"),
-                new SettingsRegionSpec("header", "Header"),
-                new SettingsRegionSpec("footer", "Footer")
-            ];
+            new SettingsRegionSpec("general", "General")
+        };
+        if (HasContentControls(overlayId))
+        {
+            regions.Add(new SettingsRegionSpec("content", "Content"));
         }
 
-        return
-        [
-            new SettingsRegionSpec("general", "General"),
-            new SettingsRegionSpec("content", "Content")
-        ];
+        if (HasHeaderControls(overlayId))
+        {
+            regions.Add(new SettingsRegionSpec("header", "Header"));
+        }
+
+        if (HasFooterControls(overlayId))
+        {
+            regions.Add(new SettingsRegionSpec("footer", "Footer"));
+        }
+
+        return regions;
     }
 
-    private static bool SupportsSharedChromeSettings(string overlayId)
+    private static bool HasHeaderControls(string overlayId)
     {
         return overlayId is
             "standings"
@@ -820,6 +1057,16 @@ internal static class Program
             or "gap-to-leader"
             or "session-weather"
             or "pit-service";
+    }
+
+    private static bool HasContentControls(string overlayId)
+    {
+        return !string.Equals(overlayId, CarRadarOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasFooterControls(string overlayId)
+    {
+        return false;
     }
 
     private static string SettingsFileStem(string overlayId)
@@ -852,16 +1099,47 @@ internal static class Program
         return
         [
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "waiting", "Waiting"),
+            new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "calculating", "Calculating"),
+            new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "plan-off", "Plan Off"),
+            new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "fuel-off", "Fuel Off"),
+            new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "stint-targets-off", "Stint Targets Off"),
+            new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "race-information-off", "Race Information Off"),
+            new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "no-data", "No Data"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "one-class", "One Class"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "two-class", "Two Classes"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "three-class", "Three Classes"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "no-pit", "Pit Off"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "driver-only", "Driver Only"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "class-separators-off", "Class Separators Off"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "focused-class-only", "Focused Class Only"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "starting-grid", "Starting Grid"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "no-content", "No Content"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "rightmost-evidence", "Rightmost Evidence"),
+            new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "driver-only", "Driver Only"),
+            new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "position-driver", "Position Driver"),
+            new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "rows-2", "Rows 2 Each Side"),
+            new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "no-content", "No Content"),
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "missing", "Missing Data"),
+            new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "session-off", "Session Off"),
+            new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "weather-off", "Weather Off"),
+            new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "no-data", "No Data"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "idle", "Idle"),
+            new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "session-off", "Session Off"),
+            new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "signal-off", "Signal Off"),
+            new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "service-off", "Service Off"),
+            new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "tire-analysis-off", "Tire Analysis Off"),
+            new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "no-data", "No Data"),
+            new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "mock-data", "Mock Data"),
+            new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "graph-only", "Graph Only"),
+            new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "rail-only", "Rail Only"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "waiting", "Waiting"),
+            new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "no-data", "No Data"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "no-content", "No Content"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "left", "Left"),
@@ -869,6 +1147,9 @@ internal static class Program
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "both-sides", "Both Sides"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "clear", "Clear"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "no-cars", "No Cars"),
+            new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "trend-row-off", "Trend Row Off"),
+            new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "trend-off", "Trend Off"),
+            new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "graph-off", "Graph Off"),
             new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "circle-fallback", "Circle Fallback"),
             new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "no-markers", "No Markers"),
             new NativeOverlayVariantSpec(FlagsOverlayDefinition.Definition.Id, "all-kinds", "All Kinds"),
@@ -883,6 +1164,7 @@ internal static class Program
         RelativeOverlayDefinition.Definition.Id,
         FuelCalculatorOverlayDefinition.Definition.Id,
         TrackMapOverlayDefinition.Definition.Id,
+        CarRadarOverlayDefinition.Definition.Id,
         SessionWeatherOverlayDefinition.Definition.Id,
         PitServiceOverlayDefinition.Definition.Id,
         InputStateOverlayDefinition.Definition.Id,
@@ -934,6 +1216,11 @@ internal static class Program
             return ReviewTrackMapModel();
         }
 
+        if (string.Equals(overlayId, CarRadarOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewCarRadarModel(previewMode);
+        }
+
         if (string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
             return ReviewSessionWeatherModel(previewMode);
@@ -941,7 +1228,7 @@ internal static class Program
 
         if (string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
-            return ReviewPitServiceModel();
+            return ReviewPitServiceModel(previewMode);
         }
 
         if (string.Equals(overlayId, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
@@ -970,10 +1257,116 @@ internal static class Program
             return WithoutSharedChrome(chromeModel);
         }
 
+        if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(slug, "one-class", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsModel(
+                    OverlaySessionKind.Race,
+                    classCount: 1,
+                    sourceOverride: "source: preview fixture one-class layout");
+            }
+
+            if (string.Equals(slug, "two-class", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsModel(
+                    OverlaySessionKind.Race,
+                    classCount: 2,
+                    sourceOverride: "source: preview fixture two-class layout");
+            }
+
+            if (string.Equals(slug, "three-class", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsModel(
+                    OverlaySessionKind.Race,
+                    classCount: 3,
+                    sourceOverride: "source: preview fixture three-class layout");
+            }
+
+            if (string.Equals(slug, "no-pit", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsModel(
+                    OverlaySessionKind.Race,
+                    excludedColumnIds: new[] { OverlayContentColumnSettings.StandingsPitColumnId });
+            }
+
+            if (string.Equals(slug, "driver-only", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsModel(
+                    OverlaySessionKind.Race,
+                    includedColumnIds: new[] { OverlayContentColumnSettings.StandingsDriverColumnId });
+            }
+
+            if (string.Equals(slug, "class-separators-off", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsModel(OverlaySessionKind.Race, showClassSeparators: false);
+            }
+
+            if (string.Equals(slug, "focused-class-only", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsModel(OverlaySessionKind.Race, otherClassRows: 0);
+            }
+
+            if (string.Equals(slug, "starting-grid", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsModel(OverlaySessionKind.Race, startingGrid: true);
+            }
+
+            if (string.Equals(slug, "no-content", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsModel(
+                    OverlaySessionKind.Race,
+                    includedColumnIds: Array.Empty<string>()) with
+                {
+                    Status = "hidden | no enabled content",
+                    Footer = string.Empty,
+                    ShouldRender = false,
+                    HeaderText = string.Empty
+                };
+            }
+        }
+
         if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             && string.Equals(slug, "rightmost-evidence", StringComparison.OrdinalIgnoreCase))
         {
             return ReviewRelativeModel(OverlaySessionKind.Race, includePitColumn: true);
+        }
+
+        if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "driver-only", StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewRelativeModel(
+                OverlaySessionKind.Race,
+                includePitColumn: false,
+                includedColumnIds: new[] { OverlayContentColumnSettings.RelativeDriverColumnId });
+        }
+
+        if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "position-driver", StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewRelativeModel(
+                OverlaySessionKind.Race,
+                includePitColumn: false,
+                includedColumnIds: new[]
+                {
+                    OverlayContentColumnSettings.RelativePositionColumnId,
+                    OverlayContentColumnSettings.RelativeDriverColumnId
+                });
+        }
+
+        if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "rows-2", StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewRelativeModel(OverlaySessionKind.Race, includePitColumn: false, carsEachSide: 2);
+        }
+
+        if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "no-content", StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewRelativeModel(
+                OverlaySessionKind.Race,
+                includePitColumn: false,
+                includedColumnIds: Array.Empty<string>());
         }
 
         if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
@@ -982,10 +1375,36 @@ internal static class Program
             return ReviewFuelWaitingModel();
         }
 
+        if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return slug switch
+            {
+                var value when string.Equals(value, "calculating", StringComparison.OrdinalIgnoreCase) => ReviewFuelCalculatingModel(),
+                var value when string.Equals(value, "plan-off", StringComparison.OrdinalIgnoreCase) => ReviewFuelModel(OverlaySessionKind.Race, showPlan: false),
+                var value when string.Equals(value, "fuel-off", StringComparison.OrdinalIgnoreCase) => ReviewFuelModel(OverlaySessionKind.Race, showFuel: false),
+                var value when string.Equals(value, "stint-targets-off", StringComparison.OrdinalIgnoreCase) => ReviewFuelModel(OverlaySessionKind.Race, showStints: false),
+                var value when string.Equals(value, "race-information-off", StringComparison.OrdinalIgnoreCase) => ReviewFuelModel(OverlaySessionKind.Race, showPlan: false, showFuel: false),
+                var value when string.Equals(value, "no-data", StringComparison.OrdinalIgnoreCase) => ReviewFuelNoDataModel(),
+                _ => throw new InvalidOperationException($"Unknown fuel native overlay fixture variant {slug}.")
+            };
+        }
+
         if (string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             && string.Equals(slug, "missing", StringComparison.OrdinalIgnoreCase))
         {
             return ReviewSessionWeatherMissingModel();
+        }
+
+        if (string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && IsSessionWeatherSectionOffSlug(slug))
+        {
+            return ReviewSessionWeatherSectionOffModel(slug);
+        }
+
+        if (string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "no-data", StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewSessionWeatherNoDataModel();
         }
 
         if (string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
@@ -994,11 +1413,27 @@ internal static class Program
             return ReviewPitServiceIdleModel();
         }
 
+        if (string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && IsPitServiceSectionOffSlug(slug))
+        {
+            return ReviewPitServiceSectionOffModel(slug);
+        }
+
+        if (string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "no-data", StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewPitServiceNoDataModel();
+        }
+
         if (string.Equals(overlayId, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
             return slug switch
             {
+                var value when string.Equals(value, "mock-data", StringComparison.OrdinalIgnoreCase) => ReviewInputModel(OverlaySessionKind.Race),
+                var value when string.Equals(value, "graph-only", StringComparison.OrdinalIgnoreCase) => ReviewInputContentVariant(showGraph: true, showRail: false),
+                var value when string.Equals(value, "rail-only", StringComparison.OrdinalIgnoreCase) => ReviewInputContentVariant(showGraph: false, showRail: true),
                 var value when string.Equals(value, "waiting", StringComparison.OrdinalIgnoreCase) => ReviewInputWaitingModel(),
+                var value when string.Equals(value, "no-data", StringComparison.OrdinalIgnoreCase) => ReviewInputWaitingModel(),
                 var value when string.Equals(value, "no-content", StringComparison.OrdinalIgnoreCase) => ReviewInputNoContentModel(),
                 var value when string.Equals(value, "min-scale", StringComparison.OrdinalIgnoreCase) => ReviewInputModel(OverlaySessionKind.Race),
                 _ => throw new InvalidOperationException($"Unknown input-state native overlay fixture variant {slug}.")
@@ -1010,10 +1445,16 @@ internal static class Program
             return ReviewCarRadarVariantModel(slug);
         }
 
-        if (string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(slug, "no-cars", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
-            return ReviewGapNoCarsModel();
+            return slug switch
+            {
+                var value when string.Equals(value, "no-cars", StringComparison.OrdinalIgnoreCase) => ReviewGapNoCarsModel(),
+                var value when string.Equals(value, "trend-row-off", StringComparison.OrdinalIgnoreCase) => ReviewGapContentVariant(showGraph: true, showTrendMetrics: true, hiddenTrendLabel: "Tire"),
+                var value when string.Equals(value, "trend-off", StringComparison.OrdinalIgnoreCase) => ReviewGapContentVariant(showGraph: true, showTrendMetrics: false),
+                var value when string.Equals(value, "graph-off", StringComparison.OrdinalIgnoreCase) => ReviewGapContentVariant(showGraph: false, showTrendMetrics: true),
+                _ => throw new InvalidOperationException($"Unknown gap-to-leader native overlay fixture variant {slug}.")
+            };
         }
 
         if (string.Equals(overlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
@@ -1049,6 +1490,20 @@ internal static class Program
         throw new InvalidOperationException($"Unknown native overlay fixture variant {overlayId}/{slug}.");
     }
 
+    private static bool IsSessionWeatherSectionOffSlug(string slug)
+    {
+        return string.Equals(slug, "session-off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(slug, "weather-off", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPitServiceSectionOffSlug(string slug)
+    {
+        return string.Equals(slug, "session-off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(slug, "signal-off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(slug, "service-off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(slug, "tire-analysis-off", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static DesignV2OverlayModel WithoutSharedChrome(DesignV2OverlayModel model)
     {
         return model with
@@ -1067,6 +1522,18 @@ internal static class Program
         form.Invalidate();
     }
 
+    private static void ApplyNativeVariantCaptureSize(DesignV2LiveOverlayForm form, string overlayId, string slug)
+    {
+        if (!string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(slug, "three-class", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        form.ClientSize = new Size(form.ClientSize.Width, 386);
+        form.PerformLayout();
+    }
+
     private static string? ReadDesignV2ModelFooter(DesignV2LiveOverlayForm form)
     {
         var field = typeof(DesignV2LiveOverlayForm).GetField("_model", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -1075,56 +1542,342 @@ internal static class Program
             : null;
     }
 
-    private static DesignV2OverlayModel ReviewStandingsModel(OverlaySessionKind previewMode)
+    private static DesignV2OverlayModel ReviewStandingsModel(
+        OverlaySessionKind previewMode,
+        IReadOnlyList<string>? includedColumnIds = null,
+        IReadOnlyList<string>? excludedColumnIds = null,
+        bool showClassSeparators = true,
+        int otherClassRows = 2,
+        bool startingGrid = false,
+        int classCount = 2,
+        string? sourceOverride = null)
     {
-        var status = $"scoring | {ReviewPreviewLabel(previewMode)}";
-        var rows = new[]
-        {
-            ReviewClassHeader("LMP2", "2 cars | ~10 laps", "#33CEFF"),
-            ReviewTableRow(["1", "#8", "Kousuke Konishi", "Leader", "-45.0", "1:45.884", "1:46.210", ""], null, cellForegrounds: [null, null, null, null, null, "#B65CFF", null, null]),
-            ReviewClassHeader("GT3", "3 cars | ~12.4 laps", "#FFAA00"),
-            ReviewTableRow(["1", "#000", "Kauan Vigliazzi Teixeira Lemos", "Leader", "-2.0", "1:53.112", "1:53.112", ""], null, cellForegrounds: [null, null, null, null, null, "#B65CFF", "#B65CFF", null]),
-            ReviewTableRow(["24", "#3094", "Tech Mates Racing", "+3.4", "0.0", "1:54.228", "1:54.228", ""], null, isReference: true, cellForegrounds: [null, null, null, null, null, "#62FF9F", "#62FF9F", null]),
-            ReviewTableRow(["49", "#60", "Tommie Wittens", "+8.9", "+5.5", "1:55.480", "1:56.004", "IN"], null)
-        };
+        var normalizedMode = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode);
+        var isRace = normalizedMode == OverlaySessionKind.Race;
+        var allColumns = StandingsColumnSpecs(isRace);
+        var selectedColumnIds = includedColumnIds
+            ?? allColumns
+                .Select(column => column.Id)
+                .Where(id => excludedColumnIds?.Contains(id) != true)
+                .ToArray();
+        var selectedColumns = allColumns
+            .Where(column => selectedColumnIds.Contains(column.Id))
+            .ToArray();
+        var rows = ReviewStandingsRows(isRace, selectedColumns, showClassSeparators, otherClassRows, startingGrid, classCount);
+        var status = $"{(startingGrid ? "starting grid" : "scoring")} | {ReviewPreviewLabel(previewMode)}";
+        var source = sourceOverride ?? (startingGrid
+            ? "source: starting grid + live timing"
+            : "source: preview fixture extremes");
+
         return new DesignV2OverlayModel(
             "Standings",
             status,
-            "source: preview fixture extremes",
+            source,
             DesignV2Evidence.Measured,
             new DesignV2TableBody(
-                [
-                    new DesignV2Column("CLS", 35, ContentAlignment.MiddleRight),
-                    new DesignV2Column("CAR", 50, ContentAlignment.MiddleRight),
-                    new DesignV2Column("Driver", 250, ContentAlignment.MiddleLeft),
-                    new DesignV2Column("GAP", 60, ContentAlignment.MiddleRight),
-                    new DesignV2Column("INT", 60, ContentAlignment.MiddleRight),
-                    new DesignV2Column("FAST", 70, ContentAlignment.MiddleRight),
-                    new DesignV2Column("LAST", 70, ContentAlignment.MiddleRight),
-                    new DesignV2Column("PIT", 48, ContentAlignment.MiddleRight)
-                ],
+                selectedColumns
+                    .Select(column => new DesignV2Column(column.Label, column.Width, column.Alignment))
+                    .ToArray(),
                 rows),
             HeaderText: "06:37:08",
             ShowFooter: false);
     }
 
-    private static DesignV2OverlayModel ReviewRelativeModel(OverlaySessionKind previewMode, bool includePitColumn)
+    private static IReadOnlyList<(string Id, string Label, int Width, ContentAlignment Alignment)> StandingsColumnSpecs(bool isRace)
     {
-        var status = $"5 - 2/4 cars | {ReviewPreviewLabel(previewMode)}";
-        var showLapRelationship = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) == OverlaySessionKind.Race;
-        var rows = Enumerable.Repeat(ReviewBlankTableRow(includePitColumn ? 4 : 3), 11).ToArray();
-        rows[4] = ReviewTableRow(includePitColumn ? ["3", "#34 Near Ahead", "-2.350", ""] : ["3", "#34 Near Ahead", "-2.350"], "#33CEFF", relativeLapDelta: showLapRelationship ? (int?)1 : null);
-        rows[5] = ReviewTableRow(includePitColumn ? ["5", "#55 Focus Driver", "0.000", ""] : ["5", "#55 Focus Driver", "0.000"], "#FFDA59", isReference: true, relativeLapDelta: showLapRelationship ? (int?)0 : null);
-        rows[6] = ReviewTableRow(includePitColumn ? ["6", "#61 Near Behind", "+1.200", "IN"] : ["6", "#61 Near Behind", "+1.200"], "#FF4FD8", relativeLapDelta: showLapRelationship ? (int?)-2 : null);
-        var columns = new List<DesignV2Column>
+        var columns = new List<(string Id, string Label, int Width, ContentAlignment Alignment)>
         {
-            new("Pos", 38, ContentAlignment.MiddleRight),
-            new("Driver", 250, ContentAlignment.MiddleLeft),
-            new("Delta", 70, ContentAlignment.MiddleRight)
+            (OverlayContentColumnSettings.StandingsClassPositionColumnId, "Pos", 35, ContentAlignment.MiddleRight),
+            (OverlayContentColumnSettings.StandingsCarNumberColumnId, "CAR", 50, ContentAlignment.MiddleRight),
+            (OverlayContentColumnSettings.StandingsDriverColumnId, "Driver", 250, ContentAlignment.MiddleLeft)
         };
-        if (includePitColumn)
+        if (isRace)
         {
-            columns.Add(new DesignV2Column("Pit", 48, ContentAlignment.MiddleRight));
+            columns.Add((OverlayContentColumnSettings.StandingsGapColumnId, "GAP", 60, ContentAlignment.MiddleRight));
+            columns.Add((OverlayContentColumnSettings.StandingsIntervalColumnId, "INT", 60, ContentAlignment.MiddleRight));
+        }
+
+        columns.Add((OverlayContentColumnSettings.StandingsFastestLapColumnId, "FAST", 70, ContentAlignment.MiddleRight));
+        columns.Add((OverlayContentColumnSettings.StandingsLastLapColumnId, "LAST", 70, ContentAlignment.MiddleRight));
+        columns.Add((OverlayContentColumnSettings.StandingsPitColumnId, "PIT", 48, ContentAlignment.MiddleRight));
+        return columns;
+    }
+
+    private static IReadOnlyList<DesignV2TableRow> ReviewStandingsRows(
+        bool isRace,
+        IReadOnlyList<(string Id, string Label, int Width, ContentAlignment Alignment)> columns,
+        bool showClassSeparators,
+        int otherClassRows,
+        bool startingGrid,
+        int classCount)
+    {
+        if (columns.Count == 0)
+        {
+            return Array.Empty<DesignV2TableRow>();
+        }
+
+        var rows = new List<DesignV2TableRow>();
+        var normalizedClassCount = Math.Clamp(classCount, 1, 3);
+        var showOtherClass = otherClassRows > 0;
+        var includeClassHeaders = showClassSeparators;
+        if (normalizedClassCount >= 3 && showOtherClass)
+        {
+            if (includeClassHeaders)
+            {
+                rows.Add(ReviewClassHeader("GTP", isRace && !startingGrid ? "2 cars | 9.00 laps" : "2 cars", "#FF6274"));
+            }
+
+            rows.Add(ReviewStandingsDataRow(
+                columns,
+                classPosition: "1",
+                carNumber: "#4",
+                driver: "Mika Alvarez",
+                gap: isRace ? "Leader" : string.Empty,
+                interval: isRace ? (startingGrid ? "--" : "-73.0") : string.Empty,
+                fastestLap: "1:38.502",
+                lastLap: "1:39.004",
+                pit: string.Empty,
+                fastestTone: !startingGrid ? "#B65CFF" : null));
+        }
+
+        if (normalizedClassCount >= 2 && includeClassHeaders && showOtherClass)
+        {
+            rows.Add(ReviewClassHeader("LMP2", isRace && !startingGrid ? "2 cars | 10.00 laps" : "2 cars", "#33CEFF"));
+        }
+
+        if (normalizedClassCount >= 2 && showOtherClass)
+        {
+            rows.Add(ReviewStandingsDataRow(
+                columns,
+                classPosition: "1",
+                carNumber: "#8",
+                driver: "Kousuke Konishi",
+                gap: isRace ? "Leader" : string.Empty,
+                interval: isRace ? (startingGrid ? "--" : "-45.0") : string.Empty,
+                fastestLap: "1:45.884",
+                lastLap: "1:46.210",
+                pit: string.Empty,
+                fastestTone: !startingGrid ? "#B65CFF" : null));
+        }
+
+        if (includeClassHeaders)
+        {
+            rows.Add(ReviewClassHeader("GT3", isRace && !startingGrid ? "3 cars | 12.40 laps" : "3 cars", "#FFAA00"));
+        }
+
+        rows.Add(ReviewStandingsDataRow(
+            columns,
+            classPosition: "1",
+            carNumber: "#000",
+            driver: "Kauan Vigliazzi Teixeira Lemos",
+            gap: isRace ? "Leader" : string.Empty,
+            interval: isRace ? (startingGrid ? "--" : "-2.0") : string.Empty,
+            fastestLap: "1:53.112",
+            lastLap: "1:53.112",
+            pit: string.Empty,
+            fastestTone: "#B65CFF",
+            lastTone: "#B65CFF"));
+        rows.Add(ReviewStandingsDataRow(
+            columns,
+            classPosition: "24",
+            carNumber: "#3094",
+            driver: "Tech Mates Racing",
+            gap: isRace ? (startingGrid ? "--" : "+3.4") : string.Empty,
+            interval: isRace ? (startingGrid ? "--" : "0.0") : string.Empty,
+            fastestLap: startingGrid ? "--" : "1:54.228",
+            lastLap: startingGrid ? "--" : "1:54.228",
+            pit: string.Empty,
+            isReference: true,
+            fastestTone: startingGrid ? null : "#62FF9F",
+            lastTone: startingGrid ? null : "#62FF9F"));
+        rows.Add(ReviewStandingsDataRow(
+            columns,
+            classPosition: "49",
+            carNumber: "#60",
+            driver: "Tommie Wittens",
+            gap: isRace ? (startingGrid ? "--" : "+8.9") : string.Empty,
+            interval: isRace ? (startingGrid ? "--" : "+5.5") : string.Empty,
+            fastestLap: startingGrid ? "--" : "1:55.480",
+            lastLap: startingGrid ? "--" : "1:56.004",
+            pit: startingGrid ? string.Empty : "IN"));
+        return rows;
+    }
+
+    private static DesignV2TableRow ReviewStandingsDataRow(
+        IReadOnlyList<(string Id, string Label, int Width, ContentAlignment Alignment)> columns,
+        string classPosition,
+        string carNumber,
+        string driver,
+        string gap,
+        string interval,
+        string fastestLap,
+        string lastLap,
+        string pit,
+        bool isReference = false,
+        string? fastestTone = null,
+        string? lastTone = null)
+    {
+        string ValueFor(string columnId)
+        {
+            if (string.Equals(columnId, OverlayContentColumnSettings.StandingsClassPositionColumnId, StringComparison.Ordinal))
+            {
+                return classPosition;
+            }
+
+            if (string.Equals(columnId, OverlayContentColumnSettings.StandingsCarNumberColumnId, StringComparison.Ordinal))
+            {
+                return carNumber;
+            }
+
+            if (string.Equals(columnId, OverlayContentColumnSettings.StandingsDriverColumnId, StringComparison.Ordinal))
+            {
+                return driver;
+            }
+
+            if (string.Equals(columnId, OverlayContentColumnSettings.StandingsGapColumnId, StringComparison.Ordinal))
+            {
+                return gap;
+            }
+
+            if (string.Equals(columnId, OverlayContentColumnSettings.StandingsIntervalColumnId, StringComparison.Ordinal))
+            {
+                return interval;
+            }
+
+            if (string.Equals(columnId, OverlayContentColumnSettings.StandingsFastestLapColumnId, StringComparison.Ordinal))
+            {
+                return fastestLap;
+            }
+
+            if (string.Equals(columnId, OverlayContentColumnSettings.StandingsLastLapColumnId, StringComparison.Ordinal))
+            {
+                return lastLap;
+            }
+
+            if (string.Equals(columnId, OverlayContentColumnSettings.StandingsPitColumnId, StringComparison.Ordinal))
+            {
+                return pit;
+            }
+
+            return string.Empty;
+        }
+
+        string? ToneFor(string columnId)
+        {
+            if (string.Equals(columnId, OverlayContentColumnSettings.StandingsFastestLapColumnId, StringComparison.Ordinal))
+            {
+                return fastestTone;
+            }
+
+            if (string.Equals(columnId, OverlayContentColumnSettings.StandingsLastLapColumnId, StringComparison.Ordinal))
+            {
+                return lastTone;
+            }
+
+            return null;
+        }
+
+        return ReviewTableRow(
+            columns.Select(column => ValueFor(column.Id)).ToArray(),
+            null,
+            isReference,
+            cellForegrounds: columns.Select(column => ToneFor(column.Id)).ToArray());
+    }
+
+    private static DesignV2OverlayModel ReviewRelativeModel(
+        OverlaySessionKind previewMode,
+        bool includePitColumn,
+        int carsEachSide = 3,
+        string[]? includedColumnIds = null)
+    {
+        if (OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) is OverlaySessionKind.Qualifying)
+        {
+            return new DesignV2OverlayModel(
+                "Relative",
+                "hidden | qualifying unsupported",
+                string.Empty,
+                DesignV2Evidence.Unavailable,
+                new DesignV2TableBody(
+                    Array.Empty<DesignV2Column>(),
+                    Array.Empty<DesignV2TableRow>(),
+                    RowHeight: 26f,
+                    PlaceholderRowHeight: 26f,
+                    FadePlaceholderRows: true),
+                ShowFooter: false,
+                ShouldRender: false);
+        }
+
+        var status = $"5 - 2/4 cars | {ReviewPreviewLabel(previewMode)}";
+        var showLapRelationship = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) is OverlaySessionKind.Practice or OverlaySessionKind.Race;
+        var rowCount = Math.Clamp(carsEachSide, 0, 8) * 2 + 1;
+        var referenceIndex = Math.Clamp(carsEachSide, 0, Math.Max(0, rowCount - 1));
+        var selectedColumnIds = includedColumnIds
+            ?? (includePitColumn
+                ? new[]
+                {
+                    OverlayContentColumnSettings.RelativePositionColumnId,
+                    OverlayContentColumnSettings.RelativeDriverColumnId,
+                    OverlayContentColumnSettings.RelativeGapColumnId,
+                    OverlayContentColumnSettings.RelativePitColumnId
+                }
+                : new[]
+                {
+                    OverlayContentColumnSettings.RelativePositionColumnId,
+                    OverlayContentColumnSettings.RelativeDriverColumnId,
+                    OverlayContentColumnSettings.RelativeGapColumnId
+                });
+        if (selectedColumnIds.Length == 0)
+        {
+            return new DesignV2OverlayModel(
+                "Relative",
+                "hidden | no enabled content",
+                string.Empty,
+                DesignV2Evidence.Unavailable,
+                new DesignV2TableBody(
+                    Array.Empty<DesignV2Column>(),
+                    Array.Empty<DesignV2TableRow>(),
+                    RowHeight: 26f,
+                    PlaceholderRowHeight: 26f,
+                    FadePlaceholderRows: true),
+                ShowFooter: false,
+                ShouldRender: false);
+        }
+
+        var rows = Enumerable.Repeat(ReviewBlankTableRow(selectedColumnIds.Length), rowCount).ToArray();
+        if (referenceIndex > 0)
+        {
+            rows[referenceIndex - 1] = ReviewTableRow(RelativeReviewValues("3", "#34 Near Ahead", "-2.350", ""), "#33CEFF", relativeLapDelta: showLapRelationship ? (int?)1 : null);
+        }
+
+        rows[referenceIndex] = ReviewTableRow(RelativeReviewValues("5", "#55 Focus Driver", "0.000", ""), "#FFDA59", isReference: true, relativeLapDelta: showLapRelationship ? (int?)0 : null);
+        if (referenceIndex + 1 < rows.Length)
+        {
+            rows[referenceIndex + 1] = ReviewTableRow(RelativeReviewValues("6", "#61 Near Behind", "+1.200", "IN"), "#FF4FD8", relativeLapDelta: showLapRelationship ? (int?)-2 : null);
+        }
+
+        var columns = selectedColumnIds
+            .Select(id => id switch
+            {
+                OverlayContentColumnSettings.RelativePositionColumnId => new DesignV2Column("Pos", 48, ContentAlignment.MiddleRight),
+                OverlayContentColumnSettings.RelativeDriverColumnId => new DesignV2Column("Driver", 240, ContentAlignment.MiddleLeft),
+                OverlayContentColumnSettings.RelativeGapColumnId => new DesignV2Column("Delta", 70, ContentAlignment.MiddleRight),
+                OverlayContentColumnSettings.RelativePitColumnId => new DesignV2Column("Pit", 48, ContentAlignment.MiddleRight),
+                _ => new DesignV2Column(id, 48, ContentAlignment.MiddleRight)
+            })
+            .ToList();
+
+        string[] RelativeReviewValues(string position, string driver, string delta, string pit)
+        {
+            return selectedColumnIds
+                .Select(id => id switch
+                {
+                    OverlayContentColumnSettings.RelativePositionColumnId => position,
+                    OverlayContentColumnSettings.RelativeDriverColumnId => driver,
+                    OverlayContentColumnSettings.RelativeGapColumnId => delta,
+                    OverlayContentColumnSettings.RelativePitColumnId => pit,
+                    _ => string.Empty
+                })
+                .ToArray();
         }
 
         return new DesignV2OverlayModel(
@@ -1134,31 +1887,44 @@ internal static class Program
             DesignV2Evidence.Live,
             new DesignV2TableBody(
                 columns,
-                rows),
+                rows,
+                RowHeight: 26f,
+                PlaceholderRowHeight: 26f,
+                FadePlaceholderRows: true),
             HeaderText: "06:37:08",
             ShowFooter: false);
     }
 
-    private static DesignV2OverlayModel ReviewFuelModel(OverlaySessionKind previewMode)
+    private static DesignV2OverlayModel ReviewFuelModel(
+        OverlaySessionKind previewMode,
+        bool showPlan = true,
+        bool showFuel = true,
+        bool showStints = true)
     {
-        var raceRows = new[]
+        var raceRows = new List<DesignV2MetricRow>();
+        if (showPlan)
         {
-            ReviewMetric("Plan", "31 laps | 3 stints | 2 stops", DesignV2Evidence.Measured,
+            raceRows.Add(ReviewMetric("Plan", "31 laps | 3 stints | 2 stops", DesignV2Evidence.Measured,
             [
-                ReviewSegment("Race", "31 laps", DesignV2Evidence.Measured),
-                ReviewSegment("Remain", "30.4 laps", DesignV2Evidence.Measured),
-                ReviewSegment("Stints", "3", DesignV2Evidence.Measured),
-                ReviewSegment("Stops", "2", DesignV2Evidence.Measured),
-                ReviewSegment("Save", "0.2 L/lap", DesignV2Evidence.Partial)
-            ]),
-            ReviewMetric("Fuel", "74.0 L | 3.1 L/lap | Covered", DesignV2Evidence.Live,
+                    ReviewSegment("Race", "31 laps", DesignV2Evidence.Measured),
+                    ReviewSegment("Remain", "30.4 laps", DesignV2Evidence.Measured),
+                    ReviewSegment("Stints", "3", DesignV2Evidence.Measured),
+                    ReviewSegment("Stops", "2", DesignV2Evidence.Measured),
+                    ReviewSegment("Save", "0.2 L/lap", DesignV2Evidence.Partial)
+            ]));
+        }
+
+        if (showFuel)
+        {
+            raceRows.Add(ReviewMetric("Fuel", "74.0 L | 3.1 L/lap | Covered", DesignV2Evidence.Live,
             [
-                ReviewSegment("Current", "74.0 L", DesignV2Evidence.Measured),
-                ReviewSegment("Burn", "3.1 L/lap", DesignV2Evidence.Measured),
-                ReviewSegment("Tank", "34.2 laps", DesignV2Evidence.Measured),
-                ReviewSegment("Need", "Covered", DesignV2Evidence.Live)
-            ])
-        };
+                    ReviewSegment("Current", "74.0 L", DesignV2Evidence.Measured),
+                    ReviewSegment("Burn", "3.1 L/lap", DesignV2Evidence.Measured),
+                    ReviewSegment("Tank", "34.2 laps", DesignV2Evidence.Measured),
+                    ReviewSegment("Need", "Covered", DesignV2Evidence.Live)
+            ]));
+        }
+
         var stintRows = new[]
         {
             ReviewMetric("Stint 1", "12 laps | target 3.1 L/lap", DesignV2Evidence.Measured,
@@ -1180,10 +1946,11 @@ internal static class Program
                 ReviewSegment("Save", "None", DesignV2Evidence.Live)
             ])
         };
-        var sections = new List<DesignV2MetricSection>
+        var sections = new List<DesignV2MetricSection>();
+        if (raceRows.Count > 0)
         {
-            new DesignV2MetricSection("Race Information", raceRows),
-        };
+            sections.Add(new DesignV2MetricSection("Race Information", raceRows));
+        }
         var usageLabel = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) switch
         {
             OverlaySessionKind.Practice => "Practice Usage",
@@ -1226,7 +1993,11 @@ internal static class Program
                 ShowFooter: false);
         }
 
-        sections.Add(new DesignV2MetricSection("Stint Targets", stintRows));
+        if (showStints)
+        {
+            sections.Add(new DesignV2MetricSection("Stint Targets", stintRows));
+        }
+
         return new DesignV2OverlayModel(
             "Fuel Calculator",
             "3 stints / 2 stops",
@@ -1240,12 +2011,14 @@ internal static class Program
     private static DesignV2OverlayModel ReviewTrackMapModel(bool includeMarkers = true, bool includeGeneratedMap = true)
     {
         TrackMapDocument? document = includeGeneratedMap ? ReviewTrackMapDocument() : null;
+        var status = includeGeneratedMap ? "live" : "track map | circle fallback";
+        var source = includeGeneratedMap
+            ? "source: IBT-derived Nurburgring 24h track map | live position telemetry"
+            : "source: live position telemetry | map fallback: no generated track map";
         var viewModel = new TrackMapOverlayViewModel(
             Title: "Track Map",
-            Status: "live",
-            Source: includeGeneratedMap
-                ? "source: IBT-derived Nurburgring 24h track map | live position telemetry"
-                : "source: live position telemetry",
+            Status: status,
+            Source: source,
             IsAvailable: true,
             Markers: includeMarkers
                 ?
@@ -1268,15 +2041,14 @@ internal static class Program
             TrackMap: document);
         return new DesignV2OverlayModel(
             "Track Map",
-            "live",
-            includeGeneratedMap
-                ? "source: IBT-derived Nurburgring 24h track map | live position telemetry"
-                : "source: live position telemetry",
+            status,
+            source,
             DesignV2Evidence.Live,
             new DesignV2TrackMapBody(TrackMapRenderModel.FromViewModel(viewModel)),
             HeaderText: "06:37:08",
             ShowFooter: false,
-            ShowHeader: false);
+            ShowHeader: false,
+            ShouldRender: includeMarkers);
     }
 
     private static TrackMapDocument ReviewTrackMapDocument()
@@ -1298,9 +2070,8 @@ internal static class Program
         var sessionType = session == OverlaySessionKind.Qualifying ? "Qualify" : SessionDisplayName(session);
         var previewLabel = ReviewPreviewLabel(previewMode);
         var clock = ReviewSessionWeatherClock(session);
-        var laps = ReviewSessionWeatherLaps(session);
         var rubber = session == OverlaySessionKind.Race ? "Moderate Usage" : "Clean";
-        var sessionRows = new[]
+        var sessionRows = new List<DesignV2MetricRow>
         {
             ReviewMetric("Session", $"{sessionType} | {previewLabel} | Team", DesignV2Evidence.Neutral,
             [
@@ -1323,13 +2094,17 @@ internal static class Program
             [
                 ReviewSegment("Name", "Gesamtstrecke 24h", DesignV2Evidence.Neutral),
                 ReviewSegment("Length", "25.4 km", DesignV2Evidence.Neutral)
-            ]),
-            ReviewMetric("Laps", $"{laps.Remaining} | {laps.Total}", DesignV2Evidence.Neutral,
+            ])
+        };
+        if (session == OverlaySessionKind.Race)
+        {
+            var laps = ReviewSessionWeatherLaps(session);
+            sessionRows.Add(ReviewMetric("Laps", $"{laps.Remaining} | {laps.Total}", DesignV2Evidence.Neutral,
             [
                 ReviewSegment("Remaining", laps.Remaining, DesignV2Evidence.Neutral),
                 ReviewSegment("Total", laps.Total, DesignV2Evidence.Neutral)
-            ])
-        };
+            ]));
+        }
         var weatherRows = new[]
         {
             ReviewMetric("Surface", $"Unknown | Dry | {rubber}", DesignV2Evidence.Neutral,
@@ -1377,16 +2152,25 @@ internal static class Program
             ShowFooter: false);
     }
 
-    private static DesignV2OverlayModel ReviewPitServiceModel()
+    private static DesignV2OverlayModel ReviewPitServiceModel(OverlaySessionKind previewMode)
     {
-        var sessionRows = new[]
-        {
-            ReviewMetric("Time / Laps", "03:58 | 148/179 laps", DesignV2Evidence.Neutral,
-            [
-                ReviewSegment("Time", "03:58", DesignV2Evidence.Neutral),
-                ReviewSegment("Laps", "148/179 laps", DesignV2Evidence.Neutral)
-            ])
-        };
+        var session = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) ?? previewMode;
+        var sessionRows = session == OverlaySessionKind.Race
+            ? new[]
+            {
+                ReviewMetric("Time / Laps", "03:58 | 148/179 laps", DesignV2Evidence.Neutral,
+                [
+                    ReviewSegment("Time", "03:58", DesignV2Evidence.Neutral),
+                    ReviewSegment("Laps", "148/179 laps", DesignV2Evidence.Neutral)
+                ])
+            }
+            : new[]
+            {
+                ReviewMetric("Time", "03:58", DesignV2Evidence.Neutral,
+                [
+                    ReviewSegment("Time", "03:58", DesignV2Evidence.Neutral)
+                ])
+            };
         var pitSignalRows = new[]
         {
             ReviewMetric("Release", "RED - service active", DesignV2Evidence.Error, rowColorHex: "#FF6274"),
@@ -1479,9 +2263,57 @@ internal static class Program
             "source: waiting",
             DesignV2Evidence.Unavailable,
             new DesignV2MetricRowsBody([]),
-            HeaderText: "--",
+            HeaderText: string.Empty,
+            ShowHeader: false,
             ShowFooter: false,
             ShouldRender: false);
+    }
+
+    private static DesignV2OverlayModel ReviewFuelNoDataModel()
+    {
+        return new DesignV2OverlayModel(
+            "Fuel Calculator",
+            "waiting for fuel telemetry",
+            "source: waiting",
+            DesignV2Evidence.Unavailable,
+            new DesignV2MetricRowsBody([]),
+            HeaderText: string.Empty,
+            ShowHeader: false,
+            ShowFooter: false,
+            ShouldRender: false);
+    }
+
+    private static DesignV2OverlayModel ReviewFuelCalculatingModel()
+    {
+        var sections = new[]
+        {
+            new DesignV2MetricSection("Race Information",
+            [
+                ReviewMetric("Plan", "31 laps | Calculating | Calculating", DesignV2Evidence.Unavailable,
+                [
+                    ReviewSegment("Race", "31 laps", DesignV2Evidence.Measured),
+                    ReviewSegment("Remain", "30.4 laps", DesignV2Evidence.Measured),
+                    ReviewSegment("Stints", "Calculating", DesignV2Evidence.Unavailable),
+                    ReviewSegment("Stops", "Calculating", DesignV2Evidence.Unavailable),
+                    ReviewSegment("Save", "Calculating", DesignV2Evidence.Unavailable)
+                ]),
+                ReviewMetric("Fuel", "74.0 L | Calculating | Calculating", DesignV2Evidence.Unavailable,
+                [
+                    ReviewSegment("Current", "74.0 L", DesignV2Evidence.Measured),
+                    ReviewSegment("Burn", "Calculating", DesignV2Evidence.Unavailable),
+                    ReviewSegment("Tank", "Calculating", DesignV2Evidence.Unavailable),
+                    ReviewSegment("Need", "Calculating", DesignV2Evidence.Unavailable)
+                ])
+            ])
+        };
+        return new DesignV2OverlayModel(
+            "Fuel Calculator",
+            "calculating strategy",
+            "burn Calculating (unavailable) | Calculating | history user | gap O0.18 C0.04",
+            DesignV2Evidence.Unavailable,
+            new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, []),
+            HeaderText: "06:37:08",
+            ShowFooter: false);
     }
 
     private static DesignV2OverlayModel ReviewSessionWeatherMissingModel()
@@ -1516,42 +2348,9 @@ internal static class Program
                 ReviewSegment("Total", "--", DesignV2Evidence.Unavailable)
             ])
         };
-        var weatherRows = new[]
-        {
-            ReviewMetric("Surface", "Unknown | -- | --", DesignV2Evidence.Unavailable,
-            [
-                ReviewSegment("Wetness", "Unknown", DesignV2Evidence.Unavailable),
-                ReviewSegment("Declared", "--", DesignV2Evidence.Unavailable),
-                ReviewSegment("Rubber", "--", DesignV2Evidence.Unavailable)
-            ]),
-            ReviewMetric("Sky", "Unknown | -- | --", DesignV2Evidence.Unavailable,
-            [
-                ReviewSegment("Skies", "Unknown", DesignV2Evidence.Unavailable),
-                ReviewSegment("Weather", "--", DesignV2Evidence.Unavailable),
-                ReviewSegment("Rain", "--", DesignV2Evidence.Unavailable)
-            ]),
-            ReviewMetric("Wind", "-- | -- | --", DesignV2Evidence.Unavailable,
-            [
-                ReviewSegment("Dir", "--", DesignV2Evidence.Unavailable),
-                ReviewSegment("Speed", "--", DesignV2Evidence.Unavailable),
-                ReviewSegment("Facing", "--", DesignV2Evidence.Unavailable, rotationDegrees: 0d)
-            ]),
-            ReviewMetric("Temps", "-- | --", DesignV2Evidence.Unavailable,
-            [
-                ReviewSegment("Air", "--", DesignV2Evidence.Unavailable),
-                ReviewSegment("Track", "--", DesignV2Evidence.Unavailable)
-            ]),
-            ReviewMetric("Atmosphere", "-- | -- | --", DesignV2Evidence.Unavailable,
-            [
-                ReviewSegment("Hum", "--", DesignV2Evidence.Unavailable),
-                ReviewSegment("Fog", "--", DesignV2Evidence.Unavailable),
-                ReviewSegment("Pressure", "--", DesignV2Evidence.Unavailable)
-            ])
-        };
         var sections = new[]
         {
-            new DesignV2MetricSection("Session", sessionRows),
-            new DesignV2MetricSection("Weather", weatherRows)
+            new DesignV2MetricSection("Session", sessionRows)
         };
         return new DesignV2OverlayModel(
             "Session / Weather",
@@ -1561,6 +2360,40 @@ internal static class Program
             new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, []),
             HeaderText: "--",
             ShowFooter: false);
+    }
+
+    private static DesignV2OverlayModel ReviewSessionWeatherNoDataModel()
+    {
+        return new DesignV2OverlayModel(
+            "Session / Weather",
+            "waiting for session telemetry",
+            string.Empty,
+            DesignV2Evidence.Unavailable,
+            new DesignV2MetricRowsBody([]),
+            HeaderText: string.Empty,
+            ShowHeader: false,
+            ShowFooter: false,
+            ShouldRender: false);
+    }
+
+    private static DesignV2OverlayModel ReviewSessionWeatherSectionOffModel(string slug)
+    {
+        var model = ReviewSessionWeatherModel(OverlaySessionKind.Race);
+        if (model.Body is not DesignV2MetricRowsBody body)
+        {
+            return model;
+        }
+
+        var removedTitle = string.Equals(slug, "session-off", StringComparison.OrdinalIgnoreCase)
+            ? "Session"
+            : "Weather";
+        var sections = body.MetricSections
+            .Where(section => !string.Equals(section.Title, removedTitle, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return model with
+        {
+            Body = new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, body.Sections)
+        };
     }
 
     private static DesignV2OverlayModel ReviewPitServiceIdleModel()
@@ -1633,6 +2466,49 @@ internal static class Program
             ShowFooter: false);
     }
 
+    private static DesignV2OverlayModel ReviewPitServiceSectionOffModel(string slug)
+    {
+        var model = ReviewPitServiceModel(OverlaySessionKind.Race);
+        if (model.Body is not DesignV2MetricRowsBody body)
+        {
+            return model;
+        }
+
+        var removedTitle = slug.ToLowerInvariant() switch
+        {
+            "session-off" => "Session",
+            "signal-off" => "Pit Signal",
+            "service-off" => "Service Request",
+            _ => string.Empty
+        };
+        var sections = string.IsNullOrEmpty(removedTitle)
+            ? body.MetricSections
+            : body.MetricSections
+                .Where(section => !string.Equals(section.Title, removedTitle, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        IReadOnlyList<DesignV2MetricGridSection> grid = string.Equals(slug, "tire-analysis-off", StringComparison.OrdinalIgnoreCase)
+            ? []
+            : body.Sections;
+        return model with
+        {
+            Body = new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, grid)
+        };
+    }
+
+    private static DesignV2OverlayModel ReviewPitServiceNoDataModel()
+    {
+        return new DesignV2OverlayModel(
+            "Pit Service",
+            "waiting for pit telemetry",
+            "source: waiting",
+            DesignV2Evidence.Unavailable,
+            new DesignV2MetricRowsBody([]),
+            HeaderText: string.Empty,
+            ShowHeader: false,
+            ShowFooter: false,
+            ShouldRender: false);
+    }
+
     private static DesignV2OverlayModel ReviewInputWaitingModel()
     {
         return new DesignV2OverlayModel(
@@ -1651,44 +2527,43 @@ internal static class Program
                 GearText: "--",
                 SteeringText: "--",
                 BrakeAbsActive: false,
-                ShowThrottleTrace: true,
-                ShowBrakeTrace: true,
-                ShowClutchTrace: true,
+                ShowThrottleTrace: false,
+                ShowBrakeTrace: false,
+                ShowClutchTrace: false,
                 IsAvailable: false,
-                ShowThrottle: true,
-                ShowBrake: true,
-                ShowClutch: true,
-                ShowSteering: true,
-                ShowGear: true,
-                ShowSpeed: true,
-                HasGraph: true,
-                HasRail: true,
-                HasContent: true,
+                ShowThrottle: false,
+                ShowBrake: false,
+                ShowClutch: false,
+                ShowSteering: false,
+                ShowGear: false,
+                ShowSpeed: false,
+                HasGraph: false,
+                HasRail: false,
+                HasContent: false,
                 Trace: []),
             HeaderText: string.Empty,
-            ShowFooter: false);
+            ShowFooter: false,
+            ShouldRender: false);
     }
 
     private static DesignV2OverlayModel ReviewInputNoContentModel()
     {
-        var trace = ReviewInputTrace();
-        var current = trace[^1];
         return new DesignV2OverlayModel(
             "Inputs",
-            "no input content enabled",
+            "hidden | no enabled content",
             string.Empty,
             DesignV2Evidence.Unavailable,
             new DesignV2InputsBody(
-                Throttle: current.Throttle,
-                Brake: current.Brake,
-                Clutch: current.Clutch,
-                SteeringWheelAngle: -0.18d,
-                SpeedMetersPerSecond: 77.889366d,
-                Gear: 6,
-                SpeedText: "280 km/h",
-                GearText: "6",
-                SteeringText: "-10 deg",
-                BrakeAbsActive: current.BrakeAbsActive,
+                Throttle: null,
+                Brake: null,
+                Clutch: null,
+                SteeringWheelAngle: null,
+                SpeedMetersPerSecond: null,
+                Gear: null,
+                SpeedText: "--",
+                GearText: "--",
+                SteeringText: "--",
+                BrakeAbsActive: false,
                 ShowThrottleTrace: false,
                 ShowBrakeTrace: false,
                 ShowClutchTrace: false,
@@ -1702,9 +2577,39 @@ internal static class Program
                 HasGraph: false,
                 HasRail: false,
                 HasContent: false,
-                Trace: trace),
+                Trace: []),
             HeaderText: string.Empty,
-            ShowFooter: false);
+            ShowFooter: false,
+            ShouldRender: false);
+    }
+
+    private static DesignV2OverlayModel ReviewInputContentVariant(bool showGraph, bool showRail)
+    {
+        var model = ReviewInputModel(OverlaySessionKind.Race);
+        if (model.Body is not DesignV2InputsBody body)
+        {
+            return model;
+        }
+
+        return model with
+        {
+            Body = body with
+            {
+                ShowThrottleTrace = showGraph,
+                ShowBrakeTrace = showGraph,
+                ShowClutchTrace = showGraph,
+                ShowThrottle = showRail,
+                ShowBrake = showRail,
+                ShowClutch = showRail,
+                ShowSteering = showRail,
+                ShowGear = showRail,
+                ShowSpeed = showRail,
+                HasGraph = showGraph,
+                HasRail = showRail,
+                HasContent = showGraph || showRail
+            },
+            ShouldRender = showGraph || showRail
+        };
     }
 
     private static DesignV2OverlayModel ReviewGapModel()
@@ -1752,6 +2657,7 @@ internal static class Program
         var focusTire = new DesignV2TireMetricValue("Dry", "D", false);
         var comparisonTire = new DesignV2TireMetricValue("Dry", "D", false);
         var threatTire = new DesignV2TireMetricValue("Wet", "W", true);
+        var fiveLapThreat = new DesignV2GapTrendMetric("5L", -1.8d, activeThreat, "ready", null, CompletedReferenceLaps: 10);
         var series = new[]
         {
             new DesignV2GapSeries(
@@ -1804,16 +2710,16 @@ internal static class Program
             SelectedSeriesCount: series.Length,
             TrendMetrics:
             [
-                new DesignV2GapTrendMetric("5L", -1.8d, activeThreat, "ready", null),
-                new DesignV2GapTrendMetric("10L", -3.4d, activeThreat, "ready", null),
+                new DesignV2GapTrendMetric("Last", null, null, "last", null, PrimaryText: "0.0", ThreatText: "-0.7", ComparisonText: "+0.4"),
+                fiveLapThreat,
+                new DesignV2GapTrendMetric("10L", -3.4d, activeThreat, "ready", null, CompletedReferenceLaps: 10),
                 new DesignV2GapTrendMetric("Pit", null, null, "pit", null, focusPit, threatPit, comparisonPit),
                 new DesignV2GapTrendMetric("PLap", null, null, "pitLap", null, focusPit, threatPit, comparisonPit),
                 new DesignV2GapTrendMetric("Stint", null, null, "stint", null, ThreatText: "17L", ComparisonText: "18L"),
                 new DesignV2GapTrendMetric("Tire", null, null, "tire", null, PrimaryTire: focusTire, ThreatTire: threatTire, ComparisonTire: comparisonTire),
-                new DesignV2GapTrendMetric("Last", null, null, "last", null, ThreatText: "8:12.120", ComparisonText: "8:13.000"),
                 new DesignV2GapTrendMetric("Status", null, null, "status", null, ThreatText: "Track", ComparisonText: "Track")
             ],
-            ActiveThreat: new DesignV2GapTrendMetric("5L", null, activeThreat, "ready", null),
+            ActiveThreat: fiveLapThreat,
             ThreatCarIdx: 43,
             MetricDeadbandSeconds: 0.25d,
             ComparisonLabel: "P23",
@@ -1827,6 +2733,85 @@ internal static class Program
             graph,
             HeaderText: "06:37:08",
             ShowFooter: false);
+    }
+
+    private static DesignV2OverlayModel ReviewGapContentVariant(
+        bool showGraph,
+        bool showTrendMetrics,
+        string? hiddenTrendLabel = null)
+    {
+        var model = ReviewGapModel();
+        if (model.Body is not DesignV2GraphBody graph)
+        {
+            return model;
+        }
+
+        var trendMetrics = showTrendMetrics
+            ? graph.TrendMetrics
+                .Where(metric => !string.Equals(metric.Label, hiddenTrendLabel, StringComparison.OrdinalIgnoreCase))
+                .ToArray()
+            : Array.Empty<DesignV2GapTrendMetric>();
+        return model with
+        {
+            Body = graph with
+            {
+                Points = showGraph ? graph.Points : Array.Empty<double>(),
+                Series = showGraph ? graph.Series : Array.Empty<DesignV2GapSeries>(),
+                Weather = showGraph ? graph.Weather : Array.Empty<DesignV2GapWeatherPoint>(),
+                LeaderChanges = showGraph ? graph.LeaderChanges : Array.Empty<DesignV2GapLeaderChangeMarker>(),
+                DriverChanges = showGraph ? graph.DriverChanges : Array.Empty<DesignV2GapDriverChangeMarker>(),
+                SelectedSeriesCount = showGraph ? graph.SelectedSeriesCount : 0,
+                TrendMetrics = trendMetrics,
+                ActiveThreat = showTrendMetrics ? graph.ActiveThreat : null,
+                ThreatCarIdx = showTrendMetrics ? graph.ThreatCarIdx : null,
+                ShowGraph = showGraph,
+                ShowTrendMetrics = showTrendMetrics
+            },
+            ShouldRender = showGraph || showTrendMetrics
+        };
+    }
+
+    private static DesignV2OverlayModel ReviewCarRadarModel(OverlaySessionKind previewMode)
+    {
+        var session = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) ?? previewMode;
+        var hasRight = session == OverlaySessionKind.Race;
+        var status = hasRight ? "car right" : "faster class";
+        var approach = new LiveMulticlassApproach(
+            CarIdx: 12,
+            CarClass: null,
+            RelativeLaps: -0.018d,
+            RelativeSeconds: -2.4d,
+            ClosingRateSecondsPerSecond: null,
+            Urgency: 0d);
+        var renderModel = CarRadarRenderModel.FromState(
+            isAvailable: true,
+            hasCarLeft: false,
+            hasCarRight: hasRight,
+            cars: [],
+            strongestMulticlassApproach: approach,
+            showMulticlassWarning: true,
+            previewVisible: false,
+            hasCurrentSignal: true,
+            referenceCarClassColorHex: "#FFDA59",
+            calibrationProfile: CarRadarCalibrationProfile.Default);
+        return new DesignV2OverlayModel(
+            "Car Radar",
+            status,
+            "source: spatial telemetry",
+            DesignV2Evidence.Live,
+            new DesignV2RadarBody(
+                IsAvailable: true,
+                HasLeft: false,
+                HasRight: hasRight,
+                Cars: [],
+                StrongestMulticlassApproach: approach,
+                ShowMulticlassWarning: true,
+                PreviewVisible: false,
+                RenderModel: renderModel,
+                SurfaceAlpha: renderModel.ShouldRender ? 1d : 0d),
+            HeaderText: string.Empty,
+            ShowFooter: false,
+            ShouldRender: renderModel.ShouldRender);
     }
 
     private static DesignV2OverlayModel ReviewCarRadarVariantModel(string slug)
@@ -1877,7 +2862,8 @@ internal static class Program
                 RenderModel: renderModel,
                 SurfaceAlpha: renderModel.ShouldRender ? 1d : 0d),
             HeaderText: string.Empty,
-            ShowFooter: false);
+            ShowFooter: false,
+            ShouldRender: renderModel.ShouldRender);
     }
 
     private static DesignV2OverlayModel ReviewGapNoCarsModel()
@@ -1934,7 +2920,8 @@ internal static class Program
                     "#62FF9F",
                     ["12:04", "first"],
                     ["mod"],
-                    [StreamChatDisplaySegment.TextSegment("Green flag at the line")]),
+                    [StreamChatDisplaySegment.TextSegment("Green flag at the line")],
+                    [new StreamChatDisplayBadge("moderator", "1", "mod", "1234")]),
                 new DesignV2ChatRow(
                     "TechMate",
                     "Brake trace looks clean Kappa",
@@ -1945,7 +2932,8 @@ internal static class Program
                     [
                         StreamChatDisplaySegment.TextSegment("Brake trace looks clean "),
                         StreamChatDisplaySegment.EmoteSegment("Kappa", "https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0")
-                    ]),
+                    ],
+                    [new StreamChatDisplayBadge("subscriber", "12", "sub", "1234")]),
                 new DesignV2ChatRow(
                     "CrewChief",
                     "Box this lap for fuel and tires",
@@ -1953,7 +2941,8 @@ internal static class Program
                     "#FFDA59",
                     ["12:06"],
                     ["vip"],
-                    [StreamChatDisplaySegment.TextSegment("Box this lap for fuel and tires")])
+                    [StreamChatDisplaySegment.TextSegment("Box this lap for fuel and tires")],
+                    [new StreamChatDisplayBadge("vip", "1", "vip", "1234")])
             ]),
             HeaderText: string.Empty,
             ShowFooter: false);
@@ -1963,7 +2952,7 @@ internal static class Program
     {
         return new DesignV2OverlayModel(
             "Stream Chat",
-            "streamlabs unavailable",
+            "streamlabs browser-source only",
             string.Empty,
             DesignV2Evidence.Error,
             new DesignV2ChatBody(
@@ -2118,7 +3107,7 @@ internal static class Program
     {
         return new DesignV2OverlayModel(
             "Stream Chat",
-            "waiting for chat source",
+            "chat source not configured",
             string.Empty,
             DesignV2Evidence.Unavailable,
             new DesignV2ChatBody(
@@ -2384,6 +3373,7 @@ internal static class Program
 
         using var bitmap = new Bitmap(targetSize.Width, targetSize.Height, PixelFormat.Format32bppArgb);
         renderRoot.DrawToBitmap(bitmap, new Rectangle(Point.Empty, targetSize));
+        ClearOutsideSettingsShell(bitmap);
         postProcess?.Invoke(bitmap);
         var completedMetadata = CompleteSettingsMetadata(
             metadata,
@@ -2411,6 +3401,7 @@ internal static class Program
         PrepareSettingsRenderRoot(renderRoot);
         using var full = new Bitmap(targetSize.Width, targetSize.Height, PixelFormat.Format32bppArgb);
         renderRoot.DrawToBitmap(full, new Rectangle(Point.Empty, targetSize));
+        ClearOutsideSettingsShell(full);
 
         var fullBounds = new Rectangle(Point.Empty, targetSize);
         var boundedCrop = Rectangle.Intersect(fullBounds, cropBounds);
@@ -2443,8 +3434,8 @@ internal static class Program
             ?? throw new InvalidOperationException("Settings screenshot capture could not find the Design V2 settings surface.");
         form.Controls.Remove(surface);
         surface.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-        surface.Location = Point.Empty;
-        surface.Size = targetSize;
+        surface.Location = DesignV2SettingsSurface.WindowCanvasOffset;
+        surface.Size = DesignV2SettingsSurface.LogicalCanvasSize;
         surface.Visible = true;
         surface.RefreshRuntimeState();
 
@@ -2456,6 +3447,17 @@ internal static class Program
         };
         root.Controls.Add(surface);
         return root;
+    }
+
+    private static void ClearOutsideSettingsShell(Bitmap bitmap)
+    {
+        using var graphics = Graphics.FromImage(bitmap);
+        using var shellPath = DesignV2SettingsSurface.CreateWindowRegionPath();
+        graphics.SetClip(shellPath, CombineMode.Exclude);
+        graphics.CompositingMode = CompositingMode.SourceCopy;
+        using var transparentBrush = new SolidBrush(Color.Transparent);
+        graphics.FillRectangle(transparentBrush, new Rectangle(Point.Empty, bitmap.Size));
+        graphics.ResetClip();
     }
 
     private static void PrepareSettingsRenderRoot(Control root)
@@ -2851,10 +3853,13 @@ internal static class Program
                 fixtureParity = screenshot.Metadata.FixtureParity,
                 comparisonMode = screenshot.Metadata.ComparisonMode,
                 comparisonLimit = screenshot.Metadata.ComparisonLimit,
+                captureMode = screenshot.Metadata.CaptureMode,
+                cropBounds = screenshot.Metadata.CropBounds,
                 status = screenshot.Metadata.Status,
                 source = NativeSourceEvidence(screenshot.Metadata),
                 bodyKind = NormalizedBodyKind(screenshot.Metadata.Body),
                 shouldRender = screenshot.Metadata.ShouldRender ?? NativeShouldRender(screenshot.Metadata),
+                headerItems = NativeHeaderItems(screenshot.Metadata),
                 rowCount = NativeRowCount(screenshot.Metadata),
                 metricCount = NativeMetricCount(screenshot.Metadata),
                 flagCount = NativeFlagCount(screenshot.Metadata),
@@ -2867,6 +3872,8 @@ internal static class Program
                 layout = screenshot.Metadata.LayoutEvidence,
                 uiEvidence = screenshot.Metadata.UiEvidence,
                 modelEvidence = NativeModelEvidence(screenshot.Metadata),
+                effectiveSettings = NativeEffectiveSettings(screenshot.Metadata),
+                v102Evidence = V102Evidence(screenshot.Metadata),
                 scenarioEvidence = screenshot.Metadata.ScenarioEvidence,
                 metadata = new
                 {
@@ -2882,6 +3889,8 @@ internal static class Program
                     fixtureParity = screenshot.Metadata.FixtureParity,
                     comparisonMode = screenshot.Metadata.ComparisonMode,
                     comparisonLimit = screenshot.Metadata.ComparisonLimit,
+                    captureMode = screenshot.Metadata.CaptureMode,
+                    cropBounds = screenshot.Metadata.CropBounds,
                     sourceContract = screenshot.Metadata.SourceContract,
                     status = screenshot.Metadata.Status,
                     modelSource = screenshot.Metadata.ModelSource,
@@ -2892,6 +3901,7 @@ internal static class Program
                     radarCarCount = screenshot.Metadata.RadarCarCount,
                     layout = screenshot.Metadata.Layout,
                     uiEvidence = screenshot.Metadata.UiEvidence,
+                    v102Evidence = V102Evidence(screenshot.Metadata),
                     scenarioEvidence = screenshot.Metadata.ScenarioEvidence
                 }
             })
@@ -2899,6 +3909,101 @@ internal static class Program
         File.WriteAllText(
             Path.Combine(outputRoot, "manifest.json"),
             $"{JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true })}{Environment.NewLine}");
+    }
+
+    private static object[] NativeHeaderItems(ScreenshotMetadata metadata)
+    {
+        var headerText = metadata.Layout?.HeaderText;
+        if (!string.Equals(metadata.Surface, "windows-native-overlay", StringComparison.Ordinal)
+            || (metadata.ShouldRender ?? NativeShouldRender(metadata)) is false
+            || string.IsNullOrWhiteSpace(headerText))
+        {
+            return [];
+        }
+
+        return
+        [
+            new
+            {
+                key = "timeRemaining",
+                value = headerText.Trim(),
+                tone = NativeHeaderTone(metadata.Evidence)
+            }
+        ];
+    }
+
+    private static string NativeHeaderTone(string? evidence)
+    {
+        return "normal";
+    }
+
+    private static string[] V102Evidence(ScreenshotMetadata metadata)
+    {
+        var ids = new SortedSet<string>(StringComparer.Ordinal);
+        if (IsWindowsSettingsSurface(metadata))
+        {
+            foreach (var id in V102EvidenceForSettingsTab(metadata.Tab))
+            {
+                ids.Add(id);
+            }
+        }
+
+        foreach (var id in V102EvidenceForOverlay(metadata.OverlayId))
+        {
+            ids.Add(id);
+        }
+
+        foreach (var id in V102EvidenceForFixture(metadata.FixtureVariant))
+        {
+            ids.Add(id);
+        }
+
+        return ids.ToArray();
+    }
+
+    private static string[] V102EvidenceForSettingsTab(string? tab)
+    {
+        return tab?.ToLowerInvariant() switch
+        {
+            "support" or "error-logging" => ["V102-010", "V102-011", "V102-022", "V102-032", "V102-035", "V102-036", "V102-038", "V102-040", "V102-046"],
+            "general" or null or "" => ["V102-001", "V102-002", "V102-008", "V102-032", "V102-040", "V102-046"],
+            _ => []
+        };
+    }
+
+    private static string[] V102EvidenceForFixture(string? fixtureVariant)
+    {
+        return fixtureVariant?.ToLowerInvariant() switch
+        {
+            "chrome-off" => ["V102-008"],
+            "rightmost-evidence" => ["V102-020"],
+            "rows-2" => ["V102-014", "V102-016"],
+            "input-no-content" => ["V102-008"],
+            "input-min-scale" => ["V102-043"],
+            "flags-all-kinds" => ["V102-042", "V102-048"],
+            "circle-fallback" => ["V102-012", "V102-044"],
+            _ => []
+        };
+    }
+
+    private static string[] V102EvidenceForOverlay(string? overlayId)
+    {
+        return overlayId?.ToLowerInvariant() switch
+        {
+            "standings" => ["V102-004", "V102-008", "V102-016", "V102-020", "V102-023", "V102-027", "V102-031", "V102-049"],
+            "relative" => ["V102-005", "V102-008", "V102-013", "V102-014", "V102-016", "V102-019", "V102-020", "V102-027", "V102-031"],
+            "fuel-calculator" => ["V102-006", "V102-008", "V102-027", "V102-031"],
+            "session-weather" => ["V102-007", "V102-008", "V102-027", "V102-031"],
+            "pit-service" => ["V102-008", "V102-009", "V102-011", "V102-027", "V102-031"],
+            "gap-to-leader" => ["V102-017", "V102-018", "V102-021", "V102-024", "V102-025", "V102-026", "V102-027", "V102-029", "V102-031", "V102-040"],
+            "input-state" => ["V102-008", "V102-031", "V102-043"],
+            "car-radar" => ["V102-031", "V102-047"],
+            "track-map" => ["V102-012", "V102-031", "V102-044"],
+            "flags" => ["V102-031", "V102-042", "V102-048"],
+            "garage-cover" => ["V102-008", "V102-015", "V102-031"],
+            "stream-chat" => ["V102-031", "V102-050"],
+            _ => []
+        };
     }
 
     private static object ScreenshotScenarioEvidence(ScreenshotMetadata metadata)
@@ -2953,6 +4058,8 @@ internal static class Program
             fixtureParity = metadata.FixtureParity,
             comparisonMode = metadata.ComparisonMode,
             comparisonLimit = metadata.ComparisonLimit,
+            captureMode = metadata.CaptureMode,
+            cropBounds = metadata.CropBounds,
             status = metadata.Status,
             bodyKind = NormalizedBodyKind(metadata.Body),
             source = NativeSourceEvidence(metadata),
@@ -2965,6 +4072,7 @@ internal static class Program
                     ? "settings-mutates-unit-system"
                     : "native-overlays-update-unit-system-in-place-without-form-recreation"
             },
+            v102Evidence = V102Evidence(metadata),
             sourceFiles,
             layoutHash = metadata.Layout is null ? null : Sha256(JsonSerializer.Serialize(metadata.Layout))
         };
@@ -2985,12 +4093,15 @@ internal static class Program
             fixtureParity = payload.fixtureParity,
             comparisonMode = payload.comparisonMode,
             comparisonLimit = payload.comparisonLimit,
+            captureMode = payload.captureMode,
+            cropBounds = payload.cropBounds,
             status = payload.status,
             bodyKind = payload.bodyKind,
             source = payload.source,
             urlPath = payload.urlPath,
             modelSummary = payload.modelSummary,
             settingsContract = payload.settingsContract,
+            v102Evidence = payload.v102Evidence,
             sourceFiles = payload.sourceFiles,
             layoutHash = payload.layoutHash,
             sourceHash = Sha256(JsonSerializer.Serialize(sourceFiles)),
@@ -3235,6 +4346,10 @@ internal static class Program
     {
         var capture = CaptureBoundsFor(root, captureBounds);
         var elements = SettingsCapturedElements(metadata, root, capture);
+        var appShell = SettingsAppShellEvidence(elements, capture);
+        var navigation = SettingsNavigationEvidence(metadata, elements, out var navigationSummary);
+        var sections = SettingsSectionEvidence(elements);
+        var layoutHealth = SettingsLayoutHealthEvidence(metadata, capture, elements, navigationSummary);
         return new
         {
             contract = "settings-ui-evidence/v1",
@@ -3247,16 +4362,588 @@ internal static class Program
             unitSystem = metadata.UnitSystem ?? "Metric",
             root = RectEvidence(new Rectangle(0, 0, capture.Width, capture.Height)),
             contentBounds = RectEvidence(new Rectangle(0, 0, capture.Width, capture.Height), includeAspectRatio: true),
+            appShell,
+            navigation,
+            sections,
+            layoutHealth,
+            coverage = SettingsCoverageEvidence(elements, sections, navigationSummary),
+            geometryMatrix = SettingsGeometryMatrixEvidence(metadata, elements),
             sidebar = elements.FirstOrDefault(element => ElementRole(element) == "settings-sidebar"),
             content = elements.FirstOrDefault(element => ElementRole(element) == "settings-content"),
             contentBody = elements.FirstOrDefault(element => ElementRole(element) == "settings-content-body"),
             tabs = elements.Where(element => ElementRole(element) == "settings-sidebar-tab").ToArray(),
             regions = elements.Where(element => ElementRole(element) == "settings-region-segment").ToArray(),
             panels = elements.Where(element => ElementRole(element) == "settings-panel").ToArray(),
-            controls = elements.Where(element => ElementRole(element) is "settings-control" or "settings-button" or "settings-choice" or "settings-toggle" or "settings-check" or "settings-stepper" or "settings-slider" or "settings-textbox" or "settings-field-label" or "settings-field-value").ToArray(),
+            controls = elements.Where(SettingsControlElement).ToArray(),
             textFields = elements.Where(element => ElementRole(element) is "settings-field-label" or "settings-field-value").ToArray(),
+            interaction = SettingsInteractionEvidence(metadata, elements),
             preview = (object?)null
         };
+    }
+
+    private static object SettingsAppShellEvidence(List<Dictionary<string, object?>> elements, Rectangle capture)
+    {
+        return new
+        {
+            contract = "settings-app-shell-evidence/v1",
+            root = RectEvidence(new Rectangle(0, 0, capture.Width, capture.Height)),
+            contentBounds = RectEvidence(new Rectangle(0, 0, capture.Width, capture.Height), includeAspectRatio: true),
+            shell = FirstSettingsElement(elements, "settings-shell"),
+            titlebar = FirstSettingsElement(elements, "settings-titlebar"),
+            dragZone = FirstSettingsElement(elements, "settings-drag-zone"),
+            body = FirstSettingsElement(elements, "settings-body"),
+            sidebar = FirstSettingsElement(elements, "settings-sidebar"),
+            content = FirstSettingsElement(elements, "settings-content"),
+            contentHeader = FirstSettingsElement(elements, "settings-content-header"),
+            contentBody = FirstSettingsElement(elements, "settings-content-body")
+        };
+    }
+
+    private static object SettingsNavigationEvidence(
+        ScreenshotMetadata metadata,
+        List<Dictionary<string, object?>> elements,
+        out SettingsNavigationSummary summary)
+    {
+        var tabs = elements
+            .Where(element => ElementRole(element) == "settings-sidebar-tab")
+            .Select((element, index) => SettingsDiagnosticElement(element, SettingsElementDiagnosticId(element, index), index))
+            .ToArray();
+        var regions = elements
+            .Where(element => ElementRole(element) == "settings-region-segment")
+            .Select((element, index) => SettingsDiagnosticElement(element, SettingsElementDiagnosticId(element, index), index))
+            .ToArray();
+        var activeTabs = elements
+            .Where(element => ElementRole(element) == "settings-sidebar-tab" && SettingsElementSelected(element))
+            .ToArray();
+        var activeRegions = elements
+            .Where(element => ElementRole(element) == "settings-region-segment" && SettingsElementSelected(element))
+            .ToArray();
+        summary = new SettingsNavigationSummary(
+            tabs.Length,
+            activeTabs.Length,
+            regions.Length,
+            activeRegions.Length);
+        return new
+        {
+            contract = "settings-navigation-evidence/v1",
+            requestedTab = metadata.Tab,
+            activeTab = activeTabs.FirstOrDefault() is { } activeTab
+                ? SettingsDiagnosticElement(activeTab, SettingsElementDiagnosticId(activeTab, 0), 0)
+                : null,
+            activeTabId = activeTabs.FirstOrDefault() is { } activeTabId
+                ? SettingsElementDiagnosticId(activeTabId, 0)
+                : null,
+            activeTabCount = activeTabs.Length,
+            tabCount = tabs.Length,
+            tabs,
+            requestedRegion = metadata.Region,
+            activeRegion = metadata.Region,
+            activeRegionId = activeRegions.FirstOrDefault() is { } activeRegion
+                ? SettingsElementDiagnosticId(activeRegion, 0)
+                : null,
+            activeRegionCount = activeRegions.Length,
+            regionCount = regions.Length,
+            regions
+        };
+    }
+
+    private static object[] SettingsSectionEvidence(List<Dictionary<string, object?>> elements)
+    {
+        var sectionRoles = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "settings-shell",
+            "settings-titlebar",
+            "settings-drag-zone",
+            "settings-body",
+            "settings-sidebar",
+            "settings-content",
+            "settings-content-header",
+            "settings-content-body",
+            "settings-region-tabs",
+            "settings-panel",
+            "settings-matrix"
+        };
+        return elements
+            .Where(element => ElementRole(element) is { } role && sectionRoles.Contains(role))
+            .Select((element, index) => new
+            {
+                sectionId = SettingsElementDiagnosticId(element, index),
+                role = ElementRole(element),
+                text = element.TryGetValue("text", out var text) ? text : null,
+                bounds = element.TryGetValue("bounds", out var bounds) ? bounds : null,
+                sourceBounds = element.TryGetValue("sourceBounds", out var sourceBounds) ? sourceBounds : null,
+                styles = element.TryGetValue("styles", out var styles) ? styles : null,
+                attributes = element.TryGetValue("attributes", out var attributes) ? attributes : null
+            })
+            .Cast<object>()
+            .ToArray();
+    }
+
+    private static object SettingsLayoutHealthEvidence(
+        ScreenshotMetadata metadata,
+        Rectangle capture,
+        List<Dictionary<string, object?>> elements,
+        SettingsNavigationSummary navigation)
+    {
+        var textOverflow = elements
+            .Where(SettingsTextElementOverflows)
+            .Select((element, index) => SettingsDiagnosticElement(element, SettingsElementDiagnosticId(element, index), index))
+            .Take(24)
+            .ToArray();
+        var clippedElements = elements
+            .Where(SettingsElementIsClipped)
+            .Select((element, index) => SettingsDiagnosticElement(element, SettingsElementDiagnosticId(element, index), index))
+            .Take(24)
+            .ToArray();
+        var root = RectEvidence(new Rectangle(0, 0, capture.Width, capture.Height));
+        var outsideRoot = elements
+            .Where(element => element.TryGetValue("bounds", out var bounds) && !RectWithin(bounds, root, 1.5d))
+            .Select((element, index) => SettingsDiagnosticElement(element, SettingsElementDiagnosticId(element, index), index))
+            .Take(24)
+            .ToArray();
+        var shell = FirstSettingsElement(elements, "settings-shell");
+        var content = FirstSettingsElement(elements, "settings-content");
+        var contentBody = FirstSettingsElement(elements, "settings-content-body");
+        var isComponentCrop = string.Equals(metadata.Surface, "windows-settings-component", StringComparison.Ordinal);
+        var expectsRegion = !string.IsNullOrWhiteSpace(metadata.Region)
+            && !string.Equals(metadata.Region, "general", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(metadata.OverlayId);
+        return new
+        {
+            contract = "settings-layout-health/v1",
+            hasOverflowingText = textOverflow.Length > 0,
+            overflowingTextCount = textOverflow.Length,
+            overflowingTextElements = textOverflow,
+            clippedElementCount = clippedElements.Length,
+            clippedElements,
+            outsideRootCount = outsideRoot.Length,
+            outsideRootElements = outsideRoot,
+            duplicateActiveTabs = navigation.ActiveTabCount > 1,
+            missingActiveTab = !isComponentCrop && navigation.TabCount > 0 && navigation.ActiveTabCount != 1,
+            duplicateActiveRegions = navigation.ActiveRegionCount > 1,
+            missingActiveRegion = !isComponentCrop && expectsRegion && navigation.RegionCount > 0 && navigation.ActiveRegionCount != 1,
+            shellWithinRoot = shell is not null && shell.TryGetValue("bounds", out var shellBounds)
+                ? RectWithin(shellBounds, root, 1.5d)
+                : (bool?)null,
+            contentWithinShell = shell is not null
+                && content is not null
+                && shell.TryGetValue("bounds", out var shellForContent)
+                && content.TryGetValue("bounds", out var contentBounds)
+                    ? RectWithin(contentBounds, shellForContent, 1.5d)
+                    : (bool?)null,
+            contentBodyWithinShell = shell is not null
+                && contentBody is not null
+                && shell.TryGetValue("bounds", out var shellForBody)
+                && contentBody.TryGetValue("bounds", out var contentBodyBounds)
+                    ? RectWithin(contentBodyBounds, shellForBody, 1.5d)
+                    : (bool?)null
+        };
+    }
+
+    private static object SettingsCoverageEvidence(
+        List<Dictionary<string, object?>> elements,
+        object[] sections,
+        SettingsNavigationSummary navigation)
+    {
+        var countRole = (string role) => elements.Count(element => ElementRole(element) == role);
+        return new
+        {
+            contract = "settings-coverage-evidence/v1",
+            hasAppShell = countRole("settings-shell") > 0,
+            hasTitlebar = countRole("settings-titlebar") > 0,
+            hasSidebar = countRole("settings-sidebar") > 0,
+            hasContent = countRole("settings-content") > 0,
+            hasContentBody = countRole("settings-content-body") > 0,
+            tabCount = navigation.TabCount,
+            activeTabCount = navigation.ActiveTabCount,
+            regionCount = navigation.RegionCount,
+            activeRegionCount = navigation.ActiveRegionCount,
+            sectionCount = sections.Length,
+            panelCount = countRole("settings-panel"),
+            controlCount = elements.Count(SettingsControlElement),
+            textFieldCount = elements.Count(SettingsTextFieldElement)
+        };
+    }
+
+    private static object SettingsGeometryMatrixEvidence(
+        ScreenshotMetadata metadata,
+        List<Dictionary<string, object?>> elements)
+    {
+        var matrixElements = elements
+            .Where(SettingsGeometryMatrixElement)
+            .Select((element, index) => SettingsGeometryMatrixElementEvidence(element, index))
+            .ToArray();
+        return new
+        {
+            contract = "ui-geometry-matrix/v1",
+            kind = "settings",
+            surface = metadata.Surface,
+            tab = metadata.Tab,
+            overlayId = metadata.OverlayId,
+            requestedRegion = metadata.Region,
+            elementCount = matrixElements.Length,
+            elements = matrixElements
+        };
+    }
+
+    private static bool SettingsGeometryMatrixElement(Dictionary<string, object?> element)
+    {
+        return ElementRole(element) is "settings-shell"
+            or "settings-titlebar"
+            or "settings-drag-zone"
+            or "settings-body"
+            or "settings-sidebar"
+            or "settings-sidebar-tab"
+            or "settings-content"
+            or "settings-content-header"
+            or "settings-content-body"
+            or "settings-region-tabs"
+            or "settings-region-segment"
+            or "settings-section"
+            or "settings-panel"
+            or "settings-panel-title"
+            or "settings-field-row"
+            or "settings-field-label"
+            or "settings-field-value"
+            or "settings-button"
+            or "settings-segmented"
+            or "settings-choice"
+            or "settings-toggle"
+            or "settings-check"
+            or "settings-stepper"
+            or "settings-slider"
+            or "settings-textbox"
+            or "settings-control"
+            or "settings-segment-choice"
+            or "settings-button-row"
+            or "settings-preview-summary"
+            or "settings-preview-stage"
+            or "settings-preview-image"
+            or "settings-matrix"
+            or "settings-matrix-row"
+            or "settings-matrix-cell";
+    }
+
+    private static object SettingsGeometryMatrixElementEvidence(
+        Dictionary<string, object?> element,
+        int index)
+    {
+        var evidence = SettingsDiagnosticElement(element, SettingsGeometryMatrixElementId(element, index), index);
+        return new
+        {
+            role = ObjectPropertyValue(evidence, "role"),
+            id = ObjectPropertyValue(evidence, "id"),
+            text = ObjectPropertyValue(evidence, "text"),
+            bounds = ObjectPropertyValue(evidence, "bounds"),
+            sourceBounds = ObjectPropertyValue(evidence, "sourceBounds"),
+            selected = ObjectPropertyValue(evidence, "selected"),
+            cursor = ObjectPropertyValue(evidence, "cursor"),
+            controlKind = ObjectPropertyValue(evidence, "controlKind"),
+            enabled = SettingsElementEnabled(element),
+            visible = SettingsElementVisible(element),
+            @checked = ElementAttribute(element, "checked"),
+            value = ElementAttribute(element, "value"),
+            index,
+            evidenceKey = ElementAttribute(element, "evidenceKey"),
+            matrixKind = ElementAttribute(element, "matrixKind"),
+            rowIndex = ElementAttribute(element, "rowIndex"),
+            columnIndex = ElementAttribute(element, "columnIndex"),
+            rowKey = ElementAttribute(element, "rowKey"),
+            columnKey = ElementAttribute(element, "columnKey")
+        };
+    }
+
+    private static string SettingsGeometryMatrixElementId(Dictionary<string, object?> element, int index)
+    {
+        var role = ElementRole(element) ?? "settings-element";
+        if (ElementAttribute(element, "evidenceKey") is { } evidenceKey
+            && !string.IsNullOrWhiteSpace(evidenceKey.ToString()))
+        {
+            return evidenceKey.ToString()!;
+        }
+
+        if (ElementAttribute(element, "tabId") is { } tabId
+            && !string.IsNullOrWhiteSpace(tabId.ToString()))
+        {
+            return $"tab:{tabId}";
+        }
+
+        if (ElementAttribute(element, "regionId") is { } regionId
+            && !string.IsNullOrWhiteSpace(regionId.ToString()))
+        {
+            return $"region:{regionId}";
+        }
+
+        if (ElementAttribute(element, "matrixKind") is { } matrixKind
+            && !string.IsNullOrWhiteSpace(matrixKind.ToString()))
+        {
+            var rowIdentity = ElementAttribute(element, "rowKey") ?? ElementAttribute(element, "rowIndex") ?? "none";
+            var columnIdentity = ElementAttribute(element, "columnKey") ?? ElementAttribute(element, "columnIndex") ?? "none";
+            return $"{matrixKind}:{role}:{rowIdentity}:{columnIdentity}";
+        }
+
+        return $"{role}:{SettingsElementDiagnosticId(element, index)}";
+    }
+
+    private static Dictionary<string, object?>? FirstSettingsElement(
+        List<Dictionary<string, object?>> elements,
+        string role)
+    {
+        return elements.FirstOrDefault(element => ElementRole(element) == role);
+    }
+
+    private static object SettingsDiagnosticElement(Dictionary<string, object?> element, string? id, int fallbackIndex)
+    {
+        return new
+        {
+            role = ElementRole(element),
+            id,
+            text = element.TryGetValue("text", out var text) ? text : null,
+            bounds = element.TryGetValue("bounds", out var bounds) ? bounds : null,
+            sourceBounds = element.TryGetValue("sourceBounds", out var sourceBounds) ? sourceBounds : null,
+            selected = SettingsElementSelected(element),
+            cursor = CursorForElement(element),
+            controlKind = ElementAttribute(element, "controlKind"),
+            index = element.TryGetValue("index", out var index) ? index : fallbackIndex
+        };
+    }
+
+    private static string SettingsElementDiagnosticId(Dictionary<string, object?> element, int index)
+    {
+        var role = ElementRole(element) ?? "settings-section";
+        var tabId = ElementAttribute(element, "tabId")?.ToString();
+        if (!string.IsNullOrWhiteSpace(tabId))
+        {
+            return tabId;
+        }
+
+        var regionId = ElementAttribute(element, "regionId")?.ToString();
+        if (!string.IsNullOrWhiteSpace(regionId))
+        {
+            return regionId;
+        }
+
+        if (role is "settings-shell" or "settings-titlebar" or "settings-drag-zone" or "settings-body" or "settings-sidebar" or "settings-content" or "settings-content-header" or "settings-content-body" or "settings-region-tabs")
+        {
+            return SettingsRoleSuffix(role);
+        }
+
+        var evidenceKey = ElementAttribute(element, "evidenceKey")?.ToString();
+        if (!string.IsNullOrWhiteSpace(evidenceKey))
+        {
+            return evidenceKey;
+        }
+
+        var text = element.TryGetValue("text", out var textValue) ? textValue?.ToString() : null;
+        var textId = NormalizeEvidenceId(text);
+        return string.IsNullOrWhiteSpace(textId) ? $"{role}-{index}" : $"{SettingsRoleSuffix(role)}-{textId}";
+    }
+
+    private static string SettingsRoleSuffix(string role)
+    {
+        return role.StartsWith("settings-", StringComparison.Ordinal)
+            ? role["settings-".Length..]
+            : role;
+    }
+
+    private static string? NormalizeEvidenceId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var builder = new StringBuilder();
+        var lastWasDash = false;
+        foreach (var character in value.Trim().ToLowerInvariant())
+        {
+            if (char.IsAsciiLetterOrDigit(character))
+            {
+                builder.Append(character);
+                lastWasDash = false;
+            }
+            else if (!lastWasDash)
+            {
+                builder.Append('-');
+                lastWasDash = true;
+            }
+        }
+
+        return builder.ToString().Trim('-');
+    }
+
+    private static bool SettingsElementSelected(Dictionary<string, object?> element)
+    {
+        if (ElementAttribute(element, "selected") is bool selected)
+        {
+            return selected;
+        }
+
+        return string.Equals(ElementAttribute(element, "ariaSelected")?.ToString(), "true", StringComparison.OrdinalIgnoreCase)
+            || (element.TryGetValue("className", out var className)
+                && className?.ToString()?.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("active") == true);
+    }
+
+    private static object? ElementAttribute(Dictionary<string, object?> element, string key)
+    {
+        return element.TryGetValue("attributes", out var attributesValue)
+            && attributesValue is Dictionary<string, object?> attributes
+            && attributes.TryGetValue(key, out var value)
+                ? value
+                : null;
+    }
+
+    private static bool? SettingsElementEnabled(Dictionary<string, object?> element)
+    {
+        if (ElementAttribute(element, "enabled") is bool enabled)
+        {
+            return enabled;
+        }
+
+        if (ElementAttribute(element, "disabled") is bool disabled)
+        {
+            return !disabled;
+        }
+
+        return null;
+    }
+
+    private static bool? SettingsElementVisible(Dictionary<string, object?> element)
+    {
+        return ElementAttribute(element, "visible") is bool visible ? visible : null;
+    }
+
+    private static bool SettingsTextElementOverflows(Dictionary<string, object?> element)
+    {
+        return SettingsTextFitRole(ElementRole(element))
+            && element.TryGetValue("textMetrics", out var metrics)
+            && (ObjectBoolean(metrics, "fitsWidth") is false || ObjectBoolean(metrics, "fitsHeight") is false);
+    }
+
+    private static bool SettingsTextFitRole(string? role)
+    {
+        return role is "settings-sidebar-tab"
+            or "settings-region-segment"
+            or "settings-panel-title"
+            or "settings-field-label"
+            or "settings-field-value"
+            or "settings-button"
+            or "settings-choice"
+            or "settings-drag-zone"
+            or "settings-segment-choice"
+            or "settings-button-row"
+            or "settings-preview-summary"
+            or "settings-matrix-row"
+            or "settings-matrix-cell";
+    }
+
+    private static bool SettingsElementIsClipped(Dictionary<string, object?> element)
+    {
+        if (!element.TryGetValue("sourceBounds", out var source)
+            || !element.TryGetValue("bounds", out var bounds))
+        {
+            return false;
+        }
+
+        var sourceWidth = ObjectNumber(source, "width");
+        var sourceHeight = ObjectNumber(source, "height");
+        var boundsWidth = ObjectNumber(bounds, "width");
+        var boundsHeight = ObjectNumber(bounds, "height");
+        return sourceWidth is not null
+            && sourceHeight is not null
+            && boundsWidth is not null
+            && boundsHeight is not null
+            && (boundsWidth.Value + 0.5d < sourceWidth.Value || boundsHeight.Value + 0.5d < sourceHeight.Value);
+    }
+
+    private static bool SettingsControlElement(Dictionary<string, object?> element)
+    {
+        return ElementRole(element) is "settings-control"
+            or "settings-button"
+            or "settings-choice"
+            or "settings-toggle"
+            or "settings-check"
+            or "settings-stepper"
+            or "settings-slider"
+            or "settings-textbox"
+            or "settings-segment-choice"
+            or "settings-button-row"
+            or "settings-preview-summary"
+            or "settings-preview-stage"
+            or "settings-preview-image"
+            or "settings-drag-zone"
+            or "settings-field-label"
+            or "settings-field-value"
+            or "settings-matrix"
+            or "settings-matrix-row"
+            or "settings-matrix-cell";
+    }
+
+    private static bool SettingsTextFieldElement(Dictionary<string, object?> element)
+    {
+        return ElementRole(element) is "settings-panel-title"
+            or "settings-field-label"
+            or "settings-field-value";
+    }
+
+    private static bool RectWithin(object? inner, object? outer, double tolerance)
+    {
+        var left = ObjectNumber(inner, "x");
+        var top = ObjectNumber(inner, "y");
+        var width = ObjectNumber(inner, "width");
+        var height = ObjectNumber(inner, "height");
+        var outerLeft = ObjectNumber(outer, "x");
+        var outerTop = ObjectNumber(outer, "y");
+        var outerWidth = ObjectNumber(outer, "width");
+        var outerHeight = ObjectNumber(outer, "height");
+        if (left is null || top is null || width is null || height is null
+            || outerLeft is null || outerTop is null || outerWidth is null || outerHeight is null)
+        {
+            return false;
+        }
+
+        return left.Value >= outerLeft.Value - tolerance
+            && top.Value >= outerTop.Value - tolerance
+            && left.Value + width.Value <= outerLeft.Value + outerWidth.Value + tolerance
+            && top.Value + height.Value <= outerTop.Value + outerHeight.Value + tolerance;
+    }
+
+    private static double? ObjectNumber(object? value, string propertyName)
+    {
+        var propertyValue = ObjectPropertyValue(value, propertyName);
+        return propertyValue switch
+        {
+            byte number => number,
+            short number => number,
+            int number => number,
+            long number => number,
+            float number => number,
+            double number => number,
+            decimal number => (double)number,
+            _ => null
+        };
+    }
+
+    private static bool? ObjectBoolean(object? value, string propertyName)
+    {
+        return ObjectPropertyValue(value, propertyName) is bool boolean ? boolean : null;
+    }
+
+    private static object? ObjectPropertyValue(object? value, string propertyName)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value is Dictionary<string, object?> dictionary)
+        {
+            return dictionary.TryGetValue(propertyName, out var item) ? item : null;
+        }
+
+        return value.GetType()
+            .GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase)
+            ?.GetValue(value);
     }
 
     private static List<Dictionary<string, object?>> SettingsCapturedElements(ScreenshotMetadata metadata, Control root, Rectangle capture)
@@ -3265,12 +4952,60 @@ internal static class Program
         var surface = Descendants(root).OfType<DesignV2SettingsSurface>().FirstOrDefault();
         var offset = surface is null ? Point.Empty : ControlOffsetFrom(root, surface);
 
-        AddCapturedElement(elements, "settings-shell", 0, "Settings shell", Offset(new Rectangle(44, 36, 1152, 608), offset), capture, null, ColorToCss(OverlayTheme.Colors.SettingsBackground));
-        AddCapturedElement(elements, "settings-titlebar", 0, "Tech Mates Racing Overlay", Offset(new Rectangle(44, 36, 1152, 58), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextPrimary), ColorToCss(OverlayTheme.DesignV2.TitleBar));
-        AddCapturedElement(elements, "settings-sidebar", 0, "Settings navigation", Offset(new Rectangle(64, 116, 190, 506), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextSecondary), ColorToCss(OverlayTheme.DesignV2.SurfaceRaised));
-        AddCapturedElement(elements, "settings-content", 0, "Settings content", Offset(new Rectangle(278, 116, 890, 506), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextPrimary), ColorToCss(OverlayTheme.DesignV2.SurfaceRaised));
-        AddCapturedElement(elements, "settings-content-header", 0, SettingsHeaderText(metadata), Offset(new Rectangle(278, 116, 890, 70), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextPrimary), ColorToCss(OverlayTheme.DesignV2.TitleBar));
-        AddCapturedElement(elements, "settings-content-body", 0, metadata.Region, Offset(new Rectangle(278, 188, 890, 434), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextSecondary), null);
+        AddCapturedElement(elements, "settings-shell", 0, "Settings shell", Offset(new Rectangle(SettingsShellX, SettingsShellY, SettingsShellWidth, SettingsShellHeight), offset), capture, null, ColorToCss(OverlayTheme.Colors.SettingsBackground));
+        AddCapturedElement(
+            elements,
+            "settings-titlebar",
+            0,
+            "Tech Mates Racing Overlay",
+            Offset(new Rectangle(SettingsShellX, SettingsShellY, SettingsShellWidth, SettingsTitlebarHeight), offset),
+            capture,
+            ColorToCss(OverlayTheme.DesignV2.TextPrimary),
+            ColorToCss(OverlayTheme.DesignV2.TitleBar),
+            new Dictionary<string, object?>
+            {
+                ["evidenceKey"] = "chrome.titlebar",
+                ["enabled"] = true,
+                ["visible"] = true
+            });
+        AddCapturedElement(
+            elements,
+            "settings-drag-zone",
+            0,
+            "Titlebar drag zone",
+            Offset(new Rectangle(SettingsShellX, SettingsShellY, SettingsShellWidth, SettingsTitlebarHeight), offset),
+            capture,
+            ColorToCss(OverlayTheme.DesignV2.TextPrimary),
+            null,
+            new Dictionary<string, object?>
+            {
+                ["evidenceKey"] = "chrome.titlebar",
+                ["controlKind"] = "drag-zone",
+                ["enabled"] = true,
+                ["visible"] = true
+            });
+        AddCapturedElement(
+            elements,
+            "settings-button",
+            0,
+            "X",
+            Offset(DesignV2SettingsLayout.CloseButtonBounds(), offset),
+            capture,
+            ColorToCss(OverlayTheme.DesignV2.TextPrimary),
+            null,
+            new Dictionary<string, object?>
+            {
+                ["evidenceKey"] = "chrome.close",
+                ["controlKind"] = "button",
+                ["enabled"] = true,
+                ["visible"] = true
+            },
+            TextMetricsEvidence("X", new Rectangle(0, 0, SettingsGeometry.CloseButtonWidth, SettingsGeometry.CloseButtonHeight), 13f, FontStyle.Bold));
+        AddCapturedElement(elements, "settings-body", 0, "Settings body", Offset(new Rectangle(SettingsShellX, SettingsShellY + SettingsTitlebarHeight, SettingsShellWidth, SettingsBodyHeight), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextSecondary), null);
+        AddCapturedElement(elements, "settings-sidebar", 0, "Settings navigation", Offset(new Rectangle(SettingsSidebarX, SettingsSidebarY, SettingsSidebarWidth, SettingsSidebarHeight), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextSecondary), ColorToCss(OverlayTheme.DesignV2.SurfaceRaised));
+        AddCapturedElement(elements, "settings-content", 0, "Settings content", Offset(new Rectangle(SettingsContentX, SettingsContentY, SettingsContentWidth, SettingsContentHeight), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextPrimary), ColorToCss(OverlayTheme.DesignV2.SurfaceRaised));
+        AddCapturedElement(elements, "settings-content-header", 0, SettingsHeaderText(metadata), Offset(new Rectangle(SettingsContentX, SettingsContentY, SettingsContentWidth, SettingsContentHeaderHeight), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextPrimary), ColorToCss(OverlayTheme.DesignV2.TitleBar));
+        AddCapturedElement(elements, "settings-content-body", 0, metadata.Region, Offset(new Rectangle(SettingsContentX, SettingsContentBodyY, SettingsContentWidth, SettingsContentBodyHeight), offset), capture, ColorToCss(OverlayTheme.DesignV2.TextSecondary), null);
 
         var tabs = SettingsSidebarTabs();
         for (var index = 0; index < tabs.Count; index++)
@@ -3283,7 +5018,7 @@ internal static class Program
                 "settings-sidebar-tab",
                 index,
                 tab.Label,
-                Offset(new Rectangle(78, 136 + index * 32, 162, 27), offset),
+                Offset(DesignV2SettingsLayout.SidebarButtonBounds(index), offset),
                 capture,
                 ColorToCss(selected ? OverlayTheme.DesignV2.TextPrimary : OverlayTheme.DesignV2.TextSecondary),
                 selected ? ColorToCss(OverlayTheme.DesignV2.Magenta) : null,
@@ -3297,8 +5032,21 @@ internal static class Program
 
         if (!string.IsNullOrWhiteSpace(metadata.OverlayId))
         {
-            var x = 312;
+            var x = SettingsPanelX + SettingsRegionSegmentPadding;
             var regions = SettingsRegionsFor(metadata.OverlayId);
+            if (regions.Count > 0)
+            {
+                AddCapturedElement(
+                    elements,
+                    "settings-region-tabs",
+                    0,
+                    "Settings page sections",
+                    Offset(new Rectangle(SettingsPanelX, SettingsRegionSegmentShellY(), SettingsSegmentShellWidth(regions), SettingsRegionSegmentShellHeight), offset),
+                    capture,
+                    ColorToCss(OverlayTheme.DesignV2.TextSecondary),
+                    null);
+            }
+
             for (var index = 0; index < regions.Count; index++)
             {
                 var region = regions[index];
@@ -3309,7 +5057,7 @@ internal static class Program
                     "settings-region-segment",
                     index,
                     region.Label,
-                    Offset(new Rectangle(x, 208, width, 30), offset),
+                    Offset(new Rectangle(x, SettingsRegionSegmentY(), width, SettingsRegionSegmentHeight), offset),
                     capture,
                     ColorToCss(selected ? OverlayTheme.DesignV2.TextPrimary : OverlayTheme.DesignV2.Cyan),
                     selected ? ColorToCss(OverlayTheme.DesignV2.Magenta) : null,
@@ -3319,37 +5067,133 @@ internal static class Program
                         ["selected"] = selected,
                         ["controlKind"] = "tab"
                     });
-                x += width + 12;
+                x += width + SettingsRegionSegmentGap;
             }
         }
 
         var panelIndex = 0;
         foreach (var panel in SettingsPanelRects(metadata))
         {
-            AddCapturedElement(elements, "settings-panel", panelIndex++, panel.Label, Offset(panel.Bounds, offset), capture, ColorToCss(OverlayTheme.DesignV2.TextPrimary), ColorToCss(OverlayTheme.DesignV2.SurfaceRaised));
+            var currentIndex = panelIndex++;
+            var panelKey = NormalizeEvidenceId(panel.Label) ?? $"panel-{currentIndex}";
+            AddCapturedElement(
+                elements,
+                "settings-panel",
+                currentIndex,
+                panel.Label,
+                Offset(panel.Bounds, offset),
+                capture,
+                ColorToCss(OverlayTheme.DesignV2.TextPrimary),
+                ColorToCss(OverlayTheme.DesignV2.SurfaceRaised),
+                new Dictionary<string, object?>
+                {
+                    ["evidenceKey"] = $"panel:{panelKey}"
+                });
+            AddCapturedElement(
+                elements,
+                "settings-panel-title",
+                currentIndex,
+                panel.Label,
+                Offset(DesignV2SettingsLayout.PanelTitleBounds(panel.Bounds), offset),
+                capture,
+                ColorToCss(OverlayTheme.DesignV2.TextPrimary),
+                null,
+                new Dictionary<string, object?>
+                {
+                    ["evidenceKey"] = $"panel-title:{panelKey}",
+                    ["evidenceRole"] = "panel-title"
+                },
+                TextMetricsEvidence(panel.Label, new Rectangle(0, 0, DesignV2SettingsLayout.PanelTitleBounds(panel.Bounds).Width, DesignV2SettingsLayout.PanelTitleBounds(panel.Bounds).Height), 16f, FontStyle.Bold));
         }
 
         AddSettingsDrawnTextElements(elements, metadata, capture, offset);
+        AddSettingsMatrixElements(elements, metadata, capture, offset);
 
         if (surface is not null)
         {
             var controlIndex = 0;
             foreach (Control control in Descendants(surface))
             {
+                var surfaceControlBounds = ControlBoundsRelativeTo(surface, control);
+                var controlBounds = Offset(surfaceControlBounds, offset);
+                var controlRole = SettingsControlRole(control);
+                var elementIndex = controlIndex++;
                 AddCapturedElement(
                     elements,
-                    SettingsControlRole(control),
-                    controlIndex++,
+                    controlRole,
+                    elementIndex,
                     SettingsControlText(control),
-                    Offset(ControlBoundsRelativeTo(surface, control), offset),
+                    controlBounds,
                     capture,
                     ColorToCss(control.ForeColor),
                     ColorToCss(control.BackColor),
-                    SettingsControlAttributes(control));
+                    SettingsControlAttributes(control, metadata, surfaceControlBounds));
+                AddSettingsDerivedControlElements(elements, control, controlRole, elementIndex, controlBounds, capture);
             }
         }
 
         return elements;
+    }
+
+    private static void AddSettingsDerivedControlElements(
+        List<Dictionary<string, object?>> elements,
+        Control control,
+        string controlRole,
+        int controlIndex,
+        Rectangle controlBounds,
+        Rectangle capture)
+    {
+        if (controlRole != "settings-segmented")
+        {
+            return;
+        }
+
+        var options = SettingsChoiceOptions(control);
+        if (options.Count == 0)
+        {
+            return;
+        }
+
+        var selected = ReadMemberValue(control, "Selected")?.ToString();
+        var segmentInset = SettingsGeometry.SegmentedPadding;
+        var segmentGap = SettingsGeometry.SegmentedChoiceGap;
+        var segmentCount = Math.Max(1, options.Count);
+        var segmentWidth = Math.Max(0, controlBounds.Width - segmentInset * 2 - segmentGap * (segmentCount - 1)) / segmentCount;
+        var segmentX = controlBounds.Left + segmentInset;
+        for (var index = 0; index < options.Count; index++)
+        {
+            var option = options[index];
+            var segmentRight = index == options.Count - 1
+                ? controlBounds.Right - segmentInset
+                : segmentX + segmentWidth;
+            var segmentBounds = new Rectangle(
+                segmentX,
+                controlBounds.Top + segmentInset,
+                Math.Max(0, segmentRight - segmentX),
+                Math.Max(0, controlBounds.Height - segmentInset * 2));
+            AddCapturedElement(
+                elements,
+                "settings-segment-choice",
+                controlIndex * 100 + index,
+                option,
+                segmentBounds,
+                capture,
+                ColorToCss(string.Equals(option, selected, StringComparison.OrdinalIgnoreCase)
+                    ? OverlayTheme.DesignV2.TextPrimary
+                    : OverlayTheme.DesignV2.Cyan),
+                string.Equals(option, selected, StringComparison.OrdinalIgnoreCase)
+                    ? ColorToCss(OverlayTheme.DesignV2.Magenta)
+                    : null,
+                new Dictionary<string, object?>
+                {
+                    ["controlKind"] = "segment-choice",
+                    ["selected"] = string.Equals(option, selected, StringComparison.OrdinalIgnoreCase),
+                    ["enabled"] = control.Enabled,
+                    ["visible"] = control.Visible
+                },
+                TextMetricsEvidence(option, segmentBounds, 10.5f, FontStyle.Bold));
+            segmentX = segmentRight + segmentGap;
+        }
     }
 
     private static void AddSettingsDrawnTextElements(
@@ -3361,66 +5205,1229 @@ internal static class Program
         var index = 0;
         if (string.Equals(metadata.Tab, "general", StringComparison.OrdinalIgnoreCase))
         {
+            var unitsPanel = DesignV2SettingsLayout.UnitsPanelBounds();
+            var unitsRow = DesignV2SettingsLayout.FieldRowBounds(unitsPanel, 0, SettingsGeometry.SegmentedRowWidth);
+            var updatesPanel = DesignV2SettingsLayout.UpdatesPanelBounds();
+            var updatesRow = DesignV2SettingsLayout.FieldRowBounds(updatesPanel, 0, SettingsGeometry.FieldRowDefaultWidth);
+            var previewPanel = DesignV2SettingsLayout.PreviewPanelBounds();
+            AddSettingsFieldEvidence(
+                elements,
+                ref index,
+                "general.units.measurement-system",
+                "Measurement system",
+                null,
+                unitsRow,
+                DesignV2SettingsLayout.FieldLabelBounds(unitsRow, 160),
+                null,
+                capture,
+                offset);
+            AddSettingsFieldEvidence(
+                elements,
+                ref index,
+                "general.updates.status",
+                "Status",
+                SettingsUpdateStatusText(metadata),
+                updatesRow,
+                DesignV2SettingsLayout.FieldLabelBounds(updatesRow, 70),
+                DesignV2SettingsLayout.UpdatesStatusValueBounds(updatesRow),
+                capture,
+                offset,
+                valueColor: SettingsUpdateStatusColor(metadata),
+                valueFontSize: 10f,
+                valueBold: true);
             AddSettingsDrawnTextElement(
                 elements,
                 ref index,
                 "settings-field-label",
-                "Status",
-                new Rectangle(748, 281, 70, 18),
+                "Session data",
+                DesignV2SettingsLayout.PreviewSummaryLabelBounds(120),
                 capture,
                 offset,
                 OverlayTheme.DesignV2.TextSecondary,
                 13f,
                 FontStyle.Regular,
-                "general.updates.status.label",
+                "general.preview.session-data.label",
                 "label");
             AddSettingsDrawnTextElement(
                 elements,
                 ref index,
                 "settings-field-value",
-                "Disabled.",
-                new Rectangle(826, 281, 290, 18),
+                string.IsNullOrWhiteSpace(metadata.PreviewMode) ? "Preview off" : $"{SettingsPreviewDisplayName(metadata.PreviewMode)} preview active",
+                DesignV2SettingsLayout.PreviewSummaryValueBounds(250),
                 capture,
                 offset,
-                OverlayTheme.DesignV2.TextMuted,
-                10f,
+                metadata.PreviewMode is null ? OverlayTheme.DesignV2.TextMuted : OverlayTheme.Colors.SuccessText,
+                12f,
                 FontStyle.Bold,
-                "general.updates.status.value",
+                "general.preview.session-data.value",
                 "value");
+            AddSettingsGeneralPreviewSummary(elements, ref index, metadata, capture, offset);
             return;
         }
 
         if (string.Equals(metadata.Tab, "support", StringComparison.OrdinalIgnoreCase)
             || string.Equals(metadata.Tab, "error-logging", StringComparison.OrdinalIgnoreCase))
         {
-            AddSettingsDrawnTextElement(
+            var capturePanel = DesignV2SettingsLayout.SupportCapturePanelBounds();
+            var rawCaptureRow = DesignV2SettingsLayout.FieldRowBounds(capturePanel, 0, SettingsGeometry.ToggleRowWidth);
+            AddSettingsFieldEvidence(
                 elements,
                 ref index,
-                "settings-field-label",
+                "support.capture.raw.enabled",
+                "Capture future live telemetry",
+                null,
+                rawCaptureRow,
+                DesignV2SettingsLayout.FieldLabelBounds(rawCaptureRow, SettingsGeometry.SupportRawCaptureLabelWidth),
+                null,
+                capture,
+                offset);
+            AddSettingsFieldEvidence(
+                elements,
+                ref index,
+                "support.bundle.latest",
                 "Latest bundle",
-                new Rectangle(328, 514, 110, 18),
+                "No bundle yet",
+                SettingsSupportBundleRowBounds(),
+                SettingsSupportBundleLabelBounds(),
+                SettingsSupportBundleValueBounds(),
                 capture,
                 offset,
-                OverlayTheme.DesignV2.TextSecondary,
-                13f,
-                FontStyle.Regular,
-                "support.bundle.latest.label",
-                "label");
-            AddSettingsDrawnTextElement(
+                valueFontSize: SettingsSupportBundleValueFontSize,
+                valueBold: true,
+                valueMonospaced: true);
+            AddSettingsPreviewSummary(
                 elements,
                 ref index,
-                "settings-field-value",
-                "No bundle yet",
-                new Rectangle(454, 513, 220, 18),
+                "support.capture.raw.description",
+                "Raw iRacing frame capture runs only when requested.",
+                DesignV2SettingsLayout.SupportDescriptionLineBounds(0),
+                capture,
+                offset);
+            AddSettingsPreviewSummary(
+                elements,
+                ref index,
+                "support.bundle.create.description",
+                "Create a bundle after reproducing an issue.",
+                DesignV2SettingsLayout.SupportDescriptionLineBounds(1),
+                capture,
+                offset);
+            AddSettingsAnalysisRows(elements, ref index, capture, offset);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(metadata.OverlayId))
+        {
+            if (string.Equals(metadata.Region, "general", StringComparison.OrdinalIgnoreCase))
+            {
+                AddSettingsOverlayGeneralRows(elements, metadata.OverlayId!, capture, offset, ref index);
+            }
+            else if (string.Equals(metadata.OverlayId, "stream-chat", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(metadata.Region, "content", StringComparison.OrdinalIgnoreCase))
+            {
+                AddSettingsStreamChatContentRows(elements, capture, offset, ref index);
+            }
+            else if (string.Equals(metadata.OverlayId, "garage-cover", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(metadata.Region, "preview", StringComparison.OrdinalIgnoreCase))
+            {
+                AddSettingsGarageCoverPreviewElements(elements, capture, offset, ref index);
+            }
+            else if (string.Equals(metadata.OverlayId, "stream-chat", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(metadata.Region, "streamlabs", StringComparison.OrdinalIgnoreCase))
+            {
+                AddSettingsPreviewSummary(
+                    elements,
+                    ref index,
+                    "stream-chat.streamlabs.note",
+                    "No Streamlabs-specific message controls yet. This page is reserved for provider-specific controls after Streamlabs payloads are verified.",
+                    new Rectangle(328, 334, 640, 48),
+                    capture,
+                    offset);
+            }
+        }
+    }
+
+    private static void AddSettingsMatrixElements(
+        List<Dictionary<string, object?>> elements,
+        ScreenshotMetadata metadata,
+        Rectangle capture,
+        Point offset)
+    {
+        var index = 0;
+        foreach (var matrix in SettingsMatrixSpecs(metadata))
+        {
+            AddSettingsMatrixElement(elements, ref index, matrix, capture, offset);
+        }
+    }
+
+    private static void AddSettingsOverlayGeneralRows(
+        List<Dictionary<string, object?>> elements,
+        string overlayId,
+        Rectangle capture,
+        Point offset,
+        ref int index)
+    {
+        var definition = DefinitionForOverlayId(overlayId);
+        if (definition is null)
+        {
+            return;
+        }
+
+        var settings = OverlaySettingsFor(definition);
+        var isGarageCover = string.Equals(overlayId, "garage-cover", StringComparison.OrdinalIgnoreCase);
+        var panelBounds = DesignV2SettingsLayout.OverlayControlsPanelBounds(DesignV2SettingsLayout.OverlayControlsPanelHeight(definition, settings));
+        var rowIndex = 0;
+        if (!isGarageCover)
+        {
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+            AddSettingsFieldEvidence(elements, ref index, $"{overlayId}.general.visible", "Visible", null, row, DesignV2SettingsLayout.FieldLabelBounds(row), null, capture, offset);
+        }
+
+        if (definition.ShowScaleControl)
+        {
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
+            AddSettingsFieldEvidence(elements, ref index, $"{overlayId}.general.scale", "Scale", "100%", row, DesignV2SettingsLayout.FieldLabelBounds(row), DesignV2SettingsLayout.FieldValueBounds(row, 40), capture, offset, valueBold: true);
+        }
+
+        if (isGarageCover)
+        {
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+            AddSettingsFieldEvidence(elements, ref index, $"{overlayId}.general.cover-image", "Cover image", null, row, DesignV2SettingsLayout.FieldLabelBounds(row), null, capture, offset);
+        }
+
+        if (definition.ShowOpacityControl)
+        {
+            var label = string.Equals(overlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) ? "Map fill" : "Opacity";
+            var key = string.Equals(label, "Map fill", StringComparison.OrdinalIgnoreCase) ? "map-fill" : "opacity";
+            var value = string.Equals(overlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) ? "0%" : "100%";
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
+            AddSettingsFieldEvidence(elements, ref index, $"{overlayId}.general.{key}", label, value, row, DesignV2SettingsLayout.FieldLabelBounds(row), DesignV2SettingsLayout.FieldValueBounds(row, 40), capture, offset, valueBold: true);
+        }
+
+        switch (overlayId)
+        {
+            case "relative":
+                var relativeRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+                AddSettingsFieldEvidence(elements, ref index, "relative.general.rows-around-focus", "Rows around focus", "7 rows", relativeRow, DesignV2SettingsLayout.FieldLabelBounds(relativeRow, 140), DesignV2SettingsLayout.FieldValueBounds(relativeRow, 36), capture, offset, valueColor: OverlayTheme.DesignV2.TextMuted, valueBold: true);
+                break;
+            case "standings":
+                var carsRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+                AddSettingsFieldEvidence(elements, ref index, "standings.general.cars-in-class", "Cars in class", null, carsRow, DesignV2SettingsLayout.FieldLabelBounds(carsRow, 140), null, capture, offset, valueBold: true);
+                var multiclassRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+                AddSettingsFieldEvidence(elements, ref index, "standings.general.multiclass-sections", "Multiclass sections", null, multiclassRow, DesignV2SettingsLayout.FieldLabelBounds(multiclassRow, 160), null, capture, offset);
+                var otherClassRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+                AddSettingsFieldEvidence(elements, ref index, "standings.general.other-class-cars", "Other-class cars", null, otherClassRow, DesignV2SettingsLayout.FieldLabelBounds(otherClassRow, 140), null, capture, offset, valueBold: true);
+                break;
+            case "gap-to-leader":
+                var gapRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+                AddSettingsFieldEvidence(elements, ref index, "gap-to-leader.general.class-gap-window", "Class gap window", null, gapRow, DesignV2SettingsLayout.FieldLabelBounds(gapRow, 140), null, capture, offset, valueBold: true);
+                break;
+            case "car-radar":
+                var fasterRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+                AddSettingsFieldEvidence(elements, ref index, "car-radar.general.faster-class-warning", "Faster-class warning", null, fasterRow, DesignV2SettingsLayout.FieldLabelBounds(fasterRow, 160), null, capture, offset);
+                var windowRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+                AddSettingsFieldEvidence(elements, ref index, "car-radar.general.multiclass-window", "Multiclass window", null, windowRow, DesignV2SettingsLayout.FieldLabelBounds(windowRow, 150), null, capture, offset, valueBold: true);
+                var rangeRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+                AddSettingsFieldEvidence(elements, ref index, "car-radar.general.radar-range", "Radar range", null, rangeRow, DesignV2SettingsLayout.FieldLabelBounds(rangeRow, 140), null, capture, offset, valueBold: true);
+                break;
+        }
+
+        if (BrowserOverlayCatalog.TryGetRouteForOverlayId(overlayId, out var route))
+        {
+            var url = $"http://127.0.0.1:5199{route}";
+            var browserSize = BrowserOverlayRecommendedSize.ScaledFor(definition, settings);
+            var browserPanel = DesignV2SettingsLayout.BrowserSourcePanelBounds();
+            var urlBounds = DesignV2SettingsLayout.BrowserSourceUrlBounds(browserPanel);
+            var sizeBounds = DesignV2SettingsLayout.BrowserSourceSizeBounds(browserPanel);
+            AddSettingsDrawnTextElement(elements, ref index, "settings-field-value", url, urlBounds, capture, offset, OverlayTheme.DesignV2.Cyan, 12f, FontStyle.Regular, $"{overlayId}.browser-source.url", "value", monospaced: true);
+            AddSettingsFieldEvidence(elements, ref index, $"{overlayId}.browser-source.size", "Browser source size", $"OBS size {browserSize.Width} x {browserSize.Height}", sizeBounds, new Rectangle(sizeBounds.Left, sizeBounds.Top, 1, 1), new Rectangle(sizeBounds.Left, sizeBounds.Top, 180, 18), capture, offset, valueColor: OverlayTheme.DesignV2.TextMuted);
+        }
+    }
+
+    private static void AddSettingsStreamChatContentRows(
+        List<Dictionary<string, object?>> elements,
+        Rectangle capture,
+        Point offset,
+        ref int index)
+    {
+        var panelBounds = DesignV2SettingsLayout.StreamChatContentPanelBounds();
+        var providerRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, 0, SettingsGeometry.ProviderChoiceRowWidth);
+        var streamlabsRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, 1, SettingsGeometry.StreamlabsUrlRowWidth);
+        var twitchRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, 2, SettingsGeometry.TwitchChannelRowWidth);
+        AddSettingsFieldEvidence(elements, ref index, "stream-chat.content.provider", "Mode", null, providerRow, DesignV2SettingsLayout.FieldLabelBounds(providerRow), null, capture, offset, valueBold: true);
+        AddSettingsFieldEvidence(elements, ref index, "stream-chat.content.streamlabs-url", "Streamlabs URL", null, streamlabsRow, DesignV2SettingsLayout.FieldLabelBounds(streamlabsRow), null, capture, offset);
+        AddSettingsFieldEvidence(elements, ref index, "stream-chat.content.twitch-channel", "Twitch channel", null, twitchRow, DesignV2SettingsLayout.FieldLabelBounds(twitchRow), null, capture, offset, valueBold: true);
+    }
+
+    private static void AddSettingsGarageCoverPreviewElements(
+        List<Dictionary<string, object?>> elements,
+        Rectangle capture,
+        Point offset,
+        ref int index)
+    {
+        var stageBounds = DesignV2SettingsLayout.GaragePreviewStageBounds();
+        var imageBounds = DesignV2SettingsLayout.GaragePreviewImageBounds();
+        AddCapturedElement(elements, "settings-panel", index++, null, Offset(stageBounds, offset), capture, null, null, new Dictionary<string, object?> { ["evidenceKey"] = "garage-cover.preview.stage", ["controlKind"] = "preview-stage", ["enabled"] = true, ["visible"] = true });
+        AddCapturedElement(elements, "settings-panel", index++, null, Offset(imageBounds, offset), capture, null, ColorToCss(Color.FromArgb(3, 8, 18)), new Dictionary<string, object?> { ["evidenceKey"] = "garage-cover.preview.shell", ["controlKind"] = "preview-shell", ["enabled"] = true, ["visible"] = true });
+        AddCapturedElement(elements, "settings-preview-stage", index++, null, Offset(stageBounds, offset), capture, null, null, new Dictionary<string, object?> { ["evidenceKey"] = "garage-cover.preview.stage", ["controlKind"] = "preview-stage", ["enabled"] = true, ["visible"] = true });
+        AddCapturedElement(elements, "settings-preview-stage", index++, null, Offset(imageBounds, offset), capture, null, ColorToCss(Color.FromArgb(3, 8, 18)), new Dictionary<string, object?> { ["evidenceKey"] = "garage-cover.preview.shell", ["controlKind"] = "preview-shell", ["enabled"] = true, ["visible"] = true });
+        AddCapturedElement(elements, "settings-preview-image", index++, "Garage cover preview image", Offset(imageBounds, offset), capture, null, null, new Dictionary<string, object?> { ["evidenceKey"] = "garage-cover.preview.image", ["controlKind"] = "image", ["enabled"] = true, ["visible"] = true, ["src"] = "assets/brand/Team_Logo_4k_TMRBRANDING.png", ["alt"] = string.Empty });
+    }
+
+    private static void AddSettingsAnalysisRows(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        Rectangle capture,
+        Point offset)
+    {
+        AddSettingsAnalysisRow(elements, ref index, "support.analysis.local-map-building", "Local map building", "Track geometry", "On", 0, capture, offset);
+        AddSettingsAnalysisRow(elements, ref index, "support.analysis.car-track-history", "Car / track history", "Session history", "On", 1, capture, offset);
+        AddSettingsAnalysisRow(elements, ref index, "support.analysis.fuel-history", "Fuel history", "Fuel model", "On", 2, capture, offset);
+        AddSettingsAnalysisRow(elements, ref index, "support.analysis.radar-calibration", "Radar calibration", "Car radar", "On", 3, capture, offset);
+        AddSettingsAnalysisRow(elements, ref index, "support.analysis.post-race-analysis", "Post-race analysis", "Summary analysis", "On", 4, capture, offset);
+    }
+
+    private static void AddSettingsAnalysisRow(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        string key,
+        string label,
+        string detail,
+        string value,
+        int rowIndex,
+        Rectangle capture,
+        Point offset)
+    {
+        var row = DesignV2SettingsLayout.SupportAnalysisRowBounds(rowIndex);
+        var labelBounds = DesignV2SettingsLayout.SupportAnalysisLabelBounds(row);
+        var valueBounds = DesignV2SettingsLayout.SupportAnalysisValueBounds(row);
+        AddSettingsDrawnTextElement(elements, ref index, "settings-field-row", $"{label} {detail} {value}", row, capture, offset, OverlayTheme.DesignV2.TextSecondary, 13f, FontStyle.Regular, key, "row");
+        AddSettingsDrawnTextElement(elements, ref index, "settings-field-label", label, new Rectangle(labelBounds.Left, labelBounds.Top - 2, 190, 18), capture, offset, OverlayTheme.DesignV2.TextSecondary, 13f, FontStyle.Bold, $"{key}.label", "label");
+        AddSettingsDrawnTextElement(elements, ref index, "settings-field-value", detail, new Rectangle(labelBounds.Left, labelBounds.Top + 15, 190, 16), capture, offset, OverlayTheme.DesignV2.TextMuted, 10.5f, FontStyle.Regular, $"{key}.detail", "value");
+        AddSettingsDrawnTextElement(elements, ref index, "settings-field-value", value, new Rectangle(valueBounds.Left, valueBounds.Top - 5, 34, 16), capture, offset, OverlayTheme.DesignV2.TextMuted, 10f, FontStyle.Bold, $"{key}.value", "value");
+    }
+
+    private static void AddSettingsGeneralPreviewSummary(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        ScreenshotMetadata metadata,
+        Rectangle capture,
+        Point offset)
+    {
+        var previewRow = DesignV2SettingsLayout.PreviewSummaryRowBounds();
+        var modeRow = DesignV2SettingsLayout.PreviewModeRowBounds();
+        var previewText = string.IsNullOrWhiteSpace(metadata.PreviewMode)
+            ? "Session data Preview off"
+            : $"Session data {SettingsPreviewDisplayName(metadata.PreviewMode)} preview active";
+        AddSettingsPreviewSummary(
+            elements,
+            ref index,
+            "general.preview.session-data",
+            previewText,
+            previewRow,
+            capture,
+            offset);
+        AddSettingsPreviewSummary(
+            elements,
+            ref index,
+            "general.preview.mode",
+            "Off Practice Quali Race",
+            modeRow,
+            capture,
+            offset);
+
+        const string firstLine = "Uses deterministic mock telemetry for the selected session.";
+        const string secondLine = "Overlay visibility, session filters, positions, scale, and opacity stay normal.";
+        const string thirdLine = "Hidden overlays stay hidden; Stream Chat is not forced open.";
+        AddSettingsPreviewSummary(
+            elements,
+            ref index,
+            "settings-preview-summary:preview-summary-uses-deterministic-mock-telemetry-for-the-selected-session",
+            firstLine,
+            DesignV2SettingsLayout.PreviewBodyLineBounds(0, SettingsGeometry.PreviewBodyLineWidth),
+            capture,
+            offset);
+        AddSettingsPreviewSummary(
+            elements,
+            ref index,
+            "settings-preview-summary:preview-summary-overlay-visibility-session-filters-positions-scale-and-opacity-stay-normal",
+            secondLine,
+            DesignV2SettingsLayout.PreviewBodyLineBounds(1, SettingsGeometry.PreviewBodyLineWidth),
+            capture,
+            offset);
+        AddSettingsPreviewSummary(
+            elements,
+            ref index,
+            "settings-preview-summary:preview-summary-hidden-overlays-stay-hidden-stream-chat-is-not-forced-open",
+            thirdLine,
+            DesignV2SettingsLayout.PreviewBodyLineBounds(2, SettingsGeometry.PreviewBodyLineWidth),
+            capture,
+            offset);
+    }
+
+    private static void AddSettingsFieldEvidence(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        string key,
+        string label,
+        string? value,
+        Rectangle rowBounds,
+        Rectangle labelBounds,
+        Rectangle? valueBounds,
+        Rectangle capture,
+        Point offset,
+        Color? valueColor = null,
+        float valueFontSize = 12f,
+        bool valueBold = false,
+        bool valueMonospaced = false)
+    {
+        AddSettingsDrawnTextElement(elements, ref index, "settings-field-row", string.IsNullOrWhiteSpace(value) ? label : $"{label} {value}", rowBounds, capture, offset, OverlayTheme.DesignV2.TextSecondary, 13f, FontStyle.Regular, key, "row");
+        if (labelBounds.Width > 1 && labelBounds.Height > 1)
+        {
+            AddSettingsDrawnTextElement(elements, ref index, "settings-field-label", label, labelBounds, capture, offset, OverlayTheme.DesignV2.TextSecondary, 13f, FontStyle.Regular, $"{key}.label", "label");
+        }
+
+        if (!string.IsNullOrWhiteSpace(value) && valueBounds is { } actualValueBounds)
+        {
+            AddSettingsDrawnTextElement(elements, ref index, "settings-field-value", value, actualValueBounds, capture, offset, valueColor ?? OverlayTheme.DesignV2.TextPrimary, valueFontSize, valueBold ? FontStyle.Bold : FontStyle.Regular, $"{key}.value", "value", monospaced: valueMonospaced);
+        }
+    }
+
+    private static void AddSettingsButtonEvidence(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        string key,
+        string text,
+        Rectangle bounds,
+        Rectangle capture,
+        Point offset,
+        bool enabled)
+    {
+        AddCapturedElement(
+            elements,
+            "settings-button",
+            index++,
+            text,
+            Offset(bounds, offset),
+            capture,
+            ColorToCss(enabled ? OverlayTheme.DesignV2.TextPrimary : OverlayTheme.DesignV2.TextMuted),
+            null,
+            new Dictionary<string, object?>
+            {
+                ["controlKind"] = "button",
+                ["evidenceKey"] = key,
+                ["enabled"] = enabled,
+                ["visible"] = true
+            },
+            TextMetricsEvidence(text, bounds, 12f, FontStyle.Bold));
+    }
+
+    private static void AddSettingsPreviewSummary(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        string key,
+        string text,
+        Rectangle bounds,
+        Rectangle capture,
+        Point offset)
+    {
+        AddSettingsDrawnTextElement(elements, ref index, "settings-preview-summary", text, bounds, capture, offset, OverlayTheme.DesignV2.TextMuted, 12f, FontStyle.Regular, key, "summary");
+    }
+
+    private static string SettingsPreviewDisplayName(string previewMode)
+    {
+        return previewMode switch
+        {
+            "practice" => "Practice",
+            "qualifying" => "Qualifying",
+            "race" => "Race",
+            _ => "Review"
+        };
+    }
+
+    private static string SettingsUpdateStatusText(ScreenshotMetadata metadata)
+    {
+        return metadata.Status switch
+        {
+            "disabled" => "Disabled.",
+            "not-installed" => "Dev run.",
+            "idle" => "Ready.",
+            "up-to-date" => "Current v1.0.3.",
+            "available" => "v1.0.4 available.",
+            "checking" => "Checking...",
+            "downloading" => "Downloading v1.0.4: 42%.",
+            "pending-restart" => "v1.0.4 pending restart.",
+            "applying" => "Restarting for v1.0.4.",
+            "failed" => "Check failed.",
+            _ => "Current v1.0.3."
+        };
+    }
+
+    private static bool SettingsUpdateCanCheck(string? status)
+    {
+        return status is "idle" or "up-to-date" or "available" or "pending-restart" or "failed";
+    }
+
+    private static string SettingsUpdatePrimaryText(string? status)
+    {
+        return status == "pending-restart" ? "Restart" : "Install";
+    }
+
+    private static bool SettingsUpdatePrimaryEnabled(string? status)
+    {
+        return status is "available" or "pending-restart";
+    }
+
+    private static Color SettingsUpdateStatusColor(ScreenshotMetadata metadata)
+    {
+        return metadata.Status switch
+        {
+            "available" or "pending-restart" => OverlayTheme.Colors.WarningText,
+            "up-to-date" => OverlayTheme.Colors.SuccessText,
+            "checking" or "downloading" or "applying" => OverlayTheme.Colors.InfoText,
+            "failed" => OverlayTheme.Colors.ErrorText,
+            _ => OverlayTheme.DesignV2.TextMuted
+        };
+    }
+
+    private static void AddSettingsMatrixElement(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        SettingsMatrixSpec matrix,
+        Rectangle capture,
+        Point offset)
+    {
+        var rows = matrix.Rows.Take(MatrixRowsThatFit(matrix)).ToArray();
+        if (rows.Length == 0)
+        {
+            return;
+        }
+
+        var matrixBounds = matrix.IsBlockGrid
+            ? BlockGridMatrixBounds(matrix, rows.Length)
+            : TableMatrixBounds(matrix, rows.Length);
+        AddSettingsMatrixCapturedElement(
+            elements,
+            ref index,
+            "settings-matrix",
+            MatrixText(matrix, rows),
+            matrixBounds,
+            capture,
+            offset,
+            matrix.Kind,
+            rowIndex: null,
+            columnIndex: null,
+            rowKey: null,
+            columnKey: null,
+            textSize: 16f,
+            fontStyle: FontStyle.Regular);
+
+        if (matrix.IsBlockGrid)
+        {
+            AddSettingsBlockGridRows(elements, ref index, matrix, rows, capture, offset);
+            return;
+        }
+
+        AddSettingsTableMatrixRowsAndCells(elements, ref index, matrix, rows, capture, offset);
+    }
+
+    private static void AddSettingsTableMatrixRowsAndCells(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        SettingsMatrixSpec matrix,
+        IReadOnlyList<SettingsMatrixRowSpec> rows,
+        Rectangle capture,
+        Point offset)
+    {
+        for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+        {
+            var row = rows[rowIndex];
+            AddSettingsMatrixCapturedElement(
+                elements,
+                ref index,
+                "settings-matrix-row",
+                row.Label,
+                TableItemCellBounds(matrix, rowIndex),
                 capture,
                 offset,
-                OverlayTheme.DesignV2.TextPrimary,
-                12f,
-                FontStyle.Bold,
-                "support.bundle.latest.value",
-                "value",
-                monospaced: true);
+                matrix.Kind,
+                rowIndex,
+                columnIndex: 0,
+                rowKey: row.Key,
+                columnKey: "item",
+                textSize: 12f,
+                fontStyle: FontStyle.Regular);
         }
+
+        AddSettingsMatrixCapturedElement(
+            elements,
+            ref index,
+            "settings-matrix-cell",
+            "Item",
+            TableItemHeaderBounds(matrix),
+            capture,
+            offset,
+            matrix.Kind,
+            rowIndex: -1,
+            columnIndex: 0,
+            rowKey: "__header__",
+            columnKey: "item",
+            textSize: 10f,
+            fontStyle: FontStyle.Bold);
+
+        if (matrix.UseSessionColumns)
+        {
+            for (var sessionIndex = 0; sessionIndex < matrix.MatrixColumns.Count; sessionIndex++)
+            {
+                var column = matrix.MatrixColumns[sessionIndex];
+                AddSettingsMatrixCapturedElement(
+                    elements,
+                    ref index,
+                    "settings-matrix-cell",
+                    column.Label,
+                    TableSessionHeaderBounds(matrix, sessionIndex),
+                    capture,
+                    offset,
+                    matrix.Kind,
+                    rowIndex: -1,
+                    columnIndex: sessionIndex + 1,
+                    rowKey: "__header__",
+                    columnKey: column.Key,
+                    textSize: 10f,
+                    fontStyle: FontStyle.Bold);
+            }
+        }
+        else
+        {
+            AddSettingsMatrixCapturedElement(
+                elements,
+                ref index,
+                "settings-matrix-cell",
+                "Visible",
+                TableVisibleHeaderBounds(matrix),
+                capture,
+                offset,
+                matrix.Kind,
+                rowIndex: -1,
+                columnIndex: 1,
+                rowKey: "__header__",
+                columnKey: "visible",
+                textSize: 10f,
+                fontStyle: FontStyle.Bold);
+        }
+
+        for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+        {
+            if (matrix.UseSessionColumns)
+            {
+                for (var sessionIndex = 0; sessionIndex < matrix.MatrixColumns.Count; sessionIndex++)
+                {
+                    var row = rows[rowIndex];
+                    var column = matrix.MatrixColumns[sessionIndex];
+                    AddSettingsMatrixCapturedElement(
+                        elements,
+                        ref index,
+                        "settings-matrix-cell",
+                        null,
+                        TableSessionCellBounds(matrix, rowIndex, sessionIndex),
+                        capture,
+                        offset,
+                        matrix.Kind,
+                        rowIndex,
+                        columnIndex: sessionIndex + 1,
+                        rowKey: row.Key,
+                        columnKey: column.Key,
+                        textSize: 12f,
+                        fontStyle: FontStyle.Regular);
+                    AddSettingsMatrixCheckElement(
+                        elements,
+                        ref index,
+                        TableSessionCellBounds(matrix, rowIndex, sessionIndex),
+                        capture,
+                        offset,
+                        matrix.Kind,
+                        rowIndex,
+                        columnIndex: sessionIndex + 1,
+                        rowKey: row.Key,
+                        columnKey: column.Key,
+                        isChecked: SettingsMatrixCheckState(matrix, row, column));
+                }
+            }
+            else
+            {
+                var row = rows[rowIndex];
+                var cellBounds = TableVisibleCellBounds(matrix, rowIndex);
+                AddSettingsMatrixCapturedElement(
+                    elements,
+                    ref index,
+                    "settings-matrix-cell",
+                    null,
+                    cellBounds,
+                    capture,
+                    offset,
+                    matrix.Kind,
+                    rowIndex,
+                    columnIndex: 1,
+                    rowKey: row.Key,
+                    columnKey: "visible",
+                    textSize: 12f,
+                    fontStyle: FontStyle.Regular);
+                AddSettingsMatrixCheckElement(
+                    elements,
+                    ref index,
+                    cellBounds,
+                    capture,
+                    offset,
+                    matrix.Kind,
+                    rowIndex,
+                    columnIndex: 1,
+                    rowKey: row.Key,
+                    columnKey: "visible",
+                    isChecked: SettingsMatrixCheckState(matrix, row, SettingsMatrixVisibleColumn));
+            }
+        }
+    }
+
+    private static void AddSettingsMatrixCheckElement(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        Rectangle cellBounds,
+        Rectangle capture,
+        Point offset,
+        string matrixKind,
+        int rowIndex,
+        int columnIndex,
+        string rowKey,
+        string columnKey,
+        bool isChecked,
+        int checkSize = SettingsGeometry.MatrixCheckSize)
+    {
+        AddSettingsMatrixCapturedElement(
+            elements,
+            ref index,
+            "settings-check",
+            null,
+            CenteredCheckBounds(cellBounds, checkSize),
+            capture,
+            offset,
+            matrixKind,
+            rowIndex,
+            columnIndex,
+            rowKey,
+            columnKey,
+            textSize: 12f,
+            fontStyle: FontStyle.Regular,
+            controlKind: "checkbox",
+            isChecked: isChecked);
+    }
+
+    private static void AddSettingsBlockGridRows(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        SettingsMatrixSpec matrix,
+        IReadOnlyList<SettingsMatrixRowSpec> rows,
+        Rectangle capture,
+        Point offset)
+    {
+        var rowsPerColumn = BlockGridRowsPerColumn(matrix, rows.Count);
+        for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+        {
+            var row = rows[rowIndex];
+            AddSettingsMatrixCapturedElement(
+                elements,
+                ref index,
+                "settings-matrix-row",
+                row.Label,
+                BlockGridRowBounds(matrix, rowIndex, rowsPerColumn),
+                capture,
+                offset,
+                matrix.Kind,
+                rowIndex,
+                columnIndex: rowIndex / rowsPerColumn,
+                rowKey: row.Key,
+                columnKey: $"column-{rowIndex / rowsPerColumn}",
+                textSize: 12f,
+                fontStyle: FontStyle.Regular);
+            if (matrix.UseSessionColumns)
+            {
+                for (var sessionIndex = 0; sessionIndex < matrix.MatrixColumns.Count; sessionIndex++)
+                {
+                    var column = matrix.MatrixColumns[sessionIndex];
+                    AddSettingsMatrixCheckElement(
+                        elements,
+                        ref index,
+                        BlockGridSessionCellBounds(matrix, rowIndex, sessionIndex, rowsPerColumn),
+                        capture,
+                        offset,
+                        matrix.Kind,
+                        rowIndex,
+                        columnIndex: sessionIndex + 1,
+                        rowKey: row.Key,
+                        columnKey: column.Key,
+                        isChecked: SettingsMatrixCheckState(matrix, row, column),
+                        checkSize: SettingsGeometry.BlockGridCheckSize);
+                }
+            }
+            else
+            {
+                AddSettingsMatrixCheckElement(
+                    elements,
+                    ref index,
+                    BlockGridVisibleCellBounds(matrix, rowIndex, rowsPerColumn),
+                    capture,
+                    offset,
+                    matrix.Kind,
+                    rowIndex,
+                    columnIndex: 1,
+                    rowKey: row.Key,
+                    columnKey: "visible",
+                    isChecked: SettingsMatrixCheckState(matrix, row, SettingsMatrixVisibleColumn),
+                    checkSize: SettingsGeometry.BlockGridCheckSize);
+            }
+        }
+    }
+
+    private static void AddSettingsMatrixCapturedElement(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        string role,
+        string? text,
+        Rectangle bounds,
+        Rectangle capture,
+        Point offset,
+        string matrixKind,
+        int? rowIndex,
+        int? columnIndex,
+        string? rowKey,
+        string? columnKey,
+        float textSize,
+        FontStyle fontStyle,
+        string controlKind = "matrix",
+        bool? isChecked = null)
+    {
+        AddCapturedElement(
+            elements,
+            role,
+            index++,
+            text,
+            Offset(bounds, offset),
+            capture,
+            ColorToCss(role == "settings-matrix" ? OverlayTheme.DesignV2.TextPrimary : OverlayTheme.DesignV2.TextSecondary),
+            role == "settings-matrix" ? null : ColorToCss(OverlayTheme.DesignV2.SurfaceRaised),
+            new Dictionary<string, object?>
+            {
+                ["controlKind"] = controlKind,
+                ["matrixKind"] = matrixKind,
+                ["rowIndex"] = rowIndex,
+                ["columnIndex"] = columnIndex,
+                ["rowKey"] = rowKey,
+                ["columnKey"] = columnKey,
+                ["checked"] = isChecked,
+                ["enabled"] = true,
+                ["visible"] = true
+            },
+            TextMetricsEvidence(text, bounds, textSize, fontStyle));
+    }
+
+    private static IReadOnlyList<SettingsMatrixSpec> SettingsMatrixSpecs(ScreenshotMetadata metadata)
+    {
+        var overlayId = metadata.OverlayId ?? string.Empty;
+        var region = metadata.Region ?? "general";
+        if (string.Equals(region, "content", StringComparison.OrdinalIgnoreCase))
+        {
+            return SettingsContentMatrixSpecs(overlayId);
+        }
+
+        if (string.Equals(region, "twitch", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(overlayId, "stream-chat", StringComparison.OrdinalIgnoreCase))
+        {
+            return
+            [
+                SettingsBlockGridSpec(
+                    "stream-chat.twitch",
+                    SettingsBlockGridPanelBounds(BlockLabels(OverlayContentColumnSettings.StreamChat).Count, columns: 2),
+                    BlockRows(OverlayContentColumnSettings.StreamChat),
+                    OverlaySettingsFor(StreamChatOverlayDefinition.Definition),
+                    columns: 2,
+                    rowHeight: SettingsBlockGridRowHeight,
+                    rowGap: SettingsBlockGridRowGap,
+                    useSessionColumns: false)
+            ];
+        }
+
+        if (string.Equals(region, "header", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(region, "footer", StringComparison.OrdinalIgnoreCase))
+        {
+            return SettingsChromeMatrixSpecs(overlayId, region);
+        }
+
+        return [];
+    }
+
+    private static IReadOnlyList<SettingsMatrixSpec> SettingsContentMatrixSpecs(string overlayId)
+    {
+        var useSessionColumns = UseSettingsContentSessionColumns(overlayId);
+        return overlayId switch
+        {
+            "relative" =>
+            [
+                SettingsTableMatrixSpec("relative.content", SettingsTablePanelBounds(ColumnRows(OverlayContentColumnSettings.Relative).Count), ColumnRows(OverlayContentColumnSettings.Relative), OverlaySettingsFor(RelativeOverlayDefinition.Definition), useSessionColumns)
+            ],
+            "standings" =>
+            [
+                SettingsTableMatrixSpec("standings.content", SettingsTablePanelBounds(ColumnRows(OverlayContentColumnSettings.Standings).Count), ColumnRows(OverlayContentColumnSettings.Standings), OverlaySettingsFor(StandingsOverlayDefinition.Definition), useSessionColumns)
+            ],
+            "gap-to-leader" =>
+            [
+                SettingsTableMatrixSpec("gap-to-leader.content", SettingsTablePanelBounds(BlockRows(OverlayContentColumnSettings.GapToLeader).Count), BlockRows(OverlayContentColumnSettings.GapToLeader), OverlaySettingsFor(GapToLeaderOverlayDefinition.Definition), useSessionColumns)
+            ],
+            "fuel-calculator" =>
+            [
+                SettingsTableMatrixSpec("fuel-calculator.content", SettingsTablePanelBounds(BlockRows(OverlayContentColumnSettings.FuelCalculator).Count), BlockRows(OverlayContentColumnSettings.FuelCalculator), OverlaySettingsFor(FuelCalculatorOverlayDefinition.Definition), useSessionColumns)
+            ],
+            "track-map" =>
+            [
+                SettingsTableMatrixSpec("track-map.content", SettingsTablePanelBounds(1), [new SettingsMatrixRowSpec(OverlayOptionKeys.TrackMapSectorBoundariesEnabled, "Sector boundaries", OverlayOptionKeys.TrackMapSectorBoundariesEnabled, true)], OverlaySettingsFor(TrackMapOverlayDefinition.Definition), useSessionColumns)
+            ],
+            "input-state" =>
+            [
+                SettingsTableMatrixSpec("input-state.content", SettingsTablePanelBounds(BlockRows(OverlayContentColumnSettings.InputState).Count), BlockRows(OverlayContentColumnSettings.InputState), OverlaySettingsFor(InputStateOverlayDefinition.Definition), useSessionColumns)
+            ],
+            "session-weather" =>
+            [
+                SettingsBlockGridSpec("session-weather.content", SettingsBlockGridPanelBounds(BlockRows(OverlayContentColumnSettings.SessionWeather).Count, columns: 2), BlockRows(OverlayContentColumnSettings.SessionWeather), OverlaySettingsFor(SessionWeatherOverlayDefinition.Definition), columns: 2, rowHeight: SettingsBlockGridRowHeight, rowGap: SettingsBlockGridRowGap, useSessionColumns: useSessionColumns)
+            ],
+            "pit-service" =>
+            [
+                SettingsBlockGridSpec("pit-service.content", SettingsBlockGridPanelBounds(BlockRows(OverlayContentColumnSettings.PitService).Count, columns: 2), BlockRows(OverlayContentColumnSettings.PitService), OverlaySettingsFor(PitServiceOverlayDefinition.Definition), columns: 2, rowHeight: SettingsBlockGridRowHeight, rowGap: SettingsBlockGridRowGap, useSessionColumns: useSessionColumns)
+            ],
+            "flags" =>
+            [
+                SettingsTableMatrixSpec(
+                    "flags.content",
+                    SettingsTablePanelBounds(5),
+                    [
+                        new SettingsMatrixRowSpec(OverlayOptionKeys.FlagsShowGreen, "Green / start / ready", OverlayOptionKeys.FlagsShowGreen, true),
+                        new SettingsMatrixRowSpec(OverlayOptionKeys.FlagsShowBlue, "Blue", OverlayOptionKeys.FlagsShowBlue, true),
+                        new SettingsMatrixRowSpec(OverlayOptionKeys.FlagsShowYellow, "Yellow / debris / caution", OverlayOptionKeys.FlagsShowYellow, true),
+                        new SettingsMatrixRowSpec(OverlayOptionKeys.FlagsShowCritical, "Red / black / repair", OverlayOptionKeys.FlagsShowCritical, true),
+                        new SettingsMatrixRowSpec(OverlayOptionKeys.FlagsShowFinish, "White / checkered / final laps", OverlayOptionKeys.FlagsShowFinish, true)
+                    ],
+                    OverlaySettingsFor(FlagsOverlayDefinition.Definition),
+                    useSessionColumns)
+            ],
+            _ => []
+        };
+    }
+
+    private static IReadOnlyList<SettingsMatrixSpec> SettingsChromeMatrixSpecs(string overlayId, string region)
+    {
+        if (!string.Equals(region, "header", StringComparison.OrdinalIgnoreCase)
+            || !SettingsSharedHeaderOverlayIds.Contains(overlayId))
+        {
+            return [];
+        }
+
+        return
+        [
+            SettingsTableMatrixSpec(
+                $"{overlayId}.header",
+                SettingsTablePanelBounds(1),
+                [new SettingsMatrixRowSpec("time-remaining", "Time remaining", NativeChromeHeaderTimeRemainingKey(OverlaySessionKind.Race), true)],
+                DefinitionForOverlayId(overlayId) is { } definition ? OverlaySettingsFor(definition) : new OverlaySettings { Id = overlayId },
+                useSessionColumns: true,
+                matrixColumns: OverlaySettingsSessionColumns.ChromeColumnsFor(overlayId).Select(column => new SettingsMatrixColumnSpec(SessionColumnKey(column.Kind), column.Label, column.Kind)).ToArray(),
+                chromeGeometry: true)
+        ];
+    }
+
+    private static SettingsMatrixSpec SettingsTableMatrixSpec(
+        string kind,
+        Rectangle bounds,
+        IReadOnlyList<SettingsMatrixRowSpec> rows,
+        OverlaySettings settings,
+        bool useSessionColumns,
+        int rowHeight = SettingsMatrixRowHeight,
+        int rowGap = SettingsMatrixRowGap,
+        IReadOnlyList<SettingsMatrixColumnSpec>? matrixColumns = null,
+        bool chromeGeometry = false)
+    {
+        return new SettingsMatrixSpec(kind, bounds, rows, settings, useSessionColumns, rowHeight, rowGap, 1, false, matrixColumns ?? (useSessionColumns ? SettingsMatrixSessionColumns : [SettingsMatrixVisibleColumn]), chromeGeometry);
+    }
+
+    private static SettingsMatrixSpec SettingsBlockGridSpec(
+        string kind,
+        Rectangle bounds,
+        IReadOnlyList<SettingsMatrixRowSpec> rows,
+        OverlaySettings settings,
+        int columns,
+        int rowHeight,
+        int rowGap,
+        bool useSessionColumns)
+    {
+        return new SettingsMatrixSpec(kind, bounds, rows, settings, useSessionColumns, rowHeight, rowGap, columns, true, useSessionColumns ? SettingsMatrixShortSessionColumns : [SettingsMatrixCompactVisibleColumn], false);
+    }
+
+    private static IReadOnlyList<SettingsMatrixRowSpec> ColumnRows(OverlayContentDefinition definition)
+    {
+        return definition.Columns
+            .OrderBy(column => column.DefaultOrder)
+            .Select(column => new SettingsMatrixRowSpec(
+                column.EnabledKey(definition.OverlayId),
+                string.IsNullOrWhiteSpace(column.SettingsLabel) ? column.Label : column.SettingsLabel!,
+                column.EnabledKey(definition.OverlayId),
+                column.DefaultEnabled))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<SettingsMatrixRowSpec> BlockRows(OverlayContentDefinition definition)
+    {
+        return (definition.Blocks ?? [])
+            .Select(block => new SettingsMatrixRowSpec(block.EnabledOptionKey, block.Label, block.EnabledOptionKey, block.DefaultEnabled))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> ColumnLabels(OverlayContentDefinition definition)
+    {
+        return definition.Columns
+            .OrderBy(column => column.DefaultOrder)
+            .Select(column => string.IsNullOrWhiteSpace(column.SettingsLabel) ? column.Label : column.SettingsLabel!)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> BlockLabels(OverlayContentDefinition definition)
+    {
+        return (definition.Blocks ?? [])
+            .Select(block => block.Label)
+            .ToArray();
+    }
+
+    private static bool UseSettingsContentSessionColumns(string overlayId)
+    {
+        return ManagedOverlayDefinitions()
+            .FirstOrDefault(definition => string.Equals(definition.Id, overlayId, StringComparison.OrdinalIgnoreCase))
+            ?.ShowSessionFilters == true;
+    }
+
+    private static Rectangle SettingsTablePanelBounds(int rowCount, int rowHeight = SettingsMatrixRowHeight, int rowGap = SettingsMatrixRowGap)
+    {
+        return new Rectangle(SettingsPanelX, SettingsPanelWithRegionsY, SettingsPanelWideWidth, SettingsMatrixHeaderOffsetY + SettingsTableMatrixHeight(rowCount, rowHeight, rowGap) + SettingsMatrixPanelBottomPadding);
+    }
+
+    private static Rectangle SettingsBlockGridPanelBounds(int rowCount, int columns, int rowHeight = SettingsBlockGridRowHeight, int rowGap = SettingsBlockGridRowGap)
+    {
+        return new Rectangle(SettingsPanelX, SettingsPanelWithRegionsY, SettingsPanelWideWidth, SettingsBlockGridHeaderOffsetY + SettingsBlockGridMatrixHeight(rowCount, columns, rowHeight, rowGap) + SettingsBlockGridPanelBottomPadding);
+    }
+
+    private static int SettingsTableMatrixHeight(int rowCount, int rowHeight, int rowGap)
+    {
+        if (rowCount <= 0)
+        {
+            return SettingsMatrixHeaderHeight;
+        }
+
+        return SettingsMatrixFirstRowOffsetY - SettingsMatrixHeaderOffsetY
+            + (rowCount - 1) * (rowHeight + rowGap)
+            + rowHeight;
+    }
+
+    private static int SettingsBlockGridMatrixHeight(int rowCount, int columns, int rowHeight, int rowGap)
+    {
+        var rowsPerColumn = (int)Math.Ceiling(rowCount / (double)Math.Max(1, columns));
+        if (rowsPerColumn <= 0)
+        {
+            return SettingsMatrixHeaderHeight;
+        }
+
+        return SettingsBlockGridFirstRowOffsetY - SettingsBlockGridHeaderOffsetY
+            + (rowsPerColumn - 1) * (rowHeight + rowGap)
+            + rowHeight;
+    }
+
+    private static int MatrixRowsThatFit(SettingsMatrixSpec matrix)
+    {
+        if (matrix.IsBlockGrid)
+        {
+            return matrix.Rows.Count;
+        }
+
+        var available = matrix.Bounds.Bottom - SettingsMatrixPanelBottomPadding - (matrix.Bounds.Top + SettingsMatrixFirstRowOffsetY);
+        return Math.Max(0, (available + matrix.RowGap) / Math.Max(1, matrix.RowHeight + matrix.RowGap));
+    }
+
+    private static string MatrixText(SettingsMatrixSpec matrix, IReadOnlyList<SettingsMatrixRowSpec> rows)
+    {
+        var labels = matrix.UseSessionColumns
+            ? matrix.MatrixColumns.Select(column => column.Label)
+            : matrix.MatrixColumns.Select(column => column.Label);
+        return string.Join(' ', new[] { "Item" }.Concat(labels).Concat(rows.Select(row => row.Label)));
+    }
+
+    private static string SessionColumnKey(OverlaySessionKind sessionKind)
+    {
+        return OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) switch
+        {
+            OverlaySessionKind.Qualifying => "qualifying",
+            OverlaySessionKind.Race => "race",
+            _ => "practice"
+        };
+    }
+
+    private static bool SettingsMatrixCheckState(
+        SettingsMatrixSpec matrix,
+        SettingsMatrixRowSpec row,
+        SettingsMatrixColumnSpec column)
+    {
+        if (matrix.ChromeGeometry)
+        {
+            var sessionKind = column.SessionKind ?? OverlaySessionKind.Race;
+            return matrix.Settings.GetBooleanOption(NativeChromeHeaderTimeRemainingKey(sessionKind), defaultValue: true);
+        }
+
+        if (column.SessionKind is { } contentSessionKind)
+        {
+            return OverlaySettingsSessionColumns.ContentEnabledFor(
+                matrix.Settings,
+                row.EnabledOptionKey,
+                row.DefaultEnabled,
+                contentSessionKind);
+        }
+
+        return matrix.Settings.GetBooleanOption(row.EnabledOptionKey, row.DefaultEnabled);
+    }
+
+    private static Rectangle TableMatrixBounds(SettingsMatrixSpec matrix, int rowCount)
+    {
+        var left = TableItemHeaderBounds(matrix).Left;
+        var top = matrix.Bounds.Top + SettingsMatrixHeaderOffsetY;
+        var right = matrix.UseSessionColumns
+            ? TableSessionHeaderBounds(matrix, matrix.MatrixColumns.Count - 1).Right
+            : TableVisibleHeaderBounds(matrix).Right;
+        var lastRow = rowCount <= 0
+            ? top + SettingsMatrixHeaderHeight
+            : TableRowY(matrix, rowCount - 1) + matrix.RowHeight;
+        return new Rectangle(left, top, Math.Max(1, right - left), Math.Max(1, lastRow - top));
+    }
+
+    private static Rectangle TableItemHeaderBounds(SettingsMatrixSpec matrix)
+    {
+        return new Rectangle(matrix.Bounds.Left + SettingsMatrixContentInsetX, matrix.Bounds.Top + SettingsMatrixHeaderOffsetY, TableItemCellWidth(matrix), SettingsMatrixHeaderHeight);
+    }
+
+    private static Rectangle TableSessionHeaderBounds(SettingsMatrixSpec matrix, int sessionIndex)
+    {
+        return new Rectangle(TableSessionColumnLeft(matrix, sessionIndex), matrix.Bounds.Top + SettingsMatrixHeaderOffsetY, SettingsMatrixSessionColumnWidth, SettingsMatrixHeaderHeight);
+    }
+
+    private static Rectangle TableVisibleHeaderBounds(SettingsMatrixSpec matrix)
+    {
+        return new Rectangle(TableVisibleColumnLeft(matrix), matrix.Bounds.Top + SettingsMatrixHeaderOffsetY, SettingsMatrixVisibleColumnWidth, SettingsMatrixHeaderHeight);
+    }
+
+    private static Rectangle TableItemCellBounds(SettingsMatrixSpec matrix, int rowIndex)
+    {
+        return new Rectangle(matrix.Bounds.Left + SettingsMatrixContentInsetX, TableRowY(matrix, rowIndex), TableItemCellWidth(matrix), matrix.RowHeight);
+    }
+
+    private static Rectangle TableSessionCellBounds(SettingsMatrixSpec matrix, int rowIndex, int sessionIndex)
+    {
+        return new Rectangle(TableSessionColumnLeft(matrix, sessionIndex), TableRowY(matrix, rowIndex), SettingsMatrixSessionColumnWidth, matrix.RowHeight);
+    }
+
+    private static Rectangle TableVisibleCellBounds(SettingsMatrixSpec matrix, int rowIndex)
+    {
+        return new Rectangle(TableVisibleColumnLeft(matrix), TableRowY(matrix, rowIndex), SettingsMatrixVisibleColumnWidth, matrix.RowHeight);
+    }
+
+    private static int TableItemCellWidth(SettingsMatrixSpec matrix)
+    {
+        var controlWidth = matrix.UseSessionColumns
+            ? matrix.MatrixColumns.Count * SettingsMatrixSessionColumnWidth + Math.Max(0, matrix.MatrixColumns.Count - 1) * SettingsMatrixColumnGap
+            : SettingsMatrixVisibleColumnWidth;
+        return Math.Max(1, matrix.Bounds.Width - SettingsMatrixContentInsetX * 2 - SettingsMatrixColumnGap - controlWidth);
+    }
+
+    private static int TableSessionColumnLeft(SettingsMatrixSpec matrix, int sessionIndex)
+    {
+        return matrix.Bounds.Left
+            + SettingsMatrixContentInsetX
+            + TableItemCellWidth(matrix)
+            + SettingsMatrixColumnGap
+            + sessionIndex * (SettingsMatrixSessionColumnWidth + SettingsMatrixColumnGap);
+    }
+
+    private static int TableVisibleColumnLeft(SettingsMatrixSpec matrix)
+    {
+        return matrix.Bounds.Left
+            + SettingsMatrixContentInsetX
+            + TableItemCellWidth(matrix)
+            + SettingsMatrixColumnGap;
+    }
+
+    private static int TableRowY(SettingsMatrixSpec matrix, int rowIndex)
+    {
+        return matrix.Bounds.Top + SettingsMatrixFirstRowOffsetY + rowIndex * (matrix.RowHeight + matrix.RowGap);
+    }
+
+    private static Rectangle BlockGridMatrixBounds(SettingsMatrixSpec matrix, int rowCount)
+    {
+        var rowsPerColumn = BlockGridRowsPerColumn(matrix, rowCount);
+        var columnWidth = BlockGridColumnWidth(matrix);
+        var width = matrix.Columns * columnWidth + Math.Max(0, matrix.Columns - 1) * SettingsBlockGridColumnGap;
+        var height = SettingsBlockGridMatrixHeight(rowCount, matrix.Columns, matrix.RowHeight, matrix.RowGap);
+        return new Rectangle(matrix.Bounds.Left + SettingsBlockGridContentInsetX, matrix.Bounds.Top + SettingsBlockGridHeaderOffsetY, width, height);
+    }
+
+    private static Rectangle BlockGridRowBounds(SettingsMatrixSpec matrix, int rowIndex, int rowsPerColumn)
+    {
+        var column = rowIndex / rowsPerColumn;
+        var row = rowIndex % rowsPerColumn;
+        var columnWidth = BlockGridColumnWidth(matrix);
+        var x = matrix.Bounds.Left + SettingsBlockGridContentInsetX + column * (columnWidth + SettingsBlockGridColumnGap);
+        var y = matrix.Bounds.Top + SettingsBlockGridFirstRowOffsetY + row * (matrix.RowHeight + matrix.RowGap);
+        return new Rectangle(x, y, columnWidth, matrix.RowHeight);
+    }
+
+    private static Rectangle BlockGridSessionCellBounds(
+        SettingsMatrixSpec matrix,
+        int rowIndex,
+        int sessionIndex,
+        int rowsPerColumn)
+    {
+        var rowBounds = BlockGridRowBounds(matrix, rowIndex, rowsPerColumn);
+        return new Rectangle(
+            rowBounds.Right - SettingsBlockGridSessionCellsRightInset + sessionIndex * SettingsBlockGridSessionColumnStride,
+            rowBounds.Top,
+            SettingsBlockGridCompactCellWidth,
+            rowBounds.Height);
+    }
+
+    private static Rectangle BlockGridVisibleCellBounds(SettingsMatrixSpec matrix, int rowIndex, int rowsPerColumn)
+    {
+        var rowBounds = BlockGridRowBounds(matrix, rowIndex, rowsPerColumn);
+        return new Rectangle(
+            rowBounds.Right - SettingsBlockGridVisibleCellRightInset,
+            rowBounds.Top,
+            SettingsBlockGridCompactCellWidth,
+            rowBounds.Height);
+    }
+
+    private static Rectangle CenteredCheckBounds(Rectangle cellBounds, int size)
+    {
+        return new Rectangle(
+            cellBounds.Left + (cellBounds.Width - size) / 2,
+            cellBounds.Top + (cellBounds.Height - size) / 2,
+            size,
+            size);
+    }
+
+    private static int BlockGridRowsPerColumn(SettingsMatrixSpec matrix, int rowCount)
+    {
+        return (int)Math.Ceiling(rowCount / (double)Math.Max(1, matrix.Columns));
+    }
+
+    private static int BlockGridColumnWidth(SettingsMatrixSpec matrix)
+    {
+        return (matrix.Bounds.Width - SettingsBlockGridContentInsetX * 2 - SettingsBlockGridColumnGap * Math.Max(0, matrix.Columns - 1)) / Math.Max(1, matrix.Columns);
     }
 
     private static void AddSettingsDrawnTextElement(
@@ -3451,7 +6458,9 @@ internal static class Program
             {
                 ["controlKind"] = "drawn-text",
                 ["evidenceKey"] = evidenceKey,
-                ["evidenceRole"] = evidenceRole
+                ["evidenceRole"] = evidenceRole,
+                ["enabled"] = true,
+                ["visible"] = true
             },
             TextMetricsEvidence(text, bounds, fontSize, fontStyle, monospaced));
     }
@@ -3532,10 +6541,100 @@ internal static class Program
                 ["fontFamily"] = ScreenshotFontFamily,
                 ["fontSize"] = null,
                 ["fontWeight"] = null,
-                ["display"] = "native"
+                ["display"] = "native",
+                ["cursor"] = CapturedCursor(role, attributes)
             },
             ["attributes"] = attributes
         });
+    }
+
+    private static object SettingsInteractionEvidence(
+        ScreenshotMetadata metadata,
+        List<Dictionary<string, object?>> elements)
+    {
+        var settingsElements = elements
+            .Where(element => (ElementRole(element) ?? string.Empty).StartsWith("settings-", StringComparison.Ordinal))
+            .ToArray();
+        var cursorCounts = settingsElements
+            .Select(element => CursorForElement(element) ?? "unknown")
+            .GroupBy(cursor => cursor, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        var passiveRoles = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "settings-shell",
+            "settings-titlebar",
+            "settings-content",
+            "settings-content-header",
+            "settings-content-body"
+        };
+
+        return new
+        {
+            contract = "settings-interaction-evidence/v1",
+            v102 = new[] { "V102-001", "V102-002" },
+            tab = metadata.Tab,
+            requestedRegion = metadata.Region,
+            settingsSurfaceDraggable = true,
+            dragHandlePolicy = "settings-titlebar-drags-window",
+            cursorCounts,
+            passiveChrome = settingsElements
+                .Where(element => ElementRole(element) is { } role && passiveRoles.Contains(role))
+                .Select(SettingsInteractionElement)
+                .ToArray(),
+            interactiveCursorElements = settingsElements
+                .Where(element => CursorForElement(element) is "pointer" or "text")
+                .Take(24)
+                .Select(SettingsInteractionElement)
+                .ToArray(),
+            moveCursorElements = settingsElements
+                .Where(element => CursorForElement(element) is "move" or "grab" or "grabbing" or "all-scroll")
+                .Select(SettingsInteractionElement)
+                .ToArray()
+        };
+    }
+
+    private static object SettingsInteractionElement(Dictionary<string, object?> element)
+    {
+        return new
+        {
+            role = ElementRole(element),
+            text = element.TryGetValue("text", out var text) ? text : null,
+            bounds = element.TryGetValue("bounds", out var bounds) ? bounds : null,
+            cursor = CursorForElement(element)
+        };
+    }
+
+    private static string? CursorForElement(Dictionary<string, object?> element)
+    {
+        if (!element.TryGetValue("styles", out var stylesValue)
+            || stylesValue is not Dictionary<string, object?> styles
+            || !styles.TryGetValue("cursor", out var cursor))
+        {
+            return null;
+        }
+
+        return cursor?.ToString();
+    }
+
+    private static string CapturedCursor(string role, Dictionary<string, object?>? attributes)
+    {
+        if (role is "settings-sidebar-tab" or "settings-region-segment" or "settings-button" or "settings-toggle" or "settings-check" or "settings-choice" or "settings-segment-choice" or "settings-stepper" or "settings-slider")
+        {
+            return "pointer";
+        }
+
+        if (role is "settings-titlebar" or "settings-drag-zone")
+        {
+            return "move";
+        }
+
+        if (role == "settings-textbox")
+        {
+            return "text";
+        }
+
+        return "default";
     }
 
     private static object? TextMetricsEvidence(
@@ -3625,11 +6724,55 @@ internal static class Program
     {
         return regionId switch
         {
-            "general" => 86,
-            "preview" => 82,
-            "streamlabs" => 104,
-            _ => 76
+            "general" => SettingsGeometry.RegionSegmentGeneralWidth,
+            "preview" => SettingsGeometry.RegionSegmentPreviewWidth,
+            "streamlabs" => SettingsGeometry.RegionSegmentStreamlabsWidth,
+            _ => SettingsGeometry.RegionSegmentDefaultWidth
         };
+    }
+
+    private static int SettingsSegmentShellWidth(IReadOnlyList<SettingsRegionSpec> regions)
+    {
+        return regions.Count == 0
+            ? 0
+            : regions.Sum(region => SettingsSegmentWidth(region.Id))
+                + Math.Max(0, regions.Count - 1) * SettingsRegionSegmentGap
+                + SettingsRegionSegmentPadding * 2;
+    }
+
+    private static int SettingsRegionSegmentShellY()
+    {
+        return SettingsPanelWithRegionsY - SettingsGeometry.RegionSegmentMarginBottom - SettingsRegionSegmentShellHeight;
+    }
+
+    private static int SettingsRegionSegmentY()
+    {
+        return SettingsRegionSegmentShellY() + SettingsRegionSegmentPadding;
+    }
+
+    private static Rectangle SettingsBrowserSourcePanelBounds()
+    {
+        return DesignV2SettingsLayout.BrowserSourcePanelBounds();
+    }
+
+    private static Rectangle SettingsBrowserSourceCopyButtonBounds(Rectangle panelBounds)
+    {
+        return DesignV2SettingsLayout.BrowserSourceCopyButtonBounds(panelBounds);
+    }
+
+    private static Rectangle SettingsSupportBundleRowBounds()
+    {
+        return DesignV2SettingsLayout.SupportBundleRowBounds();
+    }
+
+    private static Rectangle SettingsSupportBundleLabelBounds()
+    {
+        return DesignV2SettingsLayout.SupportBundleLabelBounds();
+    }
+
+    private static Rectangle SettingsSupportBundleValueBounds()
+    {
+        return DesignV2SettingsLayout.SupportBundleValueBounds();
     }
 
     private static string? SettingsHeaderText(ScreenshotMetadata metadata)
@@ -3649,7 +6792,27 @@ internal static class Program
             .FirstOrDefault(candidate => string.Equals(candidate.Id, metadata.OverlayId, StringComparison.OrdinalIgnoreCase));
         return definition is null
             ? metadata.Tab
-            : $"{definition.DisplayName} {metadata.Region}";
+            : $"{definition.DisplayName} {SettingsSubtitleFor(definition.Id)}";
+    }
+
+    private static string SettingsSubtitleFor(string overlayId)
+    {
+        return overlayId switch
+        {
+            "standings" => "Class and overall running order for the current session.",
+            "relative" => "Nearby-car timing around the local in-car reference.",
+            "gap-to-leader" => "Focused class gap trend and nearby leader context.",
+            "fuel-calculator" => "Fuel strategy, stint targets, and source confidence.",
+            "session-weather" => "Session timing, track state, and weather telemetry.",
+            "pit-service" => "Pit request state, service plan, and release context.",
+            "track-map" => "Live car location and sector context.",
+            "stream-chat" => "Local browser-source chat setup for Streamlabs or Twitch.",
+            "garage-cover" => "Local browser-source privacy cover for garage and setup scenes.",
+            "input-state" => "Input rail visibility for pedal, steering, gear, and speed telemetry.",
+            "car-radar" => "Local proximity radar and multiclass approach warning controls.",
+            "flags" => "Compact session flag strip display and size controls.",
+            _ => "Overlay settings and browser-source controls."
+        };
     }
 
     private static IReadOnlyList<(string Label, Rectangle Bounds)> SettingsPanelRects(ScreenshotMetadata metadata)
@@ -3658,9 +6821,9 @@ internal static class Program
         {
             return
             [
-                ("Units", new Rectangle(306, 214, 392, 132)),
-                ("Updates", new Rectangle(726, 214, 414, 132)),
-                ("Show Preview", new Rectangle(306, 374, 612, 196))
+                ("Units", DesignV2SettingsLayout.UnitsPanelBounds()),
+                ("Updates", DesignV2SettingsLayout.UpdatesPanelBounds()),
+                ("Show Preview", DesignV2SettingsLayout.PreviewPanelBounds())
             ];
         }
 
@@ -3669,10 +6832,8 @@ internal static class Program
         {
             return
             [
-                ("Capture Controls", new Rectangle(306, 214, 392, 206)),
-                ("Automatic History", new Rectangle(726, 214, 414, 206)),
-                ("Support Bundle", new Rectangle(306, 446, 392, 142)),
-                ("Support Folders", new Rectangle(726, 446, 414, 142))
+                ("Enhanced iRacing Telemetry Capture", DesignV2SettingsLayout.SupportCapturePanelBounds()),
+                ("Data Analysis Opt-out", DesignV2SettingsLayout.SupportAnalysisPanelBounds())
             ];
         }
 
@@ -3680,52 +6841,70 @@ internal static class Program
         var region = metadata.Region ?? "general";
         if (string.Equals(region, "general", StringComparison.OrdinalIgnoreCase))
         {
-            var controlHeight = string.Equals(overlayId, "garage-cover", StringComparison.OrdinalIgnoreCase) ? 166 : 226;
-            return
-            [
-                ("Overlay Controls", new Rectangle(306, 272, 392, controlHeight)),
-                ("Browser Source", new Rectangle(726, 272, 414, 132))
-            ];
+            var controlHeight = SettingsOverlayControlsPanelHeight(metadata);
+            var panels = new List<(string Label, Rectangle Bounds)>
+            {
+                ("Overlay Controls", DesignV2SettingsLayout.OverlayControlsPanelBounds(controlHeight))
+            };
+            if (BrowserOverlayCatalog.TryGetRouteForOverlayId(overlayId, out _))
+            {
+                panels.Add(("Browser Source", DesignV2SettingsLayout.BrowserSourcePanelBounds()));
+            }
+
+            return panels;
         }
 
         if (string.Equals(region, "content", StringComparison.OrdinalIgnoreCase))
         {
             return overlayId switch
             {
-                "standings" => [("Content Display", new Rectangle(306, 272, 834, 344))],
-                "relative" => [("Content Display", new Rectangle(306, 272, 834, 280))],
-                "input-state" => [("Content Display", new Rectangle(306, 272, 834, 236))],
-                "session-weather" => [("Session / Weather Cells", new Rectangle(306, 272, 834, 344))],
-                "pit-service" => [("Pit Service Cells", new Rectangle(306, 272, 834, 344))],
-                "stream-chat" => [("Chat Source", new Rectangle(306, 272, 834, 170))],
-                "flags" => [("Content Display", new Rectangle(306, 272, 834, 240))],
-                "fuel-calculator" or "track-map" => [("Content Display", new Rectangle(306, 272, 834, 150))],
-                _ => [("Content Display", new Rectangle(306, 272, 834, 126))]
+                "standings" => [("Content Display", SettingsTablePanelBounds(ColumnLabels(OverlayContentColumnSettings.Standings).Count))],
+                "relative" => [("Content Display", SettingsTablePanelBounds(ColumnLabels(OverlayContentColumnSettings.Relative).Count))],
+                "gap-to-leader" => [("Content Display", SettingsTablePanelBounds(BlockLabels(OverlayContentColumnSettings.GapToLeader).Count))],
+                "input-state" => [("Content Display", SettingsTablePanelBounds(BlockLabels(OverlayContentColumnSettings.InputState).Count))],
+                "session-weather" => [("Session / Weather Cells", SettingsBlockGridPanelBounds(BlockLabels(OverlayContentColumnSettings.SessionWeather).Count, columns: 2))],
+                "pit-service" => [("Pit Service Cells", SettingsBlockGridPanelBounds(BlockLabels(OverlayContentColumnSettings.PitService).Count, columns: 2))],
+                "stream-chat" => [("Chat Source", DesignV2SettingsLayout.StreamChatContentPanelBounds())],
+                "flags" => [("Content Display", SettingsTablePanelBounds(5))],
+                "fuel-calculator" => [("Content Display", SettingsTablePanelBounds(BlockLabels(OverlayContentColumnSettings.FuelCalculator).Count))],
+                "track-map" => [("Content Display", SettingsTablePanelBounds(1))],
+                _ => [("Content Display", SettingsTablePanelBounds(1))]
             };
         }
 
         if (string.Equals(region, "header", StringComparison.OrdinalIgnoreCase)
             || string.Equals(region, "footer", StringComparison.OrdinalIgnoreCase))
         {
-            return [(region, new Rectangle(306, 272, 834, 232))];
+            return [(CultureInfo.InvariantCulture.TextInfo.ToTitleCase(region.ToLowerInvariant()), SettingsTablePanelBounds(1))];
         }
 
         if (string.Equals(region, "preview", StringComparison.OrdinalIgnoreCase))
         {
-            return [("Preview", new Rectangle(306, 272, 392, 240))];
+            return [];
         }
 
         if (string.Equals(region, "twitch", StringComparison.OrdinalIgnoreCase))
         {
-            return [("Twitch Metadata", new Rectangle(306, 272, 834, 200))];
+            return [("Twitch Metadata", SettingsBlockGridPanelBounds(BlockLabels(OverlayContentColumnSettings.StreamChat).Count, columns: 2))];
         }
 
         if (string.Equals(region, "streamlabs", StringComparison.OrdinalIgnoreCase))
         {
-            return [("Streamlabs", new Rectangle(306, 272, 834, 150))];
+            return [("Streamlabs", DesignV2SettingsLayout.StreamlabsPanelBounds())];
         }
 
-        return [("Settings", new Rectangle(306, 272, 834, 126))];
+        return [("Settings", SettingsTablePanelBounds(1))];
+    }
+
+    private static int SettingsOverlayControlsPanelHeight(ScreenshotMetadata metadata)
+    {
+        var definition = DefinitionForOverlayId(metadata.OverlayId);
+        if (definition is null)
+        {
+            return SettingsGeometry.OverlayControlsPanelHeight;
+        }
+
+        return DesignV2SettingsLayout.OverlayControlsPanelHeight(definition, NativeSettingsForMetadata(metadata));
     }
 
     private static Rectangle Offset(Rectangle rectangle, Point offset)
@@ -3767,7 +6946,7 @@ internal static class Program
 
         if (typeName.Contains("Choice", StringComparison.OrdinalIgnoreCase))
         {
-            return "settings-choice";
+            return "settings-segmented";
         }
 
         if (typeName.Contains("Stepper", StringComparison.OrdinalIgnoreCase))
@@ -3817,6 +6996,13 @@ internal static class Program
     {
         var parts = new List<string>();
         AddText(parts, control.Text);
+        if (SettingsControlRole(control) == "settings-segmented")
+        {
+            foreach (var option in SettingsChoiceOptions(control))
+            {
+                AddText(parts, option);
+            }
+        }
         AddText(parts, ReadMemberValue(control, "Selected")?.ToString());
         AddText(parts, ReadMemberValue(control, "Value")?.ToString());
         AddText(parts, ReadMemberValue(control, "IsOn") is bool isOn ? (isOn ? "On" : "Off") : null);
@@ -3824,8 +7010,29 @@ internal static class Program
         return parts.Count == 0 ? null : string.Join(" ", parts);
     }
 
-    private static Dictionary<string, object?> SettingsControlAttributes(Control control)
+    private static IReadOnlyList<string> SettingsChoiceOptions(Control control)
     {
+        if (ReadMemberValue(control, "_options") is not IEnumerable options)
+        {
+            return [];
+        }
+
+        return options
+            .Cast<object?>()
+            .Select(option => option?.ToString())
+            .Where(option => !string.IsNullOrWhiteSpace(option))
+            .Select(option => option!)
+            .ToArray();
+    }
+
+    private static Dictionary<string, object?> SettingsControlAttributes(
+        Control control,
+        ScreenshotMetadata? metadata = null,
+        Rectangle? sourceBounds = null)
+    {
+        var evidenceKey = metadata is not null && sourceBounds is not null
+            ? SettingsControlEvidenceKey(metadata, control, sourceBounds.Value)
+            : null;
         return new Dictionary<string, object?>
         {
             ["controlKind"] = SettingsControlKind(control),
@@ -3833,16 +7040,242 @@ internal static class Program
             ["enabled"] = control.Enabled,
             ["visible"] = control.Visible,
             ["tabStop"] = control.TabStop,
+            ["evidenceKey"] = evidenceKey,
             ["value"] = ReadMemberValue(control, "Value"),
-            ["selected"] = ReadMemberValue(control, "Selected"),
+            ["selected"] = SettingsControlSelected(control),
             ["checked"] = ReadMemberValue(control, "IsChecked"),
             ["isOn"] = ReadMemberValue(control, "IsOn")
         };
     }
 
+    private static object? SettingsControlSelected(Control control)
+    {
+        if (ReadMemberValue(control, "Selected") is { } selected)
+        {
+            return selected;
+        }
+
+        if (ReadMemberValue(control, "IsOn") is bool isOn)
+        {
+            return isOn;
+        }
+
+        if (ReadMemberValue(control, "IsChecked") is bool isChecked)
+        {
+            return isChecked;
+        }
+
+        return null;
+    }
+
+    private static string? SettingsControlEvidenceKey(
+        ScreenshotMetadata metadata,
+        Control control,
+        Rectangle bounds)
+    {
+        var role = SettingsControlRole(control);
+        if (role == "settings-button" && SameBounds(bounds, DesignV2SettingsLayout.CloseButtonBounds()))
+        {
+            return "chrome.close";
+        }
+
+        if (string.Equals(metadata.Tab, "general", StringComparison.OrdinalIgnoreCase))
+        {
+            var unitsRow = DesignV2SettingsLayout.FieldRowBounds(DesignV2SettingsLayout.UnitsPanelBounds(), 0, SettingsGeometry.SegmentedRowWidth);
+            if (role == "settings-segmented" && SameBounds(bounds, DesignV2SettingsLayout.RightAlignedControlBounds(unitsRow, SettingsGeometry.SegmentedWidth, SettingsGeometry.SegmentedHeight)))
+            {
+                return "general.units.measurement-system.value";
+            }
+
+            if (role == "settings-segmented" && SameBounds(bounds, DesignV2SettingsLayout.PreviewModeControlBounds()))
+            {
+                return "general.preview.mode.value";
+            }
+
+            if (role == "settings-button" && SameBounds(bounds, DesignV2SettingsLayout.UpdatesCheckButtonBounds()))
+            {
+                return "general.updates.check";
+            }
+
+            if (role == "settings-button" && SameBounds(bounds, DesignV2SettingsLayout.UpdatesPrimaryButtonBounds()))
+            {
+                return "general.updates.primary";
+            }
+        }
+
+        if (string.Equals(metadata.Tab, "support", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(metadata.Tab, "error-logging", StringComparison.OrdinalIgnoreCase))
+        {
+            var rawRow = DesignV2SettingsLayout.FieldRowBounds(DesignV2SettingsLayout.SupportCapturePanelBounds(), 0, SettingsGeometry.ToggleRowWidth);
+            if (role == "settings-toggle" && SameBounds(bounds, DesignV2SettingsLayout.RightAlignedControlBounds(rawRow, SettingsToggleWidth, SettingsToggleHeight)))
+            {
+                return "support.capture.raw.enabled.value";
+            }
+
+            if (role == "settings-button" && SameBounds(bounds, DesignV2SettingsLayout.SupportCreateBundleButtonBounds()))
+            {
+                return "support.bundle.create";
+            }
+
+            if (role == "settings-button" && SameBounds(bounds, DesignV2SettingsLayout.SupportOpenBundleButtonBounds()))
+            {
+                return "support.bundle.open-folder";
+            }
+
+            if (role == "settings-toggle")
+            {
+                for (var rowIndex = 0; rowIndex < 5; rowIndex++)
+                {
+                    if (!SameBounds(bounds, DesignV2SettingsLayout.SupportAnalysisToggleBounds(DesignV2SettingsLayout.SupportAnalysisRowBounds(rowIndex))))
+                    {
+                        continue;
+                    }
+
+                    return rowIndex switch
+                    {
+                        0 => "support.analysis.local-map-building.value",
+                        1 => "support.analysis.car-track-history.value",
+                        2 => "support.analysis.fuel-history.value",
+                        3 => "support.analysis.radar-calibration.value",
+                        4 => "support.analysis.post-race-analysis.value",
+                        _ => null
+                    };
+                }
+            }
+        }
+
+        if (metadata.OverlayId is { Length: > 0 } overlayId
+            && string.Equals(metadata.Region, "general", StringComparison.OrdinalIgnoreCase))
+        {
+            return SettingsOverlayGeneralControlEvidenceKey(overlayId, role, bounds);
+        }
+
+        if (string.Equals(metadata.OverlayId, "stream-chat", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(metadata.Region, "content", StringComparison.OrdinalIgnoreCase))
+        {
+            var panel = DesignV2SettingsLayout.StreamChatContentPanelBounds();
+            var providerRow = DesignV2SettingsLayout.FieldRowBounds(panel, 0, SettingsGeometry.ProviderChoiceRowWidth);
+            var streamlabsRow = DesignV2SettingsLayout.FieldRowBounds(panel, 1, SettingsGeometry.StreamlabsUrlRowWidth);
+            var twitchRow = DesignV2SettingsLayout.FieldRowBounds(panel, 2, SettingsGeometry.TwitchChannelRowWidth);
+            if (role == "settings-segmented" && SameBounds(bounds, DesignV2SettingsLayout.InlineControlBounds(providerRow, SettingsGeometry.ProviderChoiceWidth, SettingsGeometry.SegmentedHeight)))
+            {
+                return "stream-chat.content.provider.value";
+            }
+
+            if (role == "settings-textbox"
+                && SameBounds(bounds, DesignV2SettingsLayout.InlineControlBounds(streamlabsRow, SettingsGeometry.StreamlabsInputWidth, SettingsGeometry.StreamlabsInputHeight)))
+            {
+                return "stream-chat.content.streamlabs-url.value";
+            }
+
+            if (role == "settings-textbox"
+                && SameBounds(bounds, DesignV2SettingsLayout.InlineControlBounds(twitchRow, SettingsGeometry.TwitchInputWidth, SettingsGeometry.StreamlabsInputHeight)))
+            {
+                return "stream-chat.content.twitch-channel.value";
+            }
+
+            if (role == "settings-button" && SameBounds(bounds, DesignV2SettingsLayout.StreamChatSaveButtonBounds(panel)))
+            {
+                return "stream-chat.content.save";
+            }
+        }
+
+        return null;
+    }
+
     private static string SettingsControlKind(Control control)
     {
         return SettingsControlRole(control).Replace("settings-", string.Empty, StringComparison.Ordinal);
+    }
+
+    private static string? SettingsOverlayGeneralControlEvidenceKey(
+        string overlayId,
+        string role,
+        Rectangle bounds)
+    {
+        var isGarageCover = string.Equals(overlayId, "garage-cover", StringComparison.OrdinalIgnoreCase);
+        var definition = ManagedOverlayDefinitions()
+            .FirstOrDefault(candidate => string.Equals(candidate.Id, overlayId, StringComparison.OrdinalIgnoreCase));
+        var settings = definition is null ? null : OverlaySettingsFor(definition);
+        var panelBounds = definition is null || settings is null
+            ? DesignV2SettingsLayout.OverlayControlsPanelBounds(SettingsGeometry.OverlayControlsPanelHeight)
+            : DesignV2SettingsLayout.OverlayControlsPanelBounds(DesignV2SettingsLayout.OverlayControlsPanelHeight(definition, settings));
+        var rowIndex = 0;
+        if (!isGarageCover)
+        {
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+            if (role == "settings-toggle" && SameBounds(bounds, DesignV2SettingsLayout.RightAlignedControlBounds(row, SettingsToggleWidth, SettingsToggleHeight)))
+            {
+                return $"{overlayId}.general.visible.value";
+            }
+        }
+
+        if (definition?.ShowScaleControl == true)
+        {
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
+            if (role == "settings-slider" && SameBounds(bounds, DesignV2SettingsLayout.InlineControlBounds(row, SettingsSliderWidth, SettingsSliderHeight)))
+            {
+                return $"{overlayId}.general.scale.value";
+            }
+        }
+
+        if (isGarageCover)
+        {
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
+            var importBounds = DesignV2SettingsLayout.InlineControlBounds(row, SettingsGeometry.GarageImportButtonWidth, SettingsCopyButtonHeight);
+            if (role == "settings-button" && SameBounds(bounds, importBounds))
+            {
+                return $"{overlayId}.general.cover-image.import";
+            }
+
+            if (role == "settings-button" && SameBounds(bounds, DesignV2SettingsLayout.GarageClearButtonBounds(importBounds)))
+            {
+                return $"{overlayId}.general.cover-image.clear";
+            }
+        }
+
+        if (definition?.ShowOpacityControl == true)
+        {
+            var opacityKey = string.Equals(overlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+                ? "map-fill"
+                : "opacity";
+            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
+            if (role == "settings-slider" && SameBounds(bounds, DesignV2SettingsLayout.InlineControlBounds(row, SettingsSliderWidth, SettingsSliderHeight)))
+            {
+                return $"{overlayId}.general.{opacityKey}.value";
+            }
+        }
+
+        if (role is "settings-stepper" or "settings-toggle")
+        {
+            return overlayId switch
+            {
+                "relative" when role == "settings-stepper" && SameBounds(bounds, DesignV2SettingsLayout.StepperBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex, SettingsGeometry.StepperRowWidth))) => "relative.general.rows-around-focus.value",
+                "standings" when role == "settings-stepper" && SameBounds(bounds, DesignV2SettingsLayout.StepperBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex, SettingsGeometry.StepperRowWidth))) => "standings.general.cars-in-class.value",
+                "standings" when role == "settings-toggle" && SameBounds(bounds, DesignV2SettingsLayout.RightAlignedControlBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex + 1, SettingsGeometry.ToggleRowWidth), SettingsToggleWidth, SettingsToggleHeight)) => "standings.general.multiclass-sections.value",
+                "standings" when role == "settings-stepper" && SameBounds(bounds, DesignV2SettingsLayout.StepperBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex + 2, SettingsGeometry.StepperRowWidth))) => "standings.general.other-class-cars.value",
+                "gap-to-leader" when role == "settings-stepper" && SameBounds(bounds, DesignV2SettingsLayout.StepperBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex, SettingsGeometry.StepperRowWidth))) => "gap-to-leader.general.class-gap-window.value",
+                "car-radar" when role == "settings-toggle" && SameBounds(bounds, DesignV2SettingsLayout.RightAlignedControlBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex, SettingsGeometry.ToggleRowWidth), SettingsToggleWidth, SettingsToggleHeight)) => "car-radar.general.faster-class-warning.value",
+                "car-radar" when role == "settings-stepper" && SameBounds(bounds, DesignV2SettingsLayout.StepperBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex + 1, SettingsGeometry.StepperRowWidth))) => "car-radar.general.multiclass-window.value",
+                "car-radar" when role == "settings-stepper" && (SameBounds(bounds, DesignV2SettingsLayout.StepperBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex + 2, SettingsGeometry.StepperRowWidth))) || SameBounds(bounds, DesignV2SettingsLayout.StepperBounds(DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex + 1, SettingsGeometry.StepperRowWidth)))) => "car-radar.general.radar-range.value",
+                _ => null
+            };
+        }
+
+        if (role == "settings-button" && SameBounds(bounds, SettingsBrowserSourceCopyButtonBounds(SettingsBrowserSourcePanelBounds())))
+        {
+            return $"{overlayId}.browser-source.copy";
+        }
+
+        return null;
+    }
+
+    private static bool SameBounds(Rectangle left, Rectangle right)
+    {
+        return Math.Abs(left.X - right.X) <= 1
+            && Math.Abs(left.Y - right.Y) <= 1
+            && Math.Abs(left.Width - right.Width) <= 1
+            && Math.Abs(left.Height - right.Height) <= 1;
     }
 
     private static object? ReadMemberValue(object instance, string name)
@@ -4122,6 +7555,728 @@ internal static class Program
         };
     }
 
+    private static object? NativeEffectiveSettings(ScreenshotMetadata metadata)
+    {
+        if (!string.Equals(metadata.Surface, "windows-native-overlay", StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(metadata.OverlayId))
+        {
+            return null;
+        }
+
+        var settings = NativeEffectiveSettingList(metadata);
+        var sharedSettings = settings
+            .Where(setting => setting.TryGetValue("key", out var key)
+                && key is string keyString
+                && SharedNativeEffectiveSettingKeys.Contains(keyString))
+            .ToArray();
+        var sharedSettingsHash = StableEvidenceHash(sharedSettings);
+        var overlaySettingsHash = StableEvidenceHash(settings);
+        var sourceFixtureVariant = NativeEffectiveFixtureVariant(metadata);
+
+        return new
+        {
+            overlayId = metadata.OverlayId,
+            previewMode = metadata.PreviewMode,
+            sources = new
+            {
+                browserReview = NativeEffectiveSettingsSource(
+                    sourceFixtureVariant,
+                    sharedSettingsHash,
+                    overlaySettingsHash,
+                    $"/review/overlays/{metadata.OverlayId}",
+                    includeNativePixelEvidence: false),
+                localhostObs = NativeEffectiveSettingsSource(
+                    sourceFixtureVariant,
+                    sharedSettingsHash,
+                    overlaySettingsHash,
+                    $"/overlays/{metadata.OverlayId}",
+                    includeNativePixelEvidence: false),
+                windowsNative = NativeEffectiveSettingsSource(
+                    sourceFixtureVariant,
+                    sharedSettingsHash,
+                    overlaySettingsHash,
+                    $"native://{metadata.OverlayId}",
+                    includeNativePixelEvidence: true)
+            },
+            rendered = new
+            {
+                bodyKind = NormalizedBodyKind(metadata.Body),
+                shouldRender = metadata.ShouldRender ?? NativeShouldRender(metadata),
+                rowCount = NativeRowCount(metadata),
+                columnKeys = NativeEffectiveColumnKeys(metadata),
+                rowIdentities = NativeEffectiveRowIdentities(metadata),
+                placeholderRowCount = NativeEffectivePlaceholderRowCount(metadata),
+                headerItems = NativeHeaderItems(metadata),
+                unavailableContentPolicy = NativeUnavailableContentPolicy(metadata),
+                fuelStrategy = NativeFuelStrategyEvidence(metadata),
+                layout = NativeMetricLayoutEvidence(metadata),
+                mapFallback = NativeMapFallbackEvidence(metadata)
+            },
+            settings
+        };
+    }
+
+    private static readonly HashSet<string> SharedNativeEffectiveSettingKeys = new(StringComparer.Ordinal)
+    {
+        "general.unitSystem",
+        "scalePercent",
+        "opacityPercent"
+    };
+
+    private static object NativeEffectiveSettingsSource(
+        string? fixtureVariant,
+        string sharedSettingsHash,
+        string overlaySettingsHash,
+        string routePath,
+        bool includeNativePixelEvidence)
+    {
+        if (includeNativePixelEvidence)
+        {
+            return new
+            {
+                applied = true,
+                fixtureVariant,
+                sharedSettingsHash,
+                overlaySettingsHash,
+                routePath,
+                pixelEvidence = new
+                {
+                    status = "unsupported",
+                    reason = "effective-settings parity source; native pixels are validated by screenshot image and model evidence"
+                }
+            };
+        }
+
+        return new
+        {
+            applied = true,
+            fixtureVariant,
+            sharedSettingsHash,
+            overlaySettingsHash,
+            routePath
+        };
+    }
+
+    private static List<Dictionary<string, object?>> NativeEffectiveSettingList(ScreenshotMetadata metadata)
+    {
+        var overlayId = metadata.OverlayId ?? string.Empty;
+        var session = NativeEffectiveSessionKey(metadata.PreviewMode);
+        var sessionKind = NativeEffectiveSessionKind(session);
+        var settings = NativeEffectiveSettingsShouldUseDefaultSettings(metadata)
+            ? OverlaySettingsFor(DefinitionForOverlayId(metadata.OverlayId)!)
+            : metadata.Settings ?? NativeSettingsForMetadata(metadata);
+        var values = new List<Dictionary<string, object?>>();
+
+        AddEffectiveSetting(values, "overlayEnabled", false);
+        AddEffectiveSetting(values, $"session.{session}.enabled", NativeEffectiveSessionEnabled(overlayId, session));
+        AddEffectiveSetting(values, "general.unitSystem", metadata.UnitSystem ?? "Metric");
+        AddEffectiveSetting(values, "scalePercent", 100);
+        AddEffectiveSetting(
+            values,
+            "opacityPercent",
+            string.Equals(overlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) ? 0 : 100);
+
+        if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            AddEffectiveSetting(
+                values,
+                "carsEachSide",
+                settings.GetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, defaultValue: 3, minimum: 0, maximum: 8));
+        }
+
+        if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            AddEffectiveContentSetting(values, settings, OverlayOptionKeys.StandingsClassSeparatorsEnabled, defaultEnabled: true, sessionKind, session);
+            AddEffectiveSetting(
+                values,
+                "carsInClass",
+                settings.GetIntegerOption(OverlayOptionKeys.StandingsCarsInClass, defaultValue: 14, minimum: 1, maximum: 24));
+            AddEffectiveSetting(
+                values,
+                "otherClassRows",
+                settings.GetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, defaultValue: 2, minimum: 0, maximum: 6));
+        }
+
+        if (string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            var carsAhead = settings.GetIntegerOption(OverlayOptionKeys.GapCarsAhead, defaultValue: 5, minimum: 0, maximum: 12);
+            var carsBehind = settings.GetIntegerOption(OverlayOptionKeys.GapCarsBehind, defaultValue: 5, minimum: 0, maximum: 12);
+            AddEffectiveSetting(values, "carsAhead", carsAhead);
+            AddEffectiveSetting(values, "carsBehind", carsBehind);
+            AddEffectiveSetting(
+                values,
+                "gap.cars-window",
+                new SortedDictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["carsAhead"] = carsAhead,
+                    ["carsBehind"] = carsBehind
+                });
+        }
+
+        if (string.Equals(overlayId, StreamChatOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            AddEffectiveSetting(values, OverlayOptionKeys.StreamChatProvider, NativeEffectiveStreamChatProvider(metadata, settings));
+        }
+
+        if (string.Equals(overlayId, CarRadarOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            AddEffectiveContentSetting(values, settings, OverlayOptionKeys.RadarMulticlassWarning, defaultEnabled: true, sessionKind, session);
+            AddEffectiveSetting(
+                values,
+                OverlayOptionKeys.RadarMulticlassWarningSeconds,
+                settings.GetIntegerOption(OverlayOptionKeys.RadarMulticlassWarningSeconds, defaultValue: 5, minimum: 3, maximum: 10));
+            AddEffectiveSetting(
+                values,
+                OverlayOptionKeys.RadarVisibilitySeconds,
+                settings.GetIntegerOption(OverlayOptionKeys.RadarVisibilitySeconds, defaultValue: 2, minimum: 2, maximum: 5));
+        }
+
+        if (NativeSupportsSharedChrome(overlayId))
+        {
+            AddEffectiveSetting(
+                values,
+                $"chrome.header.time-remaining.{session}",
+                settings.GetBooleanOption(NativeChromeHeaderTimeRemainingKey(sessionKind), defaultValue: true),
+                session);
+        }
+
+        if (string.Equals(overlayId, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            var traceEnabled =
+                NativeEffectiveContentEnabled(settings, OverlayOptionKeys.InputShowThrottleTrace, defaultEnabled: true, sessionKind)
+                || NativeEffectiveContentEnabled(settings, OverlayOptionKeys.InputShowBrakeTrace, defaultEnabled: true, sessionKind)
+                || NativeEffectiveContentEnabled(settings, OverlayOptionKeys.InputShowClutchTrace, defaultEnabled: true, sessionKind);
+            AddEffectiveSetting(values, "input-state.trace.*", traceEnabled, session);
+        }
+
+        AddNativeContentSettings(values, overlayId, settings, sessionKind, session);
+        return values;
+    }
+
+    private static bool NativeEffectiveSettingsShouldUseDefaultSettings(ScreenshotMetadata metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata.OverlayId)
+            || string.IsNullOrWhiteSpace(metadata.FixtureVariant)
+            || DefinitionForOverlayId(metadata.OverlayId) is null)
+        {
+            return false;
+        }
+
+        var slug = metadata.FixtureVariant;
+        return metadata.OverlayId switch
+        {
+            var id when string.Equals(id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) =>
+                slug.ToLowerInvariant() is "calculating" or "waiting" or "no-data",
+            _ => false
+        };
+    }
+
+    private static OverlaySettings NativeSettingsForMetadata(ScreenshotMetadata metadata)
+    {
+        var definition = DefinitionForOverlayId(metadata.OverlayId);
+        if (definition is null)
+        {
+            return new OverlaySettings
+            {
+                Id = metadata.OverlayId ?? "unknown",
+                Enabled = true,
+                Width = 1,
+                Height = 1,
+                AlwaysOnTop = false
+            };
+        }
+
+        return metadata.FixtureVariant is { Length: > 0 } fixtureVariant
+            ? NativeVariantSettings(definition, fixtureVariant) ?? OverlaySettingsFor(definition)
+            : OverlaySettingsFor(definition);
+    }
+
+    private static OverlayDefinition? DefinitionForOverlayId(string? overlayId)
+    {
+        return ManagedOverlayDefinitions()
+            .FirstOrDefault(definition => string.Equals(definition.Id, overlayId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void AddNativeContentSettings(
+        List<Dictionary<string, object?>> values,
+        string overlayId,
+        OverlaySettings settings,
+        OverlaySessionKind sessionKind,
+        string session)
+    {
+        if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var column in OverlayContentColumnSettings.Standings.Columns)
+            {
+                AddEffectiveContentSetting(values, settings, column.EnabledKey(overlayId), column.DefaultEnabled, sessionKind, session);
+            }
+            return;
+        }
+
+        if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var column in OverlayContentColumnSettings.Relative.Columns)
+            {
+                AddEffectiveContentSetting(values, settings, column.EnabledKey(overlayId), column.DefaultEnabled, sessionKind, session);
+            }
+            return;
+        }
+
+        if (string.Equals(overlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            AddEffectiveContentSetting(values, settings, OverlayOptionKeys.TrackMapSectorBoundariesEnabled, defaultEnabled: true, sessionKind, session);
+            return;
+        }
+
+        if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            AddEffectiveContentSetting(values, settings, OverlayOptionKeys.FlagsShowGreen, defaultEnabled: true, sessionKind, session);
+            AddEffectiveContentSetting(values, settings, OverlayOptionKeys.FlagsShowBlue, defaultEnabled: true, sessionKind, session);
+            AddEffectiveContentSetting(values, settings, OverlayOptionKeys.FlagsShowYellow, defaultEnabled: true, sessionKind, session);
+            AddEffectiveContentSetting(values, settings, OverlayOptionKeys.FlagsShowCritical, defaultEnabled: true, sessionKind, session);
+            AddEffectiveContentSetting(values, settings, OverlayOptionKeys.FlagsShowFinish, defaultEnabled: true, sessionKind, session);
+            return;
+        }
+
+        if (!OverlayContentColumnSettings.TryGetContentDefinition(overlayId, out var definition)
+            || definition.Blocks is not { Count: > 0 } blocks)
+        {
+            return;
+        }
+
+        foreach (var block in blocks)
+        {
+            AddEffectiveContentSetting(values, settings, block.EnabledOptionKey, block.DefaultEnabled, sessionKind, session);
+        }
+    }
+
+    private static void AddEffectiveContentSetting(
+        List<Dictionary<string, object?>> values,
+        OverlaySettings settings,
+        string key,
+        bool defaultEnabled,
+        OverlaySessionKind sessionKind,
+        string session)
+    {
+        AddEffectiveSetting(values, key, NativeEffectiveContentEnabled(settings, key, defaultEnabled, sessionKind), session);
+    }
+
+    private static bool NativeEffectiveContentEnabled(
+        OverlaySettings settings,
+        string key,
+        bool defaultEnabled,
+        OverlaySessionKind sessionKind)
+    {
+        var globalEnabled = settings.GetBooleanOption(key, defaultEnabled);
+        return settings.GetBooleanOption(
+            OverlayContentColumnSettings.SessionEnabledOptionKey(key, sessionKind),
+            globalEnabled);
+    }
+
+    private static void AddEffectiveSetting(
+        List<Dictionary<string, object?>> values,
+        string key,
+        object? value,
+        string? session = null)
+    {
+        var setting = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["key"] = key,
+            ["value"] = value
+        };
+        if (!string.IsNullOrWhiteSpace(session))
+        {
+            setting["session"] = session;
+        }
+
+        values.Add(setting);
+    }
+
+    private static string NativeEffectiveSessionKey(string? previewMode)
+    {
+        return previewMode?.ToLowerInvariant() switch
+        {
+            "practice" => "practice",
+            "qualifying" => "qualifying",
+            "race" => "race",
+            "test" => "test",
+            _ => "race"
+        };
+    }
+
+    private static OverlaySessionKind NativeEffectiveSessionKind(string session)
+    {
+        return session switch
+        {
+            "practice" => OverlaySessionKind.Practice,
+            "qualifying" => OverlaySessionKind.Qualifying,
+            "race" => OverlaySessionKind.Race,
+            _ => OverlaySessionKind.Test
+        };
+    }
+
+    private static bool NativeEffectiveSessionEnabled(string overlayId, string session)
+    {
+        return string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            ? string.Equals(session, "race", StringComparison.Ordinal)
+            : true;
+    }
+
+    private static string NativeChromeHeaderTimeRemainingKey(OverlaySessionKind sessionKind)
+    {
+        return sessionKind switch
+        {
+            OverlaySessionKind.Practice => OverlayOptionKeys.ChromeHeaderTimeRemainingPractice,
+            OverlaySessionKind.Qualifying => OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying,
+            OverlaySessionKind.Race => OverlayOptionKeys.ChromeHeaderTimeRemainingRace,
+            _ => OverlayOptionKeys.ChromeHeaderTimeRemainingTest
+        };
+    }
+
+    private static bool NativeSupportsSharedChrome(string overlayId)
+    {
+        return overlayId.ToLowerInvariant() is
+            "standings"
+            or "relative"
+            or "fuel-calculator"
+            or "gap-to-leader"
+            or "session-weather"
+            or "pit-service";
+    }
+
+    private static string NativeEffectiveStreamChatProvider(ScreenshotMetadata metadata, OverlaySettings settings)
+    {
+        return metadata.FixtureVariant?.ToLowerInvariant() switch
+        {
+            "twitch-rich" => StreamChatOverlaySettings.ProviderTwitch,
+            "streamlabs-configured" => StreamChatOverlaySettings.ProviderStreamlabs,
+            _ => settings.GetStringOption(OverlayOptionKeys.StreamChatProvider, StreamChatOverlaySettings.ProviderNone)
+        };
+    }
+
+    private static string? NativeEffectiveFixtureVariant(ScreenshotMetadata metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata.OverlayId)
+            || string.IsNullOrWhiteSpace(metadata.FixtureVariant))
+        {
+            return null;
+        }
+
+        var overlayId = metadata.OverlayId;
+        var slug = metadata.FixtureVariant;
+        if (string.Equals(slug, "chrome-off", StringComparison.OrdinalIgnoreCase))
+        {
+            return "chrome-off";
+        }
+
+        return overlayId switch
+        {
+            var id when string.Equals(id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => slug.ToLowerInvariant() switch
+            {
+                "waiting" => "fuel-waiting",
+                "calculating" => "fuel-calculating",
+                "plan-off" => "fuel-plan-off",
+                "fuel-off" => "fuel-fuel-off",
+                "stint-targets-off" => "fuel-stint-targets-off",
+                "race-information-off" => "fuel-race-information-off",
+                "no-data" => "fuel-no-data",
+                _ => $"fuel-{slug}"
+            },
+            var id when string.Equals(id, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => $"standings-{slug}",
+            var id when string.Equals(id, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => slug.ToLowerInvariant() switch
+            {
+                "rightmost-evidence" => "rightmost-evidence",
+                "driver-only" => "relative-driver-only",
+                "position-driver" => "relative-position-driver",
+                "rows-2" => "relative-rows-2",
+                "no-content" => "relative-no-content",
+                _ => $"relative-{slug}"
+            },
+            var id when string.Equals(id, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => $"session-weather-{slug}",
+            var id when string.Equals(id, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => $"pit-service-{slug}",
+            var id when string.Equals(id, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => slug.ToLowerInvariant() switch
+            {
+                "mock-data" => "input-state-mock-data",
+                "graph-only" => "input-graph-only",
+                "rail-only" => "input-rail-only",
+                "waiting" => "input-waiting",
+                "no-data" => "input-no-data",
+                "no-content" => "input-no-content",
+                "min-scale" => "input-min-scale",
+                _ => $"input-{slug}"
+            },
+            var id when string.Equals(id, CarRadarOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => $"car-radar-{slug}",
+            var id when string.Equals(id, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => slug.ToLowerInvariant() switch
+            {
+                "no-cars" => "gap-no-cars",
+                "trend-row-off" => "gap-trend-row-off",
+                "trend-off" => "gap-trend-off",
+                "graph-off" => "gap-graph-off",
+                _ => $"gap-{slug}"
+            },
+            var id when string.Equals(id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => slug.ToLowerInvariant() switch
+            {
+                "circle-fallback" => null,
+                "no-markers" => "track-map-no-markers",
+                _ => $"track-map-{slug}"
+            },
+            var id when string.Equals(id, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => $"flags-{slug}",
+            var id when string.Equals(id, StreamChatOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => $"stream-chat-{slug}",
+            _ => slug
+        };
+    }
+
+    private static string[] NativeEffectiveColumnKeys(ScreenshotMetadata metadata)
+    {
+        var body = metadata.Layout?.BodyLayout;
+        if (body is null || !string.Equals(NormalizedBodyKind(body.Kind), "table", StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        return body.Columns
+            .Select(column => NativeEffectiveColumnKey(metadata.OverlayId, column.Label))
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToArray();
+    }
+
+    private static string NativeEffectiveColumnKey(string? overlayId, string label)
+    {
+        var normalizedLabel = label.Trim().ToUpperInvariant();
+        if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedLabel switch
+            {
+                "POS" => "class-position",
+                "CAR" => "car-number",
+                "DRIVER" => "driver",
+                "GAP" => "gap",
+                "INT" => "interval",
+                "FAST" => "fastest-lap",
+                "LAST" => "last-lap",
+                "PIT" => "pit",
+                _ => label
+            };
+        }
+
+        if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedLabel switch
+            {
+                "POS" => "relative-position",
+                "DRIVER" => "driver",
+                "DELTA" or "EST" => "gap",
+                "PIT" => "pit",
+                _ => label
+            };
+        }
+
+        return label;
+    }
+
+    private static string[] NativeEffectiveRowIdentities(ScreenshotMetadata metadata)
+    {
+        var body = metadata.Layout?.BodyLayout;
+        if (body is null || !string.Equals(NormalizedBodyKind(body.Kind), "table", StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        return body.Rows.Select(NativeEffectiveRowIdentity).ToArray();
+    }
+
+    private static string NativeEffectiveRowIdentity(DesignV2LayoutRow row)
+    {
+        var cells = row.Cells.Select(cell => cell.Text ?? string.Empty).ToArray();
+        var isClassHeader = string.Equals(row.Kind, "class-header", StringComparison.Ordinal);
+        var isPlaceholder = string.Equals(row.Kind, "placeholder", StringComparison.Ordinal)
+            || !cells.Any(cell => !string.IsNullOrWhiteSpace(cell));
+        var kind = isClassHeader ? "class-header" : isPlaceholder ? "placeholder" : "row";
+        var primary = isClassHeader
+            ? row.Text ?? string.Empty
+            : string.Join("/", cells.Take(2));
+        var reference = string.Equals(row.Kind, "reference", StringComparison.Ordinal)
+            ? "reference"
+            : string.Empty;
+        var detail = row.Detail ?? string.Empty;
+        return string.Join("|", kind, primary, isClassHeader ? detail.ToUpperInvariant() : string.Empty, reference);
+    }
+
+    private static int NativeEffectivePlaceholderRowCount(ScreenshotMetadata metadata)
+    {
+        var body = metadata.Layout?.BodyLayout;
+        if (body is null || !string.Equals(NormalizedBodyKind(body.Kind), "table", StringComparison.Ordinal))
+        {
+            return 0;
+        }
+
+        return body.Rows.Count(row =>
+            string.Equals(row.Kind, "placeholder", StringComparison.Ordinal)
+            || !row.Cells.Any(cell => !string.IsNullOrWhiteSpace(cell.Text)));
+    }
+
+    private static string StableEvidenceHash(object? value)
+    {
+        var json = StableEvidenceJson(value);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)))
+            .ToLowerInvariant()[..16];
+    }
+
+    private static string StableEvidenceJson(object? value)
+    {
+        if (value is null)
+        {
+            return "null";
+        }
+
+        if (value is string text)
+        {
+            return JsonSerializer.Serialize(text);
+        }
+
+        if (value is bool boolean)
+        {
+            return boolean ? "true" : "false";
+        }
+
+        if (value is int
+            or long
+            or short
+            or byte
+            or double
+            or float
+            or decimal)
+        {
+            return JsonSerializer.Serialize(value);
+        }
+
+        if (value is IEnumerable<KeyValuePair<string, object?>> pairs)
+        {
+            return "{"
+                + string.Join(
+                    ",",
+                    pairs
+                        .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                        .Select(pair => $"{JsonSerializer.Serialize(pair.Key)}:{StableEvidenceJson(pair.Value)}"))
+                + "}";
+        }
+
+        if (value is IEnumerable enumerable)
+        {
+            return "["
+                + string.Join(",", enumerable.Cast<object?>().Select(StableEvidenceJson))
+                + "]";
+        }
+
+        return JsonSerializer.Serialize(value);
+    }
+
+    private static object? NativeMapFallbackEvidence(ScreenshotMetadata metadata)
+    {
+        if (!string.Equals(metadata.OverlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if ((metadata.ShouldRender ?? NativeShouldRender(metadata)) is false)
+        {
+            return null;
+        }
+
+        var vector = metadata.Layout?.BodyLayout?.Vector;
+        if (vector is null || !string.Equals(vector.MapKind, "circle", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return new
+        {
+            kind = "circle",
+            reason = "no-generated-track-map",
+            currentTrackKey = "windows-review-fixture-track"
+        };
+    }
+
+    private static object? NativeFuelStrategyEvidence(ScreenshotMetadata metadata)
+    {
+        if (!string.Equals(metadata.OverlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var state = "unavailable";
+        if (metadata.ShouldRender is not false)
+        {
+            var text = NativeBodyText(metadata.Layout?.BodyLayout) ?? string.Empty;
+            if (text.Contains("Need Covered", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("Covered", StringComparison.OrdinalIgnoreCase))
+            {
+                state = "not-needed";
+            }
+            else if (text.Contains("Need +", StringComparison.OrdinalIgnoreCase))
+            {
+                state = "measured";
+            }
+        }
+
+        return new
+        {
+            additionalFuelNeedState = state,
+            successCopyRequiresMeasuredNeed = true
+        };
+    }
+
+    private static object? NativeMetricLayoutEvidence(ScreenshotMetadata metadata)
+    {
+        if (!string.Equals(metadata.OverlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(metadata.OverlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var body = metadata.Layout?.BodyLayout;
+        var contentRowCount = body is null
+            ? 0
+            : body.Rows.Count
+                + body.MetricRows.Count
+                + body.MetricGrids.Sum(grid => grid.Rows.Count);
+        var sectionCount = body is null
+            ? 0
+            : body.MetricRows
+                .Select(row => row.Section)
+                .Where(section => !string.IsNullOrWhiteSpace(section))
+                .Distinct(StringComparer.Ordinal)
+                .Count()
+                + body.MetricGrids.Count;
+        var estimatedContentHeight = Math.Max(0, 38 + contentRowCount * 30 + sectionCount * 18);
+        var clientHeight = metadata.Layout?.Client.Height ?? 0f;
+        var unusedHeightRatio = clientHeight > 0f
+            ? Math.Clamp((clientHeight - estimatedContentHeight) / clientHeight, 0f, 1f)
+            : 0f;
+
+        return new
+        {
+            contentRowCount,
+            unusedHeightRatio = Math.Round(unusedHeightRatio, 3)
+        };
+    }
+
+    private static string? NativeUnavailableContentPolicy(ScreenshotMetadata metadata)
+    {
+        if (string.Equals(metadata.OverlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(metadata.FixtureVariant, "missing", StringComparison.OrdinalIgnoreCase))
+        {
+            return "section-aware-placeholders";
+        }
+
+        if (metadata.ShouldRender is false)
+        {
+            return "suppress-rendered-content";
+        }
+
+        return null;
+    }
+
     private static object ColumnEvidence(DesignV2LayoutColumn column)
     {
         return new
@@ -4141,6 +8296,7 @@ internal static class Program
         var renderedCells = row.Cells.Count > 0
             ? row.Cells.Select(CellEvidence).ToArray()
             : ClassHeaderCellEvidence(row);
+        var isClassHeader = string.Equals(row.Kind, "class-header", StringComparison.Ordinal);
         return new
         {
             index = row.Index,
@@ -4148,6 +8304,9 @@ internal static class Program
             kind = row.Kind,
             isReference = string.Equals(row.Kind, "reference", StringComparison.Ordinal),
             isPartial = string.Equals(row.Evidence, "Partial", StringComparison.OrdinalIgnoreCase),
+            isClassHeader,
+            headerTitle = isClassHeader ? row.Text : null,
+            headerDetail = isClassHeader ? row.Detail : null,
             classColorHex = row.ClassColorHex,
             relativeLapDelta = row.RelativeLapDelta,
             evidence = row.Evidence,
@@ -4178,7 +8337,7 @@ internal static class Program
             new
             {
                 columnIndex = 0,
-                column = "CLS",
+                column = "Driver",
                 text,
                 value = text,
                 alignment = "left",
@@ -4283,7 +8442,7 @@ internal static class Program
         {
             title = grid.Title,
             bounds = RectEvidence(grid.Bounds),
-            headers = grid.Headers.Select(header => header.Text).ToArray(),
+            headers = grid.ModelHeaders.ToArray(),
             renderedHeaders = grid.Headers.Select(CellEvidence).ToArray(),
             rows = grid.Rows.Select(row =>
             {
@@ -4323,6 +8482,8 @@ internal static class Program
             selectedSeriesCount = graph.SeriesCount,
             metricDeadbandSeconds = graph.MetricDeadbandSeconds,
             comparisonLabel = graph.ComparisonLabel,
+            showGraph = graph.ShowGraph,
+            showTrendMetrics = graph.ShowTrendMetrics,
             activeThreat = graph.ActiveThreat is { } activeThreat
                 ? GraphTrendMetricEvidence(activeThreat)
                 : null,
@@ -4349,17 +8510,19 @@ internal static class Program
                 points = series.Points.Select(GraphPointEvidence).ToArray()
             }).ToArray(),
             trendMetricCount = graph.TrendMetricCount,
-            trendMetrics = graph.TrendMetrics.Select(GraphTrendMetricEvidence).ToArray(),
+            trendMetrics = graph.TrendMetrics.Select((metric, index) => GraphTrendMetricEvidence(metric, index)).ToArray(),
             weatherCount = graph.WeatherBands.Count,
+            leaderChangeCount = graph.Markers.Count(marker => string.Equals(marker.Kind, "leader-change", StringComparison.Ordinal)),
+            driverChangeCount = graph.Markers.Count(marker => string.Equals(marker.Kind, "driver-change", StringComparison.Ordinal)),
             markerCount = graph.Markers.Count,
             gridLineCount = graph.GridLines.Count,
             gridLines = graph.GridLines.Select(LineEvidence).ToArray(),
             geometry = new
             {
                 frame = RectEvidence(graph.Frame),
-                plot = RectEvidence(graph.Plot),
-                axis = RectEvidence(graph.Axis),
-                labelLane = RectEvidence(graph.LabelLane),
+                plot = graph.ShowGraph ? RectEvidence(graph.Plot) : null,
+                axis = graph.ShowGraph ? RectEvidence(graph.Axis) : null,
+                labelLane = graph.ShowGraph ? RectEvidence(graph.LabelLane) : null,
                 metricsTable = graph.MetricsTable is { } metricsTable ? RectEvidence(metricsTable) : null,
                 scale = graph.Scale,
                 aheadSeconds = graph.AheadSeconds,
@@ -4374,14 +8537,16 @@ internal static class Program
         };
     }
 
-    private static object GraphTrendMetricEvidence(DesignV2LayoutGraphTrendMetric metric)
+    private static object GraphTrendMetricEvidence(DesignV2LayoutGraphTrendMetric metric, int? index = null)
     {
         return new
         {
+            index,
             label = metric.Label,
             focusGapChangeSeconds = metric.FocusGapChangeSeconds,
             state = metric.State,
             stateLabel = metric.StateLabel,
+            completedReferenceLaps = metric.CompletedReferenceLaps,
             valueText = metric.ValueText,
             chaserText = metric.ChaserText,
             primaryText = metric.PrimaryText,
@@ -4583,31 +8748,21 @@ internal static class Program
                 name = row.Text,
                 text = row.Detail,
                 kind = ChatRowKind(row),
-                authorColorHex = row.Foreground,
+                authorColorHex = row.AuthorColorHex,
                 metadata = row.Metadata.ToArray(),
-                badges = row.Badges.Select(badge => new
+                badges = row.BadgeDetails.Select(badge => new
                 {
-                    id = badge,
-                    version = string.Empty,
-                    label = badge,
-                    roomId = (string?)null
+                    id = badge.Id,
+                    version = badge.Version,
+                    label = badge.Label,
+                    roomId = badge.RoomId
                 }).ToArray(),
-                segments = row.ChatSegments.Count > 0
-                    ? row.ChatSegments.Select(segment => new
-                    {
-                        kind = segment.Kind,
-                        text = (string?)segment.Text,
-                        imageUrl = segment.ImageUrl
-                    }).ToArray()
-                    : new[]
-                    {
-                        new
-                        {
-                            kind = "text",
-                            text = (string?)row.Detail,
-                            imageUrl = (string?)null
-                        }
-                    },
+                segments = row.ChatSegments.Select(segment => new
+                {
+                    kind = segment.Kind,
+                    text = (string?)segment.Text,
+                    imageUrl = segment.ImageUrl
+                }).ToArray(),
                 bounds = RectEvidence(row.Bounds),
                 nameBounds = (object?)null,
                 textBounds = (object?)null
@@ -4667,6 +8822,9 @@ internal static class Program
 
     private static object CarRadarEvidence(DesignV2LayoutVector vector)
     {
+        var items = vector.ShouldRender ? vector.Items : Array.Empty<DesignV2LayoutVectorItem>();
+        var primitives = vector.ShouldRender ? vector.Primitives : Array.Empty<DesignV2LayoutVectorPrimitive>();
+        var labels = vector.ShouldRender ? vector.Labels : Array.Empty<DesignV2LayoutVectorLabel>();
         return new
         {
             shouldRender = vector.ShouldRender,
@@ -4689,25 +8847,28 @@ internal static class Program
                 x = vector.ScaleX,
                 y = vector.ScaleY
             },
-            carCount = vector.ItemCount,
-            itemCount = vector.ItemCount,
-            primitiveCount = vector.PrimitiveCount,
-            labelCount = vector.LabelCount,
-            ringCount = vector.Primitives.Count(primitive => string.Equals(primitive.Kind, "ring", StringComparison.Ordinal)),
+            carCount = items.Count,
+            itemCount = items.Count,
+            primitiveCount = primitives.Count,
+            labelCount = labels.Count,
+            ringCount = primitives.Count(primitive => string.Equals(primitive.Kind, "ring", StringComparison.Ordinal)),
             surfaceAlpha = vector.SurfaceAlpha,
-            colors = VectorColors(vector),
-            items = vector.Items.Select(VectorItemEvidence).ToArray(),
-            primitives = vector.Primitives.Select(VectorPrimitiveEvidence).ToArray(),
-            labels = vector.Labels.Select(VectorLabelEvidence).ToArray()
+            colors = vector.ShouldRender ? VectorColors(vector) : Array.Empty<string>(),
+            items = items.Select(VectorItemEvidence).ToArray(),
+            primitives = primitives.Select(VectorPrimitiveEvidence).ToArray(),
+            labels = labels.Select(VectorLabelEvidence).ToArray()
         };
     }
 
     private static object TrackMapEvidence(DesignV2LayoutVector vector)
     {
+        var items = vector.ShouldRender ? vector.Items : Array.Empty<DesignV2LayoutVectorItem>();
+        var primitives = vector.ShouldRender ? vector.Primitives : Array.Empty<DesignV2LayoutVectorPrimitive>();
+        var labels = vector.ShouldRender ? vector.Labels : Array.Empty<DesignV2LayoutVectorLabel>();
         return new
         {
-            markerCount = vector.ItemCount,
-            primitiveCount = vector.PrimitiveCount,
+            markerCount = items.Count,
+            primitiveCount = primitives.Count,
             mapKind = vector.MapKind,
             isAvailable = vector.ShouldRender,
             width = vector.SourceWidth,
@@ -4729,12 +8890,12 @@ internal static class Program
                 y = vector.ScaleY
             },
             shouldRender = vector.ShouldRender,
-            itemCount = vector.ItemCount,
-            labelCount = vector.LabelCount,
-            colors = VectorColors(vector),
-            items = vector.Items.Select(VectorItemEvidence).ToArray(),
-            primitives = vector.Primitives.Select(VectorPrimitiveEvidence).ToArray(),
-            labels = vector.Labels.Select(VectorLabelEvidence).ToArray()
+            itemCount = items.Count,
+            labelCount = labels.Count,
+            colors = vector.ShouldRender ? VectorColors(vector) : Array.Empty<string>(),
+            items = items.Select(VectorItemEvidence).ToArray(),
+            primitives = primitives.Select(VectorPrimitiveEvidence).ToArray(),
+            labels = labels.Select(VectorLabelEvidence).ToArray()
         };
     }
 
@@ -4814,6 +8975,11 @@ internal static class Program
     private static string? NativeTextSample(ScreenshotMetadata metadata)
     {
         if (!string.Equals(metadata.Surface, "windows-native-overlay", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if ((metadata.ShouldRender ?? NativeShouldRender(metadata)) is false)
         {
             return null;
         }
@@ -5083,6 +9249,130 @@ internal static class Program
             return chromeOffSettings;
         }
 
+        if (string.Equals(definition.Id, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "rightmost-evidence", StringComparison.OrdinalIgnoreCase))
+        {
+            var relativeSettings = OverlaySettingsFor(definition);
+            var pitEnabledKey = $"{RelativeOverlayDefinition.Definition.Id}.content.{OverlayContentColumnSettings.RelativePitColumnId}.enabled";
+            relativeSettings.SetBooleanOption(pitEnabledKey, true);
+            relativeSettings.SetBooleanOption(OverlayContentColumnSettings.SessionEnabledOptionKey(pitEnabledKey, OverlaySessionKind.Race), true);
+            var size = OverlayContentSizing.BaseSizeFor(definition, relativeSettings, OverlaySessionKind.Race);
+            relativeSettings.Width = size.Width;
+            relativeSettings.Height = size.Height;
+            return relativeSettings;
+        }
+
+        if (string.Equals(definition.Id, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "rows-2", StringComparison.OrdinalIgnoreCase))
+        {
+            var relativeSettings = OverlaySettingsFor(definition);
+            relativeSettings.SetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, 2, 0, 8);
+            var size = OverlayContentSizing.BaseSizeFor(definition, relativeSettings, OverlaySessionKind.Race);
+            relativeSettings.Width = size.Width;
+            relativeSettings.Height = size.Height;
+            return relativeSettings;
+        }
+
+        if (string.Equals(definition.Id, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(slug, "driver-only", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(slug, "position-driver", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(slug, "no-content", StringComparison.OrdinalIgnoreCase)))
+        {
+            var relativeSettings = OverlaySettingsFor(definition);
+            var enabledIds = string.Equals(slug, "driver-only", StringComparison.OrdinalIgnoreCase)
+                ? new[] { OverlayContentColumnSettings.RelativeDriverColumnId }
+                : string.Equals(slug, "position-driver", StringComparison.OrdinalIgnoreCase)
+                    ? new[]
+                    {
+                        OverlayContentColumnSettings.RelativePositionColumnId,
+                        OverlayContentColumnSettings.RelativeDriverColumnId
+                    }
+                    : Array.Empty<string>();
+            foreach (var column in OverlayContentColumnSettings.Relative.Columns)
+            {
+                var enabled = enabledIds.Contains(column.Id, StringComparer.OrdinalIgnoreCase);
+                var key = column.EnabledKey(RelativeOverlayDefinition.Definition.Id);
+                relativeSettings.SetBooleanOption(key, enabled);
+                relativeSettings.SetBooleanOption(OverlayContentColumnSettings.SessionEnabledOptionKey(key, OverlaySessionKind.Race), enabled);
+            }
+
+            var size = OverlayContentSizing.BaseSizeFor(definition, relativeSettings, OverlaySessionKind.Race);
+            relativeSettings.Width = size.Width;
+            relativeSettings.Height = size.Height;
+            return relativeSettings;
+        }
+
+        if (string.Equals(definition.Id, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && IsStandingsVariantSlug(slug))
+        {
+            var standingsSettings = OverlaySettingsFor(definition);
+            ApplyStandingsVariantSettings(standingsSettings, slug);
+            var size = OverlayContentSizing.BaseSizeFor(definition, standingsSettings, OverlaySessionKind.Race);
+            if (string.Equals(slug, "three-class", StringComparison.OrdinalIgnoreCase))
+            {
+                size = new Size(size.Width, 386);
+            }
+
+            standingsSettings.Width = size.Width;
+            standingsSettings.Height = size.Height;
+            return standingsSettings;
+        }
+
+        if (IsSectionOffVariant(definition.Id, slug))
+        {
+            var sectionSettings = OverlaySettingsFor(definition);
+            DisableSectionContent(sectionSettings, definition.Id, slug);
+            var size = OverlayContentSizing.BaseSizeFor(definition, sectionSettings, OverlaySessionKind.Race);
+            sectionSettings.Width = size.Width;
+            sectionSettings.Height = size.Height;
+            return sectionSettings;
+        }
+
+        if (string.Equals(definition.Id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "calculating", StringComparison.OrdinalIgnoreCase))
+        {
+            var calculatingSettings = OverlaySettingsFor(definition);
+            DisableSectionContent(calculatingSettings, definition.Id, "stint-targets-off");
+            var size = OverlayContentSizing.BaseSizeFor(definition, calculatingSettings, OverlaySessionKind.Race);
+            calculatingSettings.Width = size.Width;
+            calculatingSettings.Height = size.Height;
+            return calculatingSettings;
+        }
+
+        if (string.Equals(definition.Id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(slug, "waiting", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(slug, "no-data", StringComparison.OrdinalIgnoreCase)))
+        {
+            var noDataSettings = OverlaySettingsFor(definition);
+            DisableAllContent(noDataSettings, definition.Id);
+            SetSharedChromeOptions(noDataSettings, enabled: false);
+            var size = OverlayContentSizing.BaseSizeFor(definition, noDataSettings, OverlaySessionKind.Race);
+            noDataSettings.Width = size.Width;
+            noDataSettings.Height = size.Height;
+            return noDataSettings;
+        }
+
+        if (IsInputStateContentVariant(definition.Id, slug))
+        {
+            var inputSettings = OverlaySettingsFor(definition);
+            DisableSectionContent(inputSettings, definition.Id, slug);
+            var size = OverlayContentSizing.BaseSizeFor(definition, inputSettings, OverlaySessionKind.Race);
+            inputSettings.Width = size.Width;
+            inputSettings.Height = size.Height;
+            return inputSettings;
+        }
+
+        if (string.Equals(definition.Id, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "missing", StringComparison.OrdinalIgnoreCase))
+        {
+            var missingWeatherSettings = OverlaySettingsFor(definition);
+            DisableSectionContent(missingWeatherSettings, definition.Id, "weather-off");
+            var size = OverlayContentSizing.BaseSizeFor(definition, missingWeatherSettings, OverlaySessionKind.Race);
+            missingWeatherSettings.Width = size.Width;
+            missingWeatherSettings.Height = size.Height;
+            return missingWeatherSettings;
+        }
+
         if (!string.Equals(definition.Id, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))
         {
@@ -5096,6 +9386,260 @@ internal static class Program
             height: Math.Max(80, (int)Math.Round(definition.DefaultHeight * scale)));
         settings.Scale = scale;
         return settings;
+    }
+
+    private static bool IsSectionOffVariant(string overlayId, string slug)
+    {
+        return string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            ? IsSessionWeatherSectionOffSlug(slug)
+            : string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+                ? IsPitServiceSectionOffSlug(slug)
+                : string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+                    ? IsFuelSectionOffSlug(slug)
+                    : string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+                        && IsGapSectionOffSlug(slug);
+    }
+
+    private static bool IsFuelSectionOffSlug(string slug)
+    {
+        return string.Equals(slug, "plan-off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(slug, "fuel-off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(slug, "stint-targets-off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(slug, "race-information-off", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsGapSectionOffSlug(string slug)
+    {
+        return string.Equals(slug, "trend-row-off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(slug, "trend-off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(slug, "graph-off", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsInputStateContentVariant(string overlayId, string slug)
+    {
+        return string.Equals(overlayId, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && slug.ToLowerInvariant() is "graph-only" or "rail-only" or "no-content";
+    }
+
+    private static bool IsStandingsVariantSlug(string slug)
+    {
+        return slug.ToLowerInvariant() is
+            "one-class"
+            or "two-class"
+            or "three-class"
+            or "no-pit"
+            or "driver-only"
+            or "class-separators-off"
+            or "focused-class-only"
+            or "starting-grid"
+            or "no-content";
+    }
+
+    private static void ApplyStandingsVariantSettings(OverlaySettings settings, string slug)
+    {
+        if (string.Equals(slug, "no-pit", StringComparison.OrdinalIgnoreCase))
+        {
+            SetStandingsColumnEnabled(settings, OverlayContentColumnSettings.StandingsPitColumnId, false);
+        }
+        else if (string.Equals(slug, "driver-only", StringComparison.OrdinalIgnoreCase))
+        {
+            SetOnlyStandingsColumnsEnabled(settings, [OverlayContentColumnSettings.StandingsDriverColumnId]);
+        }
+        else if (string.Equals(slug, "class-separators-off", StringComparison.OrdinalIgnoreCase))
+        {
+            settings.SetBooleanOption(OverlayOptionKeys.StandingsClassSeparatorsEnabled, false);
+        }
+        else if (string.Equals(slug, "focused-class-only", StringComparison.OrdinalIgnoreCase))
+        {
+            settings.SetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, 0, 0, 6);
+        }
+        else if (string.Equals(slug, "no-content", StringComparison.OrdinalIgnoreCase))
+        {
+            SetOnlyStandingsColumnsEnabled(settings, []);
+        }
+    }
+
+    private static void SetOnlyStandingsColumnsEnabled(OverlaySettings settings, IReadOnlyCollection<string> enabledColumnIds)
+    {
+        foreach (var column in OverlayContentColumnSettings.Standings.Columns)
+        {
+            SetStandingsColumnEnabled(settings, column.Id, enabledColumnIds.Contains(column.Id));
+        }
+    }
+
+    private static void SetStandingsColumnEnabled(OverlaySettings settings, string columnId, bool enabled)
+    {
+        var column = OverlayContentColumnSettings.Standings.Columns
+            .FirstOrDefault(candidate => string.Equals(candidate.Id, columnId, StringComparison.Ordinal));
+        if (column is null)
+        {
+            return;
+        }
+
+        var enabledKey = column.EnabledKey(StandingsOverlayDefinition.Definition.Id);
+        settings.SetBooleanOption(enabledKey, enabled);
+        settings.SetBooleanOption(OverlayContentColumnSettings.SessionEnabledOptionKey(enabledKey, OverlaySessionKind.Race), enabled);
+    }
+
+    private static void DisableSectionContent(OverlaySettings settings, string overlayId, string slug)
+    {
+        if (!OverlayContentColumnSettings.TryGetContentDefinition(overlayId, out var definition)
+            || definition.Blocks is not { Count: > 0 } blocks)
+        {
+            return;
+        }
+
+        var disabledLabels = DisabledSectionContentLabels(overlayId, slug);
+        foreach (var block in blocks.Where(block => disabledLabels.Contains(block.Label)))
+        {
+            settings.SetBooleanOption(block.EnabledOptionKey, false);
+        }
+    }
+
+    private static HashSet<string> DisabledSectionContentLabels(string overlayId, string slug)
+    {
+        string[] labels = [];
+        if (string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            labels = slug.ToLowerInvariant() switch
+            {
+                "session-off" =>
+                [
+                    "Session type",
+                    "Session name",
+                    "Session mode",
+                    "Elapsed time",
+                    "Remaining time",
+                    "Total time",
+                    "Event type",
+                    "Car",
+                    "Track name",
+                    "Track length",
+                    "Laps remaining",
+                    "Laps total"
+                ],
+                "weather-off" =>
+                [
+                    "Wetness",
+                    "Declared surface",
+                    "Rubber",
+                    "Skies",
+                    "Weather",
+                    "Rain",
+                    "Wind direction",
+                    "Wind speed",
+                    "Facing wind",
+                    "Air temp",
+                    "Track temp",
+                    "Humidity",
+                    "Fog",
+                    "Pressure"
+                ],
+                _ => []
+            };
+        }
+        else if (string.Equals(overlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            labels = slug.ToLowerInvariant() switch
+            {
+                "plan-off" => ["Plan"],
+                "fuel-off" => ["Fuel"],
+                "stint-targets-off" => ["Stint targets"],
+                "race-information-off" => ["Plan", "Fuel"],
+                _ => []
+            };
+        }
+        else if (string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            labels = slug.ToLowerInvariant() switch
+            {
+                "session-off" => ["Session time", "Session laps"],
+                "signal-off" => ["Release", "Pit status"],
+                "service-off" =>
+                [
+                    "Fuel requested",
+                    "Fuel selected",
+                    "Tearoff requested",
+                    "Required repair",
+                    "Optional repair",
+                    "Fast repair selected",
+                    "Fast repairs available"
+                ],
+                "tire-analysis-off" =>
+                [
+                    "Compound",
+                    "Change request",
+                    "Set limit",
+                    "Sets available",
+                    "Sets used",
+                    "Pressure",
+                    "Temperature",
+                    "Wear",
+                    "Distance"
+                ],
+                _ => []
+            };
+        }
+        else if (string.Equals(overlayId, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            labels = slug.ToLowerInvariant() switch
+            {
+                "graph-only" =>
+                [
+                    "Throttle %",
+                    "Brake %",
+                    "Clutch %",
+                    "Steering wheel",
+                    "Gear",
+                    "Speed"
+                ],
+                "rail-only" =>
+                [
+                    "Throttle trace",
+                    "Brake trace",
+                    "Clutch trace"
+                ],
+                "no-content" =>
+                [
+                    "Throttle trace",
+                    "Brake trace",
+                    "Clutch trace",
+                    "Throttle %",
+                    "Brake %",
+                    "Clutch %",
+                    "Steering wheel",
+                    "Gear",
+                    "Speed"
+                ],
+                _ => []
+            };
+        }
+        else if (string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            labels = slug.ToLowerInvariant() switch
+            {
+                "trend-row-off" => ["Tire"],
+                "trend-off" => ["Last", "5L", "10L", "Pit", "PLap", "Stint", "Tire", "Status"],
+                "graph-off" => ["Graph"],
+                _ => []
+            };
+        }
+
+        return new HashSet<string>(labels, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static void DisableAllContent(OverlaySettings settings, string overlayId)
+    {
+        if (!OverlayContentColumnSettings.TryGetContentDefinition(overlayId, out var definition)
+            || definition.Blocks is not { Count: > 0 } blocks)
+        {
+            return;
+        }
+
+        foreach (var block in blocks)
+        {
+            settings.SetBooleanOption(block.EnabledOptionKey, false);
+        }
     }
 
     private static void SetSharedChromeOptions(OverlaySettings settings, bool enabled)
@@ -5125,6 +9669,30 @@ internal static class Program
         int Height,
         ScreenshotMetadata Metadata);
 
+    private sealed record SettingsMatrixSpec(
+        string Kind,
+        Rectangle Bounds,
+        IReadOnlyList<SettingsMatrixRowSpec> Rows,
+        OverlaySettings Settings,
+        bool UseSessionColumns,
+        int RowHeight,
+        int RowGap,
+        int Columns,
+        bool IsBlockGrid,
+        IReadOnlyList<SettingsMatrixColumnSpec> MatrixColumns,
+        bool ChromeGeometry);
+
+    private sealed record SettingsMatrixRowSpec(
+        string Key,
+        string Label,
+        string EnabledOptionKey,
+        bool DefaultEnabled);
+
+    private sealed record SettingsMatrixColumnSpec(
+        string Key,
+        string Label,
+        OverlaySessionKind? SessionKind);
+
     private sealed record ScreenshotMetadata(
         string Surface,
         string? Renderer = null,
@@ -5137,6 +9705,8 @@ internal static class Program
         string? FixtureParity = null,
         string? ComparisonMode = null,
         string? ComparisonLimit = null,
+        string? CaptureMode = null,
+        object? CropBounds = null,
         string? SourceContract = null,
         string? Status = null,
         string? ModelSource = null,
@@ -5152,7 +9722,14 @@ internal static class Program
         object? LayoutEvidence = null,
         object? UiEvidence = null,
         object? ScenarioEvidence = null,
-        string? UnitSystem = null);
+        string? UnitSystem = null,
+        OverlaySettings? Settings = null);
+
+    private readonly record struct SettingsNavigationSummary(
+        int TabCount,
+        int ActiveTabCount,
+        int RegionCount,
+        int ActiveRegionCount);
 
     private sealed record SettingsRegionSpec(string Id, string Label);
 

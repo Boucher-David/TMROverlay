@@ -807,7 +807,7 @@ internal sealed class TrackMapForm : PersistentOverlayForm
             marker.CarIdx,
             marker.LapDistPct,
             marker.IsFocus,
-            MarkerColor(marker.ClassColorHex, marker.IsFocus),
+            MarkerColor(marker.ClassColorHex, marker.IsFocus, marker.IsPlayerFocus),
             FormatPositionLabel(marker.Position));
     }
 
@@ -816,9 +816,9 @@ internal sealed class TrackMapForm : PersistentOverlayForm
         return position is > 0 ? $"P{position.Value}" : null;
     }
 
-    private static Color MarkerColor(string? classColorHex, bool isFocus)
+    private static Color MarkerColor(string? classColorHex, bool isFocus, bool isPlayerFocus)
     {
-        if (isFocus)
+        if (isFocus && isPlayerFocus)
         {
             return FocusMarkerColor;
         }

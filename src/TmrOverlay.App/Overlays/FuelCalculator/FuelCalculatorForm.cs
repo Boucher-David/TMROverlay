@@ -280,7 +280,7 @@ internal sealed class FuelCalculatorForm : PersistentOverlayForm, IUnitSystemAwa
             if (!strategyModel.IsAvailable)
             {
                 SetLiveTelemetryAvailable(false);
-                var waitingViewModel = FuelCalculatorViewModel.From(strategyModel, showAdvice, _unitSystem, StintRowCount);
+                var waitingViewModel = FuelCalculatorViewModel.From(strategyModel, showAdvice, _unitSystem, StintRowCount, _settings);
                 var waitingUiChanged = false;
                 var waitingApplyStarted = Stopwatch.GetTimestamp();
                 var waitingApplySucceeded = false;
@@ -327,7 +327,7 @@ internal sealed class FuelCalculatorForm : PersistentOverlayForm, IUnitSystemAwa
             var viewModelSucceeded = false;
             try
             {
-                viewModel = FuelCalculatorViewModel.From(strategyModel, showAdvice, _unitSystem, StintRowCount);
+                viewModel = FuelCalculatorViewModel.From(strategyModel, showAdvice, _unitSystem, StintRowCount, _settings);
                 viewModelSucceeded = true;
             }
             finally
@@ -521,7 +521,10 @@ internal sealed class FuelCalculatorForm : PersistentOverlayForm, IUnitSystemAwa
 
     private static OverlayChromeTone ChromeTone(FuelStrategySnapshot? strategy)
     {
-        if (strategy is null || !strategy.HasData || strategy.FuelPerLapLiters is null)
+        if (strategy is null
+            || !strategy.HasData
+            || strategy.FuelPerLapLiters is null
+            || !string.Equals(strategy.FuelPerLapSource, "measured green lap", StringComparison.OrdinalIgnoreCase))
         {
             return OverlayChromeTone.Waiting;
         }

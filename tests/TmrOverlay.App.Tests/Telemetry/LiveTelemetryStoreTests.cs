@@ -1041,6 +1041,24 @@ DriverInfo:
 """);
     }
 
+    private static void ApplyQualifyingSession(LiveTelemetryStore store)
+    {
+        store.ApplySessionInfo("""
+WeekendInfo:
+ EventType: Qualifying
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Qualify
+   SessionName: QUALIFY
+   SessionTime: 900 sec
+   SessionLaps: unlimited
+DriverInfo:
+ DriverCarIdx: 10
+""");
+    }
+
     private static void ApplyIRatingRaceSession(LiveTelemetryStore store, bool teamRacing = false)
     {
         store.ApplySessionInfo($$"""
@@ -1842,10 +1860,12 @@ QualifyResultsInfo:
         Assert.Null(trailing.DeltaSecondsToFocus);
 
         var standings = StandingsOverlayViewModel.From(snapshot, now, maximumRows: 3);
+        var standingsRows = standings.Rows.Where(row => !row.IsClassHeader).ToArray();
         Assert.Equal("source: starting grid", standings.Source);
-        Assert.Equal(new[] { "#11", "#10", "#12" }, standings.Rows.Select(row => row.CarNumber));
-        Assert.Equal(new[] { "--", "--", "--" }, standings.Rows.Select(row => row.Interval));
-        Assert.Equal(new[] { "Leader", "--", "--" }, standings.Rows.Select(row => row.Gap));
+        Assert.Contains(standings.Rows, row => row.IsClassHeader && row.Driver == "GT3");
+        Assert.Equal(new[] { "#11", "#10", "#12" }, standingsRows.Select(row => row.CarNumber));
+        Assert.Equal(new[] { "--", "--", "--" }, standingsRows.Select(row => row.Interval));
+        Assert.Equal(new[] { "Leader", "--", "--" }, standingsRows.Select(row => row.Gap));
 
         Assert.Contains(models.Relative.Rows, row =>
             row.CarIdx == 11
@@ -2853,10 +2873,10 @@ QualifyResultsInfo:
     }
 
     [Fact]
-    public void RecordFrame_DoesNotInferRelativeOverlaySecondsOutsideRace()
+    public void RecordFrame_DoesNotInferRelativeOverlaySecondsOutsideRaceOrPractice()
     {
         var store = new LiveTelemetryStore();
-        ApplyPracticeSession(store);
+        ApplyQualifyingSession(store);
 
         store.RecordFrame(CreateSample(
             playerCarIdx: 10,

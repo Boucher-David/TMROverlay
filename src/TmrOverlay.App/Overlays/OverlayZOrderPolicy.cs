@@ -4,33 +4,37 @@ namespace TmrOverlay.App.Overlays;
 
 internal static class OverlayZOrderPolicy
 {
-    public static bool ShouldSettingsWindowBeTopMost(bool settingsWindowFocused)
+    public static bool ShouldSettingsWindowBeTopMost(bool settingsWindowVisible)
     {
-        return settingsWindowFocused;
+        return false;
     }
 
-    public static bool ShouldManagedOverlayBeTopMost(OverlaySettings settings)
+    public static bool ShouldManagedOverlayBeTopMost(
+        OverlaySettings settings,
+        bool settingsWindowActive = false,
+        bool intersectsSettingsWindow = false)
     {
-        return settings.AlwaysOnTop;
+        return settings.AlwaysOnTop
+            && (!settingsWindowActive || !intersectsSettingsWindow);
     }
 
     public static bool ShouldProtectSettingsWindowInput(
-        bool settingsWindowActive,
+        bool settingsWindowVisible,
         bool isSettingsWindow,
         bool intersectsSettingsWindow)
     {
-        return settingsWindowActive && !isSettingsWindow && intersectsSettingsWindow;
+        return settingsWindowVisible && !isSettingsWindow && intersectsSettingsWindow;
     }
 
     public static bool ShouldOverlayBeInputTransparent(
         bool intrinsicallyTransparent,
         bool forceInputTransparent,
-        bool settingsWindowActive,
+        bool settingsWindowVisible,
         bool isSettingsWindow,
         bool intersectsSettingsWindow)
     {
         return intrinsicallyTransparent
             || forceInputTransparent
-            || ShouldProtectSettingsWindowInput(settingsWindowActive, isSettingsWindow, intersectsSettingsWindow);
+            || ShouldProtectSettingsWindowInput(settingsWindowVisible, isSettingsWindow, intersectsSettingsWindow);
     }
 }

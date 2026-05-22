@@ -19,6 +19,11 @@ internal static class BrowserOverlayAssets
         return ReadAsset("scripts", "overlay-shell.js");
     }
 
+    public static string Contract(string name)
+    {
+        return ReadAsset("contracts", name);
+    }
+
     public static string ModuleScript(string moduleName)
     {
         return ReadAsset("modules", $"{moduleName}.js");

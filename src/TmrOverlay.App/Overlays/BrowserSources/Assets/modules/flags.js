@@ -1,4 +1,5 @@
 let flagsDisplayModel = null;
+const flagsGeometry = geometry?.flags || {};
 
 TmrBrowserOverlay.register({
   async beforeRefresh() {
@@ -17,14 +18,16 @@ TmrBrowserOverlay.register({
 function renderFlags(model) {
   const flags = Array.isArray(model?.flags?.flags) ? model.flags.flags : [];
   if (model?.shouldRender === false || flags.length === 0) {
+    postBrowserSourceEvent(model ? 'model-hidden' : 'model-null', model);
     modelRootOpacity = rootOpacityFromModel(model);
     applyOverlayOpacity(0);
     clearFlagsSurface();
-    renderHeaderItems(model, '');
+    clearHeaderItems();
     clearFooterSource();
     return;
   }
 
+  postBrowserSourceEvent('model-render', model);
   modelRootOpacity = rootOpacityFromModel(model);
   applyOverlayOpacity(1);
   contentEl.innerHTML = flagsSvg(flags);
@@ -37,10 +40,10 @@ function clearFlagsSurface() {
 }
 
 function flagsSvg(flags) {
-  const width = Math.max(180, window.innerWidth || 360);
-  const height = Math.max(96, window.innerHeight || 170);
-  const padding = 8;
-  const gap = 8;
+  const width = Math.max(flagGeometryNumber('minimumWidth', 180), window.innerWidth || 360);
+  const height = Math.max(flagGeometryNumber('minimumHeight', 96), window.innerHeight || 170);
+  const padding = flagGeometryNumber('outerPadding', 8);
+  const gap = flagGeometryNumber('cellGap', 8);
   const { columns, rows } = gridFor(flags.length);
   const bounds = {
     x: padding,
@@ -68,19 +71,22 @@ function flagsSvg(flags) {
 }
 
 function flagCell(flag, cell, index) {
-  const compact = cell.height < 92 || cell.width < 132;
+  const compact = cell.height < flagGeometryNumber('compactCellHeightThreshold', 92)
+    || cell.width < flagGeometryNumber('compactCellWidthThreshold', 132);
   const visualKind = flagVisualKind(flag);
-  const labelHeight = compact ? 16 : 18;
-  const flagAreaHeight = Math.max(32, cell.height - labelHeight);
-  const poleX = cell.x + Math.max(12, cell.width * 0.16);
-  const poleTop = cell.y + 4;
-  const poleBottom = cell.y + flagAreaHeight - 2;
-  const clothLeft = poleX + 1;
-  const clothWidth = Math.max(48, cell.x + cell.width - clothLeft - 8);
-  const clothHeight = Math.max(24, Math.min(flagAreaHeight * 0.7, clothWidth * 0.58));
-  const clothTop = cell.y + Math.max(4, (flagAreaHeight - clothHeight) * 0.32);
+  const labelHeight = compact ? flagGeometryNumber('compactLabelHeight', 16) : flagGeometryNumber('labelHeight', 18);
+  const flagAreaHeight = Math.max(flagGeometryNumber('flagAreaMinimumHeight', 32), cell.height - labelHeight);
+  const poleX = cell.x + Math.max(flagGeometryNumber('poleMinimumInsetX', 12), cell.width * flagGeometryNumber('poleInsetFractionX', 0.16));
+  const poleTop = cell.y + flagGeometryNumber('poleTopOffset', 4);
+  const poleBottom = cell.y + flagAreaHeight - flagGeometryNumber('poleBottomInset', 2);
+  const clothLeft = poleX + flagGeometryNumber('clothLeftOffset', 1);
+  const clothWidth = Math.max(flagGeometryNumber('clothMinimumWidth', 48), cell.x + cell.width - clothLeft - flagGeometryNumber('clothRightInset', 8));
+  const clothHeight = Math.max(
+    flagGeometryNumber('clothMinimumHeight', 24),
+    Math.min(flagAreaHeight * flagGeometryNumber('clothAreaHeightFraction', 0.7), clothWidth * flagGeometryNumber('clothWidthHeightFraction', 0.58)));
+  const clothTop = cell.y + Math.max(flagGeometryNumber('clothTopMinimum', 4), (flagAreaHeight - clothHeight) * flagGeometryNumber('clothTopFraction', 0.32));
   const cloth = { x: clothLeft, y: clothTop, width: clothWidth, height: clothHeight };
-  const path = flagPath(cloth, compact ? 3.5 : 5.5, index);
+  const path = flagPath(cloth, compact ? flagGeometryNumber('compactWave', 3.5) : flagGeometryNumber('wave', 5.5), index);
   const title = [flag?.label, flag?.detail].filter(Boolean).join(' | ');
   const label = [flag?.label, flag?.detail].filter(Boolean).join(' ');
   const labelY = cell.y + cell.height - 2;
@@ -88,10 +94,10 @@ function flagCell(flag, cell, index) {
   return `
     <g class="flag-cell flag-${className(visualKind)}">
       <title>${escapeHtml(title || 'Flag')}</title>
-      <line x1="${number(poleX + 1)}" y1="${number(poleTop + 1)}" x2="${number(poleX + 1)}" y2="${number(poleBottom + 1)}" stroke="rgba(0,0,0,0.47)" stroke-width="${compact ? 2 : 3}" stroke-linecap="round"></line>
-      <line x1="${number(poleX)}" y1="${number(poleTop)}" x2="${number(poleX)}" y2="${number(poleBottom)}" stroke="rgba(214,220,226,0.88)" stroke-width="${compact ? 2 : 3}" stroke-linecap="round"></line>
+      <line x1="${number(poleX + flagGeometryNumber('poleShadowOffset', 1))}" y1="${number(poleTop + flagGeometryNumber('poleShadowOffset', 1))}" x2="${number(poleX + flagGeometryNumber('poleShadowOffset', 1))}" y2="${number(poleBottom + flagGeometryNumber('poleShadowOffset', 1))}" stroke="rgba(0,0,0,0.47)" stroke-width="${compact ? flagGeometryNumber('poleCompactStrokeWidth', 2) : flagGeometryNumber('poleStrokeWidth', 3)}" stroke-linecap="round"></line>
+      <line x1="${number(poleX)}" y1="${number(poleTop)}" x2="${number(poleX)}" y2="${number(poleBottom)}" stroke="rgba(214,220,226,0.88)" stroke-width="${compact ? flagGeometryNumber('poleCompactStrokeWidth', 2) : flagGeometryNumber('poleStrokeWidth', 3)}" stroke-linecap="round"></line>
       ${flagCloth(flag, path, cloth)}
-      <text class="flag-label" x="${number(cell.x + cell.width / 2)}" y="${number(labelY)}" fill="rgb(247,251,255)" font-family="Segoe UI, Arial, sans-serif" font-size="${compact ? 10 : 11}" font-weight="800" text-anchor="middle">${escapeHtml(label || 'Flag')}</text>
+      <text class="flag-label" x="${number(cell.x + cell.width / 2)}" y="${number(labelY)}" fill="rgb(247,251,255)" font-family="Segoe UI, Arial, sans-serif" font-size="${compact ? flagGeometryNumber('compactLabelFontSize', 10) : flagGeometryNumber('labelFontSize', 11)}" font-weight="800" text-anchor="middle">${escapeHtml(label || 'Flag')}</text>
     </g>`;
 }
 
@@ -105,7 +111,7 @@ function flagCloth(flag, path, cloth) {
   const outline = kind === 'white' ? 'rgba(26,30,34,0.86)' : 'rgba(255,255,255,0.67)';
   const extras = [];
   if (kind === 'meatball') {
-    const diameter = Math.min(cloth.width, cloth.height) * 0.44;
+    const diameter = Math.min(cloth.width, cloth.height) * flagGeometryNumber('meatballDiameterFraction', 0.44);
     extras.push(`<circle cx="${number(cloth.x + cloth.width / 2)}" cy="${number(cloth.y + cloth.height / 2)}" r="${number(diameter / 2)}" fill="rgb(245,124,38)"></circle>`);
   } else if (kind === 'caution') {
     extras.push(cautionStripes(path, cloth));
@@ -120,8 +126,8 @@ function flagCloth(flag, path, cloth) {
 }
 
 function checkeredFlag(path, cloth) {
-  const columns = 6;
-  const rows = 4;
+  const columns = flagGeometryNumber('checkeredColumns', 6);
+  const rows = flagGeometryNumber('checkeredRows', 4);
   const squareWidth = cloth.width / columns;
   const squareHeight = cloth.height / rows;
   const id = `flagClip${Math.round(cloth.x * 10)}_${Math.round(cloth.y * 10)}`;
@@ -143,10 +149,10 @@ function checkeredFlag(path, cloth) {
 }
 
 function cautionStripes(path, cloth) {
-  const stripeWidth = Math.max(8, cloth.width * 0.12);
+  const stripeWidth = Math.max(flagGeometryNumber('stripeMinimumWidth', 8), cloth.width * flagGeometryNumber('stripeWidthFraction', 0.12));
   const id = `cautionClip${Math.round(cloth.x * 10)}_${Math.round(cloth.y * 10)}`;
   const stripes = [];
-  for (let x = cloth.x - cloth.height; x < cloth.x + cloth.width; x += stripeWidth * 2.5) {
+  for (let x = cloth.x - cloth.height; x < cloth.x + cloth.width; x += stripeWidth * flagGeometryNumber('cautionStripeStrideMultiplier', 2.5)) {
     stripes.push(`<polygon points="${number(x)},${number(cloth.y + cloth.height)} ${number(x + stripeWidth)},${number(cloth.y + cloth.height)} ${number(x + stripeWidth + cloth.height)},${number(cloth.y)} ${number(x + cloth.height)},${number(cloth.y)}" fill="rgba(0,0,0,0.28)"></polygon>`);
   }
 
@@ -156,10 +162,10 @@ function cautionStripes(path, cloth) {
 }
 
 function debrisStripes(path, cloth) {
-  const stripeWidth = Math.max(8, cloth.width * 0.12);
+  const stripeWidth = Math.max(flagGeometryNumber('stripeMinimumWidth', 8), cloth.width * flagGeometryNumber('stripeWidthFraction', 0.12));
   const id = `debrisClip${Math.round(cloth.x * 10)}_${Math.round(cloth.y * 10)}`;
   const stripes = [];
-  for (let x = cloth.x - cloth.height; x < cloth.x + cloth.width; x += stripeWidth * 2.2) {
+  for (let x = cloth.x - cloth.height; x < cloth.x + cloth.width; x += stripeWidth * flagGeometryNumber('debrisStripeStrideMultiplier', 2.2)) {
     stripes.push(`<polygon points="${number(x)},${number(cloth.y + cloth.height)} ${number(x + stripeWidth)},${number(cloth.y + cloth.height)} ${number(x + stripeWidth + cloth.height)},${number(cloth.y)} ${number(x + cloth.height)},${number(cloth.y)}" fill="rgba(245,124,38,0.82)"></polygon>`);
   }
 
@@ -172,13 +178,13 @@ function flagPath(bounds, wave, index) {
   const phase = index % 2 === 0 ? 1 : -1;
   const leftTop = { x: bounds.x, y: bounds.y };
   const rightTop = { x: bounds.x + bounds.width, y: bounds.y + wave * phase };
-  const rightBottom = { x: bounds.x + bounds.width, y: bounds.y + bounds.height + wave * 0.4 * phase };
+  const rightBottom = { x: bounds.x + bounds.width, y: bounds.y + bounds.height + wave * flagGeometryNumber('pathBottomWaveFraction', 0.4) * phase };
   const leftBottom = { x: bounds.x, y: bounds.y + bounds.height };
   return [
     `M ${number(leftTop.x)} ${number(leftTop.y)}`,
-    `C ${number(bounds.x + bounds.width * 0.28)} ${number(bounds.y - wave * phase)} ${number(bounds.x + bounds.width * 0.62)} ${number(bounds.y + wave * phase)} ${number(rightTop.x)} ${number(rightTop.y)}`,
+    `C ${number(bounds.x + bounds.width * flagGeometryNumber('pathControlOneFraction', 0.28))} ${number(bounds.y - wave * phase)} ${number(bounds.x + bounds.width * flagGeometryNumber('pathControlTwoFraction', 0.62))} ${number(bounds.y + wave * phase)} ${number(rightTop.x)} ${number(rightTop.y)}`,
     `L ${number(rightBottom.x)} ${number(rightBottom.y)}`,
-    `C ${number(bounds.x + bounds.width * 0.62)} ${number(bounds.y + bounds.height - wave * phase)} ${number(bounds.x + bounds.width * 0.28)} ${number(bounds.y + bounds.height + wave * phase)} ${number(leftBottom.x)} ${number(leftBottom.y)}`,
+    `C ${number(bounds.x + bounds.width * flagGeometryNumber('pathControlTwoFraction', 0.62))} ${number(bounds.y + bounds.height - wave * phase)} ${number(bounds.x + bounds.width * flagGeometryNumber('pathControlOneFraction', 0.28))} ${number(bounds.y + bounds.height + wave * phase)} ${number(leftBottom.x)} ${number(leftBottom.y)}`,
     'Z'
   ].join(' ');
 }
@@ -217,10 +223,16 @@ function flagVisualKind(flag) {
 
 function gridFor(count) {
   if (count <= 1) return { columns: 1, rows: 1 };
-  if (count === 2) return { columns: 2, rows: 1 };
-  if (count <= 4) return { columns: 2, rows: 2 };
-  if (count <= 6) return { columns: 3, rows: 2 };
-  return { columns: 4, rows: Math.ceil(count / 4) };
+  if (count <= flagGeometryNumber('gridTwoCountMaximum', 2)) return { columns: 2, rows: 1 };
+  if (count <= flagGeometryNumber('gridFourCountMaximum', 4)) return { columns: 2, rows: 2 };
+  if (count <= flagGeometryNumber('gridSixCountMaximum', 6)) return { columns: 3, rows: 2 };
+  const columns = flagGeometryNumber('gridMaximumColumns', 4);
+  return { columns, rows: Math.ceil(count / columns) };
+}
+
+function flagGeometryNumber(key, fallback) {
+  const value = Number(flagsGeometry?.[key]);
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function className(value) {

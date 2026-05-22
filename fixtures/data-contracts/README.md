@@ -18,5 +18,11 @@ snapshot-to-native mapping tests. Future durable schema changes should add the
 new version snapshot in the same branch as the migration or compatibility
 adapter.
 
+Live overlay evidence contracts can grow without adding a new durable snapshot
+when they do not change persisted user data. Local-role evidence is one such
+case: tests should prove the model/evidence path can carry
+`DriverInfo.Drivers[].IsSpectator` and a nullable future `isSpotting` field, but
+the `v0.19.0` durable settings/history/map snapshot remains valid.
+
 Do not store private driver/team identity, raw capture payloads, source `.ibt`
 files, full session YAML, diagnostics bundles, or machine-specific paths here.

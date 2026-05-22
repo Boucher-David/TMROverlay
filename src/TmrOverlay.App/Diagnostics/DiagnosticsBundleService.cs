@@ -1,11 +1,14 @@
 using System.IO.Compression;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using TmrOverlay.Core.AppInfo;
 using TmrOverlay.App.Installation;
 using TmrOverlay.App.Localhost;
+using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.CarRadar;
 using TmrOverlay.App.Overlays.Flags;
@@ -62,6 +65,7 @@ internal sealed class DiagnosticsBundleService
     private readonly TrackMapStore _trackMapStore;
     private readonly AppSettingsStore _settingsStore;
     private readonly ILiveTelemetrySource _liveTelemetrySource;
+    private readonly BrowserOverlayModelFactory _browserOverlayModelFactory;
     private readonly SessionPreviewState _sessionPreviewState;
     private readonly AppPerformanceState _performanceState;
     private readonly AppPerformanceSnapshotRecorder _performanceRecorder;
@@ -88,6 +92,7 @@ internal sealed class DiagnosticsBundleService
         TrackMapStore trackMapStore,
         AppSettingsStore settingsStore,
         ILiveTelemetrySource liveTelemetrySource,
+        BrowserOverlayModelFactory browserOverlayModelFactory,
         SessionPreviewState sessionPreviewState,
         AppPerformanceState performanceState,
         AppPerformanceSnapshotRecorder performanceRecorder,
@@ -106,6 +111,7 @@ internal sealed class DiagnosticsBundleService
         _trackMapStore = trackMapStore;
         _settingsStore = settingsStore;
         _liveTelemetrySource = liveTelemetrySource;
+        _browserOverlayModelFactory = browserOverlayModelFactory;
         _sessionPreviewState = sessionPreviewState;
         _performanceState = performanceState;
         _performanceRecorder = performanceRecorder;
@@ -142,6 +148,7 @@ internal sealed class DiagnosticsBundleService
             var bundlePath = CreateUniqueBundlePath(createdAtUtc, bundleIdentity);
 
             using var archive = ZipFile.Open(bundlePath, ZipArchiveMode.Create);
+            var liveOverlayWindowsSnapshot = _liveOverlayWindowCaptureStore.Snapshot();
 
             var metadataStarted = System.Diagnostics.Stopwatch.GetTimestamp();
             var metadataSucceeded = false;
@@ -164,13 +171,16 @@ internal sealed class DiagnosticsBundleService
                 }, JsonOptions));
                 AddTextEntry(archive, "metadata/storage.json", JsonSerializer.Serialize(_storageOptions, JsonOptions));
                 AddTextEntry(archive, "metadata/telemetry-state.json", JsonSerializer.Serialize(_captureState.Snapshot(), JsonOptions));
-                AddTextEntry(archive, "metadata/localhost-overlays.json", JsonSerializer.Serialize(_localhostOverlayState.Snapshot(), JsonOptions));
+                var localhostSnapshot = _localhostOverlayState.Snapshot();
+                AddTextEntry(archive, "metadata/localhost-overlays.json", JsonSerializer.Serialize(localhostSnapshot, JsonOptions));
                 AddTextEntry(archive, "metadata/browser-overlays.json", JsonSerializer.Serialize(BrowserOverlayDiagnostics(), JsonOptions));
+                AddTextEntry(archive, "metadata/localhost-overlay-models.json", JsonSerializer.Serialize(LocalhostOverlayModelDiagnostics(localhostSnapshot), JsonOptions));
                 AddTextEntry(archive, "metadata/session-preview.json", JsonSerializer.Serialize(_sessionPreviewState.Snapshot(), JsonOptions));
                 AddTextEntry(archive, "metadata/shared-settings-contract.json", JsonSerializer.Serialize(SharedOverlayContract.DiagnosticsSnapshot(), JsonOptions));
+                AddTextEntry(archive, "metadata/overlay-geometry-contract.json", JsonSerializer.Serialize(OverlayGeometryContractDiagnostics(), JsonOptions));
                 AddTextEntry(archive, "metadata/release-updates.json", JsonSerializer.Serialize(_releaseUpdates.Snapshot(), JsonOptions));
                 AddTextEntry(archive, "metadata/installer-cleanup.json", JsonSerializer.Serialize(InstallerCleanup.LegacyInstallerCleanupSnapshot(), JsonOptions));
-                AddTextEntry(archive, "metadata/evidence-quality.json", JsonSerializer.Serialize(EvidenceQualityDiagnostics(), JsonOptions));
+                AddTextEntry(archive, "metadata/evidence-quality.json", JsonSerializer.Serialize(EvidenceQualityDiagnostics(liveOverlayWindowsSnapshot), JsonOptions));
                 AddTextEntry(archive, "metadata/latest-capture-evidence.json", JsonSerializer.Serialize(LatestCaptureEvidenceDiagnostics(), JsonOptions));
                 AddTextEntry(archive, "metadata/ibt-analysis.json", JsonSerializer.Serialize(IbtAnalysisDiagnostics(), JsonOptions));
                 AddTextEntry(archive, "metadata/track-maps.json", JsonSerializer.Serialize(TrackMapDiagnostics(), JsonOptions));
@@ -329,7 +339,7 @@ internal sealed class DiagnosticsBundleService
             var liveOverlayWindowsSucceeded = false;
             try
             {
-                AddLiveOverlayWindows(archive);
+                AddLiveOverlayWindows(archive, liveOverlayWindowsSnapshot);
                 liveOverlayWindowsSucceeded = true;
             }
             finally
@@ -821,13 +831,12 @@ internal sealed class DiagnosticsBundleService
         return snapshot.CurrentCaptureDirectory ?? snapshot.LastCaptureDirectory;
     }
 
-    private object EvidenceQualityDiagnostics()
+    private object EvidenceQualityDiagnostics(LiveOverlayWindowCaptureManifest liveOverlays)
     {
         var now = DateTimeOffset.UtcNow;
         var liveSnapshot = _liveTelemetrySource.Snapshot();
         var lastActiveSnapshot = _liveTelemetrySource.LastActiveSnapshot();
         var localhost = _localhostOverlayState.Snapshot();
-        var liveOverlays = _liveOverlayWindowCaptureStore.Snapshot();
         var updateEvents = UpdateEventDiagnostics();
         var latestCapture = LatestCaptureDirectory();
         var warnings = new List<string>();
@@ -2429,12 +2438,14 @@ internal sealed class DiagnosticsBundleService
                 || !string.IsNullOrWhiteSpace(track.TrackConfigName));
     }
 
-    private void AddLiveOverlayWindows(ZipArchive archive)
+    private void AddLiveOverlayWindows(
+        ZipArchive archive,
+        LiveOverlayWindowCaptureManifest liveOverlayWindowsSnapshot)
     {
         AddTextEntry(
             archive,
             "live-overlays/manifest.json",
-            JsonSerializer.Serialize(_liveOverlayWindowCaptureStore.Snapshot(), JsonOptions));
+            JsonSerializer.Serialize(liveOverlayWindowsSnapshot, JsonOptions));
         foreach (var file in _liveOverlayWindowCaptureStore.CaptureFiles())
         {
             AddFileIfExists(archive, file.SourcePath, file.EntryName);
@@ -2476,6 +2487,458 @@ internal sealed class DiagnosticsBundleService
                 .OrderBy(page => page.Id, StringComparer.OrdinalIgnoreCase)
                 .ToArray()
         };
+    }
+
+    private object LocalhostOverlayModelDiagnostics(LocalhostOverlaySnapshot localhost)
+    {
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var settings = _settingsStore.Load();
+            var currentSnapshot = _liveTelemetrySource.Snapshot();
+            var lastActiveSnapshot = _liveTelemetrySource.LastActiveSnapshot();
+            var includeLastActive = (!currentSnapshot.IsConnected || !currentSnapshot.IsCollecting)
+                && lastActiveSnapshot is not null;
+            var overlayModelRequestCount = RequestCountForRoute(localhost.RouteCounts, "overlay_model");
+            var overlayModelSuccessCount = BrowserOverlayCatalog.Pages.Sum(page =>
+                RequestCountForPathStatus(localhost.PathStatusCodeCounts, [$"/api/overlay-model/{page.Id}"], 200));
+
+            return new
+            {
+                GeneratedAtUtc = now,
+                Purpose = "distinguishes localhost HTTP availability from browser-source model renderability",
+                Localhost = new
+                {
+                    localhost.Enabled,
+                    localhost.Port,
+                    localhost.Prefix,
+                    localhost.Status,
+                    localhost.TotalRequests,
+                    localhost.SuccessfulRequests,
+                    localhost.FailedRequests,
+                    localhost.RequestErrorCount,
+                    localhost.LastRequestAtUtc,
+                    localhost.LastRequestPath,
+                    localhost.LastRequestRoute,
+                    localhost.LastRequestStatusCode,
+                    localhost.LastRequestClientKind,
+                    localhost.HasRecentRequests,
+                    localhost.LastPageEventAtUtc,
+                    localhost.LastPageEventKind,
+                    localhost.LastPageEventOverlayId,
+                    localhost.LastPageEventClientId,
+                    localhost.LastPageEventClientKind,
+                    localhost.LastPageEventShouldRender,
+                    localhost.LastPageEventStatus,
+                    localhost.LastPageEventError,
+                    localhost.ClientCounts,
+                    localhost.RouteClientCounts,
+                    localhost.PathClientCounts,
+                    localhost.PageEventCounts,
+                    localhost.PageEventOverlayCounts,
+                    localhost.PageEventClientCounts,
+                    localhost.RecentPageEvents,
+                    OverlayModelRequestCount = overlayModelRequestCount,
+                    OverlayModelSuccessCount = overlayModelSuccessCount,
+                    AnyOverlayModelRequestSucceeded = overlayModelSuccessCount > 0
+                },
+                Telemetry = new
+                {
+                    Current = LiveSnapshotSummary("current", currentSnapshot),
+                    LastActiveAvailable = lastActiveSnapshot is not null,
+                    LastActiveIncluded = includeLastActive,
+                    LastActive = includeLastActive && lastActiveSnapshot is not null
+                        ? LiveSnapshotSummary("last-active", lastActiveSnapshot)
+                        : null
+                },
+                Pages = BrowserOverlayCatalog.Pages
+                    .Select(page => LocalhostOverlayPageModelDiagnostics(
+                        page,
+                        settings,
+                        currentSnapshot,
+                        lastActiveSnapshot,
+                        includeLastActive,
+                        now,
+                        localhost))
+                    .OrderBy(page => page.Id, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+            };
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Failed to collect localhost overlay model diagnostics metadata.");
+            return new
+            {
+                GeneratedAtUtc = DateTimeOffset.UtcNow,
+                Error = exception.GetType().Name,
+                ErrorMessage = exception.Message
+            };
+        }
+    }
+
+    private LocalhostOverlayPageModelDiagnosticsSnapshot LocalhostOverlayPageModelDiagnostics(
+        BrowserOverlayPage page,
+        ApplicationSettings settings,
+        LiveTelemetrySnapshot currentSnapshot,
+        LiveTelemetrySnapshot? lastActiveSnapshot,
+        bool includeLastActive,
+        DateTimeOffset now,
+        LocalhostOverlaySnapshot localhost)
+    {
+        var modelApiPath = $"/api/overlay-model/{page.Id}";
+        var currentModelSnapshot = page.RequiresTelemetry ? currentSnapshot : LiveTelemetrySnapshot.Empty;
+        var lastActiveModel = includeLastActive && page.RequiresTelemetry && lastActiveSnapshot is not null
+            ? BuildOverlayModelDiagnostics(page, lastActiveSnapshot, settings, now, "last-active", matchesLocalhostEndpoint: false)
+            : null;
+
+        return new LocalhostOverlayPageModelDiagnosticsSnapshot(
+            Id: page.Id,
+            Title: page.Title,
+            HtmlRoute: page.CanonicalRoute,
+            ModelApiPath: modelApiPath,
+            RequiresTelemetry: page.RequiresTelemetry,
+            RenderWhenTelemetryUnavailable: page.RenderWhenTelemetryUnavailable,
+            FadeWhenTelemetryUnavailable: page.FadeWhenTelemetryUnavailable,
+            RefreshIntervalMilliseconds: page.RefreshIntervalMilliseconds,
+            HtmlRouteRequestCount: RequestCountForPaths(localhost.PathCounts, page.Routes),
+            HtmlRouteSuccessCount: RequestCountForPathStatus(localhost.PathStatusCodeCounts, page.Routes, 200),
+            ModelApiRequestCount: RequestCountForPaths(localhost.PathCounts, [modelApiPath]),
+            ModelApiSuccessCount: RequestCountForPathStatus(localhost.PathStatusCodeCounts, [modelApiPath], 200),
+            PageLoadedEventCount: RequestCountForRoute(localhost.PageEventOverlayCounts, $"{page.Id}|page-loaded"),
+            ModelRenderEventCount: RequestCountForRoute(localhost.PageEventOverlayCounts, $"{page.Id}|model-render"),
+            ModelHiddenEventCount: RequestCountForRoute(localhost.PageEventOverlayCounts, $"{page.Id}|model-hidden"),
+            ModelErrorEventCount: RequestCountForRoute(localhost.PageEventOverlayCounts, $"{page.Id}|model-error"),
+            RecentPageEvents: localhost.RecentPageEvents
+                .Where(pageEvent => string.Equals(pageEvent.OverlayId, page.Id, StringComparison.OrdinalIgnoreCase))
+                .ToArray(),
+            Current: BuildOverlayModelDiagnostics(page, currentModelSnapshot, settings, now, "current", matchesLocalhostEndpoint: true),
+            LastActive: lastActiveModel);
+    }
+
+    private LocalhostOverlayModelDiagnosticsSnapshot BuildOverlayModelDiagnostics(
+        BrowserOverlayPage page,
+        LiveTelemetrySnapshot snapshot,
+        ApplicationSettings settings,
+        DateTimeOffset now,
+        string snapshotSource,
+        bool matchesLocalhostEndpoint)
+    {
+        try
+        {
+            if (_browserOverlayModelFactory.TryBuild(page.Id, snapshot, settings, now, out var response))
+            {
+                var model = response.Model;
+                return new LocalhostOverlayModelDiagnosticsSnapshot(
+                    SnapshotSource: snapshotSource,
+                    MatchesLocalhostEndpoint: matchesLocalhostEndpoint,
+                    BuildStatus: "built",
+                    RenderDecision: model.ShouldRender ? "would_render" : "built_but_should_not_render",
+                    GeneratedAtUtc: response.GeneratedAtUtc,
+                    ShouldRender: model.ShouldRender,
+                    Status: model.Status,
+                    Source: model.Source,
+                    BodyKind: model.BodyKind,
+                    RootOpacity: model.RootOpacity,
+                    Content: BrowserOverlayModelContentDiagnostics(model),
+                    Error: null,
+                    ErrorMessage: null);
+            }
+
+            return new LocalhostOverlayModelDiagnosticsSnapshot(
+                SnapshotSource: snapshotSource,
+                MatchesLocalhostEndpoint: matchesLocalhostEndpoint,
+                BuildStatus: "not_built",
+                RenderDecision: "model_not_found",
+                GeneratedAtUtc: now,
+                ShouldRender: false,
+                Status: null,
+                Source: null,
+                BodyKind: null,
+                RootOpacity: null,
+                Content: null,
+                Error: null,
+                ErrorMessage: null);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Failed to build localhost overlay model diagnostics for {OverlayId}.", page.Id);
+            return new LocalhostOverlayModelDiagnosticsSnapshot(
+                SnapshotSource: snapshotSource,
+                MatchesLocalhostEndpoint: matchesLocalhostEndpoint,
+                BuildStatus: "error",
+                RenderDecision: "build_error",
+                GeneratedAtUtc: now,
+                ShouldRender: false,
+                Status: null,
+                Source: null,
+                BodyKind: null,
+                RootOpacity: null,
+                Content: null,
+                Error: exception.GetType().Name,
+                ErrorMessage: exception.Message);
+        }
+    }
+
+    private static object LiveSnapshotSummary(string source, LiveTelemetrySnapshot snapshot)
+    {
+        var session = snapshot.Models.Session;
+        var reference = snapshot.Models.Reference;
+        var directory = snapshot.Models.DriverDirectory;
+        var sample = snapshot.LatestSample;
+
+        return new
+        {
+            Source = source,
+            snapshot.IsConnected,
+            snapshot.IsCollecting,
+            snapshot.SourceId,
+            snapshot.StartedAtUtc,
+            snapshot.LastUpdatedAtUtc,
+            snapshot.Sequence,
+            HasLatestSample = sample is not null,
+            SessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot).ToString(),
+            Session = new
+            {
+                SessionType = session.SessionType ?? snapshot.Context.Session.SessionType,
+                EventType = session.EventType ?? snapshot.Context.Session.EventType,
+                SessionState = session.SessionState ?? sample?.SessionState,
+                SessionFlagsHex = FormatRawFlagsHex(session.SessionFlags ?? sample?.SessionFlags),
+                session.SessionTimeRemainSeconds,
+                session.SessionLapsRemain,
+                session.RaceLaps
+            },
+            Focus = new
+            {
+                PlayerCarIdx = reference.PlayerCarIdx ?? directory.PlayerCarIdx ?? sample?.PlayerCarIdx,
+                FocusCarIdx = reference.FocusCarIdx ?? directory.FocusCarIdx ?? sample?.FocusCarIdx,
+                RawCamCarIdx = sample?.RawCamCarIdx,
+                reference.HasExplicitNonPlayerFocus,
+                FocusUnavailableReason = reference.FocusUnavailableReason ?? sample?.FocusUnavailableReason,
+                ReferenceCarClass = reference.ReferenceCarClass ?? directory.ReferenceCarClass
+            },
+            Models = new
+            {
+                SessionHasData = session.HasData,
+                DriverDirectoryHasData = directory.HasData,
+                ReferenceHasData = reference.HasData,
+                TimingHasData = snapshot.Models.Timing.HasData,
+                ScoringHasData = snapshot.Models.Scoring.HasData,
+                SpatialHasData = snapshot.Models.Spatial.HasData,
+                FuelPitHasData = snapshot.Models.FuelPit.HasData,
+                InputsHasData = snapshot.Models.Inputs.HasData,
+                TrackMapHasSectors = snapshot.Models.TrackMap.HasSectors,
+                TrackMapHasLiveTiming = snapshot.Models.TrackMap.HasLiveTiming
+            }
+        };
+    }
+
+    private static object BrowserOverlayModelContentDiagnostics(BrowserOverlayDisplayModel model)
+    {
+        return new
+        {
+            ColumnCount = model.Columns.Count,
+            RowCount = model.Rows.Count,
+            ReferenceRowCount = model.Rows.Count(row => row.IsReference),
+            ClassHeaderCount = model.Rows.Count(row => row.IsClassHeader),
+            PitRowCount = model.Rows.Count(row => row.IsPit),
+            PartialRowCount = model.Rows.Count(row => row.IsPartial),
+            PendingGridRowCount = model.Rows.Count(row => row.IsPendingGrid),
+            PlaceholderRowCount = model.Rows.Count(row => row.IsPlaceholder),
+            MetricCount = model.Metrics.Count,
+            PointCount = model.Points.Count,
+            HeaderItemCount = model.HeaderItems.Count,
+            HeaderItems = model.HeaderItems.Select(item => new
+            {
+                item.Key,
+                item.Value,
+                item.Tone
+            }).ToArray(),
+            GridSectionCount = model.GridSections?.Count ?? 0,
+            GridRowCount = model.GridSections?.Sum(section => section.Rows.Count) ?? 0,
+            MetricSectionCount = model.MetricSections?.Count ?? 0,
+            MetricSectionRowCount = model.MetricSections?.Sum(section => section.Rows.Count) ?? 0,
+            Graph = GapGraphDiagnostics(model.Graph),
+            CarRadar = model.CarRadar is null
+                ? null
+                : new
+                {
+                    model.CarRadar.IsAvailable,
+                    model.CarRadar.HasCurrentSignal,
+                    model.CarRadar.HasCarLeft,
+                    model.CarRadar.HasCarRight,
+                    CarCount = model.CarRadar.Cars.Count,
+                    model.CarRadar.ShowMulticlassWarning,
+                    model.CarRadar.PreviewVisible
+                },
+            TrackMap = model.TrackMap is null
+                ? null
+                : new
+                {
+                    MarkerCount = model.TrackMap.Markers.Count,
+                    SectorCount = model.TrackMap.Sectors.Count,
+                    model.TrackMap.ShowSectorBoundaries,
+                    model.TrackMap.InternalOpacity,
+                    model.TrackMap.IncludeUserMaps,
+                    RenderMarkerCount = model.TrackMap.RenderModel.Markers.Count,
+                    RenderPrimitiveCount = model.TrackMap.RenderModel.Primitives.Count
+                },
+            GarageCover = model.GarageCover is null
+                ? null
+                : new
+                {
+                    model.GarageCover.ShouldCover,
+                    ImageStatus = model.GarageCover.BrowserSettings.ImageStatus,
+                    DetectionState = model.GarageCover.Detection.State,
+                    model.GarageCover.Detection.IsFresh
+                },
+            StreamChat = model.StreamChat is null
+                ? null
+                : new
+                {
+                    RowCount = model.StreamChat.Rows.Count,
+                    model.StreamChat.Settings.Provider,
+                    model.StreamChat.Settings.IsConfigured
+                },
+            Inputs = model.Inputs is null
+                ? null
+                : new
+                {
+                    model.Inputs.IsAvailable,
+                    model.Inputs.HasContent,
+                    model.Inputs.HasGraph,
+                    model.Inputs.HasRail,
+                    TracePointCount = model.Inputs.Trace.Count,
+                    model.Inputs.ShowThrottle,
+                    model.Inputs.ShowBrake,
+                    model.Inputs.ShowClutch,
+                    model.Inputs.ShowSteering,
+                    model.Inputs.ShowGear,
+                    model.Inputs.ShowSpeed
+                },
+            Flags = model.Flags is null
+                ? null
+                : new
+                {
+                    FlagCount = model.Flags.Flags.Count,
+                    model.Flags.IsWaiting
+                },
+            EffectiveRendered = EffectiveRenderedDiagnostics(model.EffectiveSettings?.Rendered),
+            model.FuelStrategyEvidence
+        };
+    }
+
+    private static object? GapGraphDiagnostics(BrowserGapGraph? graph)
+    {
+        return graph is null
+            ? null
+            : new
+            {
+                SeriesCount = graph.Series.Count,
+                graph.SelectedSeriesCount,
+                SeriesPointCount = graph.Series.Sum(series => series.Points.Count),
+                ReferenceSeriesCount = graph.Series.Count(series => series.IsReference),
+                ClassLeaderSeriesCount = graph.Series.Count(series => series.IsClassLeader),
+                StaleSeriesCount = graph.Series.Count(series => series.IsStale),
+                StickyExitSeriesCount = graph.Series.Count(series => series.IsStickyExit),
+                WeatherPointCount = graph.Weather.Count,
+                LeaderChangeMarkerCount = graph.LeaderChanges.Count,
+                DriverChangeMarkerCount = graph.DriverChanges.Count,
+                graph.StartSeconds,
+                graph.EndSeconds,
+                graph.MaxGapSeconds,
+                graph.LapReferenceSeconds,
+                graph.ThreatCarIdx,
+                ActiveThreatState = graph.ActiveThreat?.State,
+                ActiveThreatLabel = graph.ActiveThreat?.Label,
+                graph.MetricDeadbandSeconds,
+                graph.ComparisonLabel,
+                graph.ShowGraph,
+                graph.ShowTrendMetrics,
+                TrendMetricCount = graph.TrendMetrics.Count,
+                Scale = graph.Scale is null
+                    ? null
+                    : new
+                    {
+                        graph.Scale.IsFocusRelative,
+                        graph.Scale.MaxGapSeconds,
+                        graph.Scale.AheadSeconds,
+                        graph.Scale.BehindSeconds,
+                        graph.Scale.LatestReferenceGapSeconds,
+                        ReferencePointCount = graph.Scale.ReferencePoints.Count
+                    }
+            };
+    }
+
+    private static object? EffectiveRenderedDiagnostics(BrowserOverlayEffectiveRendered? rendered)
+    {
+        return rendered is null
+            ? null
+            : new
+            {
+                rendered.BodyKind,
+                rendered.ShouldRender,
+                rendered.RowCount,
+                HeaderItemCount = rendered.HeaderItems.Count,
+                rendered.ColumnKeys,
+                RowIdentityCount = rendered.RowIdentities?.Count ?? 0,
+                rendered.PlaceholderRowCount,
+                rendered.BrowserSource,
+                rendered.Provenance,
+                rendered.RelativeTimingEvidence,
+                rendered.TableStatus,
+                rendered.TimingSanity,
+                rendered.FuelStrategy,
+                rendered.Layout,
+                rendered.InputAvailability,
+                rendered.MapFallback,
+                rendered.UnavailableContentPolicy
+            };
+    }
+
+    private static long RequestCountForRoute(IReadOnlyDictionary<string, long> counts, string route)
+    {
+        return counts.TryGetValue(route, out var count) ? count : 0L;
+    }
+
+    private static long RequestCountForPaths(IReadOnlyDictionary<string, long> counts, IEnumerable<string> paths)
+    {
+        var normalizedPaths = paths
+            .Select(BrowserOverlayPage.NormalizeRoute)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return counts
+            .Where(item => normalizedPaths.Contains(BrowserOverlayPage.NormalizeRoute(item.Key)))
+            .Sum(item => item.Value);
+    }
+
+    private static long RequestCountForPathStatus(
+        IReadOnlyDictionary<string, long> counts,
+        IEnumerable<string> paths,
+        int statusCode)
+    {
+        var statusKey = statusCode.ToString(CultureInfo.InvariantCulture);
+        var normalizedPaths = paths
+            .Select(BrowserOverlayPage.NormalizeRoute)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return counts
+            .Where(item => TrySplitPathStatusKey(item.Key, out var path, out var status)
+                && string.Equals(status, statusKey, StringComparison.OrdinalIgnoreCase)
+                && normalizedPaths.Contains(BrowserOverlayPage.NormalizeRoute(path)))
+            .Sum(item => item.Value);
+    }
+
+    private static bool TrySplitPathStatusKey(string key, out string path, out string status)
+    {
+        var separator = key.LastIndexOf('|');
+        if (separator <= 0 || separator >= key.Length - 1)
+        {
+            path = string.Empty;
+            status = string.Empty;
+            return false;
+        }
+
+        path = key[..separator];
+        status = key[(separator + 1)..];
+        return true;
     }
 
     private object GarageCoverDiagnostics()
@@ -3893,6 +4356,43 @@ internal sealed class DiagnosticsBundleService
             "Settings were empty or invalid; omitted to avoid copying private stream chat widget URLs.");
     }
 
+    private static object OverlayGeometryContractDiagnostics()
+    {
+        var current = OverlayGeometryContracts.Current;
+        var currentJson = JsonSerializer.Serialize(current, JsonOptions);
+        JsonNode? sourceContract = null;
+        string? sourceJsonSha256 = null;
+        string? sourceError = null;
+
+        try
+        {
+            var sourceJson = OverlayGeometryContracts.BrowserJson();
+            sourceContract = JsonNode.Parse(sourceJson);
+            sourceJsonSha256 = Sha256Hex(sourceJson);
+        }
+        catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
+        {
+            sourceError = exception.Message;
+        }
+
+        return new
+        {
+            EvidenceVersion = 1,
+            Source = "overlay-geometry-contract",
+            SourceAsset = "src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json",
+            RuntimeContractSha256 = Sha256Hex(currentJson),
+            SourceJsonSha256 = sourceJsonSha256,
+            SourceError = sourceError,
+            Current = current,
+            SourceContract = sourceContract
+        };
+    }
+
+    private static string Sha256Hex(string value)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+    }
+
     private static void AddSharedContractFiles(ZipArchive archive)
     {
         var contractPath = SharedOverlayContract.LoadStatus.Path ?? SharedOverlayContract.TryFindDefaultContractPath();
@@ -4142,6 +4642,42 @@ internal sealed record LapDeltaSignalDiagnostic(
 {
     public bool IsUsable => Ok == true && Seconds is { } value && !double.IsNaN(value) && !double.IsInfinity(value);
 }
+
+internal sealed record LocalhostOverlayPageModelDiagnosticsSnapshot(
+    string Id,
+    string Title,
+    string HtmlRoute,
+    string ModelApiPath,
+    bool RequiresTelemetry,
+    bool RenderWhenTelemetryUnavailable,
+    bool FadeWhenTelemetryUnavailable,
+    int RefreshIntervalMilliseconds,
+    long HtmlRouteRequestCount,
+    long HtmlRouteSuccessCount,
+    long ModelApiRequestCount,
+    long ModelApiSuccessCount,
+    long PageLoadedEventCount,
+    long ModelRenderEventCount,
+    long ModelHiddenEventCount,
+    long ModelErrorEventCount,
+    IReadOnlyList<LocalhostOverlayPageEventSample> RecentPageEvents,
+    LocalhostOverlayModelDiagnosticsSnapshot Current,
+    LocalhostOverlayModelDiagnosticsSnapshot? LastActive);
+
+internal sealed record LocalhostOverlayModelDiagnosticsSnapshot(
+    string SnapshotSource,
+    bool MatchesLocalhostEndpoint,
+    string BuildStatus,
+    string RenderDecision,
+    DateTimeOffset GeneratedAtUtc,
+    bool ShouldRender,
+    string? Status,
+    string? Source,
+    string? BodyKind,
+    double? RootOpacity,
+    object? Content,
+    string? Error,
+    string? ErrorMessage);
 
 internal sealed record LapDeltaQualityDiagnostics(
     bool EvidenceAvailable,

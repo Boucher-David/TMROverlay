@@ -431,6 +431,43 @@ public sealed class SimpleTelemetryOverlayViewModelTests
     }
 
     [Fact]
+    public void SessionWeather_FromTelemetry_HidesUnlimitedClockPartsForLapLimitedRace()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var context = RaceContext(sessionTime: "unlimited", sessionLaps: "3");
+        var snapshot = Snapshot(now, LiveRaceModels.Empty with
+        {
+            Session = LiveSessionModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                SessionType = "Race",
+                SessionState = 4,
+                SessionTimeSeconds = 143d,
+                SessionTimeRemainSeconds = 604_800d,
+                SessionTimeTotalSeconds = 604_800d,
+                SessionLapsRemain = 3,
+                SessionLapsTotal = 3
+            },
+            Weather = LiveWeatherModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable
+            }
+        }, context);
+
+        var viewModel = SessionWeatherOverlayViewModel.From(snapshot, now, "Metric");
+        var clock = Assert.Single(viewModel.Rows, row => row.Label == "Clock");
+
+        Assert.Equal("2:23 elapsed", clock.Value);
+        Assert.Collection(
+            clock.Segments,
+            segment => Assert.Equal("2:23", segment.Value),
+            segment => Assert.Equal("--", segment.Value),
+            segment => Assert.Equal("--", segment.Value));
+    }
+
+    [Fact]
     public void SessionWeather_FromTelemetry_TreatsUnknownWetFlagAsNormalTelemetry()
     {
         var now = DateTimeOffset.UtcNow;
@@ -455,21 +492,25 @@ public sealed class SimpleTelemetryOverlayViewModelTests
 
         Assert.Equal("Practice", viewModel.Status);
         Assert.Equal(SimpleTelemetryTone.Normal, viewModel.Tone);
-        Assert.Contains(viewModel.Rows, row => row.Label == "Surface" && row.Value == "--");
+        Assert.DoesNotContain(viewModel.Rows, row => row.Label == "Surface");
+        Assert.DoesNotContain(viewModel.MetricSections, section => section.Title == "Weather");
     }
 
     [Fact]
     public void SessionWeather_FromLegacySample_DoesNotTurnMissingWeatherFieldsIntoDry()
     {
         var now = DateTimeOffset.UtcNow;
-        var snapshot = LegacySampleSnapshot(now, LegacySample(now, trackWetness: -1, weatherDeclaredWet: null));
+        var snapshot = LegacySampleSnapshot(now, LegacySample(
+            now,
+            airTempC: double.NaN,
+            trackTempCrewC: double.NaN,
+            trackWetness: -1,
+            weatherDeclaredWet: null));
 
         var viewModel = SessionWeatherOverlayViewModel.From(snapshot, now, "Metric");
 
-        var surface = Assert.Single(viewModel.Rows, row => row.Label == "Surface");
-        Assert.Equal("--", surface.Value);
-        Assert.Contains(surface.Segments, segment => segment.Label == "Wetness" && segment.Value == "--");
-        Assert.Contains(surface.Segments, segment => segment.Label == "Declared" && segment.Value == "--");
+        Assert.DoesNotContain(viewModel.Rows, row => row.Label == "Surface");
+        Assert.DoesNotContain(viewModel.MetricSections, section => section.Title == "Weather");
     }
 
     [Fact]
@@ -630,6 +671,7 @@ public sealed class SimpleTelemetryOverlayViewModelTests
                 Quality = LiveModelQuality.Reliable,
                 SessionType = "Race",
                 SessionTimeRemainSeconds = 86_258.266667d,
+                SessionTimeTotalSeconds = 86_400d,
                 SessionLapsRemain = 4,
                 SessionLapsTotal = 5
             },
@@ -647,7 +689,7 @@ public sealed class SimpleTelemetryOverlayViewModelTests
 
         Assert.Equal("release ready", viewModel.Status);
         Assert.Contains(viewModel.Rows, row => row.Label == "Release" && row.Value == "GREEN - go (inferred)");
-        Assert.Contains(viewModel.Rows, row => row.Label == "Time / Laps" && row.Value == "23:58 | 4/5 laps");
+        Assert.Contains(viewModel.Rows, row => row.Label == "Time / Laps" && row.Value == "4/5 laps");
 
         Assert.Collection(
             viewModel.MetricSections,
@@ -669,6 +711,52 @@ public sealed class SimpleTelemetryOverlayViewModelTests
                 Assert.DoesNotContain(section.Rows, row => row.Label == "Service");
                 Assert.Contains(section.Rows, row => row.Label == "Tearoff");
                 Assert.Contains(section.Rows, row => row.Label == "Fast repair");
+            });
+    }
+
+    [Fact]
+    public void PitService_FromTelemetry_HidesUnlimitedTimeForLapLimitedRace()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var context = RaceContext(sessionTime: "unlimited", sessionLaps: "3");
+        var snapshot = Snapshot(now, LiveRaceModels.Empty with
+        {
+            Session = LiveSessionModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                SessionType = "Race",
+                SessionState = 4,
+                SessionTimeRemainSeconds = 604_800d,
+                SessionTimeTotalSeconds = 604_800d,
+                SessionLapsRemain = 3,
+                SessionLapsTotal = 3
+            },
+            FuelPit = LiveFuelPitModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                PlayerCarInPitStall = true,
+                PitstopActive = false,
+                PitServiceFlags = 0
+            }
+        }, context);
+
+        var viewModel = PitServiceOverlayViewModel.From(snapshot, now, "Metric");
+        var row = Assert.Single(viewModel.Rows, row => row.Label == "Time / Laps");
+
+        Assert.Equal("3/3 laps", row.Value);
+        Assert.Collection(
+            row.Segments,
+            segment =>
+            {
+                Assert.Equal("Time", segment.Label);
+                Assert.Equal("--", segment.Value);
+            },
+            segment =>
+            {
+                Assert.Equal("Laps", segment.Label);
+                Assert.Equal("3/3 laps", segment.Value);
             });
     }
 
@@ -1069,6 +1157,16 @@ public sealed class SimpleTelemetryOverlayViewModelTests
         Assert.Contains(viewModel.Rows, row => row.Label == "Pedals" && row.Value.Contains("T 75%", StringComparison.Ordinal));
         Assert.Contains(viewModel.Rows, row => row.Label == "Pedals" && row.Value.Contains("B 10% ABS", StringComparison.Ordinal));
         Assert.Contains(viewModel.Rows, row => row.Label == "Steering" && row.Value == "+30 deg");
+
+        var renderModel = InputStateRenderModelBuilder.Build(
+            snapshot,
+            now,
+            "Imperial",
+            new OverlaySettings { Id = "input-state" },
+            []);
+        Assert.Equal(Math.PI / 6d, renderModel.SteeringWheelAngle);
+        Assert.Equal(-Math.PI / 6d, renderModel.SteeringWheelVisualAngle);
+        Assert.Equal("+30 deg", renderModel.SteeringText);
     }
 
     [Fact]
@@ -1144,8 +1242,12 @@ public sealed class SimpleTelemetryOverlayViewModelTests
         Assert.Contains(viewModel.Rows, row => row.Label == "Steering" && row.Value == "0 deg");
     }
 
-    private static LiveTelemetrySnapshot Snapshot(DateTimeOffset now, LiveRaceModels models)
+    private static LiveTelemetrySnapshot Snapshot(
+        DateTimeOffset now,
+        LiveRaceModels models,
+        HistoricalSessionContext? context = null)
     {
+        context ??= HistoricalSessionContext.Empty;
         var normalizedModels = models with
         {
             DriverDirectory = models.DriverDirectory.HasData
@@ -1176,7 +1278,26 @@ public sealed class SimpleTelemetryOverlayViewModelTests
             IsCollecting = true,
             LastUpdatedAtUtc = now,
             Sequence = 1,
+            Context = context,
+            Combo = HistoricalComboIdentity.From(context),
             Models = normalizedModels
+        };
+    }
+
+    private static HistoricalSessionContext RaceContext(string sessionTime, string sessionLaps)
+    {
+        return new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity(),
+            Track = new HistoricalTrackIdentity(),
+            Session = new HistoricalSessionIdentity
+            {
+                SessionType = "Race",
+                SessionName = "RACE",
+                SessionTime = sessionTime,
+                SessionLaps = sessionLaps
+            },
+            Conditions = new HistoricalSessionInfoConditions()
         };
     }
 
@@ -1221,6 +1342,8 @@ public sealed class SimpleTelemetryOverlayViewModelTests
         bool onPitRoad = false,
         bool pitstopActive = false,
         int? carLeftRight = null,
+        double airTempC = 21d,
+        double trackTempCrewC = 30d,
         int trackWetness = 1,
         bool? weatherDeclaredWet = false)
     {
@@ -1243,8 +1366,8 @@ public sealed class SimpleTelemetryOverlayViewModelTests
             LapDistPct: 0.42d,
             LapLastLapTimeSeconds: 92.4d,
             LapBestLapTimeSeconds: 91.8d,
-            AirTempC: 21d,
-            TrackTempCrewC: 30d,
+            AirTempC: airTempC,
+            TrackTempCrewC: trackTempCrewC,
             TrackWetness: trackWetness,
             WeatherDeclaredWet: weatherDeclaredWet,
             PlayerTireCompound: 0,

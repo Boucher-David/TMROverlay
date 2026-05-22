@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using TmrOverlay.App.History;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.CarRadar;
@@ -27,6 +29,10 @@ namespace TmrOverlay.App.Tests.DataContracts;
 public sealed class DataContractSnapshotOverlayMappingTests
 {
     private const string LatestSnapshotRelativePath = "fixtures/data-contracts/v0.19.0";
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     [Fact]
     public void LatestSettingsSnapshot_MapsToLocalhostOverlayModels()
@@ -50,7 +56,7 @@ public sealed class DataContractSnapshotOverlayMappingTests
         Assert.Equal(0.88d, standings.RootOpacity);
         Assert.StartsWith("source:", standings.Source, StringComparison.Ordinal);
         Assert.DoesNotContain(standings.HeaderItems, item => item.Key == "status");
-        Assert.Contains(standings.HeaderItems, item => item.Key == "timeRemaining" && item.Value == "00:10:00");
+        Assert.DoesNotContain(standings.HeaderItems, item => item.Key == "timeRemaining");
         Assert.Contains(standings.Columns, column => column.DataKey == OverlayContentColumnSettings.DataDriver && column.Width == 360);
         Assert.DoesNotContain(standings.Columns, column => column.DataKey == OverlayContentColumnSettings.DataGap);
 
@@ -138,7 +144,7 @@ public sealed class DataContractSnapshotOverlayMappingTests
             OverlayContentColumnSettings.Standings,
             OverlaySessionKind.Race);
         Assert.DoesNotContain(standingsColumns, column => column.DataKey == OverlayContentColumnSettings.DataGap);
-        Assert.Equal("00:10:00", DesignV2LiveOverlayForm.BuildHeaderText(standings, live, "live standings"));
+        Assert.Equal(string.Empty, DesignV2LiveOverlayForm.BuildHeaderText(standings, live, "live standings"));
         Assert.False(DesignV2LiveOverlayForm.ShowFooterForSettings(DesignV2LiveOverlayKind.Standings, standings, live));
 
         var relative = Overlay(settings, "relative");
@@ -179,7 +185,7 @@ public sealed class DataContractSnapshotOverlayMappingTests
             now,
             previewVisible: false,
             showMulticlassWarning: carRadar.GetBooleanOption(OverlayOptionKeys.RadarMulticlassWarning, defaultValue: true),
-            CarRadarCalibrationProfile.Default);
+            calibrationProfile: CarRadarCalibrationProfile.Default);
         Assert.True(radarModel.ShowMulticlassWarning);
         Assert.NotNull(radarModel.StrongestMulticlassApproach);
 
@@ -206,6 +212,69 @@ public sealed class DataContractSnapshotOverlayMappingTests
         Assert.True(flags.GetBooleanOption(OverlayOptionKeys.FlagsShowFinish, defaultValue: true));
         var flagModel = FlagsOverlayViewModel.ForDisplay(live, now);
         Assert.Contains(flagModel.Flags, flag => flag.Kind == FlagDisplayKind.Checkered && flag.Category == FlagDisplayCategory.Finish);
+    }
+
+    [Fact]
+    public void LatestSettingsSnapshot_LocalhostModelsExposeV103ParityEvidence()
+    {
+        using var snapshot = LoadedSettingsSnapshot();
+        var settings = snapshot.Settings;
+        var now = DateTimeOffset.Parse("2026-05-15T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var live = ProductionLikeRaceSnapshot(now);
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(snapshot.Root, "history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(snapshot.Root, "baseline-history")
+        }));
+
+        foreach (var overlayId in new[] { "standings", "relative" })
+        {
+            var model = Build(factory, overlayId, live, settings, now).Model;
+            var json = JsonSerializer.SerializeToNode(model, JsonOptions);
+            Assert.NotNull(json);
+
+            AssertV103SharedSettingsFingerprint(json, overlayId);
+
+            var rendered = RequiredObject(json["effectiveSettings"]?["rendered"]);
+            Assert.Equal(
+                model.Columns.Select(column => column.DataKey).ToArray(),
+                RequiredArray(rendered["columnKeys"]).Select(JsonString).ToArray());
+            Assert.Equal(
+                model.Rows.Select(RowIdentity).ToArray(),
+                RequiredArray(rendered["rowIdentities"]).Select(JsonString).ToArray());
+            Assert.Equal(
+                model.Rows.Count(row => row.Cells.Count == 0 || row.Cells.All(string.IsNullOrWhiteSpace)),
+                JsonInt(rendered["placeholderRowCount"]));
+            AssertRoleContext(rendered, expectedLocalRole: "driver", expectedPlayerIsSpectator: false);
+        }
+    }
+
+    [Fact]
+    public void LatestSettingsSnapshot_LocalhostModelsExposeSpectatorRoleContract()
+    {
+        using var snapshot = LoadedSettingsSnapshot();
+        var settings = snapshot.Settings;
+        var now = DateTimeOffset.Parse("2026-05-15T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var live = SpectatorRoleSnapshot(ProductionLikeRaceSnapshot(now));
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(snapshot.Root, "history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(snapshot.Root, "baseline-history")
+        }));
+
+        var model = Build(factory, "standings", live, settings, now).Model;
+        var json = JsonSerializer.SerializeToNode(model, JsonOptions);
+        Assert.NotNull(json);
+
+        var rendered = RequiredObject(json["effectiveSettings"]?["rendered"]);
+        var role = AssertRoleContext(rendered, expectedLocalRole: "spectator", expectedPlayerIsSpectator: true);
+        Assert.Equal(63, JsonInt(role["playerCarIdx"]));
+        Assert.Equal(10, JsonInt(role["focusCarIdx"]));
+        Assert.Equal(false, JsonBool(role["focusIsPlayer"]));
+        Assert.Equal(true, JsonBool(role["hasExplicitNonPlayerFocus"]));
+        Assert.Equal(false, JsonBool(role["focusIsSpectator"]));
     }
 
     private static BrowserOverlayModelResponse Build(
@@ -258,6 +327,81 @@ public sealed class DataContractSnapshotOverlayMappingTests
     private static OverlaySettings Overlay(ApplicationSettings settings, string overlayId)
     {
         return settings.Overlays.Single(overlay => string.Equals(overlay.Id, overlayId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void AssertV103SharedSettingsFingerprint(JsonNode json, string overlayId)
+    {
+        var sources = RequiredObject(json["effectiveSettings"]?["sources"]);
+        var fingerprints = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var sourceName in new[] { "browserReview", "localhostObs", "windowsNative" })
+        {
+            var source = RequiredObject(sources[sourceName]);
+            Assert.True(JsonBool(source["applied"]) == true, $"{overlayId}: {sourceName} was not marked applied");
+            var sharedSettingsHash = JsonString(source["sharedSettingsHash"]);
+            var overlaySettingsHash = JsonString(source["overlaySettingsHash"]);
+            Assert.False(string.IsNullOrWhiteSpace(sharedSettingsHash));
+            Assert.False(string.IsNullOrWhiteSpace(overlaySettingsHash));
+            fingerprints.Add($"{sharedSettingsHash}:{overlaySettingsHash}");
+        }
+
+        Assert.Single(fingerprints);
+    }
+
+    private static JsonObject AssertRoleContext(
+        JsonObject rendered,
+        string expectedLocalRole,
+        bool? expectedPlayerIsSpectator)
+    {
+        var role = RequiredObject(rendered["roleContext"]);
+        Assert.Equal(expectedLocalRole, JsonString(role["localRole"]));
+        Assert.Equal("DriverInfo.Drivers[].IsSpectator", JsonString(role["roleSource"]));
+        Assert.Equal(expectedPlayerIsSpectator, JsonBool(role["playerIsSpectator"]));
+        Assert.True(role.ContainsKey("isSpotting"));
+        Assert.Null(JsonBool(role["isSpotting"]));
+        Assert.Equal("not-observed", JsonString(role["spottingSignalStatus"]));
+        return role;
+    }
+
+    private static string RowIdentity(BrowserOverlayDisplayRow row)
+    {
+        var kind = row.IsClassHeader
+            ? "class-header"
+            : row.IsPlaceholder
+                ? "placeholder"
+                : "row";
+        var primary = row.HeaderTitle ?? string.Join("/", row.Cells.Take(2));
+        var detail = row.HeaderDetail ?? string.Empty;
+        return string.Join(
+            "|",
+            kind,
+            primary,
+            row.IsClassHeader ? detail.ToUpperInvariant() : detail,
+            row.IsReference ? "reference" : string.Empty);
+    }
+
+    private static JsonObject RequiredObject(JsonNode? node)
+    {
+        return Assert.IsType<JsonObject>(node);
+    }
+
+    private static JsonArray RequiredArray(JsonNode? node)
+    {
+        return Assert.IsType<JsonArray>(node);
+    }
+
+    private static string? JsonString(JsonNode? node)
+    {
+        return node?.GetValue<string>();
+    }
+
+    private static bool? JsonBool(JsonNode? node)
+    {
+        return node?.GetValue<bool>();
+    }
+
+    private static int? JsonInt(JsonNode? node)
+    {
+        return node?.GetValue<int>();
     }
 
     private static LoadedSnapshot LoadedSettingsSnapshot()
@@ -338,13 +482,23 @@ public sealed class DataContractSnapshotOverlayMappingTests
             TrackLengthKm = 1.5d,
             CarDisplayName = "Mercedes-AMG GT3"
         };
+        var driverIdentities = new[]
+        {
+            DriverIdentity(10, "Reference Driver", "#10", isSpectator: false),
+            DriverIdentity(11, "Class Leader", "#11", isSpectator: false),
+            DriverIdentity(12, "Chase Driver", "#12", isSpectator: false),
+            DriverIdentity(21, "Prototype", "#21", 5000, "P2", "#33CEFF", isSpectator: false)
+        };
         var driverDirectory = LiveDriverDirectoryModel.Empty with
         {
             HasData = true,
             Quality = LiveModelQuality.Reliable,
             PlayerCarIdx = 10,
             FocusCarIdx = 10,
-            ReferenceCarClass = 4098
+            ReferenceCarClass = 4098,
+            PlayerDriver = driverIdentities[0],
+            FocusDriver = driverIdentities[0],
+            Drivers = driverIdentities
         };
         var reference = LiveReferenceModel.Empty with
         {
@@ -725,6 +879,64 @@ public sealed class DataContractSnapshotOverlayMappingTests
                 new HistoricalTrackSector { SectorNum = 3, SectorStartPct = 0.66d }
             ]
         };
+    }
+
+    private static LiveTelemetrySnapshot SpectatorRoleSnapshot(LiveTelemetrySnapshot snapshot)
+    {
+        var spectator = DriverIdentity(63, "Local Spotter", "#63", isSpectator: true);
+        var focus = DriverIdentity(10, "Reference Driver", "#10", isSpectator: false);
+        var drivers = snapshot.Models.DriverDirectory.Drivers
+            .Where(driver => driver.CarIdx != spectator.CarIdx)
+            .Append(spectator)
+            .OrderBy(driver => driver.CarIdx)
+            .ToArray();
+
+        return snapshot with
+        {
+            Models = snapshot.Models with
+            {
+                DriverDirectory = snapshot.Models.DriverDirectory with
+                {
+                    PlayerCarIdx = spectator.CarIdx,
+                    FocusCarIdx = focus.CarIdx,
+                    PlayerDriver = spectator,
+                    FocusDriver = focus,
+                    Drivers = drivers
+                },
+                Reference = snapshot.Models.Reference with
+                {
+                    PlayerCarIdx = spectator.CarIdx,
+                    FocusCarIdx = focus.CarIdx,
+                    FocusIsPlayer = false,
+                    HasExplicitNonPlayerFocus = true,
+                    FocusUsesPlayerLocalFallback = false
+                }
+            }
+        };
+    }
+
+    private static LiveDriverIdentity DriverIdentity(
+        int carIdx,
+        string driverName,
+        string carNumber,
+        int carClass = 4098,
+        string className = "GT3",
+        string color = "#FFDA59",
+        bool? isSpectator = false)
+    {
+        return new LiveDriverIdentity(
+            CarIdx: carIdx,
+            DriverName: driverName,
+            AbbrevName: null,
+            Initials: null,
+            UserId: null,
+            TeamId: null,
+            TeamName: driverName,
+            CarNumber: carNumber,
+            CarClassId: carClass,
+            CarClassName: className,
+            CarClassColorHex: color,
+            IsSpectator: isSpectator);
     }
 
     private static LiveScoringRow ScoringRow(

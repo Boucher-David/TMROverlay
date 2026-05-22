@@ -14,14 +14,16 @@ TmrBrowserOverlay.register({
 
 function renderTrackMap(model) {
   if (model?.shouldRender === false) {
+    postBrowserSourceEvent('model-hidden', model);
     modelRootOpacity = rootOpacityFromModel(model);
     applyOverlayOpacity(0);
     contentEl.innerHTML = '';
-    renderHeaderItems(model, '');
+    clearHeaderItems();
     clearFooterSource();
     return;
   }
 
+  postBrowserSourceEvent(model ? 'model-render' : 'model-null', model);
   modelRootOpacity = rootOpacityFromModel(model);
   applyOverlayOpacity(1);
   const renderModel = model?.trackMap?.renderModel;

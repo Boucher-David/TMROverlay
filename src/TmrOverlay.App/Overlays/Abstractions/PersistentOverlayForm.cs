@@ -78,6 +78,8 @@ internal abstract class PersistentOverlayForm : Form
 
     protected bool IsOverlayFramePersistenceSuppressed => _framePersistenceSuppressed;
 
+    protected virtual double PersistedOverlayOpacity => _baseOpacity;
+
     public void SetInputTransparentOverride(bool enabled)
     {
         if (_inputTransparentOverride == enabled)
@@ -279,7 +281,7 @@ internal abstract class PersistentOverlayForm : Form
         _settings.Y = Location.Y;
         _settings.Width = persistedSize.Width;
         _settings.Height = persistedSize.Height;
-        _settings.Opacity = _baseOpacity;
+        _settings.Opacity = PersistedOverlayOpacity;
         _saveSettings();
     }
 

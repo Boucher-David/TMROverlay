@@ -209,7 +209,7 @@ private func renderBase(_ canvas: Canvas, title: String, status: String? = nil) 
 
 private func renderStandings(_ c: Canvas) {
     renderBase(c, title: "Standings", status: "RACE")
-    header(c, y: 350, columns: [("POS", 20, 46), ("DRIVER", 74, 260), ("CLS", 350, 54), ("GAP", 424, 82), ("LAST", 526, 92), ("ST", 634, 52)])
+    header(c, y: 350, columns: [("POS", 20, 46), ("DRIVER", 74, 260), ("Pos", 350, 54), ("GAP", 424, 82), ("LAST", 526, 92), ("ST", 634, 52)])
     tableRows(c, y: 308, rowHeight: 48, rows: drivers)
 }
 

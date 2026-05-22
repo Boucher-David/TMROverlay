@@ -43,7 +43,10 @@ internal static class AppSettingsMigrator
         OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying,
         OverlayOptionKeys.ChromeHeaderTimeRemainingRace,
         OverlayOptionKeys.RadarMulticlassWarning,
+        OverlayOptionKeys.RadarMulticlassWarningSeconds,
+        OverlayOptionKeys.RadarVisibilitySeconds,
         OverlayOptionKeys.StandingsClassSeparatorsEnabled,
+        OverlayOptionKeys.StandingsCarsInClass,
         OverlayOptionKeys.StandingsOtherClassRows,
         OverlayOptionKeys.StandingsColumnClassWidth,
         OverlayOptionKeys.StandingsColumnCarWidth,
@@ -194,9 +197,12 @@ internal static class AppSettingsMigrator
                 break;
             case "car-radar":
                 EnsureOption(overlay, OverlayOptionKeys.RadarMulticlassWarning, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.RadarMulticlassWarningSeconds, defaultValue: 5, minimum: 3, maximum: 10);
+                EnsureOption(overlay, OverlayOptionKeys.RadarVisibilitySeconds, defaultValue: 2, minimum: 2, maximum: 5);
                 break;
             case "standings":
                 EnsureOption(overlay, OverlayOptionKeys.StandingsClassSeparatorsEnabled, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.StandingsCarsInClass, defaultValue: 14, minimum: 1, maximum: 24);
                 EnsureOption(overlay, OverlayOptionKeys.StandingsOtherClassRows, defaultValue: 2, minimum: 0, maximum: 6);
                 EnsureOption(overlay, OverlayOptionKeys.StandingsColumnClassWidth, defaultValue: 54, minimum: 42, maximum: 110);
                 EnsureOption(overlay, OverlayOptionKeys.StandingsColumnCarWidth, defaultValue: 66, minimum: 48, maximum: 130);
@@ -235,6 +241,15 @@ internal static class AppSettingsMigrator
             case "gap-to-leader":
                 EnsureOption(overlay, OverlayOptionKeys.GapCarsAhead, defaultValue: 5, minimum: 0, maximum: 12);
                 EnsureOption(overlay, OverlayOptionKeys.GapCarsBehind, defaultValue: 5, minimum: 0, maximum: 12);
+                EnsureOption(overlay, OverlayOptionKeys.GapGraphEnabled, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.GapTrendLastEnabled, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.GapTrend5LEnabled, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.GapTrend10LEnabled, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.GapTrendPitEnabled, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.GapTrendPitLapEnabled, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.GapTrendStintEnabled, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.GapTrendTireEnabled, defaultValue: true);
+                EnsureOption(overlay, OverlayOptionKeys.GapTrendStatusEnabled, defaultValue: true);
                 break;
             case "track-map":
                 EnsureOption(overlay, OverlayOptionKeys.TrackMapBuildFromTelemetry, defaultValue: true);
@@ -272,9 +287,13 @@ internal static class AppSettingsMigrator
         return overlayId.Trim().ToLowerInvariant() switch
         {
             "fuel-calculator" => key is OverlayOptionKeys.FuelAdvice,
-            "car-radar" => key is OverlayOptionKeys.RadarMulticlassWarning,
+            "car-radar" => key is
+                OverlayOptionKeys.RadarMulticlassWarning
+                or OverlayOptionKeys.RadarMulticlassWarningSeconds
+                or OverlayOptionKeys.RadarVisibilitySeconds,
             "standings" => key is
                 OverlayOptionKeys.StandingsClassSeparatorsEnabled
+                or OverlayOptionKeys.StandingsCarsInClass
                 or OverlayOptionKeys.StandingsOtherClassRows
                 or OverlayOptionKeys.StandingsColumnClassWidth
                 or OverlayOptionKeys.StandingsColumnCarWidth
@@ -311,6 +330,15 @@ internal static class AppSettingsMigrator
             "gap-to-leader" => key is
                 OverlayOptionKeys.GapCarsAhead
                 or OverlayOptionKeys.GapCarsBehind
+                or OverlayOptionKeys.GapGraphEnabled
+                or OverlayOptionKeys.GapTrendLastEnabled
+                or OverlayOptionKeys.GapTrend5LEnabled
+                or OverlayOptionKeys.GapTrend10LEnabled
+                or OverlayOptionKeys.GapTrendPitEnabled
+                or OverlayOptionKeys.GapTrendPitLapEnabled
+                or OverlayOptionKeys.GapTrendStintEnabled
+                or OverlayOptionKeys.GapTrendTireEnabled
+                or OverlayOptionKeys.GapTrendStatusEnabled
                 or OverlayOptionKeys.GapRaceOnlyDefaultApplied,
             "track-map" => key is
                 OverlayOptionKeys.TrackMapBuildFromTelemetry
@@ -389,10 +417,10 @@ internal static class AppSettingsMigrator
     private static void NormalizeRelativeCarsEachSide(OverlaySettings overlay)
     {
         var carsEachSide = overlay.Options.ContainsKey(OverlayOptionKeys.RelativeCarsEachSide)
-            ? overlay.GetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, defaultValue: 5, minimum: 0, maximum: 8)
+            ? overlay.GetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, defaultValue: 3, minimum: 0, maximum: 8)
             : Math.Max(
-                overlay.GetIntegerOption(OverlayOptionKeys.RelativeCarsAhead, defaultValue: 5, minimum: 0, maximum: 8),
-                overlay.GetIntegerOption(OverlayOptionKeys.RelativeCarsBehind, defaultValue: 5, minimum: 0, maximum: 8));
+                overlay.GetIntegerOption(OverlayOptionKeys.RelativeCarsAhead, defaultValue: 3, minimum: 0, maximum: 8),
+                overlay.GetIntegerOption(OverlayOptionKeys.RelativeCarsBehind, defaultValue: 3, minimum: 0, maximum: 8));
         overlay.SetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, carsEachSide, 0, 8);
         // Keep the old split keys normalized for pre-v0.17.0 browser/native readers.
         overlay.SetIntegerOption(OverlayOptionKeys.RelativeCarsAhead, carsEachSide, 0, 8);

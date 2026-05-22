@@ -740,15 +740,16 @@ internal sealed class OverlayManager : IDisposable
                     form,
                     overlayLiveTelemetryAvailable,
                     immediate: !wasVisible);
+                var settingsWindowActive = IsSettingsWindowActiveAndVisible();
                 if (fadeAllowsVisible)
                 {
-                    ApplyOverlayTopMost(settings, form);
+                    ApplyOverlayTopMost(settings, form, settingsWindowActive);
                     if (!form.Visible)
                     {
                         form.Show();
                     }
 
-                    ApplyOverlayTopMost(settings, form);
+                    ApplyOverlayTopMost(settings, form, settingsWindowActive);
                 }
                 else
                 {
@@ -884,25 +885,32 @@ internal sealed class OverlayManager : IDisposable
     {
         settings.Scale = Math.Clamp(settings.Scale, 0.6d, 2d);
         ApplyFlagsCompactPolicy(definition, settings);
+        var persistedHeight = settings.Height;
         var size = ScaledOverlaySize(definition, settings, sessionKind);
-        var appliedSize = ShouldPreserveExpandedOverlayHeight(definition, currentSize, size, sessionPreviewActive)
+        settings.Width = size.Width;
+        settings.Height = size.Height;
+        return ShouldPreserveExpandedStandingsClientSize(
+            definition,
+            currentSize,
+            size,
+            persistedHeight,
+            sessionPreviewActive)
             ? currentSize
             : size;
-        settings.Width = appliedSize.Width;
-        settings.Height = appliedSize.Height;
-        return appliedSize;
     }
 
-    internal static bool ShouldPreserveExpandedOverlayHeight(
+    internal static bool ShouldPreserveExpandedStandingsClientSize(
         OverlayDefinition definition,
         Size currentSize,
         Size targetSize,
+        int persistedHeight,
         bool sessionPreviewActive = false)
     {
         return string.Equals(definition.Id, StandingsOverlayDefinition.Definition.Id, StringComparison.Ordinal)
             && !sessionPreviewActive
             && currentSize.Width == targetSize.Width
-            && currentSize.Height > targetSize.Height;
+            && currentSize.Height > targetSize.Height
+            && currentSize.Height != persistedHeight;
     }
 
     private void ApplyOpacityIfChanged(OverlayDefinition definition, OverlaySettings settings, Form form)
@@ -1270,6 +1278,14 @@ internal sealed class OverlayManager : IDisposable
         var changed = false;
         var width = SettingsOverlayDefinition.Definition.DefaultWidth;
         var height = SettingsOverlayDefinition.Definition.DefaultHeight;
+        if (settings.Width == DesignV2SettingsSurface.LogicalCanvasWidth
+            && settings.Height == DesignV2SettingsSurface.LogicalCanvasHeight)
+        {
+            settings.X -= DesignV2SettingsSurface.WindowCanvasOffset.X;
+            settings.Y -= DesignV2SettingsSurface.WindowCanvasOffset.Y;
+            changed = true;
+        }
+
         if (settings.Width != width || settings.Height != height)
         {
             settings.Width = width;
@@ -1431,7 +1447,7 @@ internal sealed class OverlayManager : IDisposable
             visibleFlags.SetManagedEnabled(true);
             if (form.Visible)
             {
-                ApplyOverlayTopMost(settings, form);
+                ApplyOverlayTopMost(settings, form, IsSettingsWindowActiveAndVisible());
             }
         }
         else if (form is DesignV2LiveOverlayForm visibleDesignV2)
@@ -1439,13 +1455,14 @@ internal sealed class OverlayManager : IDisposable
             visibleDesignV2.SetFlagsManagedState(true, _settingsOverlayActive);
             if (fadeAllowsVisible)
             {
-                ApplyOverlayTopMost(settings, form);
+                var settingsWindowVisible = TryGetVisibleSettingsForm(out _);
+                ApplyOverlayTopMost(settings, form, _settingsOverlayActive && settingsWindowVisible);
                 if (!form.Visible)
                 {
                     form.Show();
                 }
 
-                ApplyOverlayTopMost(settings, form);
+                ApplyOverlayTopMost(settings, form, _settingsOverlayActive && settingsWindowVisible);
             }
             else
             {
@@ -1530,7 +1547,7 @@ internal sealed class OverlayManager : IDisposable
             defaultEnabled: false,
             defaultOpacity: DefaultOverlayOpacity(definition));
         ApplySettingsWindowInputProtection(form);
-        ApplyOverlayTopMost(settings, form);
+        ApplyOverlayTopMost(settings, form, IsSettingsWindowActiveAndVisible());
         if (form is FlagsOverlayForm flags)
         {
             flags.SetSettingsOverlayActive(_settingsOverlayActive);
@@ -1542,9 +1559,16 @@ internal sealed class OverlayManager : IDisposable
         }
     }
 
-    private void ApplyOverlayTopMost(OverlaySettings settings, Form form)
+    private void ApplyOverlayTopMost(OverlaySettings settings, Form form, bool settingsWindowActive)
     {
-        var shouldBeTopMost = OverlayZOrderPolicy.ShouldManagedOverlayBeTopMost(settings);
+        var intersectsSettingsWindow = settingsWindowActive
+            && TryGetVisibleSettingsForm(out var settingsForm)
+            && !ReferenceEquals(form, settingsForm)
+            && form.Bounds.IntersectsWith(settingsForm.Bounds);
+        var shouldBeTopMost = OverlayZOrderPolicy.ShouldManagedOverlayBeTopMost(
+            settings,
+            settingsWindowActive,
+            intersectsSettingsWindow);
         if (form.TopMost != shouldBeTopMost)
         {
             form.TopMost = shouldBeTopMost;
@@ -1553,16 +1577,14 @@ internal sealed class OverlayManager : IDisposable
 
     private void ApplySettingsWindowTopMost(Form settingsForm)
     {
-        var shouldBeTopMost = OverlayZOrderPolicy.ShouldSettingsWindowBeTopMost(_settingsOverlayActive);
+        var shouldBeTopMost = OverlayZOrderPolicy.ShouldSettingsWindowBeTopMost(settingsForm.Visible);
         if (settingsForm.TopMost != shouldBeTopMost)
         {
             settingsForm.TopMost = shouldBeTopMost;
         }
 
-        if (_settingsOverlayActive)
-        {
-            settingsForm.BringToFront();
-        }
+        // Opening Settings activates and raises it once. Keep periodic z-order
+        // reconciliation from pinning the main app above iRacing or Alt+Tab.
     }
 
     private void ApplySettingsWindowInputProtection(Form form, bool forceInputTransparent = false)
@@ -1572,7 +1594,6 @@ internal sealed class OverlayManager : IDisposable
             var intrinsicallyTransparent = persistent.IsIntrinsicallyInputTransparentOverlay;
             var settingsWindowVisible = TryGetVisibleSettingsForm(out var settingsForm);
             var isSettingsWindow = ReferenceEquals(form, settingsForm);
-            var settingsWindowActive = settingsWindowVisible && _settingsOverlayActive;
             var intersectsSettingsWindow = settingsWindowVisible
                 && !isSettingsWindow
                 && form.Bounds.IntersectsWith(settingsForm.Bounds);
@@ -1580,17 +1601,22 @@ internal sealed class OverlayManager : IDisposable
                 OverlayZOrderPolicy.ShouldOverlayBeInputTransparent(
                     intrinsicallyTransparent,
                     forceInputTransparent,
-                    settingsWindowActive,
+                    settingsWindowVisible,
                     isSettingsWindow,
                     intersectsSettingsWindow));
         }
+    }
+
+    private bool IsSettingsWindowActiveAndVisible()
+    {
+        return _settingsOverlayActive && TryGetVisibleSettingsForm(out _);
     }
 
     private bool ShouldProtectSettingsWindowInput(Form form)
     {
         var settingsWindowVisible = TryGetVisibleSettingsForm(out var settingsForm);
         return OverlayZOrderPolicy.ShouldProtectSettingsWindowInput(
-            settingsWindowVisible && _settingsOverlayActive,
+            settingsWindowVisible,
             ReferenceEquals(form, settingsForm),
             settingsWindowVisible && form.Bounds.IntersectsWith(settingsForm.Bounds));
     }

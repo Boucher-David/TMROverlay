@@ -81,6 +81,7 @@ public sealed class AppSettingsStoreTests
             standings.SetIntegerOption(standingsDriverOrderKey, 1, 1, 8);
             standings.SetIntegerOption(OverlayOptionKeys.StandingsColumnDriverWidth, 360, 180, 520);
             standings.SetBooleanOption(OverlayOptionKeys.StandingsClassSeparatorsEnabled, false);
+            standings.SetIntegerOption(OverlayOptionKeys.StandingsCarsInClass, 7, 1, 24);
             standings.SetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, 0, 0, 6);
 
             var relative = settings.GetOrAddOverlay("relative", 520, 360);
@@ -118,6 +119,7 @@ public sealed class AppSettingsStoreTests
             Assert.Equal(1, persistedStandings.GetIntegerOption(standingsDriverOrderKey, 3, 1, 8));
             Assert.Equal(360, persistedStandings.GetIntegerOption(OverlayOptionKeys.StandingsColumnDriverWidth, 250, 180, 520));
             Assert.False(persistedStandings.GetBooleanOption(OverlayOptionKeys.StandingsClassSeparatorsEnabled, true));
+            Assert.Equal(7, persistedStandings.GetIntegerOption(OverlayOptionKeys.StandingsCarsInClass, 14, 1, 24));
             Assert.Equal(0, persistedStandings.GetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, 2, 0, 6));
 
             var persistedRelative = reloaded.Overlays.Single(overlay => overlay.Id == "relative");
@@ -197,6 +199,7 @@ public sealed class AppSettingsStoreTests
             Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.RelativeCarsAhead));
             Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.RelativeCarsBehind));
             Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.StandingsClassSeparatorsEnabled));
+            Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.StandingsCarsInClass));
             Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.StandingsOtherClassRows));
             Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.FuelAdvice));
             Assert.False(overlay.Options.ContainsKey(OverlayOptionKeys.RadarMulticlassWarning));
@@ -334,6 +337,7 @@ public sealed class AppSettingsStoreTests
                       "options": {
                         "relative.cars-each-side": "3",
                         "fuel.advice": "false",
+                        "standings.cars-in-class": "9",
                         "standings.other-class-rows": "6"
                       }
                     },
@@ -363,6 +367,7 @@ public sealed class AppSettingsStoreTests
 
             Assert.Equal(3, relative.GetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, 5, 0, 8));
             Assert.False(relative.Options.ContainsKey(OverlayOptionKeys.FuelAdvice));
+            Assert.False(relative.Options.ContainsKey(OverlayOptionKeys.StandingsCarsInClass));
             Assert.False(relative.Options.ContainsKey(OverlayOptionKeys.StandingsOtherClassRows));
             Assert.False(fuel.GetBooleanOption(OverlayOptionKeys.FuelAdvice, defaultValue: true));
             Assert.False(fuel.Options.ContainsKey(OverlayOptionKeys.RelativeCarsEachSide));
@@ -465,6 +470,7 @@ public sealed class AppSettingsStoreTests
                         "standings.content.standings.gap.enabled": "false",
                         "standings.content.standings.driver.order": "1",
                         "standings.column.driver-width": "360",
+                        "standings.cars-in-class": "9",
                         "standings.other-class-rows": "0"
                       }
                     },
@@ -519,6 +525,7 @@ public sealed class AppSettingsStoreTests
                 minimum: 1,
                 maximum: 8));
             Assert.Equal(360, standings.GetIntegerOption(OverlayOptionKeys.StandingsColumnDriverWidth, 250, 180, 520));
+            Assert.Equal(9, standings.GetIntegerOption(OverlayOptionKeys.StandingsCarsInClass, 14, 1, 24));
             Assert.Equal(0, standings.GetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, 2, 0, 6));
 
             var trackMap = settings.Overlays.Single(overlay => overlay.Id == "track-map");
@@ -552,6 +559,7 @@ public sealed class AppSettingsStoreTests
                 $"{restartedStandings.Id}.content.{OverlayContentColumnSettings.StandingsGapColumnId}.enabled",
                 defaultValue: true));
             Assert.Equal(360, restartedStandings.GetIntegerOption(OverlayOptionKeys.StandingsColumnDriverWidth, 250, 180, 520));
+            Assert.Equal(9, restartedStandings.GetIntegerOption(OverlayOptionKeys.StandingsCarsInClass, 14, 1, 24));
             Assert.Equal(0, restartedStandings.GetIntegerOption(OverlayOptionKeys.StandingsOtherClassRows, 2, 0, 6));
 
             var restartedTrackMap = restarted.Overlays.Single(overlay => overlay.Id == "track-map");

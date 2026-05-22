@@ -34,6 +34,7 @@ describe('data contract settings mapping', () => {
     expect(standings.scalePercent).toBe(115);
     expect(standings.opacityPercent).toBe(88);
     expect(standings.classSeparatorsEnabled).toBe(true);
+    expect(standings.carsInClass).toBe(14);
     expect(standings.otherClassRows).toBe(0);
     expect(standings.headerRows).toEqual(['Time remaining']);
     expect(standings.footerRows).toEqual([]);
@@ -45,7 +46,7 @@ describe('data contract settings mapping', () => {
     expect(contentRow(relative, 'Pit status').enabled).toBe(false);
 
     const fuel = overlay(config, 'fuel-calculator');
-    expect(fuel.contentRows).toEqual([]);
+    expect(fuel.contentRows.map((row) => row.label)).toEqual(['Plan', 'Fuel', 'Stint targets', 'Fuel range', 'Fuel usage']);
     expect(fuel.footerRows).toEqual([]);
 
     const sessionWeather = overlay(config, 'session-weather');
@@ -66,7 +67,10 @@ describe('data contract settings mapping', () => {
     expect(contentRow(inputState, 'Speed').enabled).toBe(true);
 
     const carRadar = overlay(config, 'car-radar');
-    expect(contentRow(carRadar, 'Faster-class warning').enabled).toBe(true);
+    expect(carRadar.contentRows).toEqual([]);
+    expect(carRadar.showMulticlassWarning).toBe(true);
+    expect(carRadar.multiclassWarningSeconds).toBe(5);
+    expect(carRadar.radarVisibilitySeconds).toBe(2);
 
     const gap = overlay(config, 'gap-to-leader');
     expect(gap.carsAhead).toBe(4);
@@ -87,7 +91,7 @@ describe('data contract settings mapping', () => {
     expect(garageCover.garagePreviewVisible).toBe(true);
 
     const flags = overlay(config, 'flags');
-    expect(contentRow(flags, 'White / checkered').enabled).toBe(true);
+    expect(contentRow(flags, 'White / checkered / final laps').enabled).toBe(true);
 
     dom.window.close();
   });
@@ -120,10 +124,13 @@ function overlayReviewState(overlay) {
     provider: options['stream-chat.provider'] || 'twitch',
     twitchChannel: options['stream-chat.twitch-channel'] || 'techmatesracing',
     streamlabsWidgetUrl: options['stream-chat.streamlabs-url'] || '',
+    carsInClass: integerOption(options['standings.cars-in-class'], 14),
     otherClassRows: integerOption(options['standings.other-class-rows'], 2),
-    carsEachSide: integerOption(options['relative.cars-each-side'], 5),
+    carsEachSide: integerOption(options['relative.cars-each-side'], 3),
     carsAhead: integerOption(options['gap.cars-ahead'], 5),
     carsBehind: integerOption(options['gap.cars-behind'], 5),
+    multiclassWarningSeconds: integerOption(options['radar.multiclass-warning-seconds'], 5),
+    radarVisibilitySeconds: integerOption(options['radar.visibility-seconds'], 2),
     garageHasImage: Boolean(options['garage-cover.image-path']),
     garagePreviewVisible: Boolean(options['garage-cover.preview-until-utc'])
   };

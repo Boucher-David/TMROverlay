@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.Styling;
 
 namespace TmrOverlay.App.Overlays.BrowserSources;
@@ -53,9 +54,11 @@ internal static class BrowserOverlayPageRenderer
             page.RefreshIntervalMilliseconds,
             page.ForwardQueryParameters), JsonOptions);
         var overlayCss = BrowserOverlayAssets.Style("overlay.css")
-            .Replace("{{THEME_CSS_VARIABLES}}", OverlayTheme.DesignV2CssVariables(), StringComparison.Ordinal);
+            .Replace("{{THEME_CSS_VARIABLES}}", OverlayTheme.DesignV2CssVariables(), StringComparison.Ordinal)
+            .Replace("{{GEOMETRY_CSS_VARIABLES}}", OverlayGeometryContracts.CssVariables(), StringComparison.Ordinal);
         var overlayScript = BrowserOverlayAssets.ShellScript()
             .Replace("{{PAGE_JSON}}", pageJson, StringComparison.Ordinal)
+            .Replace("{{GEOMETRY_JSON}}", OverlayGeometryContracts.BrowserJson(), StringComparison.Ordinal)
             .Replace("{{MODULE_SCRIPT}}", page.Script, StringComparison.Ordinal);
 
         return BrowserOverlayAssets.Template("overlay.html")

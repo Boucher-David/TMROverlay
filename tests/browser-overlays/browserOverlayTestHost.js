@@ -19,19 +19,33 @@ export {
   renderOverlayIndexHtml
 } from './browserOverlayAssets.js';
 
-export async function renderBrowserOverlay(name, { live, settings = {}, model = null, waitForSelector = 'table' }) {
+export async function renderBrowserOverlay(name, { live, settings = {}, model = null, waitForSelector = 'table', query = '', userAgent = null }) {
   const fetchCalls = [];
+  const browserSourceEvents = [];
   const page = browserOverlayPage(name);
   const dom = new JSDOM(renderOverlayHtml(name), {
     pretendToBeVisual: true,
     runScripts: 'dangerously',
-    url: `http://localhost:8765/overlays/${name}`,
+    url: `http://localhost:8765/overlays/${name}${query}`,
     beforeParse(window) {
       installCanvasMock(window);
-      window.fetch = async (input) => {
+      if (userAgent) {
+        Object.defineProperty(window.navigator, 'userAgent', {
+          value: userAgent,
+          configurable: true
+        });
+      }
+
+      window.fetch = async (input, init = {}) => {
         const path = new URL(String(input), window.location.href).pathname;
         fetchCalls.push(path);
-        const payload = browserOverlayApiResponse(name, path, { live, settings, model });
+        if (path === '/api/browser-source-event') {
+          browserSourceEvents.push(JSON.parse(String(init.body || '{}')));
+          return jsonResponse({ ok: true });
+        }
+
+        const currentModel = typeof model === 'function' ? model() : model;
+        const payload = browserOverlayApiResponse(name, path, { live, settings, model: currentModel });
         if (payload) {
           return jsonResponse(payload);
         }
@@ -57,6 +71,7 @@ export async function renderBrowserOverlay(name, { live, settings = {}, model = 
     dom,
     document: dom.window.document,
     fetchCalls,
+    browserSourceEvents,
     close: () => dom.window.close()
   };
 }

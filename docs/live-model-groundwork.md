@@ -30,7 +30,7 @@ Status / Diagnostics V2 is the app-health companion to the live overlay model. `
 ## Model Families
 
 - `LiveSessionModel`: session clock, lap limits, session labels, track/car display labels, and missing live session signals.
-- `LiveDriverDirectoryModel`: session-info driver identity keyed by `CarIdx`, plus player/focus references.
+- `LiveDriverDirectoryModel`: session-info driver identity keyed by `CarIdx`, plus player/focus references. Preserve `LiveDriverIdentity.IsSpectator` as local-role evidence even when current overlays do not render it; the overlay evidence contract also reserves a nullable future `isSpotting` slot so v1.x role-gating can compare any later true spotting signal against the session-info spectator row.
 - `LiveReferenceModel`: normalized player/focus/reference facts, including focus identity, whether focus is the player/team car, focus timing/progress, local player pit/garage context, and evidence for timing and spatial placement. Product overlays should start from this model for reference-car identity instead of deriving their own focus/player rules from raw sample fields.
 - `LiveCoverageModel`: roster, scoring-result, live-position, live-timing, live-spatial, and live-proximity row counts so consumers can distinguish full live coverage from partial iRacing-transmitted rows.
 - `LiveScoringModel`: scoring rows parsed from session YAML `ResultsPositions` or race starting-grid rows, grouped by class and enriched with driver identity, grounded class labels/colors, lap totals, and best/last lap values. Race sessions hold the starting grid until official position/class-position/progress coverage becomes meaningful, then stop using grid as a stale fallback.

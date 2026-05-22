@@ -494,12 +494,13 @@ internal sealed class IbtAnalysisService
                 continue;
             }
 
-            var score = ScoreCandidate(file, manifest, diskStartedAtUtc, fileTimeDistanceSeconds);
+            var score = ScoreCandidate(file, manifest, diskStartedAtUtc, fileTimeDistanceSeconds, header, diskHeader);
             if (score >= bestScore)
             {
                 continue;
             }
 
+            var durationSeconds = CandidateDurationSeconds(header, diskHeader);
             bestScore = score;
             best = new IbtCandidate(
                 Path: file.FullName,
@@ -509,6 +510,8 @@ internal sealed class IbtAnalysisService
                 DiskStartedAtUtc: diskStartedAtUtc,
                 Header: header,
                 DiskHeader: diskHeader,
+                DurationSeconds: durationSeconds,
+                CaptureCoverageRatio: CandidateCaptureCoverageRatio(manifest, header, diskHeader, durationSeconds),
                 Score: score);
         }
 
@@ -559,27 +562,139 @@ internal sealed class IbtAnalysisService
         FileInfo file,
         CaptureManifest? manifest,
         DateTimeOffset? diskStartedAtUtc,
-        double fileTimeDistanceSeconds)
+        double fileTimeDistanceSeconds,
+        IbtTelemetryHeader? header,
+        IbtDiskHeader? diskHeader)
     {
+        double score;
         if (manifest?.StartedAtUtc is null)
         {
-            return -new DateTimeOffset(file.LastWriteTimeUtc, TimeSpan.Zero).ToUnixTimeSeconds();
+            score = -new DateTimeOffset(file.LastWriteTimeUtc, TimeSpan.Zero).ToUnixTimeSeconds();
+            return score - CandidateQualityBonus(header, diskHeader, CandidateDurationSeconds(header, diskHeader));
         }
 
         var captureStarted = manifest.StartedAtUtc;
         var captureFinished = manifest.FinishedAtUtc ?? manifest.StartedAtUtc;
         if (diskStartedAtUtc is not null)
         {
-            return DistanceFromWindowSeconds(diskStartedAtUtc.Value, captureStarted, captureFinished);
+            score = DistanceFromWindowSeconds(diskStartedAtUtc.Value, captureStarted, captureFinished);
+            var durationSeconds = CandidateDurationSeconds(header, diskHeader);
+            return score
+                + CandidateCoveragePenalty(CandidateCaptureCoverageRatio(manifest, header, diskHeader, durationSeconds))
+                - CandidateQualityBonus(header, diskHeader, durationSeconds);
         }
 
         if (fileTimeDistanceSeconds > 0)
         {
-            return fileTimeDistanceSeconds + 10_000;
+            score = fileTimeDistanceSeconds + 10_000;
+            var durationSeconds = CandidateDurationSeconds(header, diskHeader);
+            return score
+                + CandidateCoveragePenalty(CandidateCaptureCoverageRatio(manifest, header, diskHeader, durationSeconds))
+                - CandidateQualityBonus(header, diskHeader, durationSeconds);
         }
 
         var lastWrite = new DateTimeOffset(file.LastWriteTimeUtc, TimeSpan.Zero);
-        return DistanceFromWindowSeconds(lastWrite, captureStarted, captureFinished) + 1_000;
+        score = DistanceFromWindowSeconds(lastWrite, captureStarted, captureFinished) + 1_000;
+        var fallbackDurationSeconds = CandidateDurationSeconds(header, diskHeader);
+        return score
+            + CandidateCoveragePenalty(CandidateCaptureCoverageRatio(manifest, header, diskHeader, fallbackDurationSeconds))
+            - CandidateQualityBonus(header, diskHeader, fallbackDurationSeconds);
+    }
+
+    private static double? CandidateDurationSeconds(
+        IbtTelemetryHeader? header,
+        IbtDiskHeader? diskHeader)
+    {
+        if (diskHeader is null)
+        {
+            return null;
+        }
+
+        var sessionDurationSeconds = diskHeader.EndSessionTime - diskHeader.StartSessionTime;
+        if (IsFinite(sessionDurationSeconds) && sessionDurationSeconds > 0d)
+        {
+            return sessionDurationSeconds;
+        }
+
+        if (header?.TickRate > 0 && diskHeader.RecordCount > 0)
+        {
+            return diskHeader.RecordCount / (double)header.TickRate;
+        }
+
+        return null;
+    }
+
+    private static double? CandidateCaptureCoverageRatio(
+        CaptureManifest? manifest,
+        IbtTelemetryHeader? header,
+        IbtDiskHeader? diskHeader,
+        double? durationSeconds)
+    {
+        if (manifest is null)
+        {
+            return null;
+        }
+
+        double coverageRatio = 0d;
+        var hasCoverageSignal = false;
+        var captureDurationSeconds = CaptureDurationSeconds(manifest);
+        if (captureDurationSeconds > 0d && durationSeconds is { } duration && duration > 0d)
+        {
+            coverageRatio = Math.Max(coverageRatio, Math.Min(1d, duration / captureDurationSeconds));
+            hasCoverageSignal = true;
+        }
+
+        if (manifest.FrameCount > 0 && diskHeader?.RecordCount > 0)
+        {
+            coverageRatio = Math.Max(coverageRatio, Math.Min(1d, diskHeader.RecordCount / (double)manifest.FrameCount));
+            hasCoverageSignal = true;
+        }
+        else if (captureDurationSeconds > 0d && header?.TickRate > 0 && diskHeader?.RecordCount > 0)
+        {
+            var expectedRecords = captureDurationSeconds * header.TickRate;
+            if (expectedRecords > 0d)
+            {
+                coverageRatio = Math.Max(coverageRatio, Math.Min(1d, diskHeader.RecordCount / expectedRecords));
+                hasCoverageSignal = true;
+            }
+        }
+
+        return hasCoverageSignal ? Math.Round(coverageRatio, 6) : null;
+    }
+
+    private static double CaptureDurationSeconds(CaptureManifest manifest)
+    {
+        var finishedAtUtc = manifest.FinishedAtUtc;
+        if (finishedAtUtc is null || finishedAtUtc.Value <= manifest.StartedAtUtc)
+        {
+            return 0d;
+        }
+
+        return (finishedAtUtc.Value - manifest.StartedAtUtc).TotalSeconds;
+    }
+
+    private static double CandidateCoveragePenalty(double? coverageRatio)
+    {
+        if (coverageRatio is null)
+        {
+            return 0d;
+        }
+
+        return Math.Max(0d, 1d - coverageRatio.Value) * 2_000d;
+    }
+
+    private static double CandidateQualityBonus(
+        IbtTelemetryHeader? header,
+        IbtDiskHeader? diskHeader,
+        double? durationSeconds)
+    {
+        var durationBonus = durationSeconds is { } duration
+            ? Math.Min(duration, 3_600d) / 60d
+            : 0d;
+        var recordBonus = diskHeader?.RecordCount > 0
+            ? Math.Min(diskHeader.RecordCount, Math.Max(header?.TickRate ?? 60, 1) * 3_600d) / 3_600d
+            : 0d;
+        return durationBonus + recordBonus;
     }
 
     private static double DistanceFromWindowSeconds(
@@ -1622,6 +1737,8 @@ internal sealed record IbtCandidate(
     DateTimeOffset? DiskStartedAtUtc,
     IbtTelemetryHeader? Header,
     IbtDiskHeader? DiskHeader,
+    double? DurationSeconds,
+    double? CaptureCoverageRatio,
     double Score)
 {
     public IbtSourceFile ToSource()
@@ -1666,7 +1783,10 @@ internal sealed record IbtCandidateSelection(
             SkipReason: SkipReason,
             ScannedFileCount: ScannedFileCount,
             RejectedCounts: RejectedCounts,
-            CandidateScore: Candidate?.Score);
+            CandidateScore: Candidate?.Score,
+            CandidateRecordCount: Candidate?.DiskHeader?.RecordCount,
+            CandidateDurationSeconds: Candidate?.DurationSeconds,
+            CandidateCaptureCoverageRatio: Candidate?.CaptureCoverageRatio);
     }
 }
 
@@ -1675,4 +1795,7 @@ internal sealed record IbtCandidateSelectionSummary(
     string? SkipReason,
     int ScannedFileCount,
     IReadOnlyDictionary<string, int> RejectedCounts,
-    double? CandidateScore);
+    double? CandidateScore,
+    int? CandidateRecordCount,
+    double? CandidateDurationSeconds,
+    double? CandidateCaptureCoverageRatio);

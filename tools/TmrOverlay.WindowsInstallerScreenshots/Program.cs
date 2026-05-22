@@ -587,10 +587,146 @@ internal static class Program
             controls,
             buttons,
             textBlocks,
+            geometryMatrix = InstallerGeometryMatrixEvidence(window, menuId),
             primaryAction = PrimaryAction(window),
             palette,
             sourceAssets = evidenceContext.SourceFiles
         };
+    }
+
+    private static object InstallerGeometryMatrixEvidence(WindowSnapshot window, string menuId)
+    {
+        var elements = new List<object>
+        {
+            InstallerGeometryMatrixElement(
+                "installer-window",
+                "installer-window",
+                window.Title,
+                new Rectangle(Point.Empty, window.Bounds.Size),
+                index: 0),
+            InstallerGeometryMatrixElement(
+                "installer-titlebar",
+                "installer-titlebar",
+                window.Title,
+                new Rectangle(0, 0, window.Bounds.Width, Math.Max(24, window.ClientBounds.Top)),
+                index: 1),
+            InstallerGeometryMatrixElement(
+                "installer-body",
+                "installer-body",
+                null,
+                window.ClientBounds.Width > 0 && window.ClientBounds.Height > 0
+                    ? window.ClientBounds
+                    : new Rectangle(Point.Empty, window.Bounds.Size),
+                index: 2)
+        };
+
+        elements.AddRange(window.Elements.Select((element, index) => InstallerGeometryMatrixElement(element, index + 3)));
+        return new
+        {
+            contract = "ui-geometry-matrix/v1",
+            kind = "installer",
+            surface = Surface,
+            menuId,
+            elementCount = elements.Count,
+            elements
+        };
+    }
+
+    private static object InstallerGeometryMatrixElement(WindowElement element, int index)
+    {
+        var role = InstallerGeometryRole(element);
+        return InstallerGeometryMatrixElement(
+            role,
+            InstallerGeometryElementId(role, element, index),
+            element.Text,
+            element.Bounds,
+            index,
+            element.Role,
+            element.Enabled,
+            element.Visible);
+    }
+
+    private static object InstallerGeometryMatrixElement(
+        string role,
+        string id,
+        string? text,
+        Rectangle bounds,
+        int index,
+        string? controlKind = null,
+        bool? enabled = null,
+        bool? visible = null)
+    {
+        return new
+        {
+            role,
+            id,
+            text = string.IsNullOrWhiteSpace(text) ? null : text,
+            bounds = RectEvidence(bounds),
+            sourceBounds = RectEvidence(bounds),
+            selected = (bool?)null,
+            cursor = role == "installer-button" ? "pointer" : "default",
+            controlKind,
+            enabled,
+            visible,
+            index
+        };
+    }
+
+    private static string InstallerGeometryRole(WindowElement element)
+    {
+        if (string.Equals(element.Role, "button", StringComparison.OrdinalIgnoreCase))
+        {
+            return "installer-button";
+        }
+
+        if (!string.IsNullOrWhiteSpace(element.Text))
+        {
+            return "installer-text";
+        }
+
+        return "installer-control";
+    }
+
+    private static string InstallerGeometryElementId(string role, WindowElement element, int index)
+    {
+        var textId = NormalizeEvidenceId(element.Text);
+        if (!string.IsNullOrWhiteSpace(textId))
+        {
+            return $"{role}:{textId}:{index}";
+        }
+
+        if (element.ControlId != 0)
+        {
+            return $"{role}:{element.ControlId}:{index}";
+        }
+
+        return $"{role}:{index}";
+    }
+
+    private static string? NormalizeEvidenceId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var builder = new StringBuilder();
+        var lastWasDash = false;
+        foreach (var character in value.Trim().ToLowerInvariant())
+        {
+            if (char.IsAsciiLetterOrDigit(character))
+            {
+                builder.Append(character);
+                lastWasDash = false;
+            }
+            else if (!lastWasDash)
+            {
+                builder.Append('-');
+                lastWasDash = true;
+            }
+        }
+
+        return builder.ToString().Trim('-');
     }
 
     private static IReadOnlyList<object> ElementEvidence(WindowSnapshot window, Bitmap bitmap)

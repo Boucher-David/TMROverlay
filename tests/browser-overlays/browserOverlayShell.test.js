@@ -69,6 +69,182 @@ describe('browser overlay shell', () => {
     expect(currentOverlay.dom.window.TmrBrowserModel).toBeUndefined();
   });
 
+  it('renders table column widths as configured pixels without proportional stretching', async () => {
+    currentOverlay = await renderBrowserOverlay('relative', {
+      live: freshLiveSnapshot({}),
+      model: {
+        overlayId: 'relative',
+        title: 'Relative',
+        status: 'live | race',
+        source: '',
+        bodyKind: 'table',
+        columns: [
+          { label: 'Pos', dataKey: 'relative-position', width: 48, alignment: 'right' },
+          { label: 'Driver', dataKey: 'driver', width: 240, alignment: 'left' }
+        ],
+        rows: [{ cells: ['5', '#55 Focus Driver'], isReference: true }],
+        metrics: [],
+        points: [],
+        headerItems: [],
+        shouldRender: true,
+        effectiveSettings: {
+          rendered: {
+            browserSource: {
+              baseWidth: 322,
+              baseHeight: 308
+            }
+          }
+        }
+      }
+    });
+
+    const table = currentOverlay.document.querySelector('table');
+    const columnStyles = [...currentOverlay.document.querySelectorAll('col')]
+      .map((column) => column.getAttribute('style'));
+    const headerStyles = [...currentOverlay.document.querySelectorAll('th')]
+      .map((cell) => cell.getAttribute('style'));
+    const cellStyles = [...currentOverlay.document.querySelectorAll('td')]
+      .map((cell) => cell.getAttribute('style'));
+
+    expect(table.getAttribute('style')).toContain('width:288px');
+    expect(table.getAttribute('style')).toContain('min-width:288px');
+    expect(columnStyles).toEqual(['width:48px;', 'width:240px;']);
+    expect(headerStyles[0]).toContain('width:48px');
+    expect(headerStyles[1]).toContain('width:240px');
+    expect(cellStyles[0]).toContain('width:48px');
+    expect(cellStyles[1]).toContain('width:240px');
+    expect(currentOverlay.document.querySelector('.overlay').style.getPropertyValue('--relative-overlay-width')).toBe('322px');
+  });
+
+  it('renders steering wheel visual direction opposite the raw telemetry sign', async () => {
+    currentOverlay = await renderBrowserOverlay('input-state', {
+      live: freshLiveSnapshot({}),
+      waitForSelector: '.input-wheel svg g',
+      model: {
+        overlayId: 'input-state',
+        title: 'Inputs',
+        status: 'live inputs',
+        source: '',
+        bodyKind: 'inputs',
+        columns: [],
+        rows: [],
+        metrics: [],
+        points: [],
+        headerItems: [],
+        shouldRender: true,
+        inputs: {
+          isAvailable: true,
+          hasRail: true,
+          hasGraph: false,
+          hasContent: true,
+          showSteering: true,
+          steeringWheelAngle: Math.PI / 6,
+          steeringWheelVisualAngle: -Math.PI / 6,
+          steeringText: '+30 deg'
+        }
+      }
+    });
+
+    const transform = currentOverlay.document.querySelector('.input-wheel svg g').getAttribute('transform');
+    const degrees = Number(/rotate\(([-0-9.]+)/.exec(transform)?.[1]);
+
+    expect(currentOverlay.document.querySelector('.input-wheel-value').textContent).toBe('+30 deg');
+    expect(degrees).toBeCloseTo(-30, 5);
+  });
+
+  it('posts browser-source events with spoofable OBS client identity', async () => {
+    currentOverlay = await renderBrowserOverlay('standings', {
+      live: {
+        isConnected: false,
+        isCollecting: false,
+        lastUpdatedAtUtc: null,
+        sequence: 0,
+        models: {}
+      },
+      model: {
+        overlayId: 'standings',
+        title: 'Standings',
+        status: 'hidden | telemetry unavailable',
+        source: '',
+        bodyKind: 'table',
+        columns: [],
+        rows: [],
+        metrics: [],
+        points: [],
+        headerItems: [],
+        shouldRender: false
+      },
+      query: '?client=obs-test&clientKind=obs',
+      userAgent: 'Mozilla/5.0 OBS Studio/32.1.2',
+      waitForSelector: null
+    });
+
+    await waitFor(() => currentOverlay.browserSourceEvents.some((event) => event.event === 'model-hidden'));
+
+    expect(currentOverlay.fetchCalls).toContain('/api/browser-source-event');
+    expect(currentOverlay.browserSourceEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        event: 'page-loaded',
+        overlayId: 'standings',
+        clientId: 'obs-test',
+        clientKind: 'obs'
+      }),
+      expect.objectContaining({
+        event: 'model-hidden',
+        overlayId: 'standings',
+        clientId: 'obs-test',
+        clientKind: 'obs',
+        shouldRender: false,
+        status: 'hidden | telemetry unavailable'
+      })
+    ]));
+  });
+
+  it('keeps polling while hidden and renders when the model becomes active without a reload', async () => {
+    let currentModel = {
+      overlayId: 'standings',
+      title: 'Standings',
+      status: 'disabled | product hidden',
+      source: '',
+      bodyKind: 'table',
+      columns: [],
+      rows: [],
+      metrics: [],
+      points: [],
+      headerItems: [],
+      shouldRender: false
+    };
+    currentOverlay = await renderBrowserOverlay('standings', {
+      live: freshLiveSnapshot({}),
+      model: () => currentModel,
+      waitForSelector: null
+    });
+
+    await waitFor(() => currentOverlay.document.querySelector('.overlay').style.opacity === '0');
+    await waitFor(() => currentOverlay.fetchCalls.filter((path) => path === '/api/overlay-model/standings').length >= 2);
+
+    currentModel = {
+      overlayId: 'standings',
+      title: 'Standings',
+      status: 'scoring | race',
+      source: 'source: scoring telemetry',
+      bodyKind: 'table',
+      columns: [{ label: 'Driver', dataKey: 'driver', width: 140, align: 'left' }],
+      rows: [{ cells: ['Driver 1'], isReference: true }],
+      metrics: [],
+      points: [],
+      headerItems: [],
+      shouldRender: true
+    };
+
+    await waitFor(() => currentOverlay.document.querySelector('.overlay').style.opacity === '1');
+    expect(currentOverlay.document.querySelector('tbody').textContent).toContain('Driver 1');
+    expect(currentOverlay.browserSourceEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: 'model-hidden', overlayId: 'standings' }),
+      expect.objectContaining({ event: 'model-render', overlayId: 'standings', shouldRender: true })
+    ]));
+  });
+
   it('does not invent header or footer chrome when the model omits shared chrome items', async () => {
     currentOverlay = await renderBrowserOverlay('fuel-calculator', {
       live: freshLiveSnapshot({}),
@@ -218,6 +394,24 @@ describe('browser overlay shell', () => {
 
     await waitFor(() => currentOverlay.document.querySelector('.overlay').style.opacity === '0');
 
+    expect(currentOverlay.document.getElementById('content').textContent).toBe('');
+    expect(currentOverlay.document.querySelector('.overlay').style.opacity).toBe('0');
+    expect(currentOverlay.document.querySelector('.header-items')?.textContent ?? '').toBe('');
+    expect(currentOverlay.document.getElementById('source').hidden).toBe(true);
+  });
+
+  it('does not mount Garage Cover content when fresh telemetry says the garage is hidden', async () => {
+    currentOverlay = await renderBrowserOverlay('garage-cover', {
+      live: freshLiveSnapshot({
+        raceEvents: { hasData: true, isGarageVisible: false, isInGarage: false, isOnTrack: true }
+      }),
+      settings: { hasImage: false, imageVersion: null, fallbackReason: 'test', previewVisible: false },
+      waitForSelector: null
+    });
+
+    await waitFor(() => currentOverlay.document.querySelector('.overlay').style.opacity === '0');
+
+    expect(currentOverlay.document.querySelector('.garage-cover')).toBeNull();
     expect(currentOverlay.document.getElementById('content').textContent).toBe('');
     expect(currentOverlay.document.querySelector('.overlay').style.opacity).toBe('0');
     expect(currentOverlay.document.querySelector('.header-items')?.textContent ?? '').toBe('');

@@ -13,14 +13,20 @@ internal sealed record CarRadarOverlayViewModel(
     IReadOnlyList<LiveSpatialCar> Cars,
     LiveMulticlassApproach? StrongestMulticlassApproach,
     bool ShowMulticlassWarning,
+    int MulticlassWarningRangeSeconds,
+    int RadarVisibilitySeconds,
     bool PreviewVisible,
     LiveSpatialModel Spatial)
 {
     private const double RadarRangeSeconds = 2d;
-    private const double MulticlassWarningRangeSeconds = 5d;
+    public const int DefaultMulticlassWarningRangeSeconds = 5;
+    public const int MinimumMulticlassWarningRangeSeconds = 3;
+    public const int MaximumMulticlassWarningRangeSeconds = 10;
+    public const int DefaultRadarVisibilitySeconds = 2;
+    public const int MinimumRadarVisibilitySeconds = 2;
+    public const int MaximumRadarVisibilitySeconds = 5;
     public const double FocusedCarLengthMeters = CarRadarCalibrationProfile.DefaultBodyLengthMeters;
     public const double PhysicalRadarRangeMeters = FocusedCarLengthMeters * 6d;
-    public const double TimingAwareVisibilitySeconds = 2d;
     public const double MaximumTimingAwareRangeMeters = FocusedCarLengthMeters * 15d;
 
     public bool HasCurrentSignal =>
@@ -40,6 +46,8 @@ internal sealed record CarRadarOverlayViewModel(
         Cars: [],
         StrongestMulticlassApproach: null,
         ShowMulticlassWarning: true,
+        MulticlassWarningRangeSeconds: DefaultMulticlassWarningRangeSeconds,
+        RadarVisibilitySeconds: DefaultRadarVisibilitySeconds,
         PreviewVisible: false,
         Spatial: LiveSpatialModel.Empty);
 
@@ -48,10 +56,14 @@ internal sealed record CarRadarOverlayViewModel(
         DateTimeOffset now,
         bool previewVisible,
         bool showMulticlassWarning,
-        CarRadarCalibrationProfile? calibrationProfile = null)
+        CarRadarCalibrationProfile? calibrationProfile = null,
+        int multiclassWarningRangeSeconds = DefaultMulticlassWarningRangeSeconds,
+        int radarVisibilitySeconds = DefaultRadarVisibilitySeconds)
     {
         snapshot = snapshot with { Models = snapshot.CompleteModels() };
         var calibration = calibrationProfile ?? CarRadarCalibrationProfile.Default;
+        var warningRangeSeconds = ClampMulticlassWarningRangeSeconds(multiclassWarningRangeSeconds);
+        var visibilitySeconds = ClampRadarVisibilitySeconds(radarVisibilitySeconds);
         var availability = OverlayAvailabilityEvaluator.FromSnapshot(snapshot, now);
         var localContext = LiveLocalStrategyContext.ForRequirement(
             snapshot,
@@ -62,13 +74,13 @@ internal sealed record CarRadarOverlayViewModel(
         var spatial = canRender ? snapshot.Models.Spatial : LiveSpatialModel.Empty;
         var hasSpatialData = spatial.HasData;
         var cars = spatial.Cars
-            .Where(car => IsInRadarRange(car, calibration))
+            .Where(car => IsInRadarRange(car, calibration, visibilitySeconds))
             .GroupBy(car => car.CarIdx)
-            .Select(group => group.MinBy(car => Math.Abs(RangeRatio(car, calibration)))!)
+            .Select(group => group.MinBy(car => Math.Abs(RangeRatio(car, calibration, visibilitySeconds)))!)
             .ToArray();
         LiveMulticlassApproach? multiclass = showMulticlassWarning
             ? spatial.MulticlassApproaches
-                .Where(IsInMulticlassWarningRange)
+                .Where(approach => IsInMulticlassWarningRange(approach, warningRangeSeconds))
                 .OrderBy(approach => approach.RelativeSeconds is { } seconds ? Math.Abs(seconds) : double.MaxValue)
                 .ThenByDescending(approach => approach.Urgency)
                 .FirstOrDefault()
@@ -99,6 +111,8 @@ internal sealed record CarRadarOverlayViewModel(
             Cars: cars,
             StrongestMulticlassApproach: multiclass,
             ShowMulticlassWarning: showMulticlassWarning,
+            MulticlassWarningRangeSeconds: warningRangeSeconds,
+            RadarVisibilitySeconds: visibilitySeconds,
             PreviewVisible: previewVisible,
             Spatial: spatial);
     }
@@ -110,9 +124,14 @@ internal sealed record CarRadarOverlayViewModel(
 
     public static bool IsInRadarRange(LiveSpatialCar car, CarRadarCalibrationProfile calibration)
     {
+        return IsInRadarRange(car, calibration, DefaultRadarVisibilitySeconds);
+    }
+
+    public static bool IsInRadarRange(LiveSpatialCar car, CarRadarCalibrationProfile calibration, int radarVisibilitySeconds)
+    {
         if (ReliableRelativeMeters(car) is { } meters)
         {
-            return Math.Abs(meters) <= VisualRadarRangeMeters(car, calibration);
+            return Math.Abs(meters) <= VisualRadarRangeMeters(car, calibration, radarVisibilitySeconds);
         }
 
         return false;
@@ -132,9 +151,14 @@ internal sealed record CarRadarOverlayViewModel(
 
     private static double RangeRatio(LiveSpatialCar car, CarRadarCalibrationProfile calibration)
     {
+        return RangeRatio(car, calibration, DefaultRadarVisibilitySeconds);
+    }
+
+    private static double RangeRatio(LiveSpatialCar car, CarRadarCalibrationProfile calibration, int radarVisibilitySeconds)
+    {
         if (ReliableRelativeMeters(car) is { } meters)
         {
-            return Math.Clamp(meters / VisualRadarRangeMeters(car, calibration), -1d, 1d);
+            return Math.Clamp(meters / VisualRadarRangeMeters(car, calibration, radarVisibilitySeconds), -1d, 1d);
         }
 
         return Math.Sign(car.RelativeLaps);
@@ -146,6 +170,11 @@ internal sealed record CarRadarOverlayViewModel(
     }
 
     public static double VisualRadarRangeMeters(LiveSpatialCar car, CarRadarCalibrationProfile calibration)
+    {
+        return VisualRadarRangeMeters(car, calibration, DefaultRadarVisibilitySeconds);
+    }
+
+    public static double VisualRadarRangeMeters(LiveSpatialCar car, CarRadarCalibrationProfile calibration, int radarVisibilitySeconds)
     {
         var bodyLengthMeters = Math.Max(0.001d, calibration.BodyLengthMeters);
         var range = bodyLengthMeters * 6d;
@@ -172,7 +201,7 @@ internal sealed record CarRadarOverlayViewModel(
             return range;
         }
 
-        var timingAwareRange = inferredMetersPerSecond * TimingAwareVisibilitySeconds;
+        var timingAwareRange = inferredMetersPerSecond * ClampRadarVisibilitySeconds(radarVisibilitySeconds);
         return Math.Clamp(
             Math.Max(range, timingAwareRange),
             range,
@@ -181,11 +210,26 @@ internal sealed record CarRadarOverlayViewModel(
 
     public static bool IsInMulticlassWarningRange(LiveMulticlassApproach approach)
     {
+        return IsInMulticlassWarningRange(approach, DefaultMulticlassWarningRangeSeconds);
+    }
+
+    public static bool IsInMulticlassWarningRange(LiveMulticlassApproach approach, int multiclassWarningRangeSeconds)
+    {
         if (approach.RelativeSeconds is not { } seconds || double.IsNaN(seconds) || double.IsInfinity(seconds))
         {
             return false;
         }
 
-        return seconds < -RadarRangeSeconds && seconds >= -MulticlassWarningRangeSeconds;
+        return seconds < -RadarRangeSeconds && seconds >= -ClampMulticlassWarningRangeSeconds(multiclassWarningRangeSeconds);
+    }
+
+    public static int ClampMulticlassWarningRangeSeconds(int seconds)
+    {
+        return Math.Clamp(seconds, MinimumMulticlassWarningRangeSeconds, MaximumMulticlassWarningRangeSeconds);
+    }
+
+    public static int ClampRadarVisibilitySeconds(int seconds)
+    {
+        return Math.Clamp(seconds, MinimumRadarVisibilitySeconds, MaximumRadarVisibilitySeconds);
     }
 }

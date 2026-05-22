@@ -112,6 +112,88 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
     }
 
     [Fact]
+    public void CompleteCollection_SamplesFramesPerSessionKind()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-diagnostics");
+            Directory.CreateDirectory(captureDirectory);
+            var recorder = new LiveOverlayDiagnosticsRecorder(
+                new LiveOverlayDiagnosticsOptions
+                {
+                    Enabled = true,
+                    MinimumFrameSpacingSeconds = 0.1d,
+                    MaxSampleFramesPerSession = 2,
+                    MaxEventExamplesPerSession = 20
+                },
+                storage,
+                new AppEventRecorder(storage),
+                NullLogger<LiveOverlayDiagnosticsRecorder>.Instance);
+            var warmupContext = CreateContext(sessionType: "Warmup", eventType: "Race");
+            var raceContext = CreateContext(sessionType: "Race", eventType: "Race");
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", startedAtUtc);
+
+            for (var index = 0; index < 5; index++)
+            {
+                recorder.RecordFrame(CreateSnapshot(
+                    warmupContext,
+                    CreateSample(
+                        startedAtUtc.AddSeconds(index),
+                        sessionTime: index,
+                        focusCarIdx: 10,
+                        carLeftRight: 0,
+                        focusF2TimeSeconds: index,
+                        classPosition: 1,
+                        observedPosition: 1,
+                        observedClassPosition: 1,
+                        observedLapDistPct: 0.1d),
+                    sequence: index + 1));
+            }
+
+            for (var index = 0; index < 2; index++)
+            {
+                recorder.RecordFrame(CreateSnapshot(
+                    raceContext,
+                    CreateSample(
+                        startedAtUtc.AddSeconds(10 + index),
+                        sessionTime: 10 + index,
+                        focusCarIdx: 10,
+                        carLeftRight: 0,
+                        focusF2TimeSeconds: 10 + index,
+                        classPosition: 1,
+                        observedPosition: 1,
+                        observedClassPosition: 1,
+                        observedLapDistPct: 0.2d),
+                    sequence: 10 + index));
+            }
+
+            var path = recorder.CompleteCollection(startedAtUtc.AddSeconds(12), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var sampleSessionKinds = document.RootElement
+                .GetProperty("sampleFrames")
+                .EnumerateArray()
+                .Select(item => item.GetProperty("sessionKind").GetString())
+                .ToArray();
+            Assert.Equal(4, sampleSessionKinds.Length);
+            Assert.Equal(2, sampleSessionKinds.Count(kind => string.Equals(kind, "Warmup", StringComparison.OrdinalIgnoreCase)));
+            Assert.Equal(2, sampleSessionKinds.Count(kind => string.Equals(kind, "Race", StringComparison.OrdinalIgnoreCase)));
+            Assert.Equal(4, document.RootElement.GetProperty("totals").GetProperty("sampledFrameCount").GetInt32());
+            Assert.Equal(3, document.RootElement.GetProperty("totals").GetProperty("droppedFrameSampleCount").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void CompleteCollection_SummarizesFlagsTelemetry()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
@@ -207,6 +289,13 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
             Assert.Equal("0x00000028", sample.GetProperty("sessionFlagsHex").GetString());
             Assert.Equal("Yellow + Blue", sample.GetProperty("flagStatus").GetString());
             Assert.Equal(2, sample.GetProperty("flagDisplayCount").GetInt32());
+            var roleContext = sample.GetProperty("roleContext");
+            Assert.Equal("driver", roleContext.GetProperty("localRole").GetString());
+            Assert.Equal("DriverInfo.Drivers[].IsSpectator", roleContext.GetProperty("roleSource").GetString());
+            Assert.False(roleContext.GetProperty("playerIsSpectator").GetBoolean());
+            Assert.True(roleContext.TryGetProperty("isSpotting", out var isSpotting));
+            Assert.Equal(JsonValueKind.Null, isSpotting.ValueKind);
+            Assert.Equal("not-observed", roleContext.GetProperty("spottingSignalStatus").GetString());
         }
         finally
         {
@@ -1686,7 +1775,9 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
             HasTakenGrid: true);
     }
 
-    private static HistoricalSessionContext CreateContext()
+    private static HistoricalSessionContext CreateContext(
+        string sessionType = "Offline Testing",
+        string eventType = "Test")
     {
         return new HistoricalSessionContext
         {
@@ -1706,8 +1797,8 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
             },
             Session = new HistoricalSessionIdentity
             {
-                SessionType = "Offline Testing",
-                EventType = "Test"
+                SessionType = sessionType,
+                EventType = eventType
             },
             Conditions = new HistoricalSessionInfoConditions(),
             Drivers =
@@ -1716,13 +1807,15 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
                 {
                     CarIdx = 10,
                     UserName = "Player",
-                    CarClassId = 4098
+                    CarClassId = 4098,
+                    IsSpectator = false
                 },
                 new HistoricalSessionDriver
                 {
                     CarIdx = 12,
                     UserName = "Focused Driver",
-                    CarClassId = 4098
+                    CarClassId = 4098,
+                    IsSpectator = false
                 }
             ],
             Sectors =
@@ -1778,7 +1871,8 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
                     UserName = "Player",
                     CarNumber = "10",
                     CarClassId = 4098,
-                    CarClassShortName = "GT3"
+                    CarClassShortName = "GT3",
+                    IsSpectator = false
                 },
                 new HistoricalSessionDriver
                 {
@@ -1786,7 +1880,8 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
                     UserName = "Grid Leader",
                     CarNumber = "11",
                     CarClassId = 4098,
-                    CarClassShortName = "GT3"
+                    CarClassShortName = "GT3",
+                    IsSpectator = false
                 }
             ],
             StartingGridPositions =

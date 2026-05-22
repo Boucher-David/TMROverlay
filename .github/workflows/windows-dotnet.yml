@@ -313,7 +313,7 @@ jobs:
             "-reports:$reportPaths" `
             "-targetdir:artifacts\coverage\dotnet" `
             "-reporttypes:Html;Cobertura;MarkdownSummaryGithub" `
-            "-assemblyfilters:+TmrOverlay.*;-TmrOverlay.App.Tests" `
+            "-assemblyfilters:+TMROverlay;+TmrOverlay.*;-TmrOverlay.App.Tests" `
             "-filefilters:-*.g.cs;-*.Designer.cs"
           if ($LASTEXITCODE -ne 0) {
               exit $LASTEXITCODE

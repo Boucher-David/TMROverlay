@@ -165,7 +165,6 @@ const sectionOffContentLabelsByFixture = new Map([
     'Laps total'
   ]],
   ['session-weather-weather-off', sessionWeatherWeatherContentLabels],
-  ['session-weather-missing', sessionWeatherWeatherContentLabels],
   ['pit-service-session-off', [
     'Session time',
     'Session laps'
@@ -2083,6 +2082,13 @@ function effectiveSettingsOverlayState(overlayId, overlayState, previewMode = 'o
     };
   }
 
+  if (overlayId === 'garage-cover' && fixtureVariant(searchParams).startsWith('garage-')) {
+    effectiveState = {
+      ...effectiveState,
+      enabled: true
+    };
+  }
+
   if (fixtureVariant(searchParams) === 'chrome-off' && collapsibleBrowserSourceChromeIds.has(overlayId)) {
     const session = sessionKeyFromPreview(previewMode);
     effectiveState = {
@@ -2529,16 +2535,18 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
         }
 
         if (fixture === 'session-weather-missing') {
+          const clock = reviewSessionWeatherClock('race');
+          const laps = reviewSessionWeatherLaps('race');
           const sessionRows = [
             metricRow('Session', 'Race | race preview | Team', 'normal', [
               metricSegment('Type', 'Race', 'normal'),
               metricSegment('Name', 'race preview', 'normal'),
               metricSegment('Mode', 'Team', 'normal')
             ]),
-            metricRow('Clock', '-- | -- | --', 'waiting', [
-              metricSegment('Elapsed', '--', 'waiting'),
-              metricSegment('Left', '--', 'waiting'),
-              metricSegment('Total', '--', 'waiting')
+            metricRow('Clock', `${clock.elapsed} | ${clock.left} | ${clock.total}`, 'normal', [
+              metricSegment('Elapsed', clock.elapsed, 'normal'),
+              metricSegment('Left', clock.left, 'normal'),
+              metricSegment('Total', clock.total, 'normal')
             ]),
             metricRow('Event', 'Race | Aston Martin Vantage GT3 EVO', 'normal', [
               metricSegment('Event', 'Race', 'normal'),
@@ -2548,16 +2556,43 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
               metricSegment('Name', 'Gesamtstrecke 24h', 'normal'),
               metricSegment('Length', formatDistance(25380), 'normal')
             ]),
-            metricRow('Laps', '-- | --', 'waiting', [
-              metricSegment('Remaining', '--', 'waiting'),
-              metricSegment('Total', '--', 'waiting')
+            metricRow('Laps', `${laps.remaining} | ${laps.total}`, 'normal', [
+              metricSegment('Remaining', laps.remaining, 'normal'),
+              metricSegment('Total', laps.total, 'normal')
+            ])
+          ];
+          const weatherRows = [
+            metricRow('Surface', '-- | -- | --', 'waiting', [
+              metricSegment('Wetness', '--', 'waiting'),
+              metricSegment('Declared', '--', 'waiting'),
+              metricSegment('Rubber', '--', 'waiting')
+            ]),
+            metricRow('Sky', '-- | -- | --', 'waiting', [
+              metricSegment('Skies', '--', 'waiting'),
+              metricSegment('Weather', '--', 'waiting'),
+              metricSegment('Rain', '--', 'waiting')
+            ]),
+            metricRow('Wind', '-- | -- | --', 'waiting', [
+              metricSegment('Dir', '--', 'waiting'),
+              metricSegment('Speed', '--', 'waiting'),
+              metricSegment('Facing', '--', 'waiting')
+            ]),
+            metricRow('Temps', '-- | --', 'waiting', [
+              metricSegment('Air', '--', 'waiting'),
+              metricSegment('Track', '--', 'waiting')
+            ]),
+            metricRow('Atmosphere', '-- | -- | --', 'waiting', [
+              metricSegment('Hum', '--', 'waiting'),
+              metricSegment('Fog', '--', 'waiting'),
+              metricSegment('Pressure', '--', 'waiting')
             ])
           ];
           const metricSections = [
-            { title: 'Session', rows: sessionRows }
+            { title: 'Session', rows: sessionRows },
+            { title: 'Weather', rows: weatherRows }
           ];
-          return withChrome(metricsModel('session-weather', 'Session / Weather', 'weather unavailable', metricSections.flatMap((section) => section.rows), '', [], metricSections, [
-            { key: 'timeRemaining', value: '--' }
+          return withChrome(metricsModel('session-weather', 'Session / Weather', 'weather unavailable', metricSections.flatMap((section) => section.rows), 'weather source unavailable | session data present', [], metricSections, [
+            { key: 'timeRemaining', value: clock.left }
           ]));
         }
         const sessionType = session === 'qualifying' ? 'Qualify' : sessionDisplayName(session);

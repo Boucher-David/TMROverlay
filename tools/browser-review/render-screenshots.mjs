@@ -543,6 +543,7 @@ function isSettingsComponentRoute(route) {
 function overlayRoute(relativePath, urlPath, metadata = {}) {
   const { viewport, ...metadataWithoutViewport } = metadata;
   const configuredCanvasSize = metadata.overlayId ? configuredCanvasOverlaySizes.get(metadata.overlayId) : null;
+  const garageCoverRoute = metadata.overlayId === 'garage-cover';
   return {
     relativePath,
     urlPath,
@@ -556,8 +557,9 @@ function overlayRoute(relativePath, urlPath, metadata = {}) {
     configuredOverlaySize: configuredCanvasSize || null,
     comparisonMode: configuredCanvasSize ? 'browser-localhost-configured-canvas-vs-native-overlay-window' : null,
     comparisonLimit: null,
-    compositingMode: configuredCanvasSize ? 'solid-review-backdrop' : null,
-    captureBackdrop: configuredCanvasSize ? configuredCanvasCaptureBackdrop : null,
+    compositingMode: garageCoverRoute ? 'transparent-browser-source' : configuredCanvasSize ? 'solid-review-backdrop' : null,
+    captureBackdrop: garageCoverRoute ? null : configuredCanvasSize ? configuredCanvasCaptureBackdrop : null,
+    omitBackground: garageCoverRoute ? true : null,
     minScale: metadata.minScale || null,
     ...metadataWithoutViewport
   };

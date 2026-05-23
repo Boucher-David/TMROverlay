@@ -634,6 +634,7 @@
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "artifacts": ["browser-overlays/fuel-calculator/default.png", "browser-overlays/fuel-calculator/no-data.png", "browser-overlays/fuel-calculator/chrome-off.png"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_hidden_no_render_manifest_contract", "tools/validate_overlay_screenshots.py:validate_hidden_no_render_png_evidence"],
           "assertions": ["metric sections render", "no-data is hidden/no-render", "chrome-off removes header/footer chrome"]
         },
         {
@@ -730,8 +731,18 @@
           "tier": "tier1-ci-contract-fixtures",
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
-          "artifacts": ["browser-overlays/session-weather/default.png", "browser-overlays/session-weather/missing.png", "browser-overlays/session-weather/no-data.png", "browser-overlays/session-weather/chrome-off.png"],
-          "assertions": ["session and weather sections render", "missing weather is section-aware", "true no-data is hidden/no-render"]
+          "artifacts": ["browser-overlays/session-weather/default.png", "browser-overlays/session-weather/no-data.png", "browser-overlays/session-weather/chrome-off.png"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_hidden_no_render_manifest_contract", "tools/validate_overlay_screenshots.py:validate_hidden_no_render_png_evidence"],
+          "assertions": ["session and weather sections render", "true no-data is hidden/no-render", "chrome-off keeps populated content without header/footer chrome"]
+        },
+        {
+          "id": "weather-missing-data-placeholders",
+          "family": "unavailable-state",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/session-weather/missing.png"],
+          "assertions": ["missing raw weather keeps weather content settings enabled", "weather section renders unavailable placeholder rows", "user-disabled weather content is only represented by weather-off"]
         },
         {
           "id": "weather-content-variants",
@@ -794,6 +805,7 @@
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "artifacts": ["browser-overlays/pit-service/default.png", "browser-overlays/pit-service/idle.png", "browser-overlays/pit-service/no-data.png", "browser-overlays/pit-service/chrome-off.png"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_hidden_no_render_manifest_contract", "tools/validate_overlay_screenshots.py:validate_hidden_no_render_png_evidence"],
           "assertions": ["service rows and tire analysis render", "idle state is distinct from true no-data", "true no-data is hidden/no-render"]
         },
         {
@@ -861,6 +873,7 @@
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "artifacts": ["browser-overlays/input-state/default.png", "browser-overlays/input-state/mock-data.png", "browser-overlays/input-state/waiting.png", "browser-overlays/input-state/no-data.png"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_hidden_no_render_manifest_contract", "tools/validate_overlay_screenshots.py:validate_hidden_no_render_png_evidence"],
           "assertions": ["graph and rail evidence render", "waiting/no-data states hide or suppress stale content according to contract"]
         },
         {
@@ -870,6 +883,7 @@
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "artifacts": ["browser-overlays/input-state/graph-only.png", "browser-overlays/input-state/rail-only.png", "browser-overlays/input-state/no-content.png"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_hidden_no_render_manifest_contract", "tools/validate_overlay_screenshots.py:validate_hidden_no_render_png_evidence"],
           "assertions": ["graph-only and rail-only bounds fit", "disabled content is absent"]
         },
         {
@@ -1003,6 +1017,7 @@
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "artifacts": ["browser-overlays/gap-to-leader/race.png", "browser-overlays/gap-to-leader/no-cars.png", "browser-overlays/gap-to-leader/chrome-off.png"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_hidden_no_render_manifest_contract", "tools/validate_overlay_screenshots.py:validate_hidden_no_render_png_evidence"],
           "assertions": ["graph and metric rows render", "no-cars is hidden/no-render", "race-only availability is explicit"]
         },
         {
@@ -1078,6 +1093,7 @@
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "artifacts": ["browser-overlays/track-map/default.png", "browser-overlays/track-map/fallback.png", "browser-overlays/track-map/no-markers.png"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_hidden_no_render_manifest_contract", "tools/validate_overlay_screenshots.py:validate_hidden_no_render_png_evidence"],
           "assertions": ["generated-map vs circle-fallback source is explicit", "marker and vector bounds are compared", "no-markers state is not blank without explanation"]
         },
         {
@@ -1216,8 +1232,10 @@
           "tier": "tier1-ci-contract-fixtures",
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "compactReplay"],
-          "artifacts": ["fixtures/telemetry-analysis/garage-cover-navarra-obs-policy.json", "browser-overlays/garage-cover/garage-visible.png", "browser-overlays/garage-cover/hidden.png", "browser-overlays/garage-cover/stale.png", "browser-overlays/garage-cover/disconnected.png"],
-          "assertions": ["disabled, hidden garage, stale, disconnected, preview, image-ready, image-missing, and enabled-visible states are distinct", "route/image readiness alone does not open the cover"]
+          "artifacts": ["fixtures/telemetry-analysis/garage-cover-navarra-obs-policy.json", "browser-overlays/garage-cover/garage-visible.png", "browser-overlays/garage-cover/hidden.png", "browser-overlays/garage-cover/stale.png", "browser-overlays/garage-cover/disconnected.png", "localhost-overlays/garage-cover/garage-visible.png", "localhost-overlays/garage-cover/hidden.png", "localhost-overlays/garage-cover/stale.png", "localhost-overlays/garage-cover/disconnected.png"],
+          "testFiles": ["tests/tools/test_garage_cover_screenshot_validator.py"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_garage_cover_compositor_safety", "tools/validate_overlay_screenshots.py:validate_garage_cover_visible_eligibility_evidence"],
+          "assertions": ["disabled, hidden garage, stale, disconnected, preview, image-ready, image-missing, and enabled-visible states are distinct", "route/image readiness alone does not open the cover", "hidden/no-render screenshots preserve a transparent compositor rather than an opaque black blocker", "visible screenshots prove overlayEnabled=true or explicitly declare forced-preview evidence"]
         },
         {
           "id": "garage-cover-live-eligibility",

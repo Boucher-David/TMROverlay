@@ -307,6 +307,41 @@ describe('browser review server validation contracts', () => {
     }));
   });
 
+  it('keeps Session Weather missing data distinct from user-disabled weather content', async () => {
+    const missing = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-missing')).model;
+    const weatherOff = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-weather-off')).model;
+
+    expect.soft(missing.status).toBe('weather unavailable');
+    expect.soft(metricSectionTitles(missing)).toEqual(['Session', 'Weather']);
+    expect.soft(metricRowLabels(missing, 'Session')).toEqual(['Session', 'Clock', 'Event', 'Track', 'Laps']);
+    expect.soft(metricRowLabels(missing, 'Weather')).toEqual(['Surface', 'Sky', 'Wind', 'Temps', 'Atmosphere']);
+    expect.soft(missing.source).toMatch(/weather source unavailable/i);
+    expect.soft(missing.effectiveSettings.rendered.unavailableContentPolicy).toBe('section-aware-placeholders');
+    expect.soft(missing.effectiveSettings.rendered.browserSource.baseHeight).toBe(496);
+
+    const weatherRows = (missing.metricSections || []).find((section) => section.title === 'Weather')?.rows || [];
+    expect.soft(weatherRows).toHaveLength(5);
+    for (const row of weatherRows) {
+      expect.soft(row.segments?.map((segment) => segment.value), `${row.label}: missing weather placeholders`).toEqual(
+        row.segments?.map(() => '--')
+      );
+      expect.soft(['waiting', 'unavailable'], `${row.label}: missing weather tone`).toContain(row.tone);
+    }
+
+    expect.soft(missing.effectiveSettings.settings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'session-weather.surface.wetness.enabled', value: true }),
+      expect.objectContaining({ key: 'session-weather.sky.weather.enabled', value: true }),
+      expect.objectContaining({ key: 'session-weather.wind.speed.enabled', value: true }),
+      expect.objectContaining({ key: 'session-weather.temps.track.enabled', value: true }),
+      expect.objectContaining({ key: 'session-weather.atmosphere.pressure.enabled', value: true })
+    ]));
+
+    expect.soft(metricSectionTitles(weatherOff)).toEqual(['Session']);
+    expect.soft(weatherOff.effectiveSettings.settings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'session-weather.sky.weather.enabled', value: false })
+    ]));
+  });
+
   it('proves v1.0.2 Gap To Leader trend, threat, color, and focus-window evidence', async () => {
     const model = (await reviewServer.getJson('/api/overlay-model/gap-to-leader?preview=race')).model;
     const graph = model.graph || {};

@@ -2359,6 +2359,8 @@ internal static class Program
 
     private static DesignV2OverlayModel ReviewSessionWeatherMissingModel()
     {
+        var clock = ReviewSessionWeatherClock(OverlaySessionKind.Race);
+        var laps = ReviewSessionWeatherLaps(OverlaySessionKind.Race);
         var sessionRows = new[]
         {
             ReviewMetric("Session", "Race | race preview | Team", DesignV2Evidence.Neutral,
@@ -2367,11 +2369,11 @@ internal static class Program
                 ReviewSegment("Name", "race preview", DesignV2Evidence.Neutral),
                 ReviewSegment("Mode", "Team", DesignV2Evidence.Neutral)
             ]),
-            ReviewMetric("Clock", "-- | -- | --", DesignV2Evidence.Unavailable,
+            ReviewMetric("Clock", $"{clock.Elapsed} | {clock.Left} | {clock.Total}", DesignV2Evidence.Neutral,
             [
-                ReviewSegment("Elapsed", "--", DesignV2Evidence.Unavailable),
-                ReviewSegment("Left", "--", DesignV2Evidence.Unavailable),
-                ReviewSegment("Total", "--", DesignV2Evidence.Unavailable)
+                ReviewSegment("Elapsed", clock.Elapsed, DesignV2Evidence.Neutral),
+                ReviewSegment("Left", clock.Left, DesignV2Evidence.Neutral),
+                ReviewSegment("Total", clock.Total, DesignV2Evidence.Neutral)
             ]),
             ReviewMetric("Event", "Race | Aston Martin Vantage GT3 EVO", DesignV2Evidence.Neutral,
             [
@@ -2383,23 +2385,56 @@ internal static class Program
                 ReviewSegment("Name", "Gesamtstrecke 24h", DesignV2Evidence.Neutral),
                 ReviewSegment("Length", "25.4 km", DesignV2Evidence.Neutral)
             ]),
-            ReviewMetric("Laps", "-- | --", DesignV2Evidence.Unavailable,
+            ReviewMetric("Laps", $"{laps.Remaining} | {laps.Total}", DesignV2Evidence.Neutral,
             [
-                ReviewSegment("Remaining", "--", DesignV2Evidence.Unavailable),
-                ReviewSegment("Total", "--", DesignV2Evidence.Unavailable)
+                ReviewSegment("Remaining", laps.Remaining, DesignV2Evidence.Neutral),
+                ReviewSegment("Total", laps.Total, DesignV2Evidence.Neutral)
+            ])
+        };
+        var weatherRows = new[]
+        {
+            ReviewMetric("Surface", "-- | -- | --", DesignV2Evidence.Unavailable,
+            [
+                ReviewSegment("Wetness", "--", DesignV2Evidence.Unavailable),
+                ReviewSegment("Declared", "--", DesignV2Evidence.Unavailable),
+                ReviewSegment("Rubber", "--", DesignV2Evidence.Unavailable)
+            ]),
+            ReviewMetric("Sky", "-- | -- | --", DesignV2Evidence.Unavailable,
+            [
+                ReviewSegment("Skies", "--", DesignV2Evidence.Unavailable),
+                ReviewSegment("Weather", "--", DesignV2Evidence.Unavailable),
+                ReviewSegment("Rain", "--", DesignV2Evidence.Unavailable)
+            ]),
+            ReviewMetric("Wind", "-- | -- | --", DesignV2Evidence.Unavailable,
+            [
+                ReviewSegment("Dir", "--", DesignV2Evidence.Unavailable),
+                ReviewSegment("Speed", "--", DesignV2Evidence.Unavailable),
+                ReviewSegment("Facing", "--", DesignV2Evidence.Unavailable)
+            ]),
+            ReviewMetric("Temps", "-- | --", DesignV2Evidence.Unavailable,
+            [
+                ReviewSegment("Air", "--", DesignV2Evidence.Unavailable),
+                ReviewSegment("Track", "--", DesignV2Evidence.Unavailable)
+            ]),
+            ReviewMetric("Atmosphere", "-- | -- | --", DesignV2Evidence.Unavailable,
+            [
+                ReviewSegment("Hum", "--", DesignV2Evidence.Unavailable),
+                ReviewSegment("Fog", "--", DesignV2Evidence.Unavailable),
+                ReviewSegment("Pressure", "--", DesignV2Evidence.Unavailable)
             ])
         };
         var sections = new[]
         {
-            new DesignV2MetricSection("Session", sessionRows)
+            new DesignV2MetricSection("Session", sessionRows),
+            new DesignV2MetricSection("Weather", weatherRows)
         };
         return new DesignV2OverlayModel(
             "Session / Weather",
             "weather unavailable",
-            string.Empty,
+            "weather source unavailable | session data present",
             DesignV2Evidence.Unavailable,
             new DesignV2MetricRowsBody(sections.SelectMany(section => section.Rows).ToArray(), sections, []),
-            HeaderText: "--",
+            HeaderText: clock.Left,
             ShowFooter: false);
     }
 

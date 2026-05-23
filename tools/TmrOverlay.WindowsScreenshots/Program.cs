@@ -3941,6 +3941,8 @@ internal static class Program
                 tab = screenshot.Metadata.Tab,
                 region = screenshot.Metadata.Region,
                 fixtureVariant = screenshot.Metadata.FixtureVariant,
+                minScale = NativeMinScale(screenshot.Metadata),
+                scaleTransform = NativeScaleTransform(screenshot.Metadata),
                 previewMode = screenshot.Metadata.PreviewMode,
                 unitSystem = screenshot.Metadata.UnitSystem ?? "Metric",
                 fixture = screenshot.Metadata.Fixture,
@@ -7537,6 +7539,8 @@ internal static class Program
         {
             contract = "windows-native-layout/v1",
             root = RectEvidence(layout.Client),
+            unscaledRoot = layout.UnscaledClient is { } unscaledClient ? RectEvidence(unscaledClient) : null,
+            renderScale = Math.Round(layout.RenderScale, 3),
             contentBounds = NativeContentBounds(layout),
             elements
         };
@@ -7697,6 +7701,7 @@ internal static class Program
                 headerItems = NativeHeaderItems(metadata),
                 unavailableContentPolicy = NativeUnavailableContentPolicy(metadata),
                 fuelStrategy = NativeFuelStrategyEvidence(metadata),
+                browserSource = NativeEffectiveBrowserSource(metadata),
                 layout = NativeMetricLayoutEvidence(metadata),
                 mapFallback = NativeMapFallbackEvidence(metadata)
             },
@@ -8014,6 +8019,64 @@ internal static class Program
     {
         var scale = double.IsFinite(settings.Scale) ? settings.Scale : 1d;
         return (int)Math.Round(Math.Clamp(scale, 0.6d, 2d) * 100d, MidpointRounding.AwayFromZero);
+    }
+
+    private static double? NativeMinScale(ScreenshotMetadata metadata)
+    {
+        return string.Equals(metadata.Surface, "windows-native-overlay", StringComparison.Ordinal)
+            && string.Equals(metadata.FixtureVariant, "min-scale", StringComparison.OrdinalIgnoreCase)
+            ? NativeRenderScale(metadata)
+            : null;
+    }
+
+    private static double? NativeScaleTransform(ScreenshotMetadata metadata)
+    {
+        return NativeMinScale(metadata);
+    }
+
+    private static double NativeRenderScale(ScreenshotMetadata metadata)
+    {
+        var layoutScale = metadata.Layout?.RenderScale;
+        if (layoutScale is > 0f)
+        {
+            return Math.Round(layoutScale.Value, 3);
+        }
+
+        var settings = metadata.Settings ?? NativeSettingsForMetadata(metadata);
+        var scale = double.IsFinite(settings.Scale) ? settings.Scale : 1d;
+        return Math.Round(Math.Clamp(scale, 0.6d, 2d), 3);
+    }
+
+    private static object? NativeEffectiveBrowserSource(ScreenshotMetadata metadata)
+    {
+        if (!string.Equals(metadata.Surface, "windows-native-overlay", StringComparison.Ordinal)
+            || metadata.Layout is not { } layout)
+        {
+            return null;
+        }
+
+        var renderScale = NativeRenderScale(metadata);
+        var baseRect = layout.UnscaledClient ?? layout.Client;
+        var renderedRect = layout.Client;
+        var opacity = NativeEffectiveOpacity(metadata);
+        return new
+        {
+            baseWidth = Math.Max(1, (int)Math.Round(baseRect.Width)),
+            baseHeight = Math.Max(1, (int)Math.Round(baseRect.Height)),
+            width = Math.Max(1, (int)Math.Round(renderedRect.Width)),
+            height = Math.Max(1, (int)Math.Round(renderedRect.Height)),
+            scale = renderScale,
+            scalePercent = (int)Math.Round(renderScale * 100d, MidpointRounding.AwayFromZero),
+            opacity,
+            opacityPercent = (int)Math.Round(opacity * 100d, MidpointRounding.AwayFromZero)
+        };
+    }
+
+    private static double NativeEffectiveOpacity(ScreenshotMetadata metadata)
+    {
+        return string.Equals(metadata.OverlayId, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            ? 0d
+            : 1d;
     }
 
     private static string NativeChromeHeaderTimeRemainingKey(OverlaySessionKind sessionKind)

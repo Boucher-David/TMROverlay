@@ -328,7 +328,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         ? radar.RenderModel.Cars.Count
         : null;
 
-    public DesignV2LayoutDiagnostics DiagnosticLayout => BuildLayoutDiagnostics(ClientRectangle, _model);
+    public DesignV2LayoutDiagnostics DiagnosticLayout => BuildScaledLayoutDiagnostics(_model);
 
     public string DiagnosticUnitSystem => _unitSystem;
 
@@ -354,6 +354,61 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         return string.Equals(unitSystem, "Imperial", StringComparison.OrdinalIgnoreCase)
             ? "Imperial"
             : "Metric";
+    }
+
+    private float RenderScale()
+    {
+        var scale = _settings.Scale;
+        return double.IsFinite(scale)
+            ? (float)Math.Clamp(scale, 0.6d, 2d)
+            : 1f;
+    }
+
+    private static bool IsNeutralScale(float scale)
+    {
+        return Math.Abs(scale - 1f) < 0.001f;
+    }
+
+    private Rectangle RenderLayoutRectangle()
+    {
+        var renderScale = RenderScale();
+        if (IsNeutralScale(renderScale))
+        {
+            return ClientRectangle;
+        }
+
+        return new Rectangle(
+            0,
+            0,
+            Math.Max(1, (int)Math.Round(ClientSize.Width / renderScale)),
+            Math.Max(1, (int)Math.Round(ClientSize.Height / renderScale)));
+    }
+
+    private int RenderLayoutDimension(int clientDimension)
+    {
+        var renderScale = RenderScale();
+        return IsNeutralScale(renderScale)
+            ? clientDimension
+            : Math.Max(1, (int)Math.Round(clientDimension / renderScale));
+    }
+
+    private int ScaleRenderLayoutDimension(int layoutDimension)
+    {
+        return Math.Max(1, (int)Math.Round(layoutDimension * RenderScale()));
+    }
+
+    private SizeF RenderLayoutSize()
+    {
+        var bounds = RenderLayoutRectangle();
+        return new SizeF(bounds.Width, bounds.Height);
+    }
+
+    private PointF RenderLayoutPoint(Point clientPoint)
+    {
+        var renderScale = RenderScale();
+        return IsNeutralScale(renderScale)
+            ? clientPoint
+            : new PointF(clientPoint.X / renderScale, clientPoint.Y / renderScale);
     }
 
     protected override void Dispose(bool disposing)
@@ -383,7 +438,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     protected override bool ShouldReceiveInputWhileTransparent(Point clientPoint)
     {
         return _kind == DesignV2LiveOverlayKind.StreamChat
-            && (IsStreamChatCloseButtonHit(clientPoint) || IsStreamChatDragHit(clientPoint, ClientSize));
+            && (IsStreamChatCloseButtonHit(clientPoint) || IsStreamChatDragHit(RenderLayoutPoint(clientPoint), RenderLayoutSize()));
     }
 
     private void ApplyWindowRegion()
@@ -407,7 +462,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
         using var path = RoundedPath(
             new RectangleF(0f, 0f, ClientSize.Width, ClientSize.Height),
-            OverlayCornerRadius);
+            Math.Max(1f, OverlayCornerRadius * RenderScale()));
         var oldRegion = Region;
         Region = new Region(path);
         oldRegion?.Dispose();
@@ -442,9 +497,24 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
             e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-            if (!DrawCustomOverlay(e.Graphics, ClientRectangle, _model))
+            var renderScale = RenderScale();
+            var renderBounds = RenderLayoutRectangle();
+            var state = e.Graphics.Save();
+            try
             {
-                DrawOverlay(e.Graphics, ClientRectangle, _model);
+                if (!IsNeutralScale(renderScale))
+                {
+                    e.Graphics.ScaleTransform(renderScale, renderScale);
+                }
+
+                if (!DrawCustomOverlay(e.Graphics, renderBounds, _model))
+                {
+                    DrawOverlay(e.Graphics, renderBounds, _model);
+                }
+            }
+            finally
+            {
+                e.Graphics.Restore(state);
             }
             succeeded = true;
         }
@@ -612,7 +682,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             maximum: StandingsBrowserSettings.MaximumCarsInClass);
         var showHeader = !string.IsNullOrWhiteSpace(BuildHeaderText(_settings, snapshot, HeaderStatusFor(_kind, string.Empty)));
         var showFooter = ShowFooterForSettings(_kind, _settings, snapshot);
-        var visibleRows = StandingsVisibleRowsForHeight(ClientSize.Height, showHeader, showFooter);
+        var visibleRows = StandingsVisibleRowsForHeight(RenderLayoutRectangle().Height, showHeader, showFooter);
         if (snapshot.Models.Scoring.HasData && ShouldAutoExpandStandingsRows(snapshot))
         {
             var requiredRows = StandingsOverlayViewModel.ExpandRowBudgetForClassGroups(
@@ -622,7 +692,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 showClassSeparators);
             if (EnsureClientHeightForStandingsRows(requiredRows, showHeader, showFooter))
             {
-                visibleRows = StandingsVisibleRowsForHeight(ClientSize.Height, showHeader, showFooter);
+                visibleRows = StandingsVisibleRowsForHeight(RenderLayoutRectangle().Height, showHeader, showFooter);
             }
         }
 
@@ -662,19 +732,19 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private bool EnsureClientHeightForStandingsRows(int rowCount, bool showHeader, bool showFooter)
     {
         var targetHeight = TargetClientHeightForStandingsRows(rowCount, showHeader, showFooter);
-        if (ClientSize.Height >= targetHeight)
+        if (RenderLayoutRectangle().Height >= targetHeight)
         {
             return false;
         }
 
-        ClientSize = new Size(ClientSize.Width, targetHeight);
+        ClientSize = new Size(ClientSize.Width, ScaleRenderLayoutDimension(targetHeight));
         return true;
     }
 
     private int TargetClientHeightForStandingsRows(int rowCount, bool showHeader, bool showFooter)
     {
         var persistedHeight = _settings.Height > 0
-            ? _settings.Height
+            ? RenderLayoutDimension(_settings.Height)
             : _definition.DefaultHeight;
         var visibleRows = Math.Clamp(
             Math.Max(1, rowCount),
@@ -876,7 +946,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             strategyModel,
             showAdvice: false,
             _unitSystem,
-            maximumRows: FuelVisibleRowsForHeight(ClientSize.Height, ShowFooterForSettings(_kind, _settings, snapshot)),
+            maximumRows: FuelVisibleRowsForHeight(RenderLayoutRectangle().Height, ShowFooterForSettings(_kind, _settings, snapshot)),
             contentSettings: _settings);
         var metricSections = viewModel.MetricSections.Select(section => new DesignV2MetricSection(
             section.Title,
@@ -3070,7 +3140,300 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         return delta;
     }
 
-    private DesignV2LayoutDiagnostics BuildLayoutDiagnostics(Rectangle bounds, DesignV2OverlayModel model)
+    private DesignV2LayoutDiagnostics BuildScaledLayoutDiagnostics(DesignV2OverlayModel model)
+    {
+        var renderScale = RenderScale();
+        var unscaledLayout = BuildLayoutDiagnostics(RenderLayoutRectangle(), model);
+        if (IsNeutralScale(renderScale))
+        {
+            return unscaledLayout with
+            {
+                RenderScale = 1f,
+                UnscaledClient = unscaledLayout.Client
+            };
+        }
+
+        return ScaleLayoutDiagnostics(unscaledLayout, renderScale) with
+        {
+            Client = LayoutRect(ClientRectangle),
+            RenderScale = renderScale,
+            UnscaledClient = unscaledLayout.Client
+        };
+    }
+
+    private static DesignV2LayoutDiagnostics ScaleLayoutDiagnostics(DesignV2LayoutDiagnostics layout, float scale)
+    {
+        return layout with
+        {
+            Client = ScaleRect(layout.Client, scale),
+            Constants = ScaleConstants(layout.Constants, scale),
+            Outer = ScaleRect(layout.Outer, scale),
+            Header = ScaleRect(layout.Header, scale),
+            Body = ScaleRect(layout.Body, scale),
+            Footer = ScaleRect(layout.Footer, scale),
+            BodyLayout = ScaleBody(layout.BodyLayout, scale)
+        };
+    }
+
+    private static DesignV2LayoutConstants ScaleConstants(DesignV2LayoutConstants constants, float scale)
+    {
+        return constants with
+        {
+            Padding = ScaleInteger(constants.Padding, scale),
+            HeaderHeight = ScaleInteger(constants.HeaderHeight, scale),
+            FooterHeight = ScaleInteger(constants.FooterHeight, scale),
+            BodyGap = ScaleInteger(constants.BodyGap, scale),
+            RowHeight = ScaleInteger(constants.RowHeight, scale),
+            RowGap = ScaleInteger(constants.RowGap, scale),
+            ColumnGap = ScaleInteger(constants.ColumnGap, scale),
+            MinimumColumnWidth = ScaleInteger(constants.MinimumColumnWidth, scale),
+            MetricLabelWidth = ScaleInteger(constants.MetricLabelWidth, scale)
+        };
+    }
+
+    private static DesignV2LayoutBody? ScaleBody(DesignV2LayoutBody? body, float scale)
+    {
+        return body is null
+            ? null
+            : body with
+            {
+                Bounds = ScaleRect(body.Bounds, scale),
+                ConfiguredWidth = ScaleValue(body.ConfiguredWidth, scale),
+                AvailableWidth = ScaleValue(body.AvailableWidth, scale),
+                GridHeight = ScaleValue(body.GridHeight, scale),
+                RowsBounds = ScaleRect(body.RowsBounds, scale),
+                Columns = body.Columns.Select(column => ScaleColumn(column, scale)).ToArray(),
+                Rows = body.Rows.Select(row => ScaleRow(row, scale)).ToArray(),
+                MetricRows = body.MetricRows.Select(row => ScaleMetricRow(row, scale)).ToArray(),
+                MetricGrids = body.MetricGrids.Select(grid => ScaleMetricGrid(grid, scale)).ToArray(),
+                FlagCells = body.FlagCells.Select(cell => ScaleFlagCell(cell, scale)).ToArray(),
+                Graph = ScaleGraph(body.Graph, scale),
+                Inputs = ScaleInputs(body.Inputs, scale),
+                Vector = ScaleVector(body.Vector, scale)
+            };
+    }
+
+    private static DesignV2LayoutColumn ScaleColumn(DesignV2LayoutColumn column, float scale)
+    {
+        return column with
+        {
+            RenderedWidth = ScaleValue(column.RenderedWidth, scale),
+            Bounds = ScaleRect(column.Bounds, scale)
+        };
+    }
+
+    private static DesignV2LayoutRow ScaleRow(DesignV2LayoutRow row, float scale)
+    {
+        return row with
+        {
+            Bounds = ScaleRect(row.Bounds, scale),
+            Cells = row.Cells.Select(cell => ScaleCell(cell, scale)).ToArray()
+        };
+    }
+
+    private static DesignV2LayoutCell ScaleCell(DesignV2LayoutCell cell, float scale)
+    {
+        return cell with { Bounds = ScaleRect(cell.Bounds, scale) };
+    }
+
+    private static DesignV2LayoutMetricRow ScaleMetricRow(DesignV2LayoutMetricRow row, float scale)
+    {
+        return row with
+        {
+            Bounds = ScaleRect(row.Bounds, scale),
+            LabelBounds = ScaleRect(row.LabelBounds, scale),
+            ValueBounds = ScaleRect(row.ValueBounds, scale),
+            SectionTitleBounds = ScaleRect(row.SectionTitleBounds, scale),
+            Segments = row.Segments.Select(segment => ScaleMetricSegment(segment, scale)).ToArray()
+        };
+    }
+
+    private static DesignV2LayoutMetricSegment ScaleMetricSegment(DesignV2LayoutMetricSegment segment, float scale)
+    {
+        return segment with
+        {
+            Bounds = ScaleRect(segment.Bounds, scale),
+            LabelBounds = ScaleRect(segment.LabelBounds, scale),
+            ValueBounds = ScaleRect(segment.ValueBounds, scale)
+        };
+    }
+
+    private static DesignV2LayoutMetricGrid ScaleMetricGrid(DesignV2LayoutMetricGrid grid, float scale)
+    {
+        return grid with
+        {
+            Bounds = ScaleRect(grid.Bounds, scale),
+            Headers = grid.Headers.Select(header => ScaleCell(header, scale)).ToArray(),
+            Rows = grid.Rows.Select(row => ScaleRow(row, scale)).ToArray()
+        };
+    }
+
+    private static DesignV2LayoutGraph? ScaleGraph(DesignV2LayoutGraph? graph, float scale)
+    {
+        return graph is null
+            ? null
+            : graph with
+            {
+                Frame = ScaleRect(graph.Frame, scale),
+                Plot = ScaleRect(graph.Plot, scale),
+                Axis = ScaleRect(graph.Axis, scale),
+                LabelLane = ScaleRect(graph.LabelLane, scale),
+                MetricsTable = ScaleRect(graph.MetricsTable, scale),
+                Series = graph.Series.Select(series => ScaleGraphSeries(series, scale)).ToArray(),
+                WeatherBands = graph.WeatherBands.Select(band => ScaleGraphBand(band, scale)).ToArray(),
+                Markers = graph.Markers.Select(marker => ScaleGraphMarker(marker, scale)).ToArray(),
+                GridLines = graph.GridLines.Select(line => ScaleLine(line, scale)).ToArray(),
+                MetricRows = graph.MetricRows.Select(row => ScaleRow(row, scale)).ToArray()
+            };
+    }
+
+    private static DesignV2LayoutGraphSeries ScaleGraphSeries(DesignV2LayoutGraphSeries series, float scale)
+    {
+        return series with
+        {
+            StrokeWidth = ScaleValue(series.StrokeWidth, scale),
+            Points = series.Points.Select(point => point with { Point = ScalePoint(point.Point, scale) }).ToArray(),
+            LatestPoint = ScalePoint(series.LatestPoint, scale)
+        };
+    }
+
+    private static DesignV2LayoutGraphBand ScaleGraphBand(DesignV2LayoutGraphBand band, float scale)
+    {
+        return band with { Bounds = ScaleRect(band.Bounds, scale) };
+    }
+
+    private static DesignV2LayoutGraphMarker ScaleGraphMarker(DesignV2LayoutGraphMarker marker, float scale)
+    {
+        return marker with
+        {
+            Start = ScalePoint(marker.Start, scale),
+            End = ScalePoint(marker.End, scale)
+        };
+    }
+
+    private static DesignV2LayoutInputs? ScaleInputs(DesignV2LayoutInputs? inputs, float scale)
+    {
+        return inputs is null
+            ? null
+            : inputs with
+            {
+                Graph = ScaleRect(inputs.Graph, scale),
+                Rail = ScaleRect(inputs.Rail, scale),
+                RailWidth = ScaleValue(inputs.RailWidth, scale),
+                Items = inputs.Items.Select(item => item with { Bounds = ScaleRect(item.Bounds, scale) }).ToArray(),
+                GridLines = inputs.GridLines.Select(line => ScaleLine(line, scale)).ToArray(),
+                TraceSeries = inputs.TraceSeries.Select(series => series with
+                {
+                    StrokeWidth = ScaleValue(series.StrokeWidth, scale),
+                    Points = series.Points.Select(point => ScalePoint(point, scale)).ToArray(),
+                    Curves = series.Curves.Select(curve => curve with
+                    {
+                        Start = ScalePoint(curve.Start, scale),
+                        Control1 = ScalePoint(curve.Control1, scale),
+                        Control2 = ScalePoint(curve.Control2, scale),
+                        End = ScalePoint(curve.End, scale)
+                    }).ToArray()
+                }).ToArray()
+            };
+    }
+
+    private static DesignV2LayoutLine ScaleLine(DesignV2LayoutLine line, float scale)
+    {
+        return line with
+        {
+            Start = ScalePoint(line.Start, scale),
+            End = ScalePoint(line.End, scale),
+            StrokeWidth = ScaleNullableValue(line.StrokeWidth, scale)
+        };
+    }
+
+    private static DesignV2LayoutVector? ScaleVector(DesignV2LayoutVector? vector, float scale)
+    {
+        return vector is null
+            ? null
+            : vector with
+            {
+                Target = ScaleRect(vector.Target, scale),
+                ScaleX = ScaleValue(vector.ScaleX, scale),
+                ScaleY = ScaleValue(vector.ScaleY, scale),
+                Items = vector.Items.Select(item => item with
+                {
+                    Bounds = ScaleRect(item.Bounds, scale),
+                    StrokeWidth = ScaleNullableValue(item.StrokeWidth, scale),
+                    AlertRingBounds = ScaleRect(item.AlertRingBounds, scale),
+                    AlertRingStrokeWidth = ScaleNullableValue(item.AlertRingStrokeWidth, scale)
+                }).ToArray(),
+                Primitives = vector.Primitives.Select(primitive => primitive with
+                {
+                    Bounds = ScaleRect(primitive.Bounds, scale),
+                    Points = primitive.Points.Select(point => ScalePoint(point, scale)).ToArray(),
+                    StrokeWidth = ScaleValue(primitive.StrokeWidth, scale)
+                }).ToArray(),
+                Labels = vector.Labels.Select(label => label with
+                {
+                    Bounds = ScaleRect(label.Bounds, scale),
+                    FontSize = ScaleValue(label.FontSize, scale)
+                }).ToArray()
+            };
+    }
+
+    private static DesignV2LayoutFlagCell ScaleFlagCell(DesignV2LayoutFlagCell cell, float scale)
+    {
+        return cell with
+        {
+            Bounds = ScaleRect(cell.Bounds, scale),
+            ClothBounds = ScaleRect(cell.ClothBounds, scale),
+            LabelBounds = ScaleRect(cell.LabelBounds, scale)
+        };
+    }
+
+    private static DesignV2LayoutRect ScaleRect(DesignV2LayoutRect rect, float scale)
+    {
+        return new DesignV2LayoutRect(
+            ScaleValue(rect.X, scale),
+            ScaleValue(rect.Y, scale),
+            ScaleValue(rect.Width, scale),
+            ScaleValue(rect.Height, scale));
+    }
+
+    private static DesignV2LayoutRect? ScaleRect(DesignV2LayoutRect? rect, float scale)
+    {
+        return rect is { } value ? ScaleRect(value, scale) : null;
+    }
+
+    private static DesignV2LayoutPoint ScalePoint(DesignV2LayoutPoint point, float scale)
+    {
+        return new DesignV2LayoutPoint(
+            ScaleValue(point.X, scale),
+            ScaleValue(point.Y, scale));
+    }
+
+    private static DesignV2LayoutPoint? ScalePoint(DesignV2LayoutPoint? point, float scale)
+    {
+        return point is { } value ? ScalePoint(value, scale) : null;
+    }
+
+    private static int ScaleInteger(int value, float scale)
+    {
+        return Math.Max(1, (int)Math.Round(value * scale));
+    }
+
+    private static float ScaleValue(float value, float scale)
+    {
+        return (float)Math.Round(value * scale, 3);
+    }
+
+    private static double ScaleValue(double value, float scale)
+    {
+        return Math.Round(value * scale, 3);
+    }
+
+    private static float? ScaleNullableValue(float? value, float scale)
+    {
+        return value is { } finite ? ScaleValue(finite, scale) : null;
+    }
+
+    private static DesignV2LayoutDiagnostics BuildLayoutDiagnostics(Rectangle bounds, DesignV2OverlayModel model)
     {
         var client = LayoutRect(bounds);
         var constants = new DesignV2LayoutConstants(
@@ -8180,9 +8543,19 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             (int)Math.Round(geometry.CloseButtonSize));
     }
 
+    private static RectangleF StreamChatCloseButtonBounds(SizeF clientSize)
+    {
+        var geometry = OverlayGeometryContracts.StreamChat;
+        return new RectangleF(
+            Math.Max(4f, clientSize.Width - geometry.CloseButtonSize - geometry.CloseButtonRight),
+            geometry.CloseButtonTop,
+            geometry.CloseButtonSize,
+            geometry.CloseButtonSize);
+    }
+
     private bool IsStreamChatCloseButtonHit(Point clientPoint)
     {
-        return StreamChatCloseButtonBounds(ClientSize).Contains(clientPoint);
+        return StreamChatCloseButtonBounds(RenderLayoutSize()).Contains(RenderLayoutPoint(clientPoint));
     }
 
     private static void DrawStreamChatCloseButton(Graphics graphics, RectangleF bounds)
@@ -8194,6 +8567,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     }
 
     internal static bool IsStreamChatDragHit(Point clientPoint, Size clientSize)
+    {
+        return IsStreamChatDragHit(clientPoint, new SizeF(clientSize.Width, clientSize.Height));
+    }
+
+    private static bool IsStreamChatDragHit(PointF clientPoint, SizeF clientSize)
     {
         var geometry = OverlayGeometryContracts.StreamChat;
         var closeButtonLeft = Math.Max(4f, clientSize.Width - geometry.CloseButtonSize - geometry.CloseButtonRight);
@@ -8706,6 +9084,10 @@ internal sealed record DesignV2LayoutDiagnostics(
     DesignV2LayoutRect Client,
     DesignV2LayoutConstants Constants)
 {
+    public float RenderScale { get; init; } = 1f;
+
+    public DesignV2LayoutRect? UnscaledClient { get; init; }
+
     public DesignV2LayoutRect? Outer { get; init; }
 
     public DesignV2LayoutRect? Header { get; init; }

@@ -6383,6 +6383,8 @@ def validate_min_scale_variant(path: str, values: dict[str, object], overlay_id:
         effective_width, effective_height = MIN_SCALE_EFFECTIVE_BROWSER_SOURCE_SIZES.get((overlay_id, "min-scale"), expected_size)
         validate_min_scale_effective_settings(path, values, f"{overlay_id} min-scale", effective_width, effective_height, failures)
     else:
+        require_equal(path, f"{overlay_id} min-scale manifest scale", values.get("minScale"), 0.6, failures)
+        require_equal(path, f"{overlay_id} min-scale native render transform", values.get("scaleTransform"), 0.6, failures)
         require_size_object(
             path,
             f"{overlay_id} min-scale native configured size",
@@ -6391,6 +6393,8 @@ def validate_min_scale_variant(path: str, values: dict[str, object], overlay_id:
             expected_height,
             failures,
             required=False)
+        validate_min_scale_effective_settings(path, values, f"{overlay_id} min-scale", expected_width, expected_height, failures)
+        validate_native_min_scale_render_evidence(path, values, f"{overlay_id} min-scale", failures)
 
 
 def validate_min_scale_effective_settings(
@@ -6420,6 +6424,62 @@ def validate_min_scale_effective_settings(
         required=True)
     settings = evidence_list(effective, "settings")
     require_effective_setting_value(path, settings, "scalePercent", 60, failures)
+
+
+def validate_native_min_scale_render_evidence(
+    path: str,
+    values: dict[str, object],
+    label: str,
+    failures: list[str],
+) -> None:
+    if not path.startswith("native-overlays/"):
+        return
+
+    layout = typed_dict(values.get("layout"))
+    root = typed_dict(layout.get("root"))
+    unscaled_root = typed_dict(layout.get("unscaledRoot"))
+    render_scale = layout.get("renderScale")
+    require_equal(path, f"{label} layout renderScale", render_scale, 0.6, failures)
+    require_size_object(
+        path,
+        f"{label} rendered layout root",
+        root,
+        int(values.get("width") or 0),
+        int(values.get("height") or 0),
+        failures)
+
+    effective = typed_dict(values.get("effectiveSettings"))
+    rendered = typed_dict(effective.get("rendered"))
+    browser_source = typed_dict(rendered.get("browserSource"))
+    base_width = browser_source.get("baseWidth")
+    base_height = browser_source.get("baseHeight")
+    rendered_width = browser_source.get("width")
+    rendered_height = browser_source.get("height")
+    if not isinstance(base_width, int) or not isinstance(base_height, int):
+        failures.append(f"{path}: {label} missing native unscaled browserSource base size evidence")
+        return
+    if isinstance(rendered_width, int) and round(base_width * 0.6) != rendered_width:
+        failures.append(
+            f"{path}: {label} expected native browserSource width to equal baseWidth * 0.6, "
+            f"got {base_width} -> {rendered_width}"
+        )
+    if isinstance(rendered_height, int) and round(base_height * 0.6) != rendered_height:
+        failures.append(
+            f"{path}: {label} expected native browserSource height to equal baseHeight * 0.6, "
+            f"got {base_height} -> {rendered_height}"
+        )
+    require_size_object(
+        path,
+        f"{label} unscaled layout root",
+        unscaled_root,
+        base_width,
+        base_height,
+        failures)
+    if base_width <= int(values.get("width") or 0) or base_height <= int(values.get("height") or 0):
+        failures.append(
+            f"{path}: {label} native min-scale expected unscaled base larger than rendered screenshot, "
+            f"got base {base_width}x{base_height} and rendered {values.get('width')}x{values.get('height')}"
+        )
 
 
 def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
@@ -9704,6 +9764,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="native standings min-scale loses render transform evidence",
+        path="native-overlays/standings-min-scale.png",
+        base=mutation_native_standings_min_scale_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("layout", "renderScale"), 1),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("standings min-scale layout renderScale",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="session weather metric units switch to imperial",
         path="browser-overlays/session-weather-race.png",
         base=mutation_session_weather_screenshot(),
@@ -11128,6 +11197,17 @@ def mutation_standings_min_scale_screenshot() -> dict[str, object]:
         source="source: preview fixture minimum-scale layout",
         should_render=True,
         row_count=6)
+    return screenshot
+
+
+def mutation_native_standings_min_scale_screenshot() -> dict[str, object]:
+    screenshot = mutation_standings_min_scale_screenshot()
+    screenshot["layout"]["unscaledRoot"] = {"x": 0, "y": 0, "width": 677, "height": 313}
+    screenshot["layout"]["renderScale"] = 0.6
+    screenshot["effectiveSettings"]["sources"]["windowsNative"]["routePath"] = "native://standings"
+    scenario = typed_dict(screenshot.get("scenarioEvidence"))
+    scenario.pop("urlPath", None)
+    scenario["fixture"] = "browser-review/static-overlay-model/min-scale"
     return screenshot
 
 

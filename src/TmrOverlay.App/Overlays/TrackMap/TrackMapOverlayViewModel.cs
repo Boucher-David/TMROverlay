@@ -204,13 +204,17 @@ internal sealed record TrackMapOverlayViewModel(
         int focusCarIdx,
         TrackMapOverlayMarker? existing)
     {
+        var focusTimingRow = FocusTimingRow(models, focusCarIdx);
         if (scoringByCarIdx.TryGetValue(focusCarIdx, out var scoringRow))
         {
-            return Position(scoringRow) ?? existing?.Position;
+            return Position(scoringRow)
+                ?? existing?.Position
+                ?? Position(focusTimingRow)
+                ?? Position(models.Reference);
         }
 
         return existing?.Position
-            ?? Position(models.Timing.FocusRow)
+            ?? Position(focusTimingRow)
             ?? Position(models.Reference);
     }
 
@@ -231,9 +235,17 @@ internal sealed record TrackMapOverlayViewModel(
             return scoringRow.CarClassColorHex;
         }
 
-        return string.IsNullOrWhiteSpace(models.Timing.FocusRow?.CarClassColorHex)
+        var focusTimingRow = FocusTimingRow(models, focusCarIdx);
+        return string.IsNullOrWhiteSpace(focusTimingRow?.CarClassColorHex)
             ? null
-            : models.Timing.FocusRow.CarClassColorHex;
+            : focusTimingRow.CarClassColorHex;
+    }
+
+    private static LiveTimingRow? FocusTimingRow(LiveRaceModels models, int focusCarIdx)
+    {
+        return models.Timing.FocusRow?.CarIdx == focusCarIdx
+            ? models.Timing.FocusRow
+            : null;
     }
 
     private static bool IsPlayerFocus(

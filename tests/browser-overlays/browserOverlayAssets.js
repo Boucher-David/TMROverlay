@@ -3250,7 +3250,7 @@ function trackMapRenderMarker(marker, trackMap) {
     ? marker.isFocus
       ? Math.max(5.7, 5.1 + label.length * 2.9)
       : Math.max(5.7, 3.9 + Math.max(0, label.length - 2) * 1.9)
-    : marker.isFocus ? 5.7 : Math.max(1.2, 3.6 - 2);
+    : marker.isFocus ? 5.7 : 4.8;
   const alertPulseProgress = marker.alertKind === 'off-track'
     ? Math.max(0, Math.min(1, finiteNumberOr(marker.alertPulseProgress, 0.25)))
     : 0;

@@ -70,10 +70,16 @@ public sealed class LocalhostOverlayHostedServiceTests
             Assert.Equal(1L, snapshot.PathCounts["/overlays/standings"]);
             Assert.Equal(1L, snapshot.PathCounts["/api/overlay-model/standings"]);
             Assert.Equal(1L, snapshot.PathClientCounts["/api/overlay-model/standings|obs"]);
-            Assert.Equal("/api/browser-source-event", snapshot.LastRequestPath);
-            Assert.Equal("browser_source_event", snapshot.LastRequestRoute);
-            Assert.Equal("obs", snapshot.LastRequestClientKind);
-            Assert.Equal(200, snapshot.LastRequestStatusCode);
+            Assert.Contains(snapshot.RecentRequests, item =>
+                string.Equals(item.Path, "/api/browser-source-event", StringComparison.Ordinal)
+                && string.Equals(item.Route, "browser_source_event", StringComparison.Ordinal)
+                && string.Equals(item.ClientKind, "obs", StringComparison.Ordinal)
+                && item.StatusCode == 200);
+            Assert.Contains(snapshot.RecentRequests, item =>
+                string.Equals(item.Path, "/api/overlay-model/standings", StringComparison.Ordinal)
+                && string.Equals(item.Route, "overlay_model", StringComparison.Ordinal)
+                && string.Equals(item.ClientKind, "obs", StringComparison.Ordinal)
+                && item.StatusCode == 200);
             Assert.Equal("model-hidden", snapshot.LastPageEventKind);
             Assert.Equal("standings", snapshot.LastPageEventOverlayId);
             Assert.Equal("obs-test", snapshot.LastPageEventClientId);

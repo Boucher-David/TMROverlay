@@ -13,47 +13,41 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.0.4 - Unit Coverage Reporting And Targeted Test Hardening
+No active release branch is documented here right now. Add the next branch target before starting another milestone or patch release.
 
-Current branch name:
+## Merged Mainline Milestones
+
+### v1.1.0 - Overlay Forensics Replay Tooling
+
+Commit: release tag `v1.1.0`
+
+Squash title:
 
 ```text
-v1.0.4
+[v1.1.0] Add overlay forensics replay tooling
 ```
 
-Release/tag decision:
+Summary:
 
-- Treat this as the V1.0.4 coverage and test-hardening follow-up after the V1.0.3 testing framework redux.
-- Do not create the `v1.0.4` release tag until the branch is merged or explicitly designated as the release point.
-- `Directory.Build.props` is aligned to `1.0.4` so branch-built MSI and coverage artifacts are distinguishable from the V1.0.3 baseline.
-- No durable raw-capture schema or user-data schema change is intended for this branch. Settings/data-contract compatibility remains covered by existing branch tests and CI gates; if the final release pass discovers a durable schema change, add the matching compatibility tests, docs, versioned snapshots, and migration/reader updates before tagging.
+- Added the first V1.1 overlay forensics toolchain for supplied raw capture bundles, including raw-capture indexing, overlay issue-event planning, model replay hooks, optional browser-review rendering, and app-owned forensics package output under `%LOCALAPPDATA%\TmrOverlay\forensics\<capture-id>`.
+- Added the `TmrOverlay.OverlayModelReplay` tool and shared raw capture replay reader so production model snapshots can be generated from explicit captures instead of relying only on post-session diagnostics.
+- Made enhanced capture finalization create a starter overlay forensics package outside the immutable raw capture folder, preserving future replay enrichment while keeping diagnostics bundles compact.
+- Documented the V1.1 data-tool proposal, the Dallara full-race capture sweep, endurance/team-racing capture inventory, current evidence gaps, and the next requirements for bare-capture semantic decoding and standalone IBT import.
+- Fixed V1.0.3 follow-up issues found during the capture review, including Garage Cover OBS/privacy behavior, fallback brand asset defaults, Settings-visible overlay input transparency, support-page evidence copy, and IBT session-identity warning coverage.
+- Kept high-fidelity capture evidence opt-in through Enhanced iRacing Telemetry Capture; ordinary diagnostics remain compact unless the user intentionally enabled raw capture.
+- Aligned shared build metadata to `1.1.0` for V1.1.0 release artifacts without changing the raw-capture format version or durable user-data snapshot baseline.
 
-Planned scope:
+### v1.0.4 - Unit Coverage Reporting And Targeted Test Hardening
 
-- Add reporting-only coverage collection for .NET and JavaScript unit tests in CI, with readable artifacts and summaries but no percentage threshold yet.
-- Add focused C# unit/functional tests for high-risk V1.0.3 logic around settings layout contracts, overlay content sizing, browser/localhost model semantics, diagnostics bundles, settings migration/defaults, history maintenance, and IBT candidate selection.
-- Add JavaScript unit coverage for browser overlay runtime modules, shell runtime behavior, and evidence-contract helpers without treating Playwright layout tests as the line-coverage metric.
-- Add Python unit coverage for screenshot-manifest comparator behavior and keep manifest/screenshot validators strict.
-- Keep screenshot, Playwright, Windows native, browser review, and localhost parity gates intact as product evidence rather than replacing them with coverage percentages.
-- Preserve the report-first CI/build-failure rule and helper-thread cleanup rule in the repo agent notes.
-- Keep broader capture replay, overlay product behavior, and threshold policy decisions out of this patch branch unless the coverage baseline exposes a concrete release blocker.
+Commit: `380cb6c`
 
-Branch-complete checklist:
-
-1. Re-read the final branch diff before writing the squash title/body; do not reuse stale V1.0.3 release text for this patch branch.
-2. Confirm `Directory.Build.props` stays aligned to `1.0.4` before tagging.
-3. Keep `AGENTS.md`, `docs/model-v2-future-branches.md`, `docs/v1.0.4.md`, coverage scripts, CI workflow text, and validation tooling aligned with the branch behavior.
-4. Run local JS/Python/static validation where available, plus C# compile-shape checks for changed `.cs` files.
-5. Confirm Windows CI runs the .NET build/tests, .NET coverage lane, data-contract tests, Windows screenshots, browser/localhost checks, JS coverage, and static validation before tagging.
-6. Review the uploaded `dotnet-coverage` and `javascript-coverage` artifacts after CI before setting any future coverage thresholds.
-
-Suggested squash title:
+Squash title:
 
 ```text
 [v1.0.4] Add unit coverage reporting and targeted test hardening
 ```
 
-Suggested squash body:
+Summary:
 
 - Added reporting-only .NET coverage collection in Windows CI with `dotnet-coverage`, ReportGenerator output, Cobertura validation for the app/core assemblies, and uploaded coverage artifacts.
 - Added Vitest V8 coverage for browser overlay unit tests with text, HTML, lcov, and JSON summary outputs plus a GitHub job summary.
@@ -64,8 +58,6 @@ Suggested squash body:
 - Preserved existing screenshot, Playwright, native Windows, browser review, localhost, manifest parity, and static validation gates as product evidence alongside the new coverage lanes.
 - Documented the V1.0.4 testing strategy, coverage policy, CI failure-handling rule, and helper-thread cleanup rule in branch docs and repo agent notes.
 - Aligned shared build metadata to `1.0.4` for V1.0.4 branch artifacts without introducing a durable raw-capture or user-data schema change.
-
-## Merged Mainline Milestones
 
 ### v1.0.3 - V1 Fixes And Testing Framework Redux
 

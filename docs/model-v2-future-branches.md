@@ -44,12 +44,13 @@ Current evidence/tooling shape:
 - 2026-05-17: v0.20.1 is tagged as the Windows/native, browser review, and localhost parity baseline. The `v1.0.0-fuel-and-release-handoff` branch became the private-team V1 candidate: keep the parity baseline stable, narrow Fuel Calculator behavior to trustworthy V1 evidence, add teammate release handoff docs, and avoid durable schema changes unless a Windows-tested compatibility issue requires them.
 - 2026-05-17: Version hygiene should stay explicit. `VERSION.md` owns current branch target and branch-complete release text, `Directory.Build.props` version metadata moves only when a branch is deliberately promoted as the next product build, and annotated tags should be created only after the release commit is on `main` or explicitly designated as the release point.
 - 2026-05-19: `v1.0.2-feedback` hardened teammate-reported overlay semantics, shared sizing/chrome, Gap To Leader, localhost hidden-product behavior, diagnostics, and validation gates. Capture-only follow-ups and real-run validation questions moved into the V1.0.3 planning notes.
-- 2026-05-22: `v1.0.3` is tagged as the feedback-hardening, geometry parity, and testing framework redux baseline. The active branch is now `v1.0.4`, a reporting-only coverage and targeted test-hardening follow-up. Keep capture-replay work, overlay product changes, and coverage threshold policy out of this patch branch unless the baseline exposes a concrete release blocker.
+- 2026-05-22: `v1.0.3` is tagged as the feedback-hardening, geometry parity, and testing framework redux baseline. `v1.0.4` is tagged as the reporting-only coverage and targeted test-hardening follow-up.
+- 2026-05-23: `v1.1.0` is the overlay forensics replay tooling milestone. It adds explicit-capture replay/indexing tools, app-owned forensics packages under `%LOCALAPPDATA%\TmrOverlay\forensics\<capture-id>`, and capture-sweep notes from the Dallara race evidence. Next work should deepen bare-capture semantic decoding, standalone IBT import, and model/pixel evidence generation rather than treating post-session diagnostics as enough live-render proof.
 - 2026-05-21: Local v1.1 replay-candidate review ranked three real-stream seeds: the GR86 Nordschleife Industriefahrten spotter-only race for race-start and spectator/local-role contracts, the April VLN four-hour endurance capture for local driving/fuel/input and multiclass long-run behavior, and the May 2 24h capture `capture-20260502-143722-571` for mid-session rejoin/no-history race behavior. The GR86 capture did not expose a new named `IsSpotting` SDK variable; spotting is proven through session-info identity, where `DriverInfo.DriverCarIdx` points at a driver row with `IsSpectator = 1`, while raw telemetry still reports `PlayerCarIdx` for that spectator row and `CamCarIdx` usually follows another race car. Do not use `IsReplayPlaying` alone to suppress live race overlays in spotting/watch contexts.
 
-## Current v1.0.4 Branch Focus
+## Current Post-V1.1 Focus
 
-The current branch is `v1.0.4`, a coverage and targeted test-hardening follow-up after the V1.0.3 testing framework redux. Treat the branch as a patch release: keep product behavior stable, publish useful .NET and JavaScript coverage baselines, add focused tests for high-risk V1.0.3 support code, and defer capture-only or larger product decisions into v1.1 replay planning.
+The current mainline has the V1.1 overlay forensics foundation. Treat the next branch as a focused follow-up rather than another broad product pass: make real captures easier to compare against overlay behavior, preserve the opt-in capture boundary, and keep native Windows, browser review, and localhost/OBS evidence explicit.
 
 Current branch focus:
 
@@ -59,10 +60,10 @@ Current branch focus:
 - Keep the v0.19.0 data-contract snapshot as the previous durable-release baseline unless a durable schema change is deliberately introduced. Any schema change needs the workflow in `docs/data-contracts.md`.
 - If overlay/settings/renderer/browser/localhost behavior changes, update screenshot generators and validation profiles in the same pass so native Windows, browser review, and localhost coverage are represented.
 - Keep the deprecated mac harness out of the V1 parity/release gate.
-- Keep V1.0.4 local in scope: CI coverage collection, JS coverage reporting, targeted C#/JavaScript/Python unit coverage, branch-complete version metadata, and validation gates around the existing product surface.
+- Keep V1.1 tool follow-ups explicit in scope: bare raw-capture semantic decoding, standalone IBT import/replay, sampled production model evidence, and pixel/screenshot evidence only when enhanced capture has been intentionally enabled.
 - Keep coverage thresholds disabled until the first baseline artifacts have been reviewed and noisy/generated paths are excluded deliberately.
-- Do not treat capture-only questions as unresolved V1.0.4 implementation work. Flags yellow-family accuracy, Car Radar side flips, live replay/capture validation, setup-change detection, spectator/local-role replay, and long-run performance optimization need fresh captures, minimized replay fixtures, or real validation and are tracked for v1.1-style replay work.
-- Keep `docs/v1.0.4.md`, `VERSION.md`, README/current-state docs, repo skills, coverage scripts, and CI workflow notes aligned before tagging.
+- Do not treat capture-only questions as ordinary overlay bugs until the replay evidence can show raw telemetry, production model output, route/OBS behavior, and pixels for the same sampled moment.
+- Keep `v1.1.md`, `docs/v1.1-data-tool-proposal.md`, `VERSION.md`, README/current-state docs, repo skills, replay tooling, and validation notes aligned before the next tag.
 
 Ongoing telemetry/model-v2 guardrails from v0.19.0 through v0.20.1 still apply:
 

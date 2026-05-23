@@ -32,6 +32,7 @@ Start here when continuing work in this repo.
 - `docs/overlay-logic.md`
 - `docs/capture-format.md`
 - `docs/data-contracts.md`
+- `tools/validation/overlay-scenario-contract.json`
 - `telemetry.md`
 - `README.md`
 
@@ -52,6 +53,7 @@ Start here when continuing work in this repo.
 - Waiting/unavailable/error preview states must use deterministic isolated fixtures. Do not let local user history, cached telemetry, or machine-specific paths make an empty state look populated unless the scenario explicitly tests history fallback or support-path display.
 - Waiting, unavailable, and all-content-disabled overlay states must be evaluated for no-render/hidden behavior as well as visible placeholder copy. Empty shells with status text are product behavior, not harmless diagnostics, unless a surface-specific fallback is documented and validated across Windows native, browser review, and localhost.
 - Screenshot coverage for each overlay should include both a populated synthetic/live example that shows what the overlay can look like and a no-data/unavailable example that proves the expected hidden, no-render, or placeholder behavior. Treat no-data screenshots as first-class product evidence, not incidental edge cases.
+- `tools/validation/overlay-scenario-contract.json` is the parseable overlay scenario checklist. When overlay behavior, renderer availability, sizing/scale, content-gating, chrome/no-data policy, replay fixtures, localhost/OBS routing, native support, or evidence contracts change, update the matching scenario entries in the same pass. Scenarios marked `covered` must cite durable evidence such as screenshot artifacts, fixtures, test files, or validator rules; scenarios marked `partial` or `missing` must keep explicit gaps or intended assertions.
 - For wider app changes, carry validation discipline into tests and fixtures: assert both data that should appear and data that must stay hidden, cover failure/degraded paths, and keep performance/diagnostics/update flows fixture-driven where possible.
 - During exploratory or iterative implementation, do not run the full docs/tests/validation sweep after every prompt. Use targeted checks only when they directly de-risk the current edit, and defer broader docs, fixtures, screenshots, and validation until the user-approved stopping point or branch-complete pass.
 - When using helper or subagent threads, close each helper as soon as its final result has been consumed so later work does not run into thread limits.

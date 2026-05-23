@@ -1,0 +1,768 @@
+{
+  "contract": "overlay-scenario-contract/v1",
+  "tracker": "v1.1.md",
+  "updated": "2026-05-23",
+  "purpose": "Parseable matrix for overlay-specific screenshot, replay, and cross-surface parity scenarios. This is the planning contract for what each overlay must prove across browser review, localhost/OBS, Windows native, compact replay fixtures, and optional full-capture replay.",
+  "statusValues": {
+    "covered": "The scenario has deterministic validation in the named tier and surfaces.",
+    "partial": "Some validation exists, but it is missing a surface, a semantic assertion, replay evidence, or a known edge case.",
+    "missing": "The scenario is known needed and has no durable validation yet.",
+    "not_applicable": "The scenario does not apply to this overlay or surface."
+  },
+  "surfaces": {
+    "browserReview": "Generated browser-review route and screenshot manifest.",
+    "localhostObs": "Production localhost/OBS route and screenshot manifest.",
+    "windowsNative": "Windows native screenshot artifact and manifest where the overlay exists natively.",
+    "settingsUi": "Settings app page/component screenshot and uiEvidence manifest.",
+    "compactReplay": "Small committed capture-derived frame/model summary replayed through production logic.",
+    "fullCaptureReplay": "Optional/nightly explicit raw capture replay, not required in fast PR CI."
+  },
+  "tiers": [
+    {
+      "id": "tier1-ci-contract-fixtures",
+      "name": "Tier 1 - CI Contract Fixtures",
+      "cadence": "every PR",
+      "artifactPolicy": "commit small deterministic fixtures and generated manifests; do not commit full raw capture folders",
+      "requiredScenarioFamilies": [
+        "populated",
+        "no-data-or-unavailable",
+        "chrome-on-no-data-where-applicable",
+        "chrome-off-where-applicable",
+        "session-modes",
+        "content-toggles",
+        "minimum-scale",
+        "localhost-route-and-aliases"
+      ],
+      "requiredAssertions": [
+        "visible-or-hidden state",
+        "row, column, section, marker, flag, or message counts",
+        "required visible text and forbidden stale/misleading text",
+        "data/source/provenance labels",
+        "width, height, crop, body, and content bounds",
+        "settings hash parity where a surface can drift"
+      ]
+    },
+    {
+      "id": "tier2-capture-derived-replay",
+      "name": "Tier 2 - Capture-Derived Replay Fixtures",
+      "cadence": "PR for compact fixtures after a bug is understood; optional local for broader windows",
+      "artifactPolicy": "commit tiny capture-derived frame/model summaries; keep full capture-* directories out of required CI",
+      "requiredScenarioFamilies": [
+        "real-data-window",
+        "production-model-replay",
+        "browser-localhost-render-replay",
+        "semantic-manifest"
+      ],
+      "requiredAssertions": [
+        "raw telemetry fields explain the selected frame/window",
+        "production model output matches the intended product behavior",
+        "rendered screenshot manifest matches the model",
+        "known issue is either reproduced or explicitly classified as not present in the selected window"
+      ]
+    },
+    {
+      "id": "tier3-release-native-parity",
+      "name": "Tier 3 - Release / Native Parity Gate",
+      "cadence": "release, pre-release, or heavier CI gate",
+      "artifactPolicy": "generate Windows native screenshots/manifests and compare them with browser review and localhost artifacts",
+      "requiredScenarioFamilies": [
+        "cross-surface-manifest-parity",
+        "windows-native-pixel-evidence",
+        "shared-geometry-contract-drift",
+        "release-blocking-compact-replay"
+      ],
+      "requiredAssertions": [
+        "browser review, localhost/OBS, and Windows native agree on semantic state for the same data/settings",
+        "geometry and image size match exactly or within documented overlay-specific tolerance",
+        "native unsupported surfaces are explicitly declared",
+        "full raw-capture replay remains optional/nightly unless promoted to a compact fixture"
+      ]
+    }
+  ],
+  "globalRequirements": [
+    {
+      "id": "same-data-and-settings",
+      "description": "Parity scenarios must identify the exact fixture, capture-derived frame/model summary, preview mode, enabled content, chrome state, scale, opacity, and route alias used by each surface."
+    },
+    {
+      "id": "semantic-before-pixels",
+      "description": "Screenshots should validate pixels after model/evidence contracts prove that the model is meaningful. Row identity, source labels, unavailable policy, and forbidden stale content are first-class assertions."
+    },
+    {
+      "id": "chrome-on-no-data-policy",
+      "description": "Every overlay must explicitly declare whether enabled header/footer chrome can render without body data. Stable chrome-only waiting states and true no-render states must both be validated where applicable."
+    },
+    {
+      "id": "minimum-scale-means-scale",
+      "description": "At 60% scale, product content should scale visually. It must not silently hide columns, rows, markers, graph content, or chrome unless a separate content setting disables them."
+    },
+    {
+      "id": "obs-readiness-classification",
+      "description": "Telemetry-rich captures must classify each expected OBS overlay as not-requested, page-loaded-no-model, model-polled-hidden, model-rendered, or browser-source-error."
+    }
+  ],
+  "overlays": [
+    {
+      "id": "standings",
+      "bodyKind": "table",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "missing",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "standings-populated-session-modes",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/standings/default.png", "browser-overlays/standings/practice.png", "browser-overlays/standings/qualifying.png", "browser-overlays/standings/race.png"],
+          "assertions": ["table body renders", "column keys and row identities are present", "class headers and reference row semantics are compared"]
+        },
+        {
+          "id": "standings-content-variants",
+          "family": "content-toggles",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "partial",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/standings/chrome-off.png", "browser-overlays/standings/starting-grid.png", "browser-overlays/standings/no-content.png"],
+          "gaps": ["explicit telemetry no-data with chrome-on is missing", "minimum-scale table-column preservation is missing"]
+        },
+        {
+          "id": "standings-practice-no-results-stability",
+          "family": "chrome-on-no-data-where-applicable",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "captureTargets": ["v1.1.0 practice capture with scoring.framesWithData=0"],
+          "assertions": ["no render/hidden flashing before accepted scoring source", "waiting or hidden policy is stable", "race GAP/INT/leader semantics do not leak into practice"]
+        },
+        {
+          "id": "standings-starting-grid-real-data",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["raw starting-grid rows feed production model", "rendered grid rows match normalized model row identities", "semantic manifest explains pending-grid rows"]
+        },
+        {
+          "id": "standings-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["scalePercent=60 preserves enabled columns", "rightmost enabled cell fits", "table geometry scales instead of dropping columns"]
+        },
+        {
+          "id": "standings-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "assertions": ["raw scoring exists but OBS not-requested is reported as readiness failure", "source URL and client-kind counts are preserved"]
+        }
+      ]
+    },
+    {
+      "id": "relative",
+      "bodyKind": "table",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "missing",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "relative-populated-session-modes",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/relative/default.png", "browser-overlays/relative/practice.png", "browser-overlays/relative/qualifying.png", "browser-overlays/relative/race.png"],
+          "assertions": ["reference row remains centered", "row identities and lap relationship classes are compared"]
+        },
+        {
+          "id": "relative-content-variants",
+          "family": "content-toggles",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "partial",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/relative/chrome-off.png", "browser-overlays/relative/rightmost-evidence.png", "browser-overlays/relative/no-content.png"],
+          "gaps": ["explicit telemetry no-data state is missing", "minimum-scale column preservation is missing"]
+        },
+        {
+          "id": "relative-practice-timing-real-data",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "captureTargets": ["v1.1.0 practice capture with nearby cars, no official lap delta, and populated CarIdxEstTime"],
+          "assertions": ["practice timing uses valid SDK timing evidence when iRacing shows seconds", "meter-only or -- fallback is explained by missing evidence", "race-only session-state gate does not block practice estimated rows"]
+        },
+        {
+          "id": "relative-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["scalePercent=60 preserves configured columns and rows", "rightmost evidence fits", "table geometry scales without responsive column hiding"]
+        }
+      ]
+    },
+    {
+      "id": "fuel-calculator",
+      "bodyKind": "metrics",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "missing",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "fuel-populated-and-no-data",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/fuel-calculator/default.png", "browser-overlays/fuel-calculator/no-data.png", "browser-overlays/fuel-calculator/chrome-off.png"],
+          "assertions": ["metric sections render", "no-data is hidden/no-render", "chrome-off removes header/footer chrome"]
+        },
+        {
+          "id": "fuel-content-variants",
+          "family": "content-toggles",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/fuel-calculator/plan-off.png", "browser-overlays/fuel-calculator/fuel-off.png", "browser-overlays/fuel-calculator/stint-targets-off.png", "browser-overlays/fuel-calculator/race-information-off.png"],
+          "assertions": ["disabled sections are absent", "visible row and section counts match enabled settings"]
+        },
+        {
+          "id": "fuel-compact-rendered-height",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "captureTargets": ["v1.1.0 race with two visible rows and larger persisted/default surface"],
+          "assertions": ["rendered section/row count drives recommended height unless user or OBS size is locked", "unusedHeightRatio is reported", "size reason is rendered-content, settings-content, custom-size, or persisted-window"]
+        },
+        {
+          "id": "fuel-measured-burn-and-refuel",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay"],
+          "assertions": ["current-session measured burn becomes available when completed green laps exist", "pit-window fuel increase is detected when net fuel rises"]
+        },
+        {
+          "id": "fuel-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["scalePercent=60 keeps visible metric rows readable", "scale does not reduce row budget unless explicitly contracted"]
+        }
+      ]
+    },
+    {
+      "id": "session-weather",
+      "bodyKind": "metrics",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "missing",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "weather-populated-and-no-data",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/session-weather/default.png", "browser-overlays/session-weather/missing.png", "browser-overlays/session-weather/no-data.png", "browser-overlays/session-weather/chrome-off.png"],
+          "assertions": ["session and weather sections render", "missing weather is section-aware", "true no-data is hidden/no-render"]
+        },
+        {
+          "id": "weather-content-variants",
+          "family": "content-toggles",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/session-weather/session-off.png", "browser-overlays/session-weather/weather-off.png"],
+          "assertions": ["disabled sections are absent", "row counts match visible sections"]
+        },
+        {
+          "id": "weather-real-data-semantics",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay"],
+          "assertions": ["air and track temperature, rain/wetness, wind, units, freshness, and weather source are captured and asserted"]
+        },
+        {
+          "id": "weather-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["scalePercent=60 keeps session/weather rows readable without clipping or hidden content"]
+        }
+      ]
+    },
+    {
+      "id": "pit-service",
+      "bodyKind": "metrics",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "missing",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "pit-populated-idle-and-no-data",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/pit-service/default.png", "browser-overlays/pit-service/idle.png", "browser-overlays/pit-service/no-data.png", "browser-overlays/pit-service/chrome-off.png"],
+          "assertions": ["service rows and tire analysis render", "idle state is distinct from true no-data", "true no-data is hidden/no-render"]
+        },
+        {
+          "id": "pit-content-variants",
+          "family": "content-toggles",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/pit-service/session-off.png", "browser-overlays/pit-service/signal-off.png", "browser-overlays/pit-service/service-off.png", "browser-overlays/pit-service/tire-analysis-off.png"],
+          "assertions": ["disabled sections are absent", "tire grid bounds and row counts remain valid"]
+        },
+        {
+          "id": "pit-refuel-real-data",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay"],
+          "assertions": ["PitSvFlags transitions are sampled", "net fuel delta and requested fuel produce refuel-detected state", "local-strategy suppression reason is explicit"]
+        },
+        {
+          "id": "pit-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "assertions": ["raw pit-service signals exist but OBS not-requested is reported as readiness failure"]
+        },
+        {
+          "id": "pit-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["scalePercent=60 keeps service rows and tire grid readable without clipping"]
+        }
+      ]
+    },
+    {
+      "id": "input-state",
+      "bodyKind": "inputs",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "missing",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "inputs-populated-and-unavailable",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/input-state/default.png", "browser-overlays/input-state/mock-data.png", "browser-overlays/input-state/waiting.png", "browser-overlays/input-state/no-data.png"],
+          "assertions": ["graph and rail evidence render", "waiting/no-data states hide or suppress stale content according to contract"]
+        },
+        {
+          "id": "inputs-content-variants",
+          "family": "content-toggles",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/input-state/graph-only.png", "browser-overlays/input-state/rail-only.png", "browser-overlays/input-state/no-content.png"],
+          "assertions": ["graph-only and rail-only bounds fit", "disabled content is absent"]
+        },
+        {
+          "id": "inputs-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "partial",
+          "surfaces": ["browserReview", "localhostObs"],
+          "artifacts": ["browser-overlays/input-state/min-scale.png"],
+          "gaps": ["Windows-native min-scale parity is not fully represented", "uploaded 60% example suggests graph/rail visual quality needs stronger assertions"],
+          "assertions": ["wheel, graph, rails, and labels fit within scaled bounds", "trace remains visible when data exists"]
+        },
+        {
+          "id": "inputs-real-data-transition-samples",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay"],
+          "assertions": ["throttle, brake, steering, gear shift, ABS, and clutch transitions sample raw inputs, model values, trace counts, and rendered bounds"]
+        }
+      ]
+    },
+    {
+      "id": "car-radar",
+      "bodyKind": "car-radar",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "missing",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "radar-side-states",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/car-radar/left.png", "browser-overlays/car-radar/right.png", "browser-overlays/car-radar/both-sides.png", "browser-overlays/car-radar/clear.png"],
+          "assertions": ["left/right/both/clear states render correct side semantics", "radar bounds are compared"]
+        },
+        {
+          "id": "radar-side-signal-placement-real-data",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "captureTargets": ["Race 2 sideSignalWithoutPlacementFrames", "v1.1.0 race sideSignalWithoutPlacementFrames"],
+          "assertions": ["CarLeftRight-only, placement-only, and both-source states are classified", "side warning without placement candidate follows explicit product policy"]
+        },
+        {
+          "id": "radar-multiclass-timing-real-data",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay"],
+          "assertions": ["F2 timing is preferred when F2 and estimated timing disagree", "estimated timing is fallback only", "approach countdown matches faster-class car timing"]
+        },
+        {
+          "id": "radar-settings-preview-lifetime",
+          "family": "settings-preview",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "partial",
+          "surfaces": ["settingsUi", "browserReview", "windowsNative"],
+          "assertions": ["settings-preview visibility requires active Settings context", "selected tab alone cannot force live preview after focus returns to iRacing"]
+        },
+        {
+          "id": "radar-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["scalePercent=60 keeps warning geometry visible and centered within radar bounds"]
+        }
+      ]
+    },
+    {
+      "id": "gap-to-leader",
+      "bodyKind": "graph",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "missing",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "gap-populated-race-and-no-cars",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/gap-to-leader/race.png", "browser-overlays/gap-to-leader/no-cars.png", "browser-overlays/gap-to-leader/chrome-off.png"],
+          "assertions": ["graph and metric rows render", "no-cars is hidden/no-render", "race-only availability is explicit"]
+        },
+        {
+          "id": "gap-content-variants",
+          "family": "content-toggles",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/gap-to-leader/trend-row-off.png", "browser-overlays/gap-to-leader/trend-off.png", "browser-overlays/gap-to-leader/graph-off.png"],
+          "assertions": ["trend row, trend graph, and graph-off variants preserve expected visible content"]
+        },
+        {
+          "id": "gap-pit-and-long-tail-real-data",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["pit entry/exit windows preserve selected series and scale mode", "far trailing selected line cannot flatten useful top-car range without explicit warning"]
+        },
+        {
+          "id": "gap-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["scalePercent=60 keeps graph, trend, and metric rows readable without clipping or hidden content"]
+        },
+        {
+          "id": "gap-performance-budget",
+          "family": "performance",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "fullCaptureReplay"],
+          "assertions": ["live paint/update costs are separated from finalization costs", "over-budget p95 is attributed to live overlay rendering"]
+        }
+      ]
+    },
+    {
+      "id": "track-map",
+      "bodyKind": "track-map",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "missing",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "track-map-populated-and-fallback",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/track-map/default.png", "browser-overlays/track-map/fallback.png", "browser-overlays/track-map/no-markers.png"],
+          "assertions": ["generated-map vs circle-fallback source is explicit", "marker and vector bounds are compared", "no-markers state is not blank without explanation"]
+        },
+        {
+          "id": "track-map-focus-real-data",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "captureTargets": ["v1.1.0 practice focus switch CamCarIdx 0 -> 4 -> 5 -> 4"],
+          "assertions": ["focused GT3 marker becomes isFocus=true with focus radius", "non-player focus uses correct marker tone", "stale LMP2 focus is rejected"]
+        },
+        {
+          "id": "track-map-practice-marker-policy",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay"],
+          "assertions": ["practice/open-session valid lap-distance markers do not depend on HasTakenGrid", "race pre-grid pending-grid policy remains separate"]
+        },
+        {
+          "id": "track-map-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["scalePercent=60 keeps map, markers, and labels visible and proportionally scaled"]
+        }
+      ]
+    },
+    {
+      "id": "flags",
+      "bodyKind": "flags",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "missing",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "flags-populated-session-modes",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/flags/default.png", "browser-overlays/flags/practice.png", "browser-overlays/flags/qualifying.png", "browser-overlays/flags/race.png", "browser-overlays/flags/all-kinds.png"],
+          "assertions": ["active flag icons and labels render", "flag cell bounds and display kinds are compared"]
+        },
+        {
+          "id": "flags-confirmed-meatball-real-data",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "captureTargets": ["capture-20260522-194832-318 confirmed race-long meatball"],
+          "assertions": ["confirmed real meatball remains displayed", "local-driver evidence/source is preserved", "duration alone is not treated as false-positive evidence"]
+        },
+        {
+          "id": "flags-local-vs-global-policy",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay"],
+          "assertions": ["global repair/furled/black bits require local-driver or session-context evidence before local critical display"]
+        },
+        {
+          "id": "flags-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "assertions": ["raw flag data exists but OBS not-requested is reported as readiness failure"]
+        },
+        {
+          "id": "flags-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["scalePercent=60 keeps active flag icons and labels visible without clipping"]
+        }
+      ]
+    },
+    {
+      "id": "garage-cover",
+      "bodyKind": "garage-cover",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "not_applicable"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "partial",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "garage-cover-policy-fixture",
+          "family": "no-data-or-unavailable",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "compactReplay"],
+          "artifacts": ["fixtures/telemetry-analysis/garage-cover-navarra-obs-policy.json", "browser-overlays/garage-cover/garage-visible.png", "browser-overlays/garage-cover/hidden.png", "browser-overlays/garage-cover/stale.png", "browser-overlays/garage-cover/disconnected.png"],
+          "assertions": ["disabled, hidden garage, stale, disconnected, preview, image-ready, image-missing, and enabled-visible states are distinct", "route/image readiness alone does not open the cover"]
+        },
+        {
+          "id": "garage-cover-live-eligibility",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "partial",
+          "surfaces": ["compactReplay", "browserReview", "localhostObs"],
+          "assertions": ["cover renders only when product enabled and fresh IsGarageVisible=true", "garage hidden stays no-render", "default brand asset is used when no imported image exists"],
+          "gaps": ["need more real-capture visible garage transition windows"]
+        },
+        {
+          "id": "garage-cover-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "partial",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "assertions": ["route requested, model hidden, model rendered, and route not requested are separate classifications"]
+        },
+        {
+          "id": "garage-cover-native-parity-declaration",
+          "family": "cross-surface-manifest-parity",
+          "tier": "tier3-release-native-parity",
+          "status": "covered",
+          "surfaces": ["windowsNative"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:BROWSER_ONLY_OVERLAY_IDS", "tests/tools/test_overlay_scenario_contract.py"],
+          "assertions": ["Windows native overlay is explicitly unsupported/not_applicable for live Garage Cover surface"]
+        }
+      ]
+    },
+    {
+      "id": "stream-chat",
+      "bodyKind": "stream-chat",
+      "surfaces": {
+        "browserReview": "supported",
+        "localhostObs": "supported",
+        "windowsNative": "supported"
+      },
+      "tierStatus": {
+        "tier1-ci-contract-fixtures": "partial",
+        "tier2-capture-derived-replay": "not_applicable",
+        "tier3-release-native-parity": "partial"
+      },
+      "scenarios": [
+        {
+          "id": "stream-chat-provider-states",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/stream-chat/default.png", "browser-overlays/stream-chat/twitch-rich.png", "browser-overlays/stream-chat/streamlabs-configured.png"],
+          "assertions": ["provider state and visible message count are recorded", "sanitized text evidence is compared", "external-source classification is explicit"]
+        },
+        {
+          "id": "stream-chat-route-health",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "partial",
+          "surfaces": ["browserReview", "localhostObs"],
+          "assertions": ["browser-source errors and route health are reported", "external provider content is not derived from iRacing replay"],
+          "gaps": ["provider failure/degraded states need stronger deterministic screenshots"]
+        },
+        {
+          "id": "stream-chat-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": ["scalePercent=60 keeps chat rows, header, and close affordance readable without clipping"]
+        },
+        {
+          "id": "stream-chat-replay-boundary",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "not_applicable",
+          "surfaces": ["compactReplay"],
+          "assertions": ["chat content is provider/external-source evidence and should not be inferred from telemetry captures"]
+        }
+      ]
+    }
+  ]
+}

@@ -24,8 +24,9 @@ Use this repo-local skill when the task is about continuing or extending `tmrOve
 11. For settings UI, overlay layout, browser-source sizing, screenshot evidence, or parity work, start from shared contracts instead of legacy renderer-local numbers. Geometry, sizing, typography metrics that affect fitting, control hit areas, crop bounds, default overlay sizes, table/grid columns, row/header heights, graph/canvas bounds, and manifest/diagnostic evidence belong in `overlay-geometry.json` or another explicit shared contract. Native consumers should use generated C# constants, browser/localhost should use contract JSON or generated CSS variables, and validators should catch stale generated output or unknown CSS/evidence fields.
 12. Keep paint-only details local only when they are genuinely decorative and unmeasured. Once a value affects bounds, text fit, screenshots, manifests, diagnostics, or CI semantic comparison, treat it as contract-owned even if it looks visual.
 13. When implementation behavior, calculations, defaults, source labels, fixture data, or validation semantics change, update the affected build test assertions and test fixtures in the same pass. Treat stale passing or failing assertions as stale references, not as a separate cleanup task.
-14. Before branch-complete handoff, use `skills/tmr-overlay-validation/SKILL.md` to make docs/screenshots current, inspect branch commits, sanitize the first commit or planned squash text, update `VERSION.md`, align build version metadata, and tag only the release point.
-15. If you change product direction, validation assumptions, capture format, or analysis assumptions, make sure the relevant reference/docs file is updated during the branch-complete sweep so future sessions inherit the new context. Raw capture format changes still need same-pass docs per `AGENTS.md`.
+14. When changing overlay behavior, surface support, sizing/scale, content-gating, chrome/no-data policy, replay fixtures, localhost/OBS routing, native support, or validation evidence, update `tools/validation/overlay-scenario-contract.json` in the same pass. Treat it as the parseable scenario coverage tracker: `covered` scenarios need durable evidence references, while `partial` and `missing` scenarios need explicit gaps or intended assertions.
+15. Before branch-complete handoff, use `skills/tmr-overlay-validation/SKILL.md` to make docs/screenshots current, inspect branch commits, sanitize the first commit or planned squash text, update `VERSION.md`, align build version metadata, and tag only the release point.
+16. If you change product direction, validation assumptions, capture format, or analysis assumptions, make sure the relevant reference/docs file is updated during the branch-complete sweep so future sessions inherit the new context. Raw capture format changes still need same-pass docs per `AGENTS.md`.
 
 ## Primary Files
 
@@ -40,6 +41,7 @@ Use this repo-local skill when the task is about continuing or extending `tmrOve
 - `src/TmrOverlay.App/Overlays/OverlayGeometryContracts.cs`
 - `src/TmrOverlay.App/Overlays/OverlayGeometryContractValues.g.cs`
 - `src/TmrOverlay.App/Telemetry/`
+- `tools/validation/overlay-scenario-contract.json`
 - `tools/generate_overlay_geometry_constants.py`
 - `tools/browser-review/render-screenshots.mjs`
 - `local-mac/TmrOverlayMac/Sources/TmrOverlayMac/Preview/OverlayScreenshotGenerator.swift`

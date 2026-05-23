@@ -49,6 +49,30 @@ For each overlay, prefer screenshot coverage that includes at least one populate
 
 Do not leave new UI validation as a follow-up unless the user explicitly asks to split it out. If the current artifacts cannot prove the intended behavior, add evidence capture first and keep assertions strict.
 
+## Overlay Scenario Contract
+
+For overlay behavior, renderer availability, sizing/scale, content-gating, chrome/no-data policy, replay fixture, localhost/OBS route, native support, or evidence-contract changes, update `tools/validation/overlay-scenario-contract.json` in the same pass.
+
+Use the contract as a parseable checklist, not as production app input:
+
+- Keep one matrix entry for every production browser overlay.
+- Declare Windows native support explicitly; browser-only surfaces such as Garage Cover must stay `not_applicable`.
+- Mark newly proven scenarios `covered` only when they cite durable evidence through `artifacts`, `fixtures`, `testFiles`, or `validatorRules`.
+- Keep `partial` and `missing` scenarios useful by listing explicit `gaps` or intended `assertions`.
+- Prefer adding compact committed fixtures or validator references over raw `capture-*` folders, which stay out of CI and git.
+
+After editing the contract or related validation rules, run:
+
+```bash
+python3 -m unittest discover -s tests/tools -p "test_overlay_scenario_contract.py"
+```
+
+For branch-complete validation, include the full tools unittest sweep:
+
+```bash
+python3 -m unittest discover -s tests/tools -p "test_*.py"
+```
+
 ## Native/Browser/Localhost Parity Inspection
 
 For every overlay behavior, renderer, availability, sizing, content-gating, or evidence-contract change, inspect all three active product surfaces in the same pass:
@@ -109,6 +133,7 @@ Make branch-readiness artifacts current before writing the final squash text:
 - If changing Windows build/release commands, make `README.md`, release-command docs, CI docs, and any in-app command references agree during this branch-complete pass.
 - If changing Windows publishing/package contents, verify PR validation runs a publish dry run with the same package audit, the release workflow audits the publish folder for accidental repo/dev-folder leaks, emits a package manifest, and documents which user data stays outside the install folder.
 - For overlay, settings UI, browser route, localhost route, preview fixture, or native renderer changes, update the screenshot generator and `tools/validate_overlay_screenshots.py` coverage expectations in the same pass. A new overlay/settings tab/region/preview state is not complete until native Windows, browser review, and localhost screenshot validation profiles either include it or explicitly justify why it is not a product surface.
+- For overlay scenario coverage changes, update `tools/validation/overlay-scenario-contract.json` and keep its evidence references aligned with screenshot artifacts, compact fixtures, test files, and validator rules. A screenshot or replay scenario is not considered covered until the scenario contract can resolve its cited evidence.
 - For overlay or settings UI changes, regenerate browser review screenshots with `npm run screenshots:browser-review -- --output artifacts/browser-review-screenshots`, run `python3 tools/validate_overlay_screenshots.py --profile browser-review-ci --root artifacts/browser-review-screenshots`, and inspect the uploaded `browser-review-screenshots` artifact from CI. Regenerate localhost route screenshots separately with `npm run screenshots:localhost -- --output artifacts/localhost-screenshots`, run `python3 tools/validate_overlay_screenshots.py --profile localhost-ci --root artifacts/localhost-screenshots`, and inspect the uploaded `localhost-screenshots` artifact from CI. Browser review and localhost are separate screenshot authorities; native Windows is still validated separately.
 - After browser-review screenshots are regenerated and validated for branch-complete work, refresh the shareable overlay media packet with `npm run media:packet`. Keep `docs/media-packet/v1-overlay-showcase/` current when overlay visuals, settings product context, or curated fixture choices change. The packet should choose feature-rich data snapshots that show each overlay or app tab doing meaningful work; real-capture or IBT-derived scenarios are preferred when they are deterministic and documented. This packet is teammate-facing product media, not parity proof; validation still comes from browser review, localhost, and Windows artifacts.
 - For live-model, snapshot-reader, data-contract, or overlay data-mapping changes, do not expand the default screenshot generator to every historical snapshot. Add or update a targeted data-snapshot render sweep instead: an allowlisted fixture manifest, a dedicated screenshot command/profile, manifest metadata for snapshot id and model source, and validation that each selected fixture renders through browser and localhost routes. Keep this separate from the always-on deterministic preview matrix until it has proven stable enough to gate PRs.

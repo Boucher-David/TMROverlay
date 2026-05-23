@@ -19,6 +19,8 @@ using TmrOverlay.App.Overlays.Styling;
 using TmrOverlay.App.Overlays.TrackMap;
 using TmrOverlay.App.Settings;
 using TmrOverlay.App.Storage;
+using TmrOverlay.Core.Fuel;
+using TmrOverlay.Core.History;
 using TmrOverlay.Core.Settings;
 using TmrOverlay.App.Telemetry;
 using TmrOverlay.Core.Telemetry.Live;
@@ -66,6 +68,9 @@ internal sealed class OverlayManager : IDisposable
     private readonly Dictionary<string, double> _appliedScales = [];
     private readonly Dictionary<string, double> _appliedOpacities = [];
     private readonly System.Windows.Forms.Timer _sessionVisibilityTimer;
+    private HistoricalComboIdentity? _fuelSizingCachedHistoryCombo;
+    private SessionHistoryLookupResult? _fuelSizingCachedHistory;
+    private DateTimeOffset _fuelSizingCachedHistoryAtUtc;
     private ApplicationSettings? _settings;
     private string? _appliedFontFamily;
     private string? _appliedUnitSystem;
@@ -733,7 +738,8 @@ internal sealed class OverlayManager : IDisposable
                     settings,
                     form,
                     sessionPreviewActive: _sessionPreviewState.Snapshot().Active,
-                    currentSession);
+                    currentSession,
+                    ModelDrivenBaseSize(registration.Definition, settings, liveSnapshot, currentSession));
                 ApplyOpacityIfChanged(registration.Definition, settings, form);
                 ApplySettingsWindowInputProtection(form);
                 ApplyRadarSettingsPreview(form, settingsPreview);
@@ -882,9 +888,16 @@ internal sealed class OverlayManager : IDisposable
         OverlaySettings settings,
         Form form,
         bool sessionPreviewActive,
-        OverlaySessionKind? sessionKind)
+        OverlaySessionKind? sessionKind,
+        Size? modelDrivenBaseSize)
     {
-        var size = TargetOverlayClientSizeForApply(definition, settings, form.ClientSize, sessionPreviewActive, sessionKind);
+        var size = TargetOverlayClientSizeForApply(
+            definition,
+            settings,
+            form.ClientSize,
+            sessionPreviewActive,
+            sessionKind,
+            modelDrivenBaseSize);
         if (_appliedScales.TryGetValue(definition.Id, out var appliedScale)
             && Math.Abs(appliedScale - settings.Scale) < 0.001d
             && form.ClientSize == size)
@@ -901,12 +914,17 @@ internal sealed class OverlayManager : IDisposable
         OverlaySettings settings,
         Size currentSize,
         bool sessionPreviewActive,
-        OverlaySessionKind? sessionKind = null)
+        OverlaySessionKind? sessionKind = null,
+        Size? modelDrivenBaseSize = null)
     {
         settings.Scale = Math.Clamp(settings.Scale, 0.6d, 2d);
         ApplyFlagsCompactPolicy(definition, settings);
         var persistedHeight = settings.Height;
-        var size = ScaledOverlaySize(definition, settings, sessionKind);
+        var size = modelDrivenBaseSize is { } baseSize
+            ? new Size(
+                ScaleDimension(baseSize.Width, settings.Scale),
+                ScaleDimension(baseSize.Height, settings.Scale))
+            : ScaledOverlaySize(definition, settings, sessionKind);
         settings.Width = size.Width;
         settings.Height = size.Height;
         return ShouldPreserveExpandedStandingsClientSize(
@@ -917,6 +935,60 @@ internal sealed class OverlayManager : IDisposable
             sessionPreviewActive)
             ? currentSize
             : size;
+    }
+
+    private Size? ModelDrivenBaseSize(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        LiveTelemetrySnapshot snapshot,
+        OverlaySessionKind? sessionKind)
+    {
+        if (!string.Equals(definition.Id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var strategyModel = LiveFuelStrategyModel.From(snapshot, DateTimeOffset.UtcNow, LookupFuelSizingHistory);
+        if (!strategyModel.IsAvailable)
+        {
+            return null;
+        }
+
+        var viewModel = FuelCalculatorViewModel.From(
+            strategyModel,
+            showAdvice: false,
+            SelectedUnitSystem,
+            maximumRows: 6,
+            contentSettings: settings);
+        return OverlayContentSizing.FuelCalculatorSizeForMetricSections(
+            definition,
+            settings,
+            sessionKind,
+            viewModel.MetricSections);
+    }
+
+    private SessionHistoryLookupResult LookupFuelSizingHistory(HistoricalComboIdentity combo)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (_fuelSizingCachedHistory is not null
+            && SameHistoricalCombo(_fuelSizingCachedHistoryCombo, combo)
+            && now - _fuelSizingCachedHistoryAtUtc <= TimeSpan.FromSeconds(30))
+        {
+            return _fuelSizingCachedHistory;
+        }
+
+        _fuelSizingCachedHistory = _historyQueryService.Lookup(combo);
+        _fuelSizingCachedHistoryCombo = combo;
+        _fuelSizingCachedHistoryAtUtc = now;
+        return _fuelSizingCachedHistory;
+    }
+
+    private static bool SameHistoricalCombo(HistoricalComboIdentity? left, HistoricalComboIdentity right)
+    {
+        return left is not null
+            && string.Equals(left.CarKey, right.CarKey, StringComparison.Ordinal)
+            && string.Equals(left.TrackKey, right.TrackKey, StringComparison.Ordinal)
+            && string.Equals(left.SessionKey, right.SessionKey, StringComparison.Ordinal);
     }
 
     internal static bool ShouldPreserveExpandedStandingsClientSize(
@@ -1453,7 +1525,8 @@ internal sealed class OverlayManager : IDisposable
             settings,
             form,
             sessionPreviewActive: _sessionPreviewState.Snapshot().Active,
-            sessionKind);
+            sessionKind,
+            modelDrivenBaseSize: null);
         ApplyOpacityIfChanged(registration.Definition, settings, form);
         ApplySettingsWindowInputProtection(form);
         var fadeAllowsVisible = ApplyLiveTelemetryFade(

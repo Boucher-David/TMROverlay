@@ -6,6 +6,7 @@ using TmrOverlay.App.Overlays.InputState;
 using TmrOverlay.App.Overlays.PitService;
 using TmrOverlay.App.Overlays.Relative;
 using TmrOverlay.App.Overlays.SessionWeather;
+using TmrOverlay.App.Overlays.SimpleTelemetry;
 using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Overlays;
@@ -174,6 +175,27 @@ internal static class OverlayContentSizing
             + sectionGaps
             + MetricGeometry.CollapsedFooterReserveHeight;
         return Math.Clamp(height, MetricGeometry.MinimumFuelCalculatorHeight, FuelCalculatorOverlayDefinition.Definition.DefaultHeight);
+    }
+
+    public static Size FuelCalculatorSizeForMetricSections(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind,
+        IReadOnlyList<SimpleTelemetryMetricSectionViewModel> metricSections)
+    {
+        var visibleSections = metricSections
+            .Where(section => section.Rows.Count > 0)
+            .ToArray();
+        if (visibleSections.Length == 0)
+        {
+            return BaseSizeFor(definition, settings, sessionKind);
+        }
+
+        var rowCount = visibleSections.Sum(section => section.Rows.Count);
+        var baseSize = new Size(
+            definition.DefaultWidth,
+            FuelCalculatorHeightForContent(rowCount, visibleSections.Length));
+        return ApplyChromeHeight(definition, settings, sessionKind, baseSize);
     }
 
     private static int TableOverlayWidth(

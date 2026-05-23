@@ -3708,12 +3708,13 @@ internal sealed class BrowserOverlayModelFactory
     private static int FuelVisibleRowsForHeight(int height, bool showFooter)
     {
         var geometry = OverlayGeometryContracts.MetricRows;
-        var bodyHeight = height
+        var availableHeight = height
             - geometry.HeaderChromeHeight
             - (showFooter ? geometry.FooterChromeHeight : geometry.CollapsedFooterReserveHeight)
-            - geometry.BodyGap
-            - 34;
-        return Math.Max(1, (int)Math.Floor(bodyHeight / (geometry.PlainRowHeight + geometry.RowGap)));
+            - geometry.FuelContentVerticalPadding
+            - geometry.FuelSectionTitleReserveHeight
+            + geometry.RowGap;
+        return Math.Max(1, (int)Math.Floor(availableHeight / (geometry.SegmentedRowHeight + geometry.RowGap)));
     }
 
     private static string BrowserStatus(IReadOnlyList<BrowserOverlayHeaderItem> headerItems, string fallback)

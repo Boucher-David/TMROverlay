@@ -11,6 +11,7 @@ using TmrOverlay.App.Overlays.PitService;
 using TmrOverlay.App.Overlays.Relative;
 using TmrOverlay.App.Overlays.SessionWeather;
 using TmrOverlay.App.Overlays.SettingsPanel;
+using TmrOverlay.App.Overlays.SimpleTelemetry;
 using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Overlays.TrackMap;
@@ -552,6 +553,50 @@ public sealed class OverlayContentColumnSettingsTests
         SetBlock(raceInfoOff, OverlayContentColumnSettings.FuelCalculator, OverlayContentColumnSettings.FuelCalculatorRacePlanBlockId, false);
         SetBlock(raceInfoOff, OverlayContentColumnSettings.FuelCalculator, OverlayContentColumnSettings.FuelCalculatorRaceFuelBlockId, false);
         Assert.Equal(new Size(503, 201), BrowserOverlayRecommendedSize.For(FuelCalculatorOverlayDefinition.Definition, raceInfoOff, OverlaySessionKind.Race));
+    }
+
+    [Fact]
+    public void FuelCalculatorModelDrivenSizingShrinksNativeWindowToLiveRows()
+    {
+        var geometry = OverlayGeometryContracts.MetricRows;
+        var fuel = new ApplicationSettings().GetOrAddOverlay(
+            FuelCalculatorOverlayDefinition.Definition.Id,
+            FuelCalculatorOverlayDefinition.Definition.DefaultWidth,
+            FuelCalculatorOverlayDefinition.Definition.DefaultHeight);
+        fuel.Scale = 1.25d;
+        var metricSections = new[]
+        {
+            new SimpleTelemetryMetricSectionViewModel(
+                "Race Information",
+                [new SimpleTelemetryRowViewModel("Plan", "calculating")]),
+            new SimpleTelemetryMetricSectionViewModel(
+                "Fuel Usage",
+                [new SimpleTelemetryRowViewModel("Burn", "calculating")])
+        };
+        var expectedBase = new Size(
+            FuelCalculatorOverlayDefinition.Definition.DefaultWidth,
+            FuelCalculatorHeightFromContract(rowCount: 2, sectionCount: 2, geometry));
+        var expectedScaled = ScaleSize(expectedBase, fuel.Scale);
+
+        Assert.Equal(
+            expectedBase,
+            OverlayContentSizing.FuelCalculatorSizeForMetricSections(
+                FuelCalculatorOverlayDefinition.Definition,
+                fuel,
+                OverlaySessionKind.Race,
+                metricSections));
+
+        var size = OverlayManager.TargetOverlayClientSizeForApply(
+            FuelCalculatorOverlayDefinition.Definition,
+            fuel,
+            currentSize: new Size(999, 999),
+            sessionPreviewActive: false,
+            sessionKind: OverlaySessionKind.Race,
+            modelDrivenBaseSize: expectedBase);
+
+        Assert.Equal(expectedScaled, size);
+        Assert.Equal(expectedScaled.Width, fuel.Width);
+        Assert.Equal(expectedScaled.Height, fuel.Height);
     }
 
     [Fact]

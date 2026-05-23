@@ -916,12 +916,13 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private static int FuelVisibleRowsForHeight(int height, bool showFooter)
     {
         var geometry = MetricGeometry;
-        var bodyHeight = height
+        var availableHeight = height
             - geometry.HeaderChromeHeight
             - (showFooter ? geometry.FooterChromeHeight : geometry.CollapsedFooterReserveHeight)
-            - geometry.BodyGap
-            - 34;
-        return Math.Max(1, (int)Math.Floor(bodyHeight / (geometry.PlainRowHeight + geometry.RowGap)));
+            - geometry.FuelContentVerticalPadding
+            - geometry.FuelSectionTitleReserveHeight
+            + geometry.RowGap;
+        return Math.Max(1, (int)Math.Floor(availableHeight / (geometry.SegmentedRowHeight + geometry.RowGap)));
     }
 
     private DesignV2OverlayModel BuildInputModel(LiveTelemetrySnapshot snapshot, DateTimeOffset now)

@@ -292,6 +292,7 @@ def main() -> int:
     parser.add_argument("--model-replay", default="auto", choices=["auto", "off", "required"], help="Run production C# overlay model replay when available.")
     parser.add_argument("--model-replay-command", default="", help="Explicit model replay command. Use {capture}, {sample_plan}, {output}, {overlays}, and {settings} placeholders.")
     parser.add_argument("--settings", type=Path, help="Optional app settings JSON for production model replay.")
+    parser.add_argument("--app-data-root", type=Path, help="Optional TmrOverlay app-data root to inventory history/settings next to the capture.")
     parser.add_argument("--renderer-command", default="", help="Explicit renderer command. Use {output}, {overlays}, and {renderer} placeholders.")
     parser.add_argument("--render-limit", default=40, type=int, help="Maximum replay screenshots per overlay and renderer.")
     parser.add_argument("--assert", dest="assert_mode", default="warn", choices=["warn", "strict", "off"])
@@ -320,6 +321,8 @@ def main() -> int:
     evidence_quality = load_json(paths.evidence_quality) if paths.evidence_quality else None
     performance_summary = load_json(paths.performance_summary) if paths.performance_summary else None
     capture_synthesis = load_json(paths.capture_synthesis) if paths.capture_synthesis else None
+    app_data_root, app_data_root_source = resolve_app_data_root(args.app_data_root, paths.capture)
+    history_inventory = build_history_inventory(app_data_root, app_data_root_source)
 
     cadence_seconds = cadence_for(args.strategy, args.cadence)
     window_before = parse_duration_seconds(args.window_before)
@@ -330,7 +333,7 @@ def main() -> int:
     frame_scan = scan_frame_headers(paths.telemetry_bin, manifest)
     frames = frame_scan.pop("_frames", [])
 
-    inventory = build_input_inventory(paths, manifest, capture_synthesis, live_diag_path, evidence_quality)
+    inventory = build_input_inventory(paths, manifest, capture_synthesis, live_diag_path, evidence_quality, history_inventory)
     event_index = build_event_index(
         live_diag,
         localhost,
@@ -363,6 +366,7 @@ def main() -> int:
     write_json(output / "sample-plan.json", sample_plan)
     write_json(output / "performance-timeline.json", performance_timeline)
     write_json(output / "storage-boundary.json", storage_boundary)
+    write_json(output / "history-inventory.json", history_inventory)
 
     model_replay_result = run_model_replay(args, paths, output, overlays)
     renderer_results = run_renderer_replays(args, output, overlays, model_replay_result)
@@ -411,8 +415,17 @@ def main() -> int:
         overlay_reports,
         live_diag_path,
     )
+    package_status = build_package_status(
+        manifest,
+        output,
+        model_replay_result,
+        renderer_results,
+        evidence_gaps,
+        history_inventory,
+    )
 
     write_json(output / "evidence-gaps.json", evidence_gaps)
+    write_json(output / "package-status.json", package_status)
 
     overlay_root = output / "overlays"
     mkdir(overlay_root)
@@ -432,7 +445,9 @@ def main() -> int:
         "captureId": manifest.get("captureId"),
         "capture": inventory["capture"],
         "diagnostics": inventory.get("diagnostics"),
+        "historyInventory": history_inventory,
         "storageBoundary": storage_boundary,
+        "packageStatus": package_status,
         "overlays": overlay_reports,
         "evidenceGaps": evidence_gaps,
         "toolRuns": tool_runs,
@@ -443,12 +458,14 @@ def main() -> int:
             "sample-plan.json",
             "performance-timeline.json",
             "storage-boundary.json",
+            "history-inventory.json",
             "obs-readiness.json",
             "live-model-samples.json",
             "tool-runs.json",
             "model-replay-result.json",
             "renderer-replay-<renderer>-result.json",
             "evidence-gaps.json",
+            "package-status.json",
             "overlays/<overlay-id>/semantic-manifest.json",
             "overlays/<overlay-id>/live-model-summary.json",
             "overlays/<overlay-id>/semantic-results.json",
@@ -901,6 +918,7 @@ def build_input_inventory(
     capture_synthesis: dict[str, Any] | None,
     live_diag_path: Path | None,
     evidence_quality: dict[str, Any] | None,
+    history_inventory: dict[str, Any],
 ) -> dict[str, Any]:
     source_files = {
         "captureManifest": file_info(paths.capture_manifest),
@@ -939,7 +957,111 @@ def build_input_inventory(
         },
         "sourceFiles": source_files,
         "evidenceWarnings": (evidence_quality or {}).get("warnings", []),
+        "history": compact_dict(
+            history_inventory,
+            ["status", "appDataRoot", "userHistoryRoot", "aggregateCount", "summaryCount", "fuelHistoryAggregateCount"],
+        ),
     }
+
+
+def resolve_app_data_root(configured_root: Path | None, capture: Path) -> tuple[Path | None, str]:
+    if configured_root is not None:
+        return configured_root.expanduser().resolve(), "explicit"
+
+    capture = capture.resolve()
+    parent = capture.parent
+    if parent.name.lower() == "captures":
+        candidate = parent.parent
+        if any((candidate / name).exists() for name in ("history", "settings", "forensics", "logs")):
+            return candidate, "capture-parent"
+
+    return None, "not-resolved"
+
+
+def build_history_inventory(app_data_root: Path | None, source: str) -> dict[str, Any]:
+    if app_data_root is None:
+        return {
+            "schemaVersion": 1,
+            "status": "unavailable",
+            "source": source,
+            "appDataRoot": None,
+            "reason": "No app-data root was provided or inferred from the capture path.",
+            "aggregateCount": 0,
+            "summaryCount": 0,
+            "fuelHistoryAggregateCount": 0,
+            "aggregates": [],
+        }
+
+    history_root = app_data_root / "history" / "user"
+    aggregate_paths = sorted(history_root.glob("cars/*/tracks/*/sessions/*/aggregate.json")) if history_root.exists() else []
+    aggregates = [compact_history_aggregate(path, history_root) for path in aggregate_paths]
+    aggregates = [aggregate for aggregate in aggregates if aggregate is not None]
+    summary_count = sum(int(aggregate.get("summaryCount") or 0) for aggregate in aggregates)
+    fuel_history_count = sum(1 for aggregate in aggregates if aggregate.get("hasFuelHistory"))
+    radar_calibration_count = len(list(history_root.glob("cars/*/radar-calibration.json"))) if history_root.exists() else 0
+    analysis_count = len(list((history_root / "analysis").glob("*.json"))) if (history_root / "analysis").exists() else 0
+
+    return {
+        "schemaVersion": 1,
+        "status": "available" if aggregates else "missing-history-aggregates",
+        "source": source,
+        "appDataRoot": str(app_data_root),
+        "userHistoryRoot": str(history_root),
+        "aggregateCount": len(aggregates),
+        "summaryCount": summary_count,
+        "fuelHistoryAggregateCount": fuel_history_count,
+        "radarCalibrationAggregateCount": radar_calibration_count,
+        "analysisReportCount": analysis_count,
+        "sessionCounts": dict(sorted(Counter(str((aggregate.get("combo") or {}).get("sessionKey") or "unknown") for aggregate in aggregates).items())),
+        "aggregates": aggregates[:80],
+        "truncated": len(aggregates) > 80,
+    }
+
+
+def compact_history_aggregate(path: Path, history_root: Path) -> dict[str, Any] | None:
+    try:
+        aggregate = load_json(path)
+    except (OSError, json.JSONDecodeError):
+        return {
+            "path": str(path.relative_to(history_root)),
+            "status": "unreadable",
+            "summaryCount": count_summary_files(path),
+            "hasFuelHistory": False,
+        }
+
+    combo = aggregate.get("combo") if isinstance(aggregate, dict) else {}
+    if not isinstance(combo, dict):
+        combo = {}
+    fuel_per_lap = compact_metric(aggregate.get("fuelPerLapLiters") if isinstance(aggregate, dict) else None)
+    stint_fuel_per_lap = compact_metric(aggregate.get("averageStintFuelPerLapLiters") if isinstance(aggregate, dict) else None)
+    return {
+        "path": str(path.relative_to(history_root)),
+        "status": "available",
+        "aggregateVersion": aggregate.get("aggregateVersion") if isinstance(aggregate, dict) else None,
+        "combo": compact_dict(combo, ["carKey", "trackKey", "sessionKey"]),
+        "updatedAtUtc": aggregate.get("updatedAtUtc") if isinstance(aggregate, dict) else None,
+        "sessionCount": aggregate.get("sessionCount") if isinstance(aggregate, dict) else None,
+        "baselineSessionCount": aggregate.get("baselineSessionCount") if isinstance(aggregate, dict) else None,
+        "summaryCount": count_summary_files(path),
+        "fuelPerLapLiters": fuel_per_lap,
+        "averageStintFuelPerLapLiters": stint_fuel_per_lap,
+        "hasFuelHistory": metric_has_samples(fuel_per_lap) or metric_has_samples(stint_fuel_per_lap),
+    }
+
+
+def compact_metric(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    return compact_dict(value, ["sampleCount", "mean", "minimum", "maximum"])
+
+
+def metric_has_samples(value: dict[str, Any] | None) -> bool:
+    return isinstance(value, dict) and int(value.get("sampleCount") or 0) > 0 and value.get("mean") is not None
+
+
+def count_summary_files(aggregate_path: Path) -> int:
+    summaries = aggregate_path.parent / "summaries"
+    return len(list(summaries.glob("*.json"))) if summaries.exists() else 0
 
 
 def build_event_index(
@@ -1640,6 +1762,98 @@ def build_evidence_gaps(
     }
 
 
+def build_package_status(
+    manifest: dict[str, Any],
+    output: Path,
+    model_replay_result: dict[str, Any],
+    renderer_results: dict[str, Any],
+    evidence_gaps: dict[str, Any],
+    history_inventory: dict[str, Any],
+) -> dict[str, Any]:
+    status_counts = evidence_gaps.get("statusCounts") or {}
+    fail_count = int(status_counts.get("fail") or 0)
+    warn_count = int(status_counts.get("warn") or 0)
+    status = "enriched_with_failures" if fail_count else "enriched_with_warnings" if warn_count else "enriched"
+    return {
+        "schemaVersion": 1,
+        "captureId": manifest.get("captureId"),
+        "status": status,
+        "enrichmentStatus": "offline",
+        "createdAtUtc": datetime.now(timezone.utc).isoformat(),
+        "createdBy": "tools/analysis/overlay_forensics.py",
+        "outputDirectory": str(output),
+        "modelReplay": {
+            "status": model_replay_result.get("status"),
+            "required": model_replay_result.get("required"),
+            "reason": model_replay_result.get("reason"),
+            "command": model_replay_result.get("command"),
+        },
+        "rendererReplay": {
+            renderer: {
+                "status": result.get("status"),
+                "reason": result.get("reason"),
+                "command": result.get("command"),
+            }
+            for renderer, result in sorted(renderer_results.items())
+        },
+        "history": compact_dict(
+            history_inventory,
+            ["status", "source", "aggregateCount", "summaryCount", "fuelHistoryAggregateCount", "analysisReportCount"],
+        ),
+        "evidenceGapCounts": status_counts,
+        "nextActions": package_next_actions(model_replay_result, renderer_results, evidence_gaps, history_inventory),
+    }
+
+
+def package_next_actions(
+    model_replay_result: dict[str, Any],
+    renderer_results: dict[str, Any],
+    evidence_gaps: dict[str, Any],
+    history_inventory: dict[str, Any],
+) -> list[str]:
+    actions: list[str] = []
+    if model_replay_result.get("status") != "produced":
+        command = model_replay_result.get("command")
+        actions.append(
+            f"Run production model replay to add active model rows: {command}"
+            if command
+            else "Run production model replay to add active model rows."
+        )
+
+    for renderer, result in sorted(renderer_results.items()):
+        if result.get("status") == "produced":
+            continue
+        command = result.get("command")
+        actions.append(
+            f"Run {renderer} renderer replay to add screenshot and manifest evidence: {command}"
+            if command
+            else f"Run {renderer} renderer replay to add screenshot and manifest evidence."
+        )
+
+    if history_inventory.get("status") != "available":
+        actions.append("Pass --app-data-root or place the capture under an app-data captures directory to inventory fuel/history aggregates.")
+    elif int(history_inventory.get("fuelHistoryAggregateCount") or 0) == 0:
+        actions.append("History inventory found no fuel aggregates; Fuel Calculator history fallback cannot be proven from this package.")
+
+    for gap in evidence_gaps.get("gaps", []):
+        if gap.get("status") == "fail":
+            detail = gap.get("detail") or gap.get("kind")
+            actions.append(f"Resolve failing evidence gap: {detail}")
+
+    return dedupe(actions)
+
+
+def dedupe(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
 def write_overlay_artifacts(
     root: Path,
     overlay_id: str,
@@ -2098,6 +2312,11 @@ def render_markdown_report(
     lines.append(f"- Production model replay: `{model_run.get('status', 'unknown')}`")
     for renderer, result in renderer_runs.items():
         lines.append(f"- `{renderer}` renderer replay: `{result.get('status', 'unknown')}`")
+    history = top_level.get("historyInventory") or {}
+    lines.extend(["", "## History Inventory", ""])
+    lines.append(f"- Status: `{history.get('status', 'unknown')}`")
+    lines.append(f"- Aggregates: `{history.get('aggregateCount', 0)}`")
+    lines.append(f"- Fuel aggregates: `{history.get('fuelHistoryAggregateCount', 0)}`")
     lines.extend(["", "## Evidence Gaps", ""])
     for gap in top_level["evidenceGaps"].get("gaps", []):
         overlay = f" `{gap.get('overlayId')}`" if gap.get("overlayId") else ""

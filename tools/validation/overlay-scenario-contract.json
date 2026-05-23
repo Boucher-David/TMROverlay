@@ -123,7 +123,9 @@
       ],
       "testFiles": [
         "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js:application diagnostics buttons update real review-server support state",
-        "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs:support.bundle.latest"
+        "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs:support.bundle.latest",
+        "tests/TmrOverlay.App.Tests/Telemetry/TelemetryCaptureStateTests.cs:SetRawCaptureEnabled_RejectsDisableWhileRawCaptureIsActive",
+        "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs:CreateInitialPackage_WritesToAppOwnedForensicsRootAndLeavesCaptureUntouched"
       ],
       "validatorRules": [
         "tools/validate_overlay_screenshots.py:support.bundle.latest.value",
@@ -132,7 +134,9 @@
       "assertions": [
         "support tab exposes diagnostics status, latest-bundle value, raw-capture toggle, local-map toggle, create-bundle action, and open-folder action",
         "review-server actions update durable support state instead of serving as inert buttons",
-        "support button and latest-bundle text bounds are part of settings uiEvidence"
+        "support button and latest-bundle text bounds are part of settings uiEvidence",
+        "raw capture cannot be disabled while an enhanced diagnostic capture is active",
+        "finished enhanced captures create app-owned forensics under %LOCALAPPDATA%\\TmrOverlay\\forensics\\<capture-id> without mutating the source capture folder"
       ]
     },
     {
@@ -287,7 +291,6 @@
       ],
       "testFiles": [
         "tests/TmrOverlay.App.Tests/Overlays/GarageCoverBrowserSettingsTests.cs:DefaultImage_ResolvesBundledBrandAsset",
-        "tests/TmrOverlay.App.Tests/Overlays/GarageCoverBrowserSettingsTests.cs:From_ReturnsImageMetadataAndTransientPreviewState",
         "tests/browser-overlays/settingsEffectMatrix.test.js:garage cover preview stays settings-only",
         "tests/browser-overlays/reviewServerContracts.test.js:does not make global session preview force Garage Cover preview visibility"
       ],
@@ -296,9 +299,41 @@
         "tools/validate_overlay_screenshots.py:settings-preview-image"
       ],
       "assertions": [
-        "Garage Cover settings keep import/clear/image preview in the settings surface without opening the live cover",
         "missing or cleared user image falls back to the bundled default image",
+        "default image metadata resolves to the bundled brand asset before a user imports a custom image",
         "Garage Cover preview stage and image bounds are measured settings evidence"
+      ]
+    },
+    {
+      "id": "settings-garage-cover-image-import-clear-actions",
+      "area": "garage-cover",
+      "family": "settings-actions",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "partial",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "settings/garage-cover/general.png",
+        "settings/garage-cover/preview.png",
+        "states/settings-garage-cover.png",
+        "states/settings-garage-cover-preview.png"
+      ],
+      "testFiles": [
+        "tests/TmrOverlay.App.Tests/Overlays/GarageCoverBrowserSettingsTests.cs:From_ReturnsImageMetadataAndTransientPreviewState",
+        "tests/browser-overlays/settingsEffectMatrix.test.js:garage cover preview stays settings-only",
+        "tests/browser-overlays/reviewServerContracts.test.js:action: 'clear'",
+        "tests/browser-overlays/reviewServerContracts.test.js:action: 'import'"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:settings-preview-stage",
+        "tools/validate_overlay_screenshots.py:settings-preview-image"
+      ],
+      "assertions": [
+        "imported Garage Cover image metadata is reflected only in settings/browser settings state",
+        "import, clear, and preview actions do not force the live Garage Cover route open",
+        "clear returns the user image path to the default-image fallback path"
+      ],
+      "gaps": [
+        "import and clear have route/model assertions, but no dedicated before/after settings screenshots yet"
       ]
     },
     {
@@ -319,7 +354,9 @@
       "testFiles": [
         "tests/browser-overlays/settingsEffectMatrix.test.js:stream chat provider twitch configures chat source",
         "tests/TmrOverlay.App.Tests/Localhost/StreamChatOverlaySettingsTests.cs",
-        "tests/TmrOverlay.App.Tests/Overlays/OverlayContentColumnSettingsTests.cs:StreamChatSettingsSaveButtonStaysInsideContractPanel"
+        "tests/TmrOverlay.App.Tests/Overlays/OverlayContentColumnSettingsTests.cs:StreamChatSettingsSaveButtonStaysInsideContractPanel",
+        "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs:stream-chat.streamlabs-url",
+        "docs/settings-overlay-logic.md:Streamlabs widget URLs are treated as private local settings and redacted from diagnostics bundles."
       ],
       "validatorRules": [
         "tools/validate_overlay_screenshots.py:stream chat provider width",
@@ -328,7 +365,8 @@
       "assertions": [
         "Stream Chat settings expose provider, Streamlabs URL, Twitch channel, Save action, and Twitch content rows",
         "provider selection reaches the production browser/localhost Stream Chat settings model",
-        "Save button and chat input bounds are measured by shared settings geometry"
+        "Save button and chat input bounds are measured by shared settings geometry",
+        "Streamlabs widget URLs are redacted from diagnostics bundles"
       ],
       "gaps": [
         "Save-button click behavior for edited Streamlabs/Twitch text is not yet covered by a dedicated settings-UI interaction test"
@@ -426,6 +464,18 @@
           "gaps": ["explicit telemetry no-data with chrome-on is missing", "Windows-native minimum-scale table-column preservation is still missing"]
         },
         {
+          "id": "standings-chrome-on-telemetry-no-data",
+          "family": "chrome-on-no-data-where-applicable",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": [
+            "enabled Standings header/footer chrome has an explicit stable policy when scoring rows are absent",
+            "no-data state cannot flash between hidden and visible shells before accepted scoring source exists",
+            "header/footer-only visibility is distinguished from all-content-disabled no-render"
+          ]
+        },
+        {
           "id": "standings-practice-no-results-stability",
           "family": "chrome-on-no-data-where-applicable",
           "tier": "tier2-capture-derived-replay",
@@ -502,6 +552,18 @@
           "gaps": ["explicit telemetry no-data state is missing", "minimum-scale column preservation is missing"]
         },
         {
+          "id": "relative-telemetry-no-data-policy",
+          "family": "chrome-on-no-data-where-applicable",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "missing",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "assertions": [
+            "enabled Relative header/footer chrome has an explicit stable policy when nearby-car timing rows are absent",
+            "practice timing unavailable, all-content-disabled, and true telemetry-no-data states are separate scenarios",
+            "no-data policy forbids stale timing rows from a prior telemetry frame"
+          ]
+        },
+        {
           "id": "relative-practice-timing-real-data",
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
@@ -520,6 +582,17 @@
           "status": "missing",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "assertions": ["scalePercent=60 preserves configured columns and rows", "rightmost evidence fits", "table geometry scales without responsive column hiding"]
+        },
+        {
+          "id": "relative-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "partial",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "fixtures": ["fixtures/telemetry-analysis/forensics-smoke/obs-readiness-all-overlays"],
+          "testFiles": ["tests/tools/test_overlay_forensics.py:test_obs_readiness_classifies_all_expected_overlays", "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs:AssertOverlayReadiness"],
+          "assertions": ["relative OBS page load without model polling is classified distinctly from model-rendered, hidden, and source-error states"],
+          "gaps": ["full-capture OBS scene/source correlation is still optional evidence"]
         }
       ]
     },
@@ -577,6 +650,33 @@
           "gaps": ["production measured-burn replay from this compact snapshot is still missing because the compact fixture stores aggregate post-race evidence, not ordered green-lap fuel frames", "Windows native render replay from this compact snapshot is still missing"]
         },
         {
+          "id": "fuel-dallara-history-ingestion",
+          "family": "real-data-window",
+          "tier": "tier2-capture-derived-replay",
+          "status": "missing",
+          "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "captureTargets": ["v1.1.1-latest-test Dallara P217 AppData history with car-128-dallarap217 track-264-nurburgring-combinedlong race/practice aggregates", "dallara-p217-lmp2-gesamtstrecke-long-20260522-* AppData folders with fuel history"],
+          "assertions": [
+            "Fuel Calculator history lookup selects matching car/track/session Dallara fuel aggregates when live measured burn is unavailable",
+            "history source label, fuel-per-lap mean, and sample count are visible in production model evidence",
+            "Dallara evidence is preferred over GR86 evidence for Gesamtstrecke Long fuel fallback debugging"
+          ],
+          "gaps": [
+            "uploaded Dallara AppData fuel history is inventoried locally, but no compact committed fixture yet proves production Fuel Calculator consumes the matching aggregate"
+          ]
+        },
+        {
+          "id": "fuel-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "partial",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "fixtures": ["fixtures/telemetry-analysis/forensics-smoke/obs-readiness-all-overlays"],
+          "testFiles": ["tests/tools/test_overlay_forensics.py:test_obs_readiness_classifies_all_expected_overlays", "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs:AssertOverlayReadiness"],
+          "assertions": ["fuel-calculator OBS route/model polling hidden state is classified separately from render success and route not requested"],
+          "gaps": ["full-capture OBS scene/source correlation is still optional evidence"]
+        },
+        {
           "id": "fuel-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
@@ -625,6 +725,17 @@
           "status": "missing",
           "surfaces": ["compactReplay"],
           "assertions": ["air and track temperature, rain/wetness, wind, units, freshness, and weather source are captured and asserted"]
+        },
+        {
+          "id": "weather-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "partial",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "fixtures": ["fixtures/telemetry-analysis/forensics-smoke/obs-readiness-all-overlays"],
+          "testFiles": ["tests/tools/test_overlay_forensics.py:test_obs_readiness_classifies_all_expected_overlays", "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs:AssertOverlayReadiness"],
+          "assertions": ["session-weather OBS route/model polling hidden state is classified separately from render success and route not requested"],
+          "gaps": ["full-capture OBS scene/source correlation is still optional evidence"]
         },
         {
           "id": "weather-minimum-scale",
@@ -751,6 +862,17 @@
           "status": "missing",
           "surfaces": ["compactReplay"],
           "assertions": ["throttle, brake, steering, gear shift, ABS, and clutch transitions sample raw inputs, model values, trace counts, and rendered bounds"]
+        },
+        {
+          "id": "inputs-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "partial",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "fixtures": ["fixtures/telemetry-analysis/forensics-smoke/obs-readiness-all-overlays"],
+          "testFiles": ["tests/tools/test_overlay_forensics.py:test_obs_readiness_classifies_all_expected_overlays", "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs:AssertOverlayReadiness"],
+          "assertions": ["input-state OBS route/model polling hidden state is classified separately from render success and route not requested"],
+          "gaps": ["full-capture OBS scene/source correlation is still optional evidence"]
         }
       ]
     },
@@ -800,7 +922,22 @@
           "tier": "tier1-ci-contract-fixtures",
           "status": "partial",
           "surfaces": ["settingsUi", "browserReview", "windowsNative"],
-          "assertions": ["settings-preview visibility requires active Settings context", "selected tab alone cannot force live preview after focus returns to iRacing"]
+          "artifacts": ["settings/car-radar/general.png", "states/settings-car-radar.png"],
+          "testFiles": ["tests/TmrOverlay.App.Tests/Overlays/OverlayInputTransparencyTests.cs:RadarSettingsPreview_RequiresActiveSettingsWindow"],
+          "validatorRules": ["tools/analysis/overlay_forensics.py:settings preview ends when Settings is no longer the active preview context"],
+          "assertions": ["settings-preview visibility requires active Settings context", "selected tab alone cannot force live preview after focus returns to iRacing"],
+          "gaps": ["scenario is still thin: no deterministic screenshot or diagnostics replay proves preview teardown across an actual focus-loss transition"]
+        },
+        {
+          "id": "radar-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "partial",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "fixtures": ["fixtures/telemetry-analysis/forensics-smoke/obs-readiness-all-overlays"],
+          "testFiles": ["tests/tools/test_overlay_forensics.py:test_obs_readiness_classifies_all_expected_overlays", "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs:AssertOverlayReadiness"],
+          "assertions": ["car-radar OBS model-rendered readiness is classified separately from settings-preview visibility and route not requested"],
+          "gaps": ["full-capture OBS scene/source correlation is still optional evidence"]
         },
         {
           "id": "radar-minimum-scale",
@@ -867,6 +1004,17 @@
           "status": "missing",
           "surfaces": ["compactReplay", "fullCaptureReplay"],
           "assertions": ["live paint/update costs are separated from finalization costs", "over-budget p95 is attributed to live overlay rendering"]
+        },
+        {
+          "id": "gap-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "partial",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "fixtures": ["fixtures/telemetry-analysis/forensics-smoke/obs-readiness-all-overlays"],
+          "testFiles": ["tests/tools/test_overlay_forensics.py:test_obs_readiness_classifies_all_expected_overlays", "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs:AssertOverlayReadiness"],
+          "assertions": ["gap-to-leader OBS model-rendered readiness is classified separately from hidden, source-error, and route-not-requested states"],
+          "gaps": ["full-capture OBS scene/source correlation is still optional evidence"]
         }
       ]
     },
@@ -915,6 +1063,17 @@
           "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
           "assertions": ["practice/open-session valid lap-distance markers do not depend on HasTakenGrid", "race pre-grid pending-grid policy remains separate"],
           "gaps": ["Windows native render replay comparing hidden pending-grid markers against visible focus markers is still missing"]
+        },
+        {
+          "id": "track-map-obs-readiness",
+          "family": "localhost-route-and-aliases",
+          "tier": "tier2-capture-derived-replay",
+          "status": "partial",
+          "surfaces": ["compactReplay", "localhostObs"],
+          "fixtures": ["fixtures/telemetry-analysis/forensics-smoke/obs-readiness-all-overlays"],
+          "testFiles": ["tests/tools/test_overlay_forensics.py:test_obs_readiness_classifies_all_expected_overlays", "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs:AssertOverlayReadiness"],
+          "assertions": ["track-map OBS browser-source-error readiness is classified separately from model hidden/rendered and route not requested"],
+          "gaps": ["full-capture OBS scene/source correlation is still optional evidence"]
         },
         {
           "id": "track-map-minimum-scale",
@@ -1075,6 +1234,28 @@
           "surfaces": ["browserReview", "localhostObs"],
           "assertions": ["browser-source errors and route health are reported", "external provider content is not derived from iRacing replay"],
           "gaps": ["provider failure/degraded states need stronger deterministic screenshots"]
+        },
+        {
+          "id": "stream-chat-invalid-provider-display",
+          "family": "no-data-or-unavailable",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "partial",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/stream-chat/default.png"],
+          "testFiles": [
+            "tests/TmrOverlay.App.Tests/Localhost/StreamChatOverlaySettingsTests.cs:From_InvalidSelectedProviderConfigReportsDeterministicUnavailableStatus",
+            "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js:renders stream chat unavailable state without telemetry fade"
+          ],
+          "validatorRules": [
+            "tests/browser-overlays/browserOverlayAssets.js:missing_or_invalid_streamlabs_url",
+            "tests/browser-overlays/browserOverlayAssets.js:missing_or_invalid_twitch_channel"
+          ],
+          "assertions": [
+            "invalid selected provider state renders deterministic unavailable copy on overlay surfaces",
+            "provider-specific status is preserved through browser, localhost, and native models",
+            "invalid provider state is not treated as iRacing telemetry waiting or stale chat data"
+          ],
+          "gaps": ["dedicated invalid Streamlabs and invalid Twitch screenshot variants are still missing"]
         },
         {
           "id": "stream-chat-minimum-scale",

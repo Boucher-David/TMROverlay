@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import subprocess
 import sys
@@ -88,6 +90,76 @@ class OverlayForensicsSmokeTests(unittest.TestCase):
             {gap["kind"] for gap in report["evidenceGaps"]["gaps"] if gap["status"] == "fail"},
         )
 
+    def test_package_status_records_offline_enrichment_and_history_inventory(self):
+        with tempfile.TemporaryDirectory(prefix="tmr-forensics-appdata-") as temp_dir:
+            app_data_root = Path(temp_dir) / "TmrOverlay"
+            aggregate_path = app_data_root / "history" / "user" / "cars" / "car-160-toyotagr86" / "tracks" / "track-249-nurburgring-nordschleife" / "sessions" / "race" / "aggregate.json"
+            aggregate_path.parent.mkdir(parents=True)
+            (aggregate_path.parent / "summaries").mkdir()
+            (aggregate_path.parent / "summaries" / "capture-20260523-200213-824.json").write_text("{}", encoding="utf-8")
+            aggregate_path.write_text(
+                json.dumps(
+                    {
+                        "aggregateVersion": 3,
+                        "combo": {
+                            "carKey": "car-160-toyotagr86",
+                            "trackKey": "track-249-nurburgring-nordschleife",
+                            "sessionKey": "race",
+                        },
+                        "sessionCount": 3,
+                        "baselineSessionCount": 1,
+                        "updatedAtUtc": "2026-05-23T20:14:17Z",
+                        "fuelPerLapLiters": {
+                            "sampleCount": 1,
+                            "mean": 5.46179,
+                            "minimum": 5.46179,
+                            "maximum": 5.46179,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result, artifacts = run_forensics_artifacts(
+                "garage-cover-hidden-no-visible-signal",
+                app_data_root=app_data_root)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        package_status = artifacts["package_status"]
+        history_inventory = artifacts["history_inventory"]
+
+        self.assertEqual("offline", package_status["enrichmentStatus"])
+        self.assertEqual("enriched_with_warnings", package_status["status"])
+        self.assertEqual("disabled", package_status["modelReplay"]["status"])
+        self.assertEqual("available", history_inventory["status"])
+        self.assertEqual(1, history_inventory["aggregateCount"])
+        self.assertEqual(1, history_inventory["summaryCount"])
+        self.assertEqual(1, history_inventory["fuelHistoryAggregateCount"])
+        self.assertEqual("race", history_inventory["aggregates"][0]["combo"]["sessionKey"])
+        self.assertEqual(5.46179, history_inventory["aggregates"][0]["fuelPerLapLiters"]["mean"])
+        self.assertEqual(history_inventory, artifacts["report"]["historyInventory"])
+
+    def test_missing_required_replay_and_renderer_evidence_fails_strict_gate(self):
+        with tempfile.TemporaryDirectory(prefix="tmr-forensics-failing-replay-") as temp_dir:
+            fail_script = Path(temp_dir) / "fail_model_replay.py"
+            fail_script.write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
+            result, artifacts = run_forensics_artifacts(
+                "garage-cover-hidden-no-visible-signal",
+                model_replay="required",
+                model_replay_command=f"{sys.executable} {fail_script}",
+                render="browser",
+                fail_on="missing-evidence",
+                assert_mode="strict")
+
+        self.assertEqual(2, result.returncode, result.stderr)
+        package_status = artifacts["package_status"]
+        gap_kinds = {gap["kind"] for gap in artifacts["report"]["evidenceGaps"]["gaps"]}
+
+        self.assertEqual("enriched_with_failures", package_status["status"])
+        self.assertEqual("failed", package_status["modelReplay"]["status"])
+        self.assertIn("production-model-replay-missing", gap_kinds)
+        self.assertIn("browser-render-missing", gap_kinds)
+
     def assert_check(self, overlay: dict, check_id: str, status: str):
         checks = overlay["semanticResults"]["checks"]
         self.assertIn(
@@ -104,30 +176,50 @@ class OverlayForensicsSmokeTests(unittest.TestCase):
 
 
 def run_forensics(name: str, overlays: str = "garage-cover", fail_on: str = "semantic"):
+    result, artifacts = run_forensics_artifacts(name, overlays=overlays, fail_on=fail_on)
+    return result, artifacts["report"]
+
+
+def run_forensics_artifacts(
+    name: str,
+    overlays: str = "garage-cover",
+    fail_on: str = "semantic",
+    model_replay: str = "off",
+    model_replay_command: str | None = None,
+    render: str = "none",
+    assert_mode: str = "strict",
+    app_data_root: Path | None = None,
+):
     fixture = fixture_root / name
     with tempfile.TemporaryDirectory(prefix=f"tmr-{name}-") as temp_dir:
         output = Path(temp_dir) / "out"
+        command = [
+            sys.executable,
+            str(tool_path),
+            "--capture",
+            str(fixture / "capture"),
+            "--diagnostics",
+            str(fixture / "diagnostics"),
+            "--output",
+            str(output),
+            "--overlays",
+            overlays,
+            "--model-replay",
+            model_replay,
+            "--render",
+            render,
+            "--fail-on",
+            fail_on,
+            "--assert",
+            assert_mode,
+        ]
+        if model_replay_command is not None:
+            command.extend(["--model-replay-command", model_replay_command])
+        if app_data_root is not None:
+            command.extend(["--app-data-root", str(app_data_root)])
+
         result = subprocess.run(
-            [
-                sys.executable,
-                str(tool_path),
-                "--capture",
-                str(fixture / "capture"),
-                "--diagnostics",
-                str(fixture / "diagnostics"),
-                "--output",
-                str(output),
-                "--overlays",
-                overlays,
-                "--model-replay",
-                "off",
-                "--render",
-                "none",
-                "--fail-on",
-                fail_on,
-                "--assert",
-                "strict",
-            ],
+            command,
             cwd=repo_root,
             text=True,
             stdout=subprocess.PIPE,
@@ -137,7 +229,11 @@ def run_forensics(name: str, overlays: str = "garage-cover", fail_on: str = "sem
         report_path = output / "overlay-forensics.json"
         if not report_path.exists():
             raise AssertionError(f"forensics report was not written\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
-        return result, json.loads(report_path.read_text(encoding="utf-8"))
+        return result, {
+            "report": json.loads(report_path.read_text(encoding="utf-8")),
+            "package_status": json.loads((output / "package-status.json").read_text(encoding="utf-8")),
+            "history_inventory": json.loads((output / "history-inventory.json").read_text(encoding="utf-8")),
+        }
 
 
 if __name__ == "__main__":

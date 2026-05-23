@@ -59,6 +59,50 @@ class OverlayForensicsSmokeTests(unittest.TestCase):
                 self.assertEqual(state, readiness["state"])
                 self.assertEqual(severity, readiness["severity"])
 
+    def test_obs_source_lifecycle_classifies_existing_route_evidence(self):
+        result, report = run_forensics(
+            "obs-readiness-all-overlays",
+            overlays=",".join([
+                "standings",
+                "relative",
+                "gap-to-leader",
+                "car-radar",
+                "fuel-calculator",
+                "pit-service",
+                "flags",
+                "track-map",
+                "input-state",
+                "session-weather",
+                "garage-cover",
+                "stream-chat",
+            ]),
+            fail_on="none")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        expected_states = {
+            "standings": "not-seen",
+            "relative": "source-loaded",
+            "gap-to-leader": "source-rendering",
+            "car-radar": "source-rendering",
+            "fuel-calculator": "source-polling",
+            "pit-service": "source-hidden",
+            "flags": "source-rendering",
+            "track-map": "source-error",
+            "input-state": "source-hidden",
+            "session-weather": "source-polling",
+            "garage-cover": "source-loaded",
+            "stream-chat": "source-rendering",
+        }
+
+        self.assertEqual(set(expected_states), set(report["overlays"]))
+        for overlay_id, state in expected_states.items():
+            with self.subTest(overlay_id=overlay_id):
+                lifecycle = report["overlays"][overlay_id]["sourceLifecycle"]
+                self.assertEqual(state, lifecycle["state"])
+                self.assertEqual(f"/overlays/{overlay_id}", lifecycle["expected"]["htmlRoute"])
+                self.assertEqual(f"/api/overlay-model/{overlay_id}", lifecycle["expected"]["modelApiPath"])
+                self.assertIn("sourceUrlQueryNotCaptured", lifecycle["evidenceLimitations"])
+
     def test_garage_cover_hidden_without_visible_signal_is_warn_only(self):
         result, report = run_forensics("garage-cover-hidden-no-visible-signal")
 

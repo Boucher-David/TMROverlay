@@ -403,6 +403,10 @@ def main() -> int:
             overlay_id: report["obsReadiness"]
             for overlay_id, report in overlay_reports.items()
         },
+        "sourceLifecycle": {
+            overlay_id: report["sourceLifecycle"]
+            for overlay_id, report in overlay_reports.items()
+        },
     }
     write_json(output / "obs-readiness.json", obs_readiness)
     write_json(output / "live-model-samples.json", {
@@ -473,6 +477,7 @@ def main() -> int:
             "evidence-gaps.json",
             "package-status.json",
             "overlays/<overlay-id>/semantic-manifest.json",
+            "overlays/<overlay-id>/source-lifecycle.json",
             "overlays/<overlay-id>/live-model-summary.json",
             "overlays/<overlay-id>/semantic-results.json",
             "overlays/<overlay-id>/timeline.md",
@@ -683,7 +688,7 @@ def run_renderer_replays(
 
 def command_from_template(template: str, placeholders: dict[str, str]) -> list[str]:
     formatted = template.format(**placeholders)
-    return shlex.split(formatted)
+    return shlex.split(formatted, posix=os.name != "nt")
 
 
 def default_model_replay_command(project: Path, placeholders: dict[str, str]) -> str:
@@ -1419,6 +1424,7 @@ def build_overlay_reports(
         raw_signal = raw_signal_summary(live_diag, overlay_id)
         route = route_stats.get(overlay_id, default_route_stats(overlay_id))
         obs_readiness = classify_obs_readiness(overlay_id, raw_signal, route, localhost, window_z_order)
+        source_lifecycle = classify_source_lifecycle(overlay_id, route)
         page = model_pages.get(overlay_id)
         perf_metrics = [metric for metric in over_budget_metrics(performance_summary, [overlay_id])]
         perf_window = (performance_timeline.get("overlayWindows") or {}).get(overlay_id, {})
@@ -1440,6 +1446,7 @@ def build_overlay_reports(
             "rawSignal": raw_signal,
             "routeCoverage": route,
             "obsReadiness": obs_readiness,
+            "sourceLifecycle": source_lifecycle,
             "finalModelSnapshot": compact_model_page(page),
             "liveModelSamples": model_sample_summaries.get(overlay_id, default_model_sample_summary(overlay_id)),
             "semanticContract": semantic_contract(overlay_id),
@@ -1529,6 +1536,64 @@ def classify_obs_readiness(
         "clientCounts": route.get("clientCounts") or {},
         "recentRequests": route.get("recentRequests") or [],
         "recentPageEvents": route.get("recentPageEvents") or [],
+    }
+
+
+def classify_source_lifecycle(overlay_id: str, route: dict[str, Any]) -> dict[str, Any]:
+    html_requests = int(route.get("htmlRouteRequestCount") or 0)
+    model_requests = int(route.get("modelApiRequestCount") or 0)
+    render_events = int(route.get("modelRenderEventCount") or 0)
+    hidden_events = int(route.get("modelHiddenEventCount") or 0)
+    null_events = int(route.get("modelNullEventCount") or 0)
+    page_loaded_events = int(route.get("pageLoadedEventCount") or 0)
+    error_events = int(route.get("modelErrorEventCount") or 0)
+
+    if error_events > 0:
+        state = "source-error"
+        detail = "Browser source reported model-error events."
+    elif render_events > 0:
+        state = "source-rendering"
+        detail = "Browser source loaded, polled the model API, and reported rendered frames."
+    elif hidden_events > 0 or null_events > 0:
+        state = "source-hidden"
+        detail = "Browser source loaded and polled the model API, but the model was hidden or null."
+    elif model_requests > 0:
+        state = "source-polling"
+        detail = "Model API was requested, but no render/hidden/null/error page event was observed."
+    elif page_loaded_events > 0 or html_requests > 0:
+        state = "source-loaded"
+        detail = "Overlay source loaded, but no model API polling was observed."
+    else:
+        state = "not-seen"
+        detail = "No source load, model poll, render, hidden, null, or error evidence was observed."
+
+    return {
+        "schemaVersion": 1,
+        "overlayId": overlay_id,
+        "state": state,
+        "detail": detail,
+        "expected": {
+            "htmlRoute": f"/overlays/{overlay_id}",
+            "modelApiPath": f"/api/overlay-model/{overlay_id}",
+        },
+        "counts": {
+            "html": html_requests,
+            "model": model_requests,
+            "pageLoaded": page_loaded_events,
+            "modelRender": render_events,
+            "modelHidden": hidden_events,
+            "modelNull": null_events,
+            "modelError": error_events,
+        },
+        "clientCounts": route.get("clientCounts") or {},
+        "recentRequests": route.get("recentRequests") or [],
+        "recentPageEvents": route.get("recentPageEvents") or [],
+        "evidenceLimitations": [
+            "sourceUrlQueryNotCaptured",
+            "modelPollsNotCorrelatedByClientId",
+            "sourceViewportNotCaptured",
+            "pollDurationNotCaptured",
+        ],
     }
 
 
@@ -2012,6 +2077,7 @@ def write_overlay_artifacts(
     write_json(root / "semantic-manifest.json", semantic_contract(overlay_id))
     write_json(root / "live-model-summary.json", model_sample_summary)
     write_json(root / "obs-readiness.json", report["obsReadiness"])
+    write_json(root / "source-lifecycle.json", report["sourceLifecycle"])
     write_json(root / "semantic-results.json", report["semanticResults"])
     screenshot_manifest_path = root / "screenshot-manifest.json"
     if not screenshot_manifest_path.exists():
@@ -2488,6 +2554,12 @@ def render_overlay_timeline(
         "",
         "```json",
         json.dumps(report["obsReadiness"], indent=2, sort_keys=True),
+        "```",
+        "",
+        "## Source Lifecycle",
+        "",
+        "```json",
+        json.dumps(report["sourceLifecycle"], indent=2, sort_keys=True),
         "```",
         "",
         "## Route Coverage",

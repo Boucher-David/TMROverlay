@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 import zlib
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 repo_root = Path(__file__).resolve().parents[2]
@@ -96,7 +96,7 @@ def write_produced_manifest(
     overlay_root = package / "overlays" / overlay_id
     renderer = "browser"
     relative_path = screenshot_path or f"screenshots/{renderer}/frame-000001.png"
-    if not Path(relative_path).is_absolute():
+    if not is_absolute_like(relative_path):
         png_path = overlay_root / relative_path
         png_path.parent.mkdir(parents=True, exist_ok=True)
         png_bytes = tiny_png_bytes()
@@ -132,6 +132,11 @@ def write_produced_manifest(
         ),
         encoding="utf-8",
     )
+
+
+def is_absolute_like(value: str) -> bool:
+    candidates = (Path(value), PurePosixPath(value), PureWindowsPath(value))
+    return any(candidate.is_absolute() for candidate in candidates)
 
 
 def tiny_png_bytes() -> bytes:

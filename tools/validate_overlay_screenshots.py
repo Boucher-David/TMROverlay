@@ -12,7 +12,7 @@ import struct
 import subprocess
 import sys
 import zlib
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Callable, Optional
 
 
@@ -11937,7 +11937,7 @@ def validate_forensics_screenshot_row(
     if not isinstance(relative_path, str) or not relative_path:
         failures.append(f"{row_label}: missing relative PNG path")
         return True
-    if Path(relative_path).is_absolute() or ".." in Path(relative_path).parts:
+    if is_absolute_or_traversing_path(relative_path):
         failures.append(f"{row_label}: screenshot path must be relative and stay inside overlay folder: {relative_path!r}")
         return True
     if renderer and not relative_path.startswith(f"screenshots/{renderer}/"):
@@ -11962,6 +11962,14 @@ def validate_forensics_screenshot_row(
     if expected_hash != actual_hash:
         failures.append(f"{row_label}: imageHash expected {actual_hash}, got {expected_hash!r}")
     return True
+
+
+def is_absolute_or_traversing_path(value: str) -> bool:
+    candidates = (Path(value), PurePosixPath(value), PureWindowsPath(value))
+    return any(candidate.is_absolute() for candidate in candidates) or any(
+        ".." in candidate.parts
+        for candidate in candidates
+    )
 
 
 def forensics_manifest_folder_overlay_id(manifest_path: Path) -> str | None:

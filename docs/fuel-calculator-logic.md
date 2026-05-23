@@ -94,6 +94,8 @@ Live fuel confidence is:
 
 `LiveTelemetryStore` owns the stateful measured-burn estimator. It seeds only from green/racing frames (`SessionState == 4`) in local active context, ignores pre-green-to-green transitions, rejects pit road, garage, focus-on-other-car, refuel/reset, invalid fuel, and implausible lap/fuel deltas, and publishes a short rolling minimum/average/maximum only after a completed valid green lap. Current fuel level still refreshes live during grid, pit, and pre-green states; those drops lower current fuel but do not count as burn-rate evidence.
 
+Routine iRacing session-info refreshes must not clear the measured-burn anchor when the active car/track/session identity is unchanged. The anchor resets only when the active fuel-burn session identity changes, such as moving from practice to race or into a different car/track/session context.
+
 Data review note from the May 2026 capture analysis:
 
 - `FuelUsePerHour` is not stable enough to treat as lap-average burn by itself. In the 4-hour Nürburgring raw capture, sampled valid-level `FuelUsePerHour` commonly implied about 18-19 L/lap even though the historical fuel-delta baseline for the same combo is about 13.4 L/lap.

@@ -105,6 +105,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
         {
             var previousGriddingSessionNum = ActiveRaceSessionNum(_context);
             var nextGriddingSessionNum = ActiveRaceSessionNum(context);
+            var sameFuelBurnSession = IsSameFuelBurnSession(_context, context);
             if (previousGriddingSessionNum != nextGriddingSessionNum)
             {
                 ResetGriddingTracker();
@@ -114,7 +115,11 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             _trackMapSectorTracker.Reset();
             _raceProjectionTracker.Reset();
             _incidentPressureTracker.Reset();
-            _fuelBurnLapTracker.Reset();
+            if (!sameFuelBurnSession)
+            {
+                _fuelBurnLapTracker.Reset();
+            }
+
             _snapshot = _snapshot with
             {
                 Context = context,
@@ -123,6 +128,17 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
                 Sequence = ++_sequence
             };
         }
+    }
+
+    private static bool IsSameFuelBurnSession(HistoricalSessionContext previous, HistoricalSessionContext next)
+    {
+        var previousCombo = HistoricalComboIdentity.From(previous);
+        var nextCombo = HistoricalComboIdentity.From(next);
+        return string.Equals(previousCombo.CarKey, nextCombo.CarKey, StringComparison.Ordinal)
+            && string.Equals(previousCombo.TrackKey, nextCombo.TrackKey, StringComparison.Ordinal)
+            && string.Equals(previousCombo.SessionKey, nextCombo.SessionKey, StringComparison.Ordinal)
+            && previous.Session.CurrentSessionNum == next.Session.CurrentSessionNum
+            && previous.Session.SessionNum == next.Session.SessionNum;
     }
 
     public void RecordFrame(HistoricalTelemetrySample sample)

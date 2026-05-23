@@ -5817,8 +5817,8 @@ def validate_garage_cover_variant(path: str, values: dict[str, object], slug: st
     expected = {
         "hidden": ("garage_hidden", False, True),
         "garage-visible": ("garage_visible", True, True),
-        "stale": ("telemetry_stale", True, False),
-        "disconnected": ("iracing_disconnected", True, False),
+        "stale": ("telemetry_stale", False, False),
+        "disconnected": ("iracing_disconnected", False, False),
     }.get(slug)
     if expected is None:
         failures.append(f"{path}: unknown garage-cover fixture variant {slug!r}")
@@ -9049,7 +9049,7 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
-        name="garage-cover global preview forces preview cover visible",
+        name="garage-cover global preview stays settings-only",
         path="browser-overlays/garage-cover-race.png",
         base=mutation_effective_settings_screenshot(overlay_id="garage-cover", body_kind="garage-cover"),
         mutate=lambda screenshot: set_nested_value(screenshot, ("effectiveSettings", "settings", 3, "value"), True),

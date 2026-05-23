@@ -477,6 +477,7 @@ public sealed class DiagnosticsBundleServiceTests
                     },
                     {
                       "id": "garage-cover",
+                      "enabled": true,
                       "options": {
                         "garage-cover.image-path": "{{escapedGarageCoverPath}}"
                       }
@@ -1758,6 +1759,8 @@ public sealed class DiagnosticsBundleServiceTests
             using var garageCoverReader = new StreamReader(garageCoverEntry.Open());
             var garageCoverJson = JsonNode.Parse(garageCoverReader.ReadToEnd());
             Assert.Equal("/overlays/garage-cover", (string?)garageCoverJson?["route"]);
+            Assert.True((bool?)garageCoverJson?["overlayEnabled"]);
+            Assert.True((bool?)garageCoverJson?["shouldCover"]);
             Assert.Equal("ready", (string?)garageCoverJson?["imageStatus"]);
             Assert.Equal("cover.png", (string?)garageCoverJson?["imageFileName"]);
             Assert.True((bool?)garageCoverJson?["lastGarageVisible"]);

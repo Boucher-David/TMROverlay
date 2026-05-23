@@ -105,7 +105,7 @@ public sealed class BrowserOverlayModelFactoryTests
     }
 
     [Fact]
-    public void GarageCoverModel_FailsClosedEvenWhenLegacySettingsAreDisabled()
+    public void GarageCoverModel_HidesWhenProductVisibilityIsDisabledEvenIfGarageIsVisible()
     {
         var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
         {
@@ -116,15 +116,54 @@ public sealed class BrowserOverlayModelFactoryTests
         var settings = new ApplicationSettings();
         settings.GetOrAddOverlay("garage-cover", 1280, 720).Enabled = false;
         var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
-        var staleSnapshot = LocalPlayerSnapshot(now.AddSeconds(-5));
+        var visibleSnapshot = LocalPlayerSnapshot(now) with
+        {
+            Models = LiveRaceModels.Empty with
+            {
+                RaceEvents = LiveRaceEventModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    IsGarageVisible = true
+                }
+            }
+        };
 
-        Assert.True(factory.TryBuild("garage-cover", staleSnapshot, settings, now, out var response));
+        Assert.True(factory.TryBuild("garage-cover", visibleSnapshot, settings, now, out var response));
+
+        Assert.Null(response.Model.GarageCover);
+        Assert.Equal("disabled | product hidden", response.Model.Status);
+        Assert.False(response.Model.ShouldRender);
+        Assert.False(response.Model.EffectiveSettings!.Rendered.ShouldRender);
+    }
+
+    [Fact]
+    public void GarageCoverModel_HidesWhenTelemetryIsUnavailable()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "garage-cover");
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.True(factory.TryBuild("garage-cover", LiveTelemetrySnapshot.Empty, settings, now, out var response));
 
         Assert.NotNull(response.Model.GarageCover);
-        Assert.True(response.Model.GarageCover!.ShouldCover);
-        Assert.True(response.Model.ShouldRender);
-        Assert.True(response.Model.EffectiveSettings!.Rendered.ShouldRender);
-        Assert.Equal("telemetry_stale", response.Model.GarageCover.Detection.State);
+        Assert.False(response.Model.GarageCover!.ShouldCover);
+        Assert.False(response.Model.ShouldRender);
+        Assert.False(response.Model.EffectiveSettings!.Rendered.ShouldRender);
+        Assert.Equal("iracing_disconnected", response.Model.GarageCover.Detection.State);
+
+        Assert.True(factory.TryBuild("garage-cover", LocalPlayerSnapshot(now.AddSeconds(-5)), settings, now, out var stale));
+        Assert.NotNull(stale.Model.GarageCover);
+        Assert.False(stale.Model.GarageCover!.ShouldCover);
+        Assert.False(stale.Model.ShouldRender);
+        Assert.False(stale.Model.EffectiveSettings!.Rendered.ShouldRender);
+        Assert.Equal("telemetry_stale", stale.Model.GarageCover.Detection.State);
     }
 
     [Fact]

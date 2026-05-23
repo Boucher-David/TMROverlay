@@ -129,8 +129,7 @@ internal sealed class BrowserOverlayModelFactory
         var modelSnapshot = snapshot with { Models = snapshot.CompleteModels() };
         var unitSystem = UnitSystem(settings);
         var sessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(modelSnapshot);
-        if (!string.Equals(overlayId, GarageCoverOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            && TryGetDefinition(overlayId, out var hiddenDefinition)
+        if (TryGetDefinition(overlayId, out var hiddenDefinition)
             && TryBuildHiddenProductModel(hiddenDefinition, modelSnapshot, settings, now, out response))
         {
             return true;

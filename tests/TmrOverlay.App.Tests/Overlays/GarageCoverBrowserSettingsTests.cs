@@ -43,19 +43,60 @@ public sealed class GarageCoverBrowserSettingsTests
     }
 
     [Fact]
-    public void From_FailsClosedWhenTelemetryIsUnavailable()
+    public void From_HidesWhenIracingIsDisconnected()
     {
         var now = DateTimeOffset.UtcNow;
 
         var model = GarageCoverViewModel.From(new ApplicationSettings(), LiveTelemetrySnapshot.Empty, now);
 
-        Assert.True(model.ShouldCover);
+        Assert.False(model.ShouldCover);
         Assert.False(model.Detection.IsFresh);
         Assert.Equal("iracing_disconnected", model.Detection.State);
     }
 
     [Fact]
-    public void DetectGarageState_FailsClosedForUnavailableTelemetry()
+    public void From_HidesWhenTelemetryIsUnavailable()
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var waiting = GarageCoverViewModel.From(
+            new ApplicationSettings(),
+            LiveTelemetrySnapshot.Empty with
+            {
+                IsConnected = true
+            },
+            now);
+        var stale = GarageCoverViewModel.From(
+            new ApplicationSettings(),
+            FreshSnapshot(now.AddSeconds(-5)),
+            now);
+
+        Assert.False(waiting.ShouldCover);
+        Assert.Equal("waiting_for_telemetry", waiting.Detection.State);
+        Assert.False(stale.ShouldCover);
+        Assert.Equal("telemetry_stale", stale.Detection.State);
+    }
+
+    [Fact]
+    public void From_DoesNotLetTransientPreviewOpenLiveCover()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var settings = new ApplicationSettings();
+        var overlay = settings.GetOrAddOverlay("garage-cover", 640, 360);
+        GarageCoverBrowserSettings.SetPreviewUntil(overlay, now.AddMinutes(5));
+
+        var model = GarageCoverViewModel.From(
+            settings,
+            FreshGarageSnapshot(now, isInGarage: false, isGarageVisible: false),
+            now);
+
+        Assert.True(model.BrowserSettings.PreviewVisible);
+        Assert.False(model.ShouldCover);
+        Assert.Equal("garage hidden", model.Status);
+    }
+
+    [Fact]
+    public void DetectGarageState_ClassifiesUnavailableTelemetry()
     {
         var now = DateTimeOffset.UtcNow;
 
@@ -94,6 +135,7 @@ public sealed class GarageCoverBrowserSettingsTests
             File.WriteAllText(coverPath, "not actually decoded by browser settings");
             var settings = new ApplicationSettings();
             var overlay = settings.GetOrAddOverlay("garage-cover", 640, 360);
+            overlay.Enabled = true;
             overlay.SetStringOption(OverlayOptionKeys.GarageCoverImagePath, coverPath);
             GarageCoverBrowserSettings.SetPreviewUntil(overlay, DateTimeOffset.UtcNow.AddMinutes(5));
 
@@ -129,6 +171,7 @@ public sealed class GarageCoverBrowserSettingsTests
             File.WriteAllText(coverPath, "not actually decoded by diagnostics");
             var settings = new ApplicationSettings();
             var overlay = settings.GetOrAddOverlay("garage-cover", 640, 360);
+            overlay.Enabled = true;
             overlay.SetStringOption(OverlayOptionKeys.GarageCoverImagePath, coverPath);
             var localhostState = new LocalhostOverlayState(new LocalhostOverlayOptions
             {
@@ -156,6 +199,8 @@ public sealed class GarageCoverBrowserSettingsTests
             Assert.True(diagnostics.RouteEnabled);
             Assert.Equal("listening", diagnostics.RouteStatus);
             Assert.Equal("/overlays/garage-cover", diagnostics.Route);
+            Assert.True(diagnostics.OverlayEnabled);
+            Assert.True(diagnostics.ShouldCover);
             Assert.Equal("ready", diagnostics.ImageStatus);
             Assert.Equal("cover.jpg", diagnostics.ImageFileName);
             Assert.Equal("garage_visible", diagnostics.LastDetectionState);

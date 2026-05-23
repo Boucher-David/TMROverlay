@@ -1181,7 +1181,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         var page = CreateTabPage("General");
         if (string.Equals(definition.Id, GarageCoverOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
-            var nextTop = SettingsOverlayTabSections.AddScaleOption(page, definition, settings, 18, SaveAndApply);
+            var nextTop = SettingsOverlayTabSections.AddOverlayBasics(page, definition, settings, 18, SaveAndApply);
             SettingsOverlayTabSections.AddLocalhostOptions(page, definition, settings, _localhostOverlayOptions, nextTop + 12, CopyTextToClipboard);
             return page;
         }

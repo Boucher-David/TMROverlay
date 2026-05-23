@@ -5376,11 +5376,8 @@ internal static class Program
         var isGarageCover = string.Equals(overlayId, "garage-cover", StringComparison.OrdinalIgnoreCase);
         var panelBounds = DesignV2SettingsLayout.OverlayControlsPanelBounds(DesignV2SettingsLayout.OverlayControlsPanelHeight(definition, settings));
         var rowIndex = 0;
-        if (!isGarageCover)
-        {
-            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
-            AddSettingsFieldEvidence(elements, ref index, $"{overlayId}.general.visible", "Visible", null, row, DesignV2SettingsLayout.FieldLabelBounds(row), null, capture, offset);
-        }
+        var visibleRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+        AddSettingsFieldEvidence(elements, ref index, $"{overlayId}.general.visible", "Visible", null, visibleRow, DesignV2SettingsLayout.FieldLabelBounds(visibleRow), null, capture, offset);
 
         if (definition.ShowScaleControl)
         {
@@ -7201,13 +7198,10 @@ internal static class Program
             ? DesignV2SettingsLayout.OverlayControlsPanelBounds(SettingsGeometry.OverlayControlsPanelHeight)
             : DesignV2SettingsLayout.OverlayControlsPanelBounds(DesignV2SettingsLayout.OverlayControlsPanelHeight(definition, settings));
         var rowIndex = 0;
-        if (!isGarageCover)
+        var visibleRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+        if (role == "settings-toggle" && SameBounds(bounds, DesignV2SettingsLayout.RightAlignedControlBounds(visibleRow, SettingsToggleWidth, SettingsToggleHeight)))
         {
-            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
-            if (role == "settings-toggle" && SameBounds(bounds, DesignV2SettingsLayout.RightAlignedControlBounds(row, SettingsToggleWidth, SettingsToggleHeight)))
-            {
-                return $"{overlayId}.general.visible.value";
-            }
+            return $"{overlayId}.general.visible.value";
         }
 
         if (definition?.ShowScaleControl == true)

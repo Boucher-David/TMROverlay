@@ -338,13 +338,11 @@
 
       function renderOverlayGeneral(overlay) {
         const controls = [];
-        if (overlay.id !== 'garage-cover') {
-          controls.push(row('Visible', toggle(overlay.enabled, (isOn) => {
-            overlay.enabled = isOn;
-            persistSettings({ kind: 'overlayEnabled', overlayId: overlay.id, enabled: isOn });
-            render();
-          }), `${overlay.id}.general.visible`));
-        }
+        controls.push(row('Visible', toggle(overlay.enabled, (isOn) => {
+          overlay.enabled = isOn;
+          persistSettings({ kind: 'overlayEnabled', overlayId: overlay.id, enabled: isOn });
+          render();
+        }), `${overlay.id}.general.visible`));
         if (overlay.showScale) controls.push(row('Scale', percentSlider('Scale', overlay.scalePercent, 60, 200, 'cyan', (percent) => {
           overlay.scalePercent = percent;
           persistSettings({ kind: 'number', overlayId: overlay.id, key: 'scalePercent', value: percent });

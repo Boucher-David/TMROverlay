@@ -2811,10 +2811,9 @@ function telemetryIsAvailable(live) {
 function garageCoverDisplayModel(page, live, settings) {
   const garageVisible = live?.models?.raceEvents?.isGarageVisible === true;
   const browserSettings = settings?.garageCover || settings || {};
-  const previewVisible = browserSettings.previewVisible === true;
   const detection = garageCoverDetection(live, garageVisible);
-  const shouldCover = previewVisible || !detection.isFresh || garageVisible;
-  const status = previewVisible ? 'preview visible' : detection.displayText;
+  const shouldCover = detection.isFresh === true && garageVisible;
+  const status = detection.displayText;
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,

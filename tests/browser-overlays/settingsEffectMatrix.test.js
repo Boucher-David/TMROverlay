@@ -386,7 +386,7 @@ function happyPathCases() {
       }
     },
     {
-      id: 'garage cover preview forces cover visible',
+      id: 'garage cover preview stays settings-only',
       overlayId: 'garage-cover',
       settingKey: 'garage-cover.previewVisible',
       expectedValue: true,
@@ -400,7 +400,7 @@ function happyPathCases() {
         expect.soft(overlay.garagePreviewVisible).toBe(true);
       },
       assertModel: (model) => {
-        expect.soft(model.garageCover?.shouldCover).toBe(true);
+        expect.soft(model.garageCover?.shouldCover).toBe(false);
       }
     },
     {

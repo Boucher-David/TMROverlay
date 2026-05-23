@@ -167,14 +167,14 @@ OVERLAY_SEMANTIC_CONTRACTS = {
         ],
     },
     "garage-cover": {
-        "purpose": "Prove safety-cover state, image readiness, brand fallback asset, and OBS route readiness.",
+        "purpose": "Prove garage-visible cover state, product-enabled state, image readiness, brand fallback asset, and OBS route readiness.",
         "rawFields": ["IsGarageVisible", "IsInGarage", "IsOnTrack", "SessionState"],
         "modelFields": ["garageCover", "shouldRender", "status", "imageStatus", "detectionState"],
         "rendererFields": ["shouldCover", "imageRendered", "defaultBrandAsset", "modelHiddenEvents"],
         "assertions": [
-            "stale/disconnected/garage-visible safety state bypasses ordinary product-hidden suppression",
+            "cover renders only when product enabled and fresh telemetry reports IsGarageVisible=true",
             "default brand image is ready when no custom image is configured",
-            "loaded OBS source renders cover when safety conditions require it",
+            "loaded OBS source route polling is not treated as render proof without garage-visible telemetry",
         ],
     },
     "stream-chat": {
@@ -1555,7 +1555,13 @@ def semantic_checks(
             checks.append(warn("final-model-snapshot-stale", "Final model snapshot is a post-session waiting/disconnected state, not live-render proof."))
 
     if overlay_id == "garage-cover" and model_requests > 0 and render_events == 0:
-        checks.append(fail("garage-cover-product-hidden", "Garage Cover route was polled but never rendered; product hidden/default-disabled state likely blocked OBS cover."))
+        raw_summary = raw_signal.get("summary", {})
+        sample_summary = raw_summary.get("sampleFrames") if isinstance(raw_summary, dict) else None
+        true_garage_visible_count = sample_summary.get("trueGarageVisibleCount", 0) if isinstance(sample_summary, dict) else 0
+        if true_garage_visible_count:
+            checks.append(fail("garage-cover-not-rendered-while-garage-visible", "Garage Cover route was polled and garage-visible samples existed, but no render events were recorded."))
+        else:
+            checks.append(warn("garage-cover-polled-no-render", "Garage Cover route was polled but never rendered; this is expected when Garage Cover is disabled or no fresh IsGarageVisible=true samples exist."))
 
     if overlay_id == "flags" and raw_signal.get("summary", {}).get("longestDisplayState"):
         checks.append(warn("flags-local-context-needed", "Flag displays require local-driver context validation; duration alone is not enough to classify a flag as false."))

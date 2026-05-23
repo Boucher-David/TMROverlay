@@ -49,6 +49,10 @@ For each overlay, prefer screenshot coverage that includes at least one populate
 
 Do not leave new UI validation as a follow-up unless the user explicitly asks to split it out. If the current artifacts cannot prove the intended behavior, add evidence capture first and keep assertions strict.
 
+## Overlay Contract First Pass
+
+Before validating an overlay functionality question or behavior change, confirm the implementation and evidence still match the app-owned contracts: `tools/validation/overlay-scenario-contract.json`, `src/TmrOverlay.Core/Overlays/OverlayBehaviorDescriptorCatalog.cs`, `src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json`, data-contract snapshots where relevant, screenshot validation profiles, overlay evidence-contract assertions, and the relevant overlay logic doc.
+
 ## Overlay Scenario Contract
 
 For overlay behavior, renderer availability, sizing/scale, content-gating, chrome/no-data policy, replay fixture, localhost/OBS route, native support, or evidence-contract changes, update `tools/validation/overlay-scenario-contract.json` in the same pass.

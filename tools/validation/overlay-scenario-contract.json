@@ -335,6 +335,38 @@
       ]
     },
     {
+      "id": "stream-chat-settings-invalid-provider-config",
+      "area": "stream-chat",
+      "family": "settings-actions",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "partial",
+      "surfaces": ["settingsUi", "browserReview", "localhostObs", "windowsNative"],
+      "artifacts": [
+        "settings/stream-chat/content.png",
+        "settings/stream-chat/twitch.png",
+        "browser-overlays/stream-chat/default.png"
+      ],
+      "testFiles": [
+        "tests/TmrOverlay.App.Tests/Localhost/StreamChatOverlaySettingsTests.cs:From_InvalidSelectedProviderConfigReportsDeterministicUnavailableStatus",
+        "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js:renders stream chat unavailable state without telemetry fade"
+      ],
+      "validatorRules": [
+        "tests/browser-overlays/browserOverlayAssets.js:missing_or_invalid_streamlabs_url",
+        "tests/browser-overlays/browserOverlayAssets.js:missing_or_invalid_twitch_channel",
+        "src/TmrOverlay.App/Overlays/StreamChat/StreamChatOverlayViewModel.cs:missing_or_invalid_streamlabs_url",
+        "src/TmrOverlay.App/Overlays/StreamChat/StreamChatOverlayViewModel.cs:missing_or_invalid_twitch_channel"
+      ],
+      "assertions": [
+        "invalid selected Streamlabs URL keeps Stream Chat unconfigured with missing_or_invalid_streamlabs_url status",
+        "invalid selected Twitch channel keeps Stream Chat unconfigured with missing_or_invalid_twitch_channel status",
+        "browser, localhost, and native Stream Chat unavailable rows use deterministic provider-specific user guidance instead of telemetry waiting text"
+      ],
+      "gaps": [
+        "no dedicated invalid-Streamlabs and invalid-Twitch screenshot variants exist yet",
+        "settings Save-button interaction for edited invalid provider text is still covered by model/settings tests rather than an end-to-end UI click path"
+      ]
+    },
+    {
       "id": "settings-radar-preview-lifetime-evidence",
       "area": "car-radar",
       "family": "settings-preview",

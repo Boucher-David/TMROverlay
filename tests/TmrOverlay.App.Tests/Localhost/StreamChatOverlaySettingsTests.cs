@@ -84,6 +84,48 @@ public sealed class StreamChatOverlaySettingsTests
         Assert.Equal("tmracing", result.TwitchChannel);
     }
 
+    [Theory]
+    [InlineData(
+        StreamChatOverlaySettings.ProviderStreamlabs,
+        "https://example.com/widgets/chat-box/abc123",
+        "tmracing",
+        "missing_or_invalid_streamlabs_url",
+        "Choose Streamlabs and paste a valid Streamlabs Chat Box widget URL.")]
+    [InlineData(
+        StreamChatOverlaySettings.ProviderTwitch,
+        "https://streamlabs.com/widgets/chat-box/abc123",
+        "no spaces allowed",
+        "missing_or_invalid_twitch_channel",
+        "Choose Twitch and enter a valid public channel name.")]
+    public void From_InvalidSelectedProviderConfigReportsDeterministicUnavailableStatus(
+        string provider,
+        string streamlabsUrl,
+        string twitchChannel,
+        string expectedStatus,
+        string expectedMessage)
+    {
+        var settings = new ApplicationSettings();
+        var overlay = settings.GetOrAddOverlay(
+            StreamChatOverlayDefinition.Definition.Id,
+            StreamChatOverlayDefinition.Definition.DefaultWidth,
+            StreamChatOverlayDefinition.Definition.DefaultHeight);
+        overlay.SetStringOption(OverlayOptionKeys.StreamChatProvider, provider);
+        overlay.SetStringOption(OverlayOptionKeys.StreamChatStreamlabsUrl, streamlabsUrl);
+        overlay.SetStringOption(OverlayOptionKeys.StreamChatTwitchChannel, twitchChannel);
+
+        var result = StreamChatOverlaySettings.From(settings);
+        var initialMessage = StreamChatOverlayViewModel.InitialMessage(result);
+
+        Assert.False(result.IsConfigured);
+        Assert.Equal(provider, result.Provider);
+        Assert.Null(result.StreamlabsWidgetUrl);
+        Assert.Null(result.TwitchChannel);
+        Assert.Equal(expectedStatus, result.Status);
+        Assert.Equal("chat source not configured", StreamChatOverlayViewModel.InitialStatus(result));
+        Assert.Equal(expectedMessage, initialMessage.Text);
+        Assert.Equal(StreamChatMessageKind.System, initialMessage.Kind);
+    }
+
     [Fact]
     public void From_RespectsTwitchContentOptions()
     {

@@ -1940,6 +1940,48 @@ DriverInfo:
     }
 
     [Fact]
+    public void RecordFrame_KeepsEstimatedRelativeRowsInPracticeWhenSessionStateIsNonRace()
+    {
+        var store = new LiveTelemetryStore();
+        store.ApplySessionInfo("""
+WeekendInfo:
+ EventType: Race
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Practice
+   SessionName: PRACTICE
+   SessionTime: 3600 sec
+   SessionLaps: unlimited
+DriverInfo:
+ DriverCarIdx: 10
+""");
+
+        store.RecordFrame(CreateSample(
+            sessionState: 1,
+            playerCarIdx: 10,
+            focusCarIdx: 10,
+            focusLapDistPct: 0.50d,
+            focusEstimatedTimeSeconds: 50d,
+            teamCarClass: 4098,
+            teamLapDistPct: 0.50d,
+            teamEstimatedTimeSeconds: 50d,
+            allCars:
+            [
+                Car(10, position: 0, classPosition: 0, lapDistPct: 0.50d, f2TimeSeconds: 0d, estimatedTimeSeconds: 50d),
+                Car(12, position: 0, classPosition: 0, lapDistPct: 0.47d, f2TimeSeconds: 0d, estimatedTimeSeconds: 47d)
+            ]));
+
+        var relativeRow = Assert.Single(store.Snapshot().Models.Relative.Rows);
+        Assert.Equal(12, relativeRow.CarIdx);
+        Assert.Equal("estimated-relative", relativeRow.Source);
+        Assert.True(relativeRow.IsBehind);
+        Assert.Equal(-3d, relativeRow.RelativeSeconds!.Value, precision: 6);
+        Assert.Equal("CarIdxEstTime+CarIdxLapDistPct", relativeRow.TimingEvidence.Source);
+    }
+
+    [Fact]
     public void RecordFrame_KeepsRelativeTimingAvailableWhenPlayerIsInPitStall()
     {
         var store = new LiveTelemetryStore();

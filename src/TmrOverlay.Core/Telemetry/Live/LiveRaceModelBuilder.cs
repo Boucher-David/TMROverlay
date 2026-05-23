@@ -828,12 +828,25 @@ internal static class LiveRaceModelBuilder
         HistoricalSessionContext context,
         HistoricalTelemetrySample sample)
     {
-        if (!IsRaceOrPracticeSession(context))
+        if (ContainsPractice(context.Session.SessionType)
+            || ContainsPractice(context.Session.SessionName))
         {
-            return false;
+            return true;
         }
 
-        return sample.SessionState is 3 or >= 4 or null;
+        if (ContainsRace(context.Session.SessionType)
+            || ContainsRace(context.Session.SessionName))
+        {
+            return sample.SessionState is 3 or >= 4 or null;
+        }
+
+        if (ContainsPractice(context.Session.EventType))
+        {
+            return true;
+        }
+
+        return ContainsRace(context.Session.EventType)
+            && sample.SessionState is 3 or >= 4 or null;
     }
 
     private static LiveScoringRow ToScoringRow(

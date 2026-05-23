@@ -176,7 +176,7 @@ When Enhanced iRacing Telemetry Capture is enabled, the app creates an initial o
 %LOCALAPPDATA%\TmrOverlay\forensics\<capture-id>
 ```
 
-That package indexes the explicit capture and related compact sidecars for follow-up replay analysis. Diagnostics bundles may reference this evidence, but raw telemetry and forensics artifacts stay outside the diagnostics bundle by default. The app will not create this package unless enhanced telemetry capture produced a raw capture.
+That package indexes the explicit capture and related compact sidecars for follow-up replay analysis, including starter package status, OBS/localhost readiness, and evidence-gap files. Offline enrichment can add active production model samples, overlay semantic manifests, and renderer screenshots. Diagnostics bundles may reference this evidence, but raw telemetry and forensics artifacts stay outside the diagnostics bundle by default. The app will not create this package unless enhanced telemetry capture produced a raw capture.
 
 If the Settings UI is frozen and a bundle cannot be created, collect `%LOCALAPPDATA%\TmrOverlay\logs` and the latest `%LOCALAPPDATA%\TmrOverlay\captures` folder from the diagnostic patch build.
 

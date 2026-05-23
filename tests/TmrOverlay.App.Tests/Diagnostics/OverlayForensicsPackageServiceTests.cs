@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.IO.Compression;
 using Microsoft.Extensions.Logging.Abstractions;
 using TmrOverlay.App.Diagnostics;
 using TmrOverlay.App.Events;
@@ -37,6 +38,9 @@ public sealed class OverlayForensicsPackageServiceTests
         Assert.Equal(Path.Combine(storage.ForensicsRoot, captureId), output);
         Assert.True(File.Exists(Path.Combine(output, "storage-boundary.json")));
         Assert.True(File.Exists(Path.Combine(output, "input-inventory.json")));
+        Assert.True(File.Exists(Path.Combine(output, "package-status.json")));
+        Assert.True(File.Exists(Path.Combine(output, "obs-readiness.json")));
+        Assert.True(File.Exists(Path.Combine(output, "evidence-gaps.json")));
         Assert.True(File.Exists(Path.Combine(output, "overlay-forensics.json")));
         Assert.True(File.Exists(Path.Combine(output, "overlay-forensics.md")));
         Assert.Equal(originalCaptureFiles, TopLevelFileNames(captureDirectory));
@@ -54,6 +58,75 @@ public sealed class OverlayForensicsPackageServiceTests
         Assert.Equal(output, rootElement.GetProperty("outputDirectory").GetString());
         Assert.Equal(diagnosticsBundle, rootElement.GetProperty("inputInventory").GetProperty("diagnosticsBundle").GetProperty("path").GetString());
         Assert.Equal(captureDirectory, rootElement.GetProperty("inputInventory").GetProperty("capture").GetProperty("directory").GetString());
+        Assert.Equal("initial", rootElement.GetProperty("packageStatus").GetProperty("enrichmentStatus").GetString());
+    }
+
+    [Fact]
+    public void CreateInitialPackage_ClassifiesObsReadinessFromDiagnosticsBundle()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-forensics-service-test", Guid.NewGuid().ToString("N"));
+        var storage = CreateStorage(root);
+        var service = CreateService(storage);
+        var captureId = "capture-20260522-204847-774";
+        var captureDirectory = Path.Combine(storage.CaptureRoot, captureId);
+        Directory.CreateDirectory(captureDirectory);
+        Directory.CreateDirectory(storage.DiagnosticsRoot);
+        File.WriteAllText(
+            Path.Combine(captureDirectory, "capture-manifest.json"),
+            $$"""{ "formatVersion": 1, "captureId": "{{captureId}}" }""");
+        var diagnosticsBundle = Path.Combine(storage.DiagnosticsRoot, "session-finalization.zip");
+        using (var archive = ZipFile.Open(diagnosticsBundle, ZipArchiveMode.Create))
+        {
+            AddZipText(
+                archive,
+                "metadata/localhost-overlays.json",
+                """
+                {
+                  "pathCounts": {
+                    "/overlays/stream-chat": 1,
+                    "/api/overlay-model/stream-chat": 38
+                  },
+                  "pageEventOverlayCounts": {
+                    "stream-chat|page-loaded": 1,
+                    "stream-chat|model-render": 2
+                  },
+                  "clientCounts": {
+                    "obs": 41
+                  }
+                }
+                """);
+            AddZipText(
+                archive,
+                "metadata/window-z-order.json",
+                """
+                {
+                  "windows": [
+                    { "processName": "obs64", "title": "OBS 32.1.2" }
+                  ]
+                }
+                """);
+        }
+
+        var output = service.CreateInitialPackage(captureDirectory, captureId, diagnosticsBundle, "unit-test");
+
+        using var readiness = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "obs-readiness.json")));
+        var readinessRoot = readiness.RootElement;
+        Assert.Equal("classified", readinessRoot.GetProperty("status").GetString());
+        Assert.True(readinessRoot.GetProperty("obsProcessPresent").GetBoolean());
+        Assert.Equal(
+            "model-rendered",
+            readinessRoot.GetProperty("overlays").GetProperty("stream-chat").GetProperty("state").GetString());
+        Assert.Equal(
+            "not-requested",
+            readinessRoot.GetProperty("overlays").GetProperty("standings").GetProperty("state").GetString());
+
+        using var gaps = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "evidence-gaps.json")));
+        Assert.Contains(
+            gaps.RootElement.GetProperty("gaps").EnumerateArray(),
+            gap => string.Equals(
+                gap.GetProperty("kind").GetString(),
+                "obs-process-present-no-telemetry-overlay-routes",
+                StringComparison.Ordinal));
     }
 
     [Fact]
@@ -114,5 +187,12 @@ public sealed class OverlayForensicsPackageServiceTests
             .Select(path => Path.GetFileName(path) ?? string.Empty)
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static void AddZipText(ZipArchive archive, string entryName, string text)
+    {
+        var entry = archive.CreateEntry(entryName);
+        using var writer = new StreamWriter(entry.Open());
+        writer.Write(text);
     }
 }

@@ -30,8 +30,9 @@ their format version, but the app should not rewrite them in place:
 - compact sidecars such as `capture-synthesis.json`, `ibt-analysis/*.json`,
   `live-model-parity.json`, and `live-overlay-diagnostics.json`
 - app-owned overlay forensics packages under `forensics/<capture-id>/`, including
-  `storage-boundary.json`, `input-inventory.json`, `overlay-forensics.json`, and
-  derived replay artifacts when present
+  `storage-boundary.json`, `input-inventory.json`, `package-status.json`,
+  `obs-readiness.json`, `evidence-gaps.json`, `overlay-forensics.json`, and
+  derived replay/model/renderer artifacts when present
 
 ### Disposable Runtime Data
 

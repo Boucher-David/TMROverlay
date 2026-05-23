@@ -795,7 +795,7 @@
     }
 
     .overlay-general-grid.garage .overlay-controls {
-      min-height: var(--tmr-settings-garage-overlay-controls-panel-height, 166px);
+      min-height: var(--tmr-settings-garage-overlay-controls-panel-height, 200px);
     }
 
     .cover-panel {

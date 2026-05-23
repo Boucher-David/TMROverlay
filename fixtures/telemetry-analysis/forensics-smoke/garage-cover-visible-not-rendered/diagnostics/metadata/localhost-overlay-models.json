@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "telemetry": {
+    "currentConnected": true
+  },
+  "pages": [
+    {
+      "id": "garage-cover",
+      "title": "Garage Cover",
+      "htmlRoute": "/overlays/garage-cover",
+      "modelApiPath": "/api/overlay-model/garage-cover",
+      "refreshIntervalMilliseconds": 250,
+      "htmlRouteRequestCount": 1,
+      "modelApiRequestCount": 8,
+      "modelRenderEventCount": 0,
+      "modelHiddenEventCount": 4,
+      "current": {
+        "snapshotSource": "live",
+        "buildStatus": "succeeded",
+        "renderDecision": "hidden",
+        "shouldRender": false,
+        "status": "garage visible",
+        "source": "source: garage telemetry/settings",
+        "bodyKind": "garage-cover",
+        "content": {
+          "rowCount": 0,
+          "headerItemCount": 0
+        }
+      }
+    }
+  ]
+}

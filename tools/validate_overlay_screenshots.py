@@ -478,6 +478,8 @@ OVERLAY_VARIANTS_ALLOW_LOW_PIXEL_ENTROPY = {
     ("gap-to-leader", "no-cars"),
     ("track-map", "no-markers"),
     ("garage-cover", "hidden"),
+    ("garage-cover", "stale"),
+    ("garage-cover", "disconnected"),
 }
 
 OVERLAY_VARIANT_MIN_UNIQUE_BYTES = {
@@ -494,6 +496,8 @@ OVERLAY_VARIANT_MIN_UNIQUE_BYTES = {
     ("gap-to-leader", "no-cars"): 1,
     ("track-map", "no-markers"): 1,
     ("garage-cover", "hidden"): 1,
+    ("garage-cover", "stale"): 1,
+    ("garage-cover", "disconnected"): 1,
 }
 
 OVERLAY_VARIANT_MIN_BYTE_RANGE = {
@@ -510,6 +514,8 @@ OVERLAY_VARIANT_MIN_BYTE_RANGE = {
     ("gap-to-leader", "no-cars"): 0,
     ("track-map", "no-markers"): 0,
     ("garage-cover", "hidden"): 0,
+    ("garage-cover", "stale"): 0,
+    ("garage-cover", "disconnected"): 0,
 }
 
 WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS = {

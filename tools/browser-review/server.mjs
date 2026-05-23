@@ -639,6 +639,15 @@ function fixtureVariant(searchParams = new URLSearchParams()) {
   return String(searchParams.get('fixture') || '').trim().toLowerCase();
 }
 
+function garageCoverImageMode(searchParams = new URLSearchParams()) {
+  const mode = String(searchParams.get('garageImageMode') || '').trim().toLowerCase();
+  return ['ready', 'missing', 'not-configured'].includes(mode) ? mode : 'ready';
+}
+
+function garageCoverFallbackReason(imageMode) {
+  return imageMode === 'missing' ? 'file_missing' : 'not_configured';
+}
+
 function fixtureMatches(searchParams, ...variants) {
   const fixture = fixtureVariant(searchParams);
   return variants.includes(fixture);
@@ -1006,11 +1015,13 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
   if (overlayId === 'garage-cover') {
     const garageFixture = fixtureVariant(searchParams);
     if (garageFixture.startsWith('garage-')) {
-      const previewVisible = false;
+      const imageMode = garageCoverImageMode(searchParams);
+      const hasImage = imageMode === 'ready';
+      const previewVisible = overlayState.garagePreviewVisible === true;
       return {
-        hasImage: true,
-        imageVersion: `review-${garageFixture}`,
-        fallbackReason: null,
+        hasImage,
+        imageVersion: hasImage ? `review-${garageFixture}` : null,
+        fallbackReason: hasImage ? null : garageCoverFallbackReason(imageMode),
         previewVisible
       };
     }

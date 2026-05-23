@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "clientCounts": {
+    "obs": 1
+  },
+  "pathCounts": {
+    "/overlays/garage-cover": 1,
+    "/api/overlay-model/garage-cover": 8
+  },
+  "pathClientCounts": {
+    "/overlays/garage-cover|obs": 1,
+    "/api/overlay-model/garage-cover|obs": 8
+  },
+  "pageEventOverlayCounts": {
+    "garage-cover|page-loaded": 1,
+    "garage-cover|model-render": 4
+  },
+  "recentRequests": [
+    {
+      "path": "/overlays/garage-cover",
+      "clientKind": "obs"
+    },
+    {
+      "path": "/api/overlay-model/garage-cover",
+      "clientKind": "obs"
+    }
+  ],
+  "recentPageEvents": [
+    {
+      "overlayId": "garage-cover",
+      "event": "page-loaded",
+      "clientKind": "obs"
+    },
+    {
+      "overlayId": "garage-cover",
+      "event": "model-render",
+      "clientKind": "obs",
+      "shouldRender": true,
+      "status": "garage visible"
+    }
+  ]
+}

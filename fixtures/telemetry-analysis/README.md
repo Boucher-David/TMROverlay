@@ -46,3 +46,9 @@ If local iRacing SDK output exposes fields or declared shapes that are not in th
 - `radar-calibration-4h-side-windows.json`
   - Compact clean `CarLeftRight` side-window fixture derived from the local four-hour Nurburgring raw capture.
   - Used by history tests to verify the radar calibration scaffold accepts real pre-grid/side-by-side evidence without requiring the raw `telemetry.bin`.
+- `garage-cover-navarra-obs-policy.json`
+  - Compact policy fixture derived from the May 23, 2026 Navarra OBS/Garage Cover enhanced capture.
+  - Preserves route/model/image counts plus the minimal frame states needed to assert Garage Cover live render policy through production C# model tests, including the `IsInGarage=true` and `IsGarageVisible=false` case.
+- `forensics-smoke/`
+  - Tiny synthetic `overlay_forensics.py` input packages derived from the Garage Cover policy cases.
+  - Used by Python unittest CI to validate report/readiness classification without committing full raw capture folders, diagnostics zips, or `telemetry.bin`.

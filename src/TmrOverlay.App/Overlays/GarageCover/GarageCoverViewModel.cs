@@ -129,6 +129,6 @@ internal sealed record GarageCoverViewModel(
             GarageCoverOverlayDefinition.Definition.Id,
             GarageCoverOverlayDefinition.Definition.DefaultWidth,
             GarageCoverOverlayDefinition.Definition.DefaultHeight,
-            defaultEnabled: false);
+            defaultEnabled: true);
     }
 }

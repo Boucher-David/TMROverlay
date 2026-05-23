@@ -152,7 +152,7 @@ internal static class GarageCoverImageStore
             return outputPath;
         }
 
-        foreach (var ancestor in Ancestors(Directory.GetCurrentDirectory()))
+        foreach (var ancestor in Ancestors(AppContext.BaseDirectory).Concat(Ancestors(Directory.GetCurrentDirectory())).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var repositoryPath = Path.Combine(ancestor, DefaultCoverSourceRelativePath);
             if (File.Exists(repositoryPath))

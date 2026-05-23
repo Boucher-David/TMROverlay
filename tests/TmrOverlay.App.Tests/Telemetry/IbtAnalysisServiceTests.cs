@@ -220,6 +220,79 @@ public sealed class IbtAnalysisServiceTests
     }
 
     [Fact]
+    public async Task WriteAsync_DowngradesCandidateWhenSessionIdentityDiffersFromCapture()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-session-mismatch-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var telemetryRoot = Path.Combine(root, "ibt");
+            var captureDirectory = Path.Combine(root, "captures", "capture-test");
+            Directory.CreateDirectory(telemetryRoot);
+            Directory.CreateDirectory(captureDirectory);
+
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-20T18:03:06Z");
+            var sourcePath = Path.Combine(telemetryRoot, "wrong-track.ibt");
+            WriteSyntheticIbt(
+                sourcePath,
+                startedAtUtc,
+                recordCount: 36_000,
+                endSessionTime: 600d,
+                lastWriteAtUtc: startedAtUtc.AddMinutes(10),
+                sessionInfoYaml:
+                """
+                WeekendInfo:
+                 TrackName: wrong_track
+                SessionInfo:
+                 CurrentSessionNum: 0
+                 Sessions:
+                 - SessionNum: 0
+                   SessionType: Race
+                DriverInfo:
+                 DriverCarIdx: 0
+                 Drivers:
+                 - CarIdx: 0
+                   CarScreenName: Wrong Car
+                """);
+            WriteCaptureManifest(captureDirectory, startedAtUtc, frameCount: 36_000);
+            File.WriteAllText(
+                Path.Combine(captureDirectory, "latest-session.yaml"),
+                """
+                WeekendInfo:
+                 TrackName: expected_track
+                SessionInfo:
+                 CurrentSessionNum: 0
+                 Sessions:
+                 - SessionNum: 0
+                   SessionType: Race
+                DriverInfo:
+                 DriverCarIdx: 0
+                 Drivers:
+                 - CarIdx: 0
+                   CarScreenName: Expected Car
+                """);
+            WriteLiveSchema(captureDirectory);
+
+            var result = await CreateService(telemetryRoot).WriteAsync(captureDirectory);
+
+            Assert.Equal(IbtAnalysisStatus.SucceededWithWarnings, result.Status);
+            Assert.Equal("candidate_session_mismatch", result.Reason);
+            using var status = JsonDocument.Parse(File.ReadAllText(Path.Combine(captureDirectory, "ibt-analysis", "status.json")));
+            Assert.Equal(sourcePath, status.RootElement.GetProperty("source").GetProperty("path").GetString());
+            Assert.Equal(sourcePath, status.RootElement.GetProperty("candidateSelection").GetProperty("selectedPath").GetString());
+            var sessionMatch = status.RootElement.GetProperty("sessionMatch");
+            Assert.Equal("mismatch", sessionMatch.GetProperty("status").GetString());
+            Assert.Contains(sessionMatch.GetProperty("mismatches").EnumerateArray(), item => item.GetString() == "track");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task WriteAsync_UsesDiskStartDistanceBeforeLastWriteWhenDiskStartIsKnown()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-ibt-disk-start-distance-test", Guid.NewGuid().ToString("N"));
@@ -535,7 +608,8 @@ public sealed class IbtAnalysisServiceTests
         double startSessionTime = 0d,
         double endSessionTime = 3d,
         DateTimeOffset? lastWriteAtUtc = null,
-        long? startUnixSecondsOverride = null)
+        long? startUnixSecondsOverride = null,
+        string? sessionInfoYaml = null)
     {
         var fields = new[]
         {
@@ -554,7 +628,7 @@ public sealed class IbtAnalysisServiceTests
         const int varHeaderBytes = 144;
         const int bufferLength = 52;
         var varHeaderOffset = telemetryHeaderBytes + diskHeaderBytes;
-        var sessionInfo = Encoding.UTF8.GetBytes("""
+        var sessionInfo = Encoding.UTF8.GetBytes(sessionInfoYaml ?? """
             WeekendInfo:
               TrackName: test_track
             SessionInfo:

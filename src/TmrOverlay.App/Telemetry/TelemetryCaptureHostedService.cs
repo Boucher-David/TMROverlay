@@ -2215,6 +2215,18 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 return;
             }
 
+            if (string.Equals(result.Status, IbtAnalysisStatus.SucceededWithWarnings, StringComparison.OrdinalIgnoreCase))
+            {
+                _events.Record("ibt_analysis_saved_with_warnings", properties);
+                _state.RecordWarning($"IBT analysis completed with warnings: {result.Reason ?? "unknown"}");
+                _logger.LogWarning(
+                    "Saved IBT analysis for {CaptureDirectory} from {IbtPath} with warnings. Reason: {Reason}.",
+                    captureDirectory,
+                    result.SourcePath,
+                    result.Reason);
+                return;
+            }
+
             _events.Record(
                 string.Equals(result.Status, IbtAnalysisStatus.Failed, StringComparison.OrdinalIgnoreCase)
                     ? "ibt_analysis_failed"

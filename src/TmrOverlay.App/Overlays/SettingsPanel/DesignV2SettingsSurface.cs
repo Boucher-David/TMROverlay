@@ -1850,6 +1850,13 @@ internal sealed class DesignV2SettingsSurface : Control
             return;
         }
 
+        using var defaultImage = GarageCoverImageStore.TryLoadDefaultPreviewImage();
+        if (defaultImage is not null && defaultImage.Width > 0 && defaultImage.Height > 0)
+        {
+            DrawAspectFill(graphics, defaultImage, Rectangle.Inflate(rect, -12, -10));
+            return;
+        }
+
         DrawCentered(graphics, "TMR", rect, 24f, FontStyle.Bold, TextPrimary);
     }
 

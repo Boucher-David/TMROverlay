@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Text.Json;
 using TmrOverlay.App.Cars;
+using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.CarRadar;
 using TmrOverlay.App.Overlays.DesignV2;
 using TmrOverlay.App.Overlays.Relative;
@@ -17,6 +18,15 @@ namespace TmrOverlay.App.Tests.Overlays;
 
 public sealed class OverlayInputTransparencyTests
 {
+    [Fact]
+    public void RadarSettingsPreview_RequiresActiveSettingsWindow()
+    {
+        Assert.True(OverlayManager.ShouldShowRadarSettingsPreview("car-radar", settingsWindowActiveAndVisible: true, radarOverlayEnabled: true));
+        Assert.False(OverlayManager.ShouldShowRadarSettingsPreview("car-radar", settingsWindowActiveAndVisible: false, radarOverlayEnabled: true));
+        Assert.False(OverlayManager.ShouldShowRadarSettingsPreview("standings", settingsWindowActiveAndVisible: true, radarOverlayEnabled: true));
+        Assert.False(OverlayManager.ShouldShowRadarSettingsPreview("car-radar", settingsWindowActiveAndVisible: true, radarOverlayEnabled: false));
+    }
+
     [Fact]
     public void DesignV2InputTransparentKind_IncludesStreamChatClickThroughOverlay()
     {

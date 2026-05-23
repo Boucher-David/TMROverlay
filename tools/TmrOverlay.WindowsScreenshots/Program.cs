@@ -5299,7 +5299,7 @@ internal static class Program
                 elements,
                 ref index,
                 "support.capture.raw.description",
-                "Raw iRacing frame capture runs only when requested.",
+                "Raw iRacing capture runs only when requested.",
                 DesignV2SettingsLayout.SupportDescriptionLineBounds(0),
                 capture,
                 offset);
@@ -5307,7 +5307,7 @@ internal static class Program
                 elements,
                 ref index,
                 "support.bundle.create.description",
-                "Create a bundle after reproducing an issue.",
+                "Forensics save when capture finishes.",
                 DesignV2SettingsLayout.SupportDescriptionLineBounds(1),
                 capture,
                 offset);

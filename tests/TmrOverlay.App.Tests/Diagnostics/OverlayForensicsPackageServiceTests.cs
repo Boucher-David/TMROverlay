@@ -130,6 +130,114 @@ public sealed class OverlayForensicsPackageServiceTests
     }
 
     [Fact]
+    public void CreateInitialPackage_ClassifiesCanonicalObsReadinessStatesForExpectedOverlays()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-forensics-service-test", Guid.NewGuid().ToString("N"));
+        var storage = CreateStorage(root);
+        var service = CreateService(storage);
+        var captureId = "capture-20260522-obs-readiness";
+        var captureDirectory = Path.Combine(storage.CaptureRoot, captureId);
+        Directory.CreateDirectory(captureDirectory);
+        Directory.CreateDirectory(storage.DiagnosticsRoot);
+        File.WriteAllText(
+            Path.Combine(captureDirectory, "capture-manifest.json"),
+            $$"""{ "formatVersion": 1, "captureId": "{{captureId}}" }""");
+        var diagnosticsBundle = Path.Combine(storage.DiagnosticsRoot, "session-finalization.zip");
+        using (var archive = ZipFile.Open(diagnosticsBundle, ZipArchiveMode.Create))
+        {
+            AddZipText(
+                archive,
+                "metadata/localhost-overlays.json",
+                """
+                {
+                  "pathCounts": {
+                    "/overlays/relative": 1,
+                    "/overlays/garage-cover": 1,
+                    "/overlays/calculator": 1,
+                    "/api/overlay-model/fuel-calculator": 5,
+                    "/api/overlay-model/session-weather": 4,
+                    "/overlays/pit-service": 1,
+                    "/api/overlay-model/pit-service": 6,
+                    "/overlays/flags": 1,
+                    "/api/overlay-model/flags": 7,
+                    "/overlays/track-map": 1,
+                    "/api/overlay-model/track-map": 3,
+                    "/overlays/stream-chat": 1,
+                    "/api/overlay-model/stream-chat": 2
+                  },
+                  "pageEventOverlayCounts": {
+                    "relative|page-loaded": 1,
+                    "garage-cover|page-loaded": 1,
+                    "fuel-calculator|page-loaded": 1,
+                    "pit-service|page-loaded": 1,
+                    "pit-service|model-hidden": 3,
+                    "flags|page-loaded": 1,
+                    "flags|model-render": 2,
+                    "track-map|page-loaded": 1,
+                    "track-map|model-error": 1,
+                    "stream-chat|page-loaded": 1,
+                    "stream-chat|model-render": 1
+                  },
+                  "clientCounts": {
+                    "obs": 42
+                  }
+                }
+                """);
+            AddZipText(
+                archive,
+                "metadata/localhost-overlay-models.json",
+                """
+                {
+                  "schemaVersion": 1,
+                  "pages": [
+                    {
+                      "id": "input-state",
+                      "htmlRouteRequestCount": 1,
+                      "modelApiRequestCount": 4,
+                      "pageLoadedEventCount": 1,
+                      "modelRenderEventCount": 0,
+                      "modelHiddenEventCount": 2,
+                      "modelErrorEventCount": 0
+                    }
+                  ]
+                }
+                """);
+        }
+
+        var output = service.CreateInitialPackage(captureDirectory, captureId, diagnosticsBundle, "unit-test");
+
+        using var readiness = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "obs-readiness.json")));
+        var overlays = readiness.RootElement.GetProperty("overlays");
+        var expectedStates = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "not-requested",
+            "page-loaded-no-model",
+            "model-polled-hidden",
+            "model-rendered",
+            "browser-source-error"
+        };
+
+        Assert.Equal(12, overlays.EnumerateObject().Count());
+        Assert.All(overlays.EnumerateObject(), overlay =>
+            Assert.Contains(overlay.Value.GetProperty("state").GetString(), expectedStates));
+        AssertOverlayReadiness(overlays, "standings", "not-requested");
+        AssertOverlayReadiness(overlays, "relative", "page-loaded-no-model");
+        AssertOverlayReadiness(overlays, "gap-to-leader", "not-requested");
+        AssertOverlayReadiness(overlays, "car-radar", "not-requested");
+        AssertOverlayReadiness(overlays, "garage-cover", "page-loaded-no-model");
+        AssertOverlayReadiness(overlays, "fuel-calculator", "model-polled-hidden");
+        Assert.Equal(
+            1,
+            overlays.GetProperty("fuel-calculator").GetProperty("htmlRouteRequestCount").GetInt32());
+        AssertOverlayReadiness(overlays, "session-weather", "model-polled-hidden");
+        AssertOverlayReadiness(overlays, "input-state", "model-polled-hidden");
+        AssertOverlayReadiness(overlays, "pit-service", "model-polled-hidden");
+        AssertOverlayReadiness(overlays, "flags", "model-rendered");
+        AssertOverlayReadiness(overlays, "track-map", "browser-source-error");
+        AssertOverlayReadiness(overlays, "stream-chat", "model-rendered");
+    }
+
+    [Fact]
     public void CreateInitialPackage_PreservesExistingEnrichedPackage()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-forensics-service-test", Guid.NewGuid().ToString("N"));
@@ -194,5 +302,12 @@ public sealed class OverlayForensicsPackageServiceTests
         var entry = archive.CreateEntry(entryName);
         using var writer = new StreamWriter(entry.Open());
         writer.Write(text);
+    }
+
+    private static void AssertOverlayReadiness(JsonElement overlays, string overlayId, string expectedState)
+    {
+        Assert.Equal(
+            expectedState,
+            overlays.GetProperty(overlayId).GetProperty("state").GetString());
     }
 }

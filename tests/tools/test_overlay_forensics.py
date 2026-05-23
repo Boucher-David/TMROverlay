@@ -12,6 +12,50 @@ fixture_root = repo_root / "fixtures" / "telemetry-analysis" / "forensics-smoke"
 
 
 class OverlayForensicsSmokeTests(unittest.TestCase):
+    def test_obs_readiness_classifies_all_expected_overlays(self):
+        result, report = run_forensics(
+            "obs-readiness-all-overlays",
+            overlays=",".join([
+                "standings",
+                "relative",
+                "gap-to-leader",
+                "car-radar",
+                "fuel-calculator",
+                "pit-service",
+                "flags",
+                "track-map",
+                "input-state",
+                "session-weather",
+                "garage-cover",
+                "stream-chat",
+            ]),
+            fail_on="none")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        expected_states = {
+            "standings": ("not-requested", "fail"),
+            "relative": ("page-loaded-no-model", "fail"),
+            "gap-to-leader": ("model-rendered", "info"),
+            "car-radar": ("model-rendered", "info"),
+            "fuel-calculator": ("model-polled-hidden", "warn"),
+            "pit-service": ("model-polled-hidden", "warn"),
+            "flags": ("model-rendered", "info"),
+            "track-map": ("browser-source-error", "fail"),
+            "input-state": ("model-polled-hidden", "warn"),
+            "session-weather": ("model-polled-hidden", "warn"),
+            "garage-cover": ("page-loaded-no-model", "fail"),
+            "stream-chat": ("model-rendered", "info"),
+        }
+        allowed_states = {state for state, _severity in expected_states.values()}
+
+        self.assertEqual(set(expected_states), set(report["overlays"]))
+        for overlay_id, (state, severity) in expected_states.items():
+            with self.subTest(overlay_id=overlay_id):
+                readiness = report["overlays"][overlay_id]["obsReadiness"]
+                self.assertIn(readiness["state"], allowed_states)
+                self.assertEqual(state, readiness["state"])
+                self.assertEqual(severity, readiness["severity"])
+
     def test_garage_cover_hidden_without_visible_signal_is_warn_only(self):
         result, report = run_forensics("garage-cover-hidden-no-visible-signal")
 
@@ -58,7 +102,7 @@ class OverlayForensicsSmokeTests(unittest.TestCase):
         self.assertEqual([], failures)
 
 
-def run_forensics(name: str):
+def run_forensics(name: str, overlays: str = "garage-cover", fail_on: str = "semantic"):
     fixture = fixture_root / name
     with tempfile.TemporaryDirectory(prefix=f"tmr-{name}-") as temp_dir:
         output = Path(temp_dir) / "out"
@@ -73,13 +117,13 @@ def run_forensics(name: str):
                 "--output",
                 str(output),
                 "--overlays",
-                "garage-cover",
+                overlays,
                 "--model-replay",
                 "off",
                 "--render",
                 "none",
                 "--fail-on",
-                "semantic",
+                fail_on,
                 "--assert",
                 "strict",
             ],

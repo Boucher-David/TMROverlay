@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "telemetry": {
+    "currentConnected": true
+  },
+  "pages": [
+    {
+      "id": "input-state",
+      "title": "Inputs",
+      "htmlRoute": "/overlays/input-state",
+      "modelApiPath": "/api/overlay-model/input-state",
+      "htmlRouteRequestCount": 1,
+      "modelApiRequestCount": 4,
+      "pageLoadedEventCount": 1,
+      "modelRenderEventCount": 0,
+      "modelHiddenEventCount": 2,
+      "modelErrorEventCount": 0,
+      "current": {
+        "snapshotSource": "live",
+        "buildStatus": "built",
+        "renderDecision": "built_but_should_not_render",
+        "shouldRender": false,
+        "status": "hidden | no enabled input traces",
+        "source": "source: telemetry",
+        "bodyKind": "input-state",
+        "content": {
+          "rowCount": 0,
+          "headerItemCount": 0
+        }
+      }
+    }
+  ]
+}

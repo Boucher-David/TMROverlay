@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "scoring": {
+    "framesWithData": 12,
+    "maxRows": 18
+  },
+  "relativeLapRelationship": {
+    "observedFrames": 12,
+    "trackedCarCount": 18
+  },
+  "lapDelta": {
+    "framesWithLiveTiming": 12
+  },
+  "radar": {
+    "sideSignalFrames": 5,
+    "multiclassApproachFrames": 2
+  },
+  "gap": {
+    "framesWithData": 12
+  },
+  "raceProjection": {
+    "framesWithData": 12
+  },
+  "fuel": {
+    "framesWithFuelLevel": 12,
+    "framesWithUsableFuelLevel": 12,
+    "pitServiceSignalFrames": 4,
+    "pitServiceRequestFrames": 2
+  },
+  "flags": {
+    "framesWithRawFlags": 2,
+    "framesWithDisplayFlags": 1
+  },
+  "trackMap": {
+    "observedFrames": 12,
+    "trackedCarCount": 18
+  },
+  "sectorTiming": {
+    "framesWithSectors": 12
+  },
+  "rawTelemetry": {
+    "observedFrames": 12,
+    "driverControlSignalFrames": 12,
+    "metadataFrames": 12
+  },
+  "sampleFrames": [
+    {
+      "frameIndex": 1,
+      "sessionTimeSeconds": 1.0,
+      "isGarageVisible": false,
+      "isInGarage": false,
+      "isOnTrack": true
+    }
+  ]
+}

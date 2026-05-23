@@ -2,42 +2,27 @@ using System.Text.Json;
 using System.IO.Compression;
 using Microsoft.Extensions.Logging;
 using TmrOverlay.App.Events;
+using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Storage;
 
 namespace TmrOverlay.App.Diagnostics;
 
 internal sealed class OverlayForensicsPackageService
 {
-    private static readonly string[] BrowserOverlayIds =
-    [
-        "standings",
-        "relative",
-        "gap-to-leader",
-        "car-radar",
-        "fuel-calculator",
-        "pit-service",
-        "flags",
-        "track-map",
-        "input-state",
-        "session-weather",
-        "garage-cover",
-        "stream-chat"
-    ];
+    private static readonly string[] BrowserOverlayIds = BrowserOverlayCatalog.Pages
+        .Select(page => page.Id)
+        .ToArray();
 
-    private static readonly string[] TelemetryOverlayIds =
-    [
-        "standings",
-        "relative",
-        "gap-to-leader",
-        "car-radar",
-        "fuel-calculator",
-        "pit-service",
-        "flags",
-        "track-map",
-        "input-state",
-        "session-weather",
-        "garage-cover"
-    ];
+    private static readonly string[] TelemetryOverlayIds = BrowserOverlayCatalog.Pages
+        .Where(page => page.RequiresTelemetry)
+        .Select(page => page.Id)
+        .ToArray();
+
+    private static readonly IReadOnlyDictionary<string, string[]> BrowserOverlayRoutesById = BrowserOverlayCatalog.Pages
+        .ToDictionary(
+            page => page.Id,
+            page => page.Routes.ToArray(),
+            StringComparer.OrdinalIgnoreCase);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -288,9 +273,10 @@ internal sealed class OverlayForensicsPackageService
     private static OverlayReadinessDocument BuildObsReadiness(string? diagnosticsBundlePath)
     {
         using var localhostDocument = TryReadJsonEntry(diagnosticsBundlePath, "metadata/localhost-overlays.json");
+        using var localhostModelsDocument = TryReadJsonEntry(diagnosticsBundlePath, "metadata/localhost-overlay-models.json");
         using var windowDocument = TryReadJsonEntry(diagnosticsBundlePath, "metadata/window-z-order.json");
 
-        if (localhostDocument is null && windowDocument is null)
+        if (localhostDocument is null && localhostModelsDocument is null && windowDocument is null)
         {
             return new OverlayReadinessDocument(
                 SchemaVersion: 1,
@@ -317,12 +303,13 @@ internal sealed class OverlayForensicsPackageService
         var pathCounts = ReadStringIntMap(localhostDocument, "pathCounts");
         var pageEventCounts = ReadStringIntMap(localhostDocument, "pageEventOverlayCounts");
         var clientCounts = ReadStringIntMap(localhostDocument, "clientCounts");
+        var modelPageCounts = ReadModelPageCounts(localhostModelsDocument);
         var obsProcessPresent = HasObsWindow(windowDocument) || clientCounts.GetValueOrDefault("obs") > 0
             ? true
             : (bool?)null;
         var overlays = BrowserOverlayIds.ToDictionary(
             overlayId => overlayId,
-            overlayId => BuildOverlayReadinessState(overlayId, pathCounts, pageEventCounts),
+            overlayId => BuildOverlayReadinessState(overlayId, pathCounts, pageEventCounts, modelPageCounts),
             StringComparer.OrdinalIgnoreCase);
 
         return new OverlayReadinessDocument(
@@ -336,15 +323,29 @@ internal sealed class OverlayForensicsPackageService
     private static OverlayReadinessState BuildOverlayReadinessState(
         string overlayId,
         IReadOnlyDictionary<string, int> pathCounts,
-        IReadOnlyDictionary<string, int> pageEventCounts)
+        IReadOnlyDictionary<string, int> pageEventCounts,
+        IReadOnlyDictionary<string, OverlayRouteCounts> modelPageCounts)
     {
-        var html = pathCounts.GetValueOrDefault($"/overlays/{overlayId}");
+        var html = BrowserOverlayRoutesById.TryGetValue(overlayId, out var htmlRoutes)
+            ? htmlRoutes.Sum(route => pathCounts.GetValueOrDefault(route))
+            : pathCounts.GetValueOrDefault($"/overlays/{overlayId}");
         var model = pathCounts.GetValueOrDefault($"/api/overlay-model/{overlayId}");
         var pageLoaded = pageEventCounts.GetValueOrDefault($"{overlayId}|page-loaded");
         var render = pageEventCounts.GetValueOrDefault($"{overlayId}|model-render");
         var hidden = pageEventCounts.GetValueOrDefault($"{overlayId}|model-hidden");
         var modelNull = pageEventCounts.GetValueOrDefault($"{overlayId}|model-null");
         var error = pageEventCounts.GetValueOrDefault($"{overlayId}|model-error");
+
+        if (modelPageCounts.TryGetValue(overlayId, out var pageCounts))
+        {
+            html = Math.Max(html, pageCounts.HtmlRouteRequestCount);
+            model = Math.Max(model, pageCounts.ModelApiRequestCount);
+            pageLoaded = Math.Max(pageLoaded, pageCounts.PageLoadedEventCount);
+            render = Math.Max(render, pageCounts.ModelRenderEventCount);
+            hidden = Math.Max(hidden, pageCounts.ModelHiddenEventCount);
+            modelNull = Math.Max(modelNull, pageCounts.ModelNullEventCount);
+            error = Math.Max(error, pageCounts.ModelErrorEventCount);
+        }
 
         string state;
         string detail;
@@ -358,35 +359,26 @@ internal sealed class OverlayForensicsPackageService
             state = "model-rendered";
             detail = "Browser source requested models and reported rendered frames.";
         }
-        else if (model > 0 && hidden > 0)
+        else if (model > 0 || hidden > 0 || modelNull > 0)
         {
             state = "model-polled-hidden";
-            detail = "Browser source requested models, but observed page events were hidden.";
+            detail = hidden > 0
+                ? "Browser source requested models, but observed page events were hidden."
+                : modelNull > 0
+                    ? "Browser source requested models, but observed page events reported no model."
+                    : "Browser source requested models, but no rendered frame was observed.";
         }
-        else if (model > 0 && pageLoaded > 0)
-        {
-            state = "page-loaded-model-polled-no-render-event";
-            detail = "Browser source loaded and polled the model, but no render/hidden event was observed.";
-        }
-        else if (pageLoaded > 0 && model == 0)
+        else if (pageLoaded > 0 || html > 0)
         {
             state = "page-loaded-no-model";
-            detail = "Browser source page loaded but did not request the overlay model API.";
-        }
-        else if (html == 0 && model == 0 && pageLoaded == 0)
-        {
-            state = "not-requested";
-            detail = "No overlay HTML, model API, or page events were observed.";
-        }
-        else if (model > 0)
-        {
-            state = "model-polled-no-page-event";
-            detail = "Model API was requested, but no browser-source page event was observed.";
+            detail = pageLoaded > 0
+                ? "Browser source page loaded but did not request the overlay model API."
+                : "Overlay HTML route was requested, but no page-loaded event or model API request was observed.";
         }
         else
         {
-            state = "unclassified";
-            detail = "Route counters did not match a known readiness state.";
+            state = "not-requested";
+            detail = "No overlay HTML, model API, or page events were observed.";
         }
 
         var severity = state is "model-rendered" ? "info" : "warn";
@@ -546,6 +538,54 @@ internal sealed class OverlayForensicsPackageService
         return result;
     }
 
+    private static IReadOnlyDictionary<string, OverlayRouteCounts> ReadModelPageCounts(JsonDocument? document)
+    {
+        if (document is null
+            || !document.RootElement.TryGetProperty("pages", out var pages)
+            || pages.ValueKind != JsonValueKind.Array)
+        {
+            return new Dictionary<string, OverlayRouteCounts>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var result = new Dictionary<string, OverlayRouteCounts>(StringComparer.OrdinalIgnoreCase);
+        foreach (var page in pages.EnumerateArray())
+        {
+            if (page.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var overlayId = TryGetString(page, "id");
+            if (string.IsNullOrWhiteSpace(overlayId))
+            {
+                continue;
+            }
+
+            result[overlayId] = new OverlayRouteCounts(
+                HtmlRouteRequestCount: ReadInt(page, "htmlRouteRequestCount"),
+                ModelApiRequestCount: ReadInt(page, "modelApiRequestCount"),
+                PageLoadedEventCount: ReadInt(page, "pageLoadedEventCount"),
+                ModelRenderEventCount: ReadInt(page, "modelRenderEventCount"),
+                ModelHiddenEventCount: ReadInt(page, "modelHiddenEventCount"),
+                ModelNullEventCount: ReadInt(page, "modelNullEventCount"),
+                ModelErrorEventCount: ReadInt(page, "modelErrorEventCount"));
+        }
+
+        return result;
+    }
+
+    private static int ReadInt(JsonElement element, string propertyName)
+    {
+        if (element.TryGetProperty(propertyName, out var property)
+            && property.ValueKind == JsonValueKind.Number
+            && property.TryGetInt32(out var value))
+        {
+            return value;
+        }
+
+        return 0;
+    }
+
     private static bool HasObsWindow(JsonDocument? document)
     {
         if (document is null
@@ -637,6 +677,15 @@ internal sealed class OverlayForensicsPackageService
         string State,
         string Severity,
         string Detail,
+        int HtmlRouteRequestCount,
+        int ModelApiRequestCount,
+        int PageLoadedEventCount,
+        int ModelRenderEventCount,
+        int ModelHiddenEventCount,
+        int ModelNullEventCount,
+        int ModelErrorEventCount);
+
+    private sealed record OverlayRouteCounts(
         int HtmlRouteRequestCount,
         int ModelApiRequestCount,
         int PageLoadedEventCount,

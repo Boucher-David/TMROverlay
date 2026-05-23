@@ -42,6 +42,14 @@ ALL_OVERLAYS = [
     "stream-chat",
 ]
 
+OBS_READINESS_STATES = {
+    "not-requested",
+    "page-loaded-no-model",
+    "model-polled-hidden",
+    "model-rendered",
+    "browser-source-error",
+}
+
 OVERLAY_RAW_SECTIONS = {
     "standings": ["scoring", "positionCadence"],
     "relative": ["relativeLapRelationship", "lapDelta", "radar"],
@@ -1275,29 +1283,28 @@ def classify_obs_readiness(
     elif render_events > 0:
         state = "model-rendered"
         detail = "Browser source requested models and reported rendered frames."
-    elif model_requests > 0 and hidden_events > 0:
+    elif model_requests > 0 or hidden_events > 0 or null_events > 0:
         state = "model-polled-hidden"
-        detail = "Browser source requested models, but observed page events were hidden."
-    elif model_requests > 0 and page_loaded_events > 0:
-        state = "page-loaded-model-polled-no-render-event"
-        detail = "Browser source loaded and polled the model, but no render/hidden event was observed."
-    elif page_loaded_events > 0 and model_requests == 0:
+        if hidden_events > 0:
+            detail = "Browser source requested models, but observed page events were hidden."
+        elif null_events > 0:
+            detail = "Browser source requested models, but observed page events reported no model."
+        else:
+            detail = "Browser source requested models, but no rendered frame was observed."
+    elif page_loaded_events > 0 or html_requests > 0:
         state = "page-loaded-no-model"
-        detail = "Browser source page loaded but did not request the overlay model API."
-    elif html_requests == 0 and model_requests == 0 and page_loaded_events == 0:
+        if page_loaded_events > 0:
+            detail = "Browser source page loaded but did not request the overlay model API."
+        else:
+            detail = "Overlay HTML route was requested, but no page-loaded event or model API request was observed."
+    else:
         state = "not-requested"
         detail = "No overlay HTML, model API, or page events were observed."
-    elif model_requests > 0:
-        state = "model-polled-no-page-event"
-        detail = "Model API was requested, but no browser-source page event was observed."
-    else:
-        state = "unclassified"
-        detail = "Route counters did not match a known readiness state."
 
     severity = "info"
     if has_raw_signal and state in {"not-requested", "page-loaded-no-model", "browser-source-error"}:
         severity = "fail"
-    elif has_raw_signal and state in {"model-polled-hidden", "model-polled-no-page-event", "page-loaded-model-polled-no-render-event"}:
+    elif has_raw_signal and state == "model-polled-hidden":
         severity = "warn"
 
     return {
@@ -1517,8 +1524,11 @@ def semantic_checks(
     else:
         checks.append(warn("obs-route-unobserved", "No model requests were observed for this overlay."))
 
-    if model_requests > 0 and render_events == 0 and hidden_events > 0:
-        checks.append(warn("obs-polled-hidden", "OBS polled this overlay but every observed page event was hidden."))
+    if model_requests > 0 and render_events == 0:
+        if hidden_events > 0:
+            checks.append(warn("obs-polled-hidden", "OBS polled this overlay but every observed page event was hidden."))
+        else:
+            checks.append(warn("obs-polled-no-render", "OBS polled this overlay but no model-render event was observed."))
     elif render_events > 0:
         checks.append(pass_check("obs-render-events", f"Observed {render_events} model-render event(s)."))
 

@@ -209,7 +209,18 @@ def settings_component_png_sizes() -> dict[str, tuple[int, int]]:
     }
 
 
+def future_settings_component_png_sizes() -> dict[str, tuple[int, int]]:
+    settings_geometry = settings_geometry_contract_for_constants()
+    return {
+        "components/settings-future/visibility-context.png": (
+            settings_geometry_int(settings_geometry, "panelSmallWidth", 392),
+            settings_geometry_int(settings_geometry, "overlayControlsPanelHeight", 266),
+        ),
+    }
+
+
 SETTINGS_COMPONENT_PNG_SIZES = settings_component_png_sizes()
+FUTURE_SETTINGS_COMPONENT_PNG_SIZES = future_settings_component_png_sizes()
 
 WINDOWS_MINIMUM_PNGS = {
     "states/settings-general.png": SETTINGS_CAPTURE_SIZE,
@@ -731,71 +742,91 @@ WAITING_STATUS_TOKENS = (
     "waiting for radar",
 )
 
-BROWSER_REVIEW_SETTINGS_PNGS = [
-    "settings/general.png",
-    "settings/general-update-available.png",
-    "settings/general-update-disabled.png",
-    "settings/general-update-not-installed.png",
-    "settings/general-update-idle.png",
-    "settings/general-update-up-to-date.png",
-    "settings/general-update-checking.png",
-    "settings/general-update-downloading.png",
-    "settings/general-update-pending-restart.png",
-    "settings/general-update-applying.png",
-    "settings/general-update-failed.png",
-    "settings/diagnostics.png",
-    "settings/support.png",
-    "settings/inputs.png",
-    "settings/inputs-content.png",
-    "settings/general-preview-practice.png",
-    "settings/general-preview-qualifying.png",
-    "settings/general-preview-race.png",
-    "settings/standings.png",
-    "settings/standings-content.png",
-    "settings/standings-header.png",
-    "settings/relative.png",
-    "settings/relative-content.png",
-    "settings/relative-header.png",
-    "settings/gap-to-leader.png",
-    "settings/gap-to-leader-content.png",
-    "settings/gap-to-leader-header.png",
-    "settings/track-map.png",
-    "settings/track-map-content.png",
-    "settings/stream-chat.png",
-    "settings/stream-chat-content.png",
-    "settings/stream-chat-twitch.png",
-    "settings/garage-cover.png",
-    "settings/garage-cover-preview.png",
-    "settings/fuel-calculator.png",
-    "settings/fuel-calculator-content.png",
-    "settings/fuel-calculator-header.png",
-    "settings/input-state.png",
-    "settings/input-state-content.png",
-    "settings/car-radar.png",
-    "settings/flags.png",
-    "settings/flags-content.png",
-    "settings/session-weather.png",
-    "settings/session-weather-content.png",
-    "settings/session-weather-header.png",
-    "settings/pit-service.png",
-    "settings/pit-service-content.png",
-    "settings/pit-service-header.png",
-]
+SETTINGS_UPDATE_STATUSES = (
+    "disabled",
+    "not-installed",
+    "idle",
+    "up-to-date",
+    "available",
+    "checking",
+    "downloading",
+    "pending-restart",
+    "applying",
+    "failed",
+)
+
+SETTINGS_UPDATE_STATUS_TEXT_BY_STATUS = {
+    "disabled": "Disabled.",
+    "not-installed": "Dev run.",
+    "idle": "Ready.",
+    "up-to-date": "Current v1.0.3.",
+    "available": "v1.0.4 available.",
+    "checking": "Checking...",
+    "downloading": "Downloading v1.0.4: 42%.",
+    "pending-restart": "v1.0.4 pending restart.",
+    "applying": "Restarting for v1.0.4.",
+    "failed": "Check failed.",
+}
+
+SETTINGS_REGIONS_BY_OVERLAY = {
+    "garage-cover": ("general", "preview"),
+    "stream-chat": ("general", "content", "twitch"),
+    "car-radar": ("general",),
+    "standings": ("general", "content", "header"),
+    "relative": ("general", "content", "header"),
+    "fuel-calculator": ("general", "content", "header"),
+    "gap-to-leader": ("general", "content", "header"),
+    "session-weather": ("general", "content", "header"),
+    "pit-service": ("general", "content", "header"),
+}
+
+
+def settings_regions_for_overlay(overlay_id: str) -> tuple[str, ...]:
+    return SETTINGS_REGIONS_BY_OVERLAY.get(overlay_id, ("general", "content"))
+
+
+def settings_app_screenshot_path(name: str) -> str:
+    return f"settings/app/{name}.png"
+
+
+def settings_update_screenshot_path(status: str) -> str:
+    return settings_app_screenshot_path(f"update-{status}")
+
+
+def settings_preview_screenshot_path(mode: str) -> str:
+    return settings_app_screenshot_path(f"preview-{mode}")
+
+
+def settings_tab_screenshot_path(tab: str, region: str = "general") -> str:
+    file_name = "general" if region == "general" else region
+    return f"settings/{tab}/{file_name}.png"
+
+
+def browser_review_settings_pngs_for_overlay_ids(overlay_ids: list[str]) -> list[str]:
+    paths = [
+        settings_app_screenshot_path("general"),
+        *(settings_update_screenshot_path(status) for status in SETTINGS_UPDATE_STATUSES),
+        settings_tab_screenshot_path("support", "diagnostics"),
+        settings_tab_screenshot_path("support"),
+        settings_tab_screenshot_path("input-state"),
+        settings_tab_screenshot_path("input-state", "content"),
+        *(settings_preview_screenshot_path(mode) for mode in PREVIEW_MODES),
+    ]
+    for overlay_id in overlay_ids:
+        for region in settings_regions_for_overlay(overlay_id):
+            paths.append(settings_tab_screenshot_path(overlay_id, region))
+    return list(dict.fromkeys(paths))
+
+
+BROWSER_REVIEW_SETTINGS_PNGS = browser_review_settings_pngs_for_overlay_ids(BROWSER_REVIEW_OVERLAY_IDS)
 
 BROWSER_REVIEW_UPDATE_STATUS_TEXT = {
-    "settings/general-update-disabled.png": "Disabled.",
-    "settings/general-update-not-installed.png": "Dev run.",
-    "settings/general-update-idle.png": "Ready.",
-    "settings/general-update-up-to-date.png": "Current v1.0.3.",
-    "settings/general-update-available.png": "v1.0.4 available.",
-    "settings/general-update-checking.png": "Checking...",
-    "settings/general-update-downloading.png": "Downloading v1.0.4: 42%.",
-    "settings/general-update-pending-restart.png": "v1.0.4 pending restart.",
-    "settings/general-update-applying.png": "Restarting for v1.0.4.",
-    "settings/general-update-failed.png": "Check failed.",
+    settings_update_screenshot_path(status): SETTINGS_UPDATE_STATUS_TEXT_BY_STATUS[status]
+    for status in SETTINGS_UPDATE_STATUSES
 }
 
 BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS = SETTINGS_COMPONENT_PNG_SIZES
+BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS = FUTURE_SETTINGS_COMPONENT_PNG_SIZES
 
 BROWSER_REVIEW_INSTALLER_PNGS = [
     "review-installer/welcome.png",
@@ -1524,7 +1555,7 @@ def compare_browser_localhost_overlay_parity(
             failures,
         )
 
-    alias_paths = {path for path in localhost if path.startswith("localhost-overlays/") and "-alias-" in path}
+    alias_paths = {path for path in localhost if web_overlay_alias_parts(path, "localhost-overlays") is not None}
     expected_aliases = localhost_alias_manifest_paths()
     compare_sets("Localhost alias screenshot manifest parity", alias_paths, expected_aliases, failures)
 
@@ -1745,17 +1776,93 @@ def primary_web_overlay_screenshots(
     screenshots: dict[str, dict[str, object]],
     prefix: str,
 ) -> dict[str, dict[str, object]]:
+    indexed: dict[str, dict[str, object]] = {}
+    for path, screenshot in screenshots.items():
+        parts = web_overlay_path_parts(path, prefix)
+        if parts is None or web_overlay_alias_parts(path, prefix) is not None:
+            continue
+        overlay_id, slug = parts
+        indexed[f"{overlay_id}/{slug}.png"] = screenshot
+    return indexed
+
+
+def web_overlay_screenshot_path(prefix: str, overlay_id: str, slug: str) -> str:
+    return f"{prefix}/{overlay_id}/{slug}.png"
+
+
+def web_overlay_alias_screenshot_path(prefix: str, overlay_id: str, alias: str, slug: str = "default") -> str:
+    suffix = "" if slug == "default" else f"-{slug}"
+    return f"{prefix}/{overlay_id}/alias-{alias}{suffix}.png"
+
+
+def web_overlay_variant_screenshot_slug(overlay_id: str, slug: str, web_stem: object = None) -> str:
+    if (overlay_id, slug) == ("track-map", "circle-fallback"):
+        return "fallback"
+    return slug
+
+
+def web_overlay_variant_screenshot_path(
+    prefix: str,
+    overlay_id: str,
+    slug: str,
+    web_stem: object = None,
+) -> str:
+    return web_overlay_screenshot_path(prefix, overlay_id, web_overlay_variant_screenshot_slug(overlay_id, slug, web_stem))
+
+
+def web_overlay_path_parts(path: str, prefix: str) -> tuple[str, str] | None:
     prefix_with_slash = f"{prefix}/"
-    return {
-        path.removeprefix(prefix_with_slash): screenshot
-        for path, screenshot in screenshots.items()
-        if path.startswith(prefix_with_slash) and "-alias-" not in path
-    }
+    if not path.startswith(prefix_with_slash) or not path.endswith(".png"):
+        return None
+
+    stem = path.removeprefix(prefix_with_slash).removesuffix(".png")
+    parts = stem.split("/")
+    if len(parts) == 2 and parts[0] and parts[1]:
+        return parts[0], parts[1]
+    if len(parts) != 1:
+        return None
+
+    return flat_web_overlay_path_parts(parts[0])
+
+
+def flat_web_overlay_path_parts(stem: str) -> tuple[str, str] | None:
+    for overlay_id in sorted(BROWSER_REVIEW_OVERLAY_IDS, key=len, reverse=True):
+        if stem == overlay_id:
+            return overlay_id, "default"
+        prefix = f"{overlay_id}-"
+        if stem.startswith(prefix):
+            return overlay_id, stem.removeprefix(prefix)
+    return None
+
+
+def web_overlay_variant_key_from_screenshot_slug(overlay_id: str, screenshot_slug: str) -> tuple[str, str] | None:
+    for variant_overlay_id, slug, _query, _windows_enabled, web_stem in OVERLAY_VARIANT_SPECS:
+        if variant_overlay_id != overlay_id:
+            continue
+        if web_overlay_variant_screenshot_slug(variant_overlay_id, slug, web_stem) == screenshot_slug:
+            return variant_overlay_id, slug
+    return None
+
+
+def web_overlay_alias_parts(path: str, prefix: str) -> tuple[str, str, str] | None:
+    parts = web_overlay_path_parts(path, prefix)
+    if parts is None:
+        return None
+    overlay_id, slug = parts
+    if not slug.startswith("alias-"):
+        return None
+
+    alias_and_mode = slug.removeprefix("alias-")
+    for mode in PREVIEW_MODES:
+        suffix = f"-{mode}"
+        if alias_and_mode.endswith(suffix):
+            return overlay_id, alias_and_mode.removesuffix(suffix), mode
+    return overlay_id, alias_and_mode, "race"
 
 
 def web_overlay_variant_manifest_path_map(prefix: str) -> dict[str, tuple[str, str]]:
     return {
-        f"{prefix}/{web_variant_stem(overlay_id, slug, web_stem)}.png": (overlay_id, slug)
+        web_overlay_variant_screenshot_path(prefix, overlay_id, slug, web_stem): (overlay_id, slug)
         for overlay_id, slug, _query, _windows_enabled, web_stem in OVERLAY_VARIANT_SPECS
     }
 
@@ -1769,12 +1876,13 @@ def windows_native_variant_manifest_path_map() -> dict[str, tuple[str, str]]:
 
 
 def web_variant_stem(overlay_id: str, slug: str, web_stem: object = None) -> str:
-    return str(web_stem) if isinstance(web_stem, str) and web_stem else f"{overlay_id}-{slug}"
+    return web_overlay_variant_screenshot_slug(overlay_id, slug, web_stem)
 
 
 def screenshot_variant_key(path: str) -> tuple[str, str] | None:
     for prefix in ("browser-overlays", "localhost-overlays"):
-        match = web_overlay_variant_manifest_path_map(prefix).get(path)
+        parts = web_overlay_path_parts(path, prefix)
+        match = web_overlay_variant_key_from_screenshot_slug(*parts) if parts is not None else None
         if match is not None:
             return match
     return windows_native_variant_manifest_path_map().get(path)
@@ -1788,6 +1896,11 @@ def is_expected_hidden_relative_state(path: str, values: Optional[dict[str, obje
         overlay_id = str(values.get("overlayId") or "")
         preview_mode = str(values.get("previewMode") or "")
         if overlay_id == "relative" and preview_mode == "qualifying":
+            return True
+
+    for prefix in ("browser-overlays", "localhost-overlays"):
+        parts = web_overlay_path_parts(path, prefix)
+        if parts == ("relative", "qualifying"):
             return True
 
     return path.endswith("/relative-qualifying.png")
@@ -1804,7 +1917,9 @@ def overlay_variant_index(
     indexed: dict[tuple[str, str], dict[str, object]] = {}
     prefix_with_slash = f"{prefix}/"
     for path, screenshot in screenshots.items():
-        if not path.startswith(prefix_with_slash) or "-alias-" in path:
+        if not path.startswith(prefix_with_slash):
+            continue
+        if prefix in {"browser-overlays", "localhost-overlays"} and web_overlay_alias_parts(path, prefix) is not None:
             continue
         overlay_id = screenshot.get("overlayId")
         fixture_variant = screenshot.get("fixtureVariant")
@@ -1821,7 +1936,9 @@ def overlay_preview_index(
     indexed: dict[tuple[str, str], dict[str, object]] = {}
     prefix_with_slash = f"{prefix}/"
     for path, screenshot in screenshots.items():
-        if not path.startswith(prefix_with_slash) or "-alias-" in path:
+        if not path.startswith(prefix_with_slash):
+            continue
+        if prefix in {"browser-overlays", "localhost-overlays"} and web_overlay_alias_parts(path, prefix) is not None:
             continue
         if isinstance(screenshot.get("fixtureVariant"), str) and screenshot.get("fixtureVariant"):
             continue
@@ -1834,17 +1951,94 @@ def overlay_preview_index(
 
 
 def browser_settings_windows_path(path: str) -> str | None:
-    if path == "settings/diagnostics.png":
-        return "states/settings-support.png"
+    if path in BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS:
+        return None
     if path.startswith("components/settings/"):
         return path
-    if not path.startswith("settings/"):
+
+    parsed = browser_settings_path_parts(path)
+    if parsed is None:
+        return None
+
+    kind, name, region = parsed
+    if kind == "app":
+        if name == "general":
+            return "states/settings-general.png"
+        if name.startswith(("update-", "preview-")):
+            return f"states/settings-general-{name}.png"
+        return None
+
+    if name == "support":
+        return "states/settings-support.png"
+
+    stem = "inputs" if name == "input-state" else name
+    suffix = "" if region == "general" else f"-{region}"
+    return f"states/settings-{stem}{suffix}.png"
+
+
+def browser_settings_path_parts(path: str) -> tuple[str, str, str] | None:
+    if not path.startswith("settings/") or not path.endswith(".png"):
         return None
 
     stem = path.removeprefix("settings/").removesuffix(".png")
-    if stem.startswith("input-state"):
-        stem = f"inputs{stem.removeprefix('input-state')}"
-    return f"states/settings-{stem}.png"
+    parts = stem.split("/")
+    if len(parts) == 2:
+        first, second = parts
+        if first == "app":
+            return "app", second, "general"
+        return "tab", first, "general" if second == "general" else second
+
+    if len(parts) == 1:
+        nested_path = legacy_settings_screenshot_path(parts[0])
+        if nested_path is not None and nested_path != path:
+            return browser_settings_path_parts(nested_path)
+
+    return None
+
+
+def legacy_settings_screenshot_path(stem: str) -> str | None:
+    if stem == "general":
+        return settings_app_screenshot_path("general")
+    if stem.startswith("general-update-"):
+        return settings_update_screenshot_path(stem.removeprefix("general-update-"))
+    if stem.startswith("general-preview-"):
+        return settings_preview_screenshot_path(stem.removeprefix("general-preview-"))
+    if stem == "diagnostics":
+        return settings_tab_screenshot_path("support", "diagnostics")
+    if stem == "support":
+        return settings_tab_screenshot_path("support")
+    if stem.startswith("inputs"):
+        suffix = stem.removeprefix("inputs")
+        return settings_tab_screenshot_path("input-state", suffix.removeprefix("-") if suffix else "general")
+
+    for overlay_id in sorted(BROWSER_REVIEW_OVERLAY_IDS, key=len, reverse=True):
+        if stem == overlay_id:
+            return settings_tab_screenshot_path(overlay_id)
+        prefix = f"{overlay_id}-"
+        if stem.startswith(prefix):
+            return settings_tab_screenshot_path(overlay_id, stem.removeprefix(prefix))
+
+    return None
+
+
+def windows_settings_browser_path(path: str) -> str | None:
+    if not path.startswith("states/settings-") or not path.endswith(".png"):
+        return None
+
+    stem = path.removeprefix("states/settings-").removesuffix(".png")
+    if stem == "general":
+        return settings_app_screenshot_path("general")
+    if stem.startswith("general-update-"):
+        return settings_update_screenshot_path(stem.removeprefix("general-update-"))
+    if stem.startswith("general-preview-"):
+        return settings_preview_screenshot_path(stem.removeprefix("general-preview-"))
+    if stem == "support":
+        return settings_tab_screenshot_path("support")
+    if stem.startswith("inputs"):
+        suffix = stem.removeprefix("inputs")
+        return settings_tab_screenshot_path("input-state", suffix.removeprefix("-") if suffix else "general")
+
+    return legacy_settings_screenshot_path(stem)
 
 
 def installer_menu_index(
@@ -1902,7 +2096,7 @@ def validate_web_overlay_pngs(root: Path, prefix: str, min_unique_bytes: int, fa
         overlay_min_byte_range = WEB_OVERLAY_PRIMARY_MIN_BYTE_RANGE.get(overlay_id, 24)
         validate_png(
             root=root,
-            relative_path=f"{prefix}/{overlay_id}.png",
+            relative_path=web_overlay_screenshot_path(prefix, overlay_id, "default"),
             expected_size=expected_size,
             min_unique_bytes=overlay_min_unique_bytes,
             failures=failures,
@@ -1910,7 +2104,7 @@ def validate_web_overlay_pngs(root: Path, prefix: str, min_unique_bytes: int, fa
             minimum_size=None if expected_size is not None else (200, 120),
         )
         for mode in preview_modes_for_overlay(overlay_id):
-            preview_path = f"{prefix}/{overlay_id}-{mode}.png"
+            preview_path = web_overlay_screenshot_path(prefix, overlay_id, mode)
             preview_expected_size = expected_overlay_preview_size(overlay_id, mode, expected_size)
             preview_min_unique_bytes = overlay_min_unique_bytes
             preview_min_byte_range = overlay_min_byte_range
@@ -1957,7 +2151,9 @@ def validate_browser_review_installer_pngs(root: Path, min_unique_bytes: int, fa
 
 
 def validate_browser_review_settings_component_pngs(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
-    for relative_path, expected_size in BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS.items():
+    component_pngs = dict(BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS)
+    component_pngs.update(BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS)
+    for relative_path, expected_size in component_pngs.items():
         validate_png(
             root=root,
             relative_path=relative_path,
@@ -1969,10 +2165,14 @@ def validate_browser_review_settings_component_pngs(root: Path, min_unique_bytes
 
 def validate_localhost_alias_pngs(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
     for relative_path in localhost_alias_manifest_paths():
-        overlay_id = relative_path.removeprefix("localhost-overlays/").split("-alias-", 1)[0]
+        alias_parts = web_overlay_alias_parts(relative_path, "localhost-overlays")
+        if alias_parts is None:
+            failures.append(f"{relative_path}: unable to parse localhost alias screenshot path")
+            continue
+        overlay_id, _alias_slug, preview_mode = alias_parts
         expected_size = expected_overlay_preview_size(
             overlay_id,
-            preview_mode_from_overlay_path(relative_path),
+            preview_mode,
             WINDOWS_NATIVE_OVERLAY_SIZES.get(overlay_id))
         validate_png(
             root=root,
@@ -2008,7 +2208,12 @@ def EXPECTED_WINDOWS_COMPONENT_FILES() -> tuple[str, ...]:
 
 
 def browser_review_manifest_paths() -> set[str]:
-    paths = set(BROWSER_REVIEW_SETTINGS_PNGS) | set(BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS) | set(BROWSER_REVIEW_INSTALLER_PNGS)
+    paths = (
+        set(BROWSER_REVIEW_SETTINGS_PNGS)
+        | set(BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS)
+        | set(BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS)
+        | set(BROWSER_REVIEW_INSTALLER_PNGS)
+    )
     paths.update(web_overlay_manifest_paths("browser-overlays"))
     return paths
 
@@ -2024,11 +2229,11 @@ def browser_localhost_manifest_paths() -> set[str]:
 def web_overlay_manifest_paths(prefix: str) -> set[str]:
     paths = set()
     for overlay_id in BROWSER_REVIEW_OVERLAY_IDS:
-        paths.add(f"{prefix}/{overlay_id}.png")
+        paths.add(web_overlay_screenshot_path(prefix, overlay_id, "default"))
         for mode in preview_modes_for_overlay(overlay_id):
-            paths.add(f"{prefix}/{overlay_id}-{mode}.png")
+            paths.add(web_overlay_screenshot_path(prefix, overlay_id, mode))
         if overlay_id == "track-map":
-            paths.add(f"{prefix}/track-map-fallback.png")
+            paths.add(web_overlay_screenshot_path(prefix, "track-map", "fallback"))
     paths.update(web_overlay_variant_manifest_path_map(prefix))
     return paths
 
@@ -2037,10 +2242,9 @@ def localhost_alias_manifest_paths() -> set[str]:
     paths = set()
     for overlay_id, aliases in LOCALHOST_OVERLAY_ALIASES.items():
         for alias_slug, _alias_route in aliases:
-            stem = f"localhost-overlays/{overlay_id}-alias-{alias_slug}"
-            paths.add(f"{stem}.png")
+            paths.add(web_overlay_alias_screenshot_path("localhost-overlays", overlay_id, alias_slug))
             for mode in preview_modes_for_overlay(overlay_id):
-                paths.add(f"{stem}-{mode}.png")
+                paths.add(web_overlay_alias_screenshot_path("localhost-overlays", overlay_id, alias_slug, mode))
     return paths
 
 
@@ -2158,13 +2362,13 @@ def validate_browser_review_manifest(
         if path.startswith("review-installer/"):
             require_manifest_fields(path, screenshot, ["menuId", "moduleAsset", "uiEvidence"], failures)
             require_installer_ui_evidence(path, screenshot.get("uiEvidence"), failures)
-        if path.startswith(("settings/", "components/settings/")):
+        if path.startswith(("settings/", "components/settings/", "components/settings-future/")):
             require_manifest_fields(path, screenshot, ["tab", "region", "uiEvidence"], failures)
             require_settings_ui_evidence(path, screenshot.get("uiEvidence"), failures)
             validate_settings_region_manifest(path, screenshot, failures)
             if path.startswith("settings/"):
                 validate_settings_shell_transparency(root / path, path, failures)
-            if path.startswith("components/settings/"):
+            if path.startswith(("components/settings/", "components/settings-future/")):
                 validate_browser_settings_component_manifest(path, screenshot, failures)
 
 
@@ -2559,6 +2763,7 @@ def validate_v102_manifest_evidence(
         "settings/",
         "states/settings-",
         "components/settings/",
+        "components/settings-future/",
     )):
         return
 
@@ -3299,7 +3504,7 @@ def require_settings_ui_evidence(path: str, value: object, failures: list[str]) 
     require_rect(path, value.get("root"), "settings UI root", failures)
     require_rect(path, value.get("contentBounds"), "settings UI content bounds", failures)
 
-    is_component_crop = path.startswith("components/settings/")
+    is_component_crop = path.startswith(("components/settings/", "components/settings-future/"))
     require_settings_app_shell_evidence(path, value.get("appShell"), is_component_crop, failures)
     require_settings_navigation_evidence(path, value.get("navigation"), is_component_crop, failures)
     require_settings_section_evidence(path, value.get("sections"), is_component_crop, failures)
@@ -3614,15 +3819,12 @@ def require_ui_geometry_matrix(
 
 
 def settings_surface_path(path: str) -> str:
-    if not path.startswith("states/settings-"):
-        return path
-
-    stem = path.removeprefix("states/settings-").removesuffix(".png")
-    if stem == "support":
-        return "settings/support.png"
-    if stem.startswith("inputs"):
-        stem = f"input-state{stem.removeprefix('inputs')}"
-    return f"settings/{stem}.png"
+    if path.startswith("states/settings-"):
+        return windows_settings_browser_path(path) or path
+    if path.startswith("settings/") and path.count("/") == 1:
+        stem = path.removeprefix("settings/").removesuffix(".png")
+        return legacy_settings_screenshot_path(stem) or path
+    return path
 
 
 def settings_geometry_required_roles(path: str, is_component_crop: bool) -> set[str]:
@@ -3638,10 +3840,11 @@ def settings_geometry_required_roles(path: str, is_component_crop: bool) -> set[
             "components/settings/chat-inputs.png": {"settings-panel", "settings-field-row", "settings-field-label", "settings-textbox", "settings-segmented"},
             "components/settings/support-buttons.png": {"settings-panel", "settings-field-row", "settings-field-label", "settings-button", "settings-toggle"},
             "components/settings/browser-source.png": {"settings-panel", "settings-field-value", "settings-button"},
+            "components/settings-future/visibility-context.png": {"settings-panel", "settings-field-row", "settings-field-label", "settings-toggle"},
         }
         return required_roles | component_roles.get(path, set())
 
-    if surface_path.startswith("settings/general"):
+    if surface_path.startswith("settings/app/"):
         required_roles.update({
             "settings-field-row",
             "settings-field-label",
@@ -3651,34 +3854,34 @@ def settings_geometry_required_roles(path: str, is_component_crop: bool) -> set[
             "settings-segment-choice",
             "settings-preview-summary",
         })
-    if surface_path in {"settings/support.png", "settings/diagnostics.png"}:
+    if surface_path in {settings_tab_screenshot_path("support"), settings_tab_screenshot_path("support", "diagnostics")}:
         required_roles.update({"settings-field-row", "settings-field-label", "settings-field-value", "settings-button", "settings-toggle"})
-    if surface_path.startswith("settings/stream-chat-content"):
+    if surface_path == settings_tab_screenshot_path("stream-chat", "content"):
         required_roles.update({"settings-field-row", "settings-field-label", "settings-textbox", "settings-segmented", "settings-segment-choice", "settings-button"})
-    if surface_path.startswith("settings/garage-cover-preview"):
+    if surface_path == settings_tab_screenshot_path("garage-cover", "preview"):
         required_roles.update({"settings-preview-stage", "settings-preview-image"})
-    if surface_path.startswith("settings/car-radar"):
+    if surface_path == settings_tab_screenshot_path("car-radar"):
         required_roles.update({"settings-field-row", "settings-field-label", "settings-toggle", "settings-stepper", "settings-button"})
-    is_region_matrix_page = any(suffix in surface_path for suffix in ("-content.png", "-header.png", "-footer.png", "-twitch.png"))
+    is_region_matrix_page = any(surface_path.endswith(f"/{region}.png") for region in ("content", "header", "footer", "twitch"))
     if (
         surface_path.startswith("settings/")
-        and not surface_path.startswith("settings/general")
-        and surface_path not in {"settings/support.png", "settings/diagnostics.png"}
-        and not surface_path.startswith("settings/garage-cover-preview")
+        and not surface_path.startswith("settings/app/")
+        and surface_path not in {settings_tab_screenshot_path("support"), settings_tab_screenshot_path("support", "diagnostics")}
+        and surface_path != settings_tab_screenshot_path("garage-cover", "preview")
         and not is_region_matrix_page
     ):
         required_roles.update({"settings-field-row", "settings-field-label"})
     if (
-        ("-content.png" in surface_path and not surface_path.startswith("settings/stream-chat-content"))
-        or "-header.png" in surface_path
-        or "-footer.png" in surface_path
-        or "-twitch.png" in surface_path
+        (surface_path.endswith("/content.png") and surface_path != settings_tab_screenshot_path("stream-chat", "content"))
+        or surface_path.endswith("/header.png")
+        or surface_path.endswith("/footer.png")
+        or surface_path.endswith("/twitch.png")
     ):
         required_roles.update({"settings-matrix", "settings-matrix-row", "settings-check"})
         if not (
-            surface_path.startswith("settings/session-weather-content")
-            or surface_path.startswith("settings/pit-service-content")
-            or surface_path.startswith("settings/stream-chat-twitch")
+            surface_path == settings_tab_screenshot_path("session-weather", "content")
+            or surface_path == settings_tab_screenshot_path("pit-service", "content")
+            or surface_path == settings_tab_screenshot_path("stream-chat", "twitch")
         ):
             required_roles.add("settings-matrix-cell")
     return required_roles
@@ -3915,12 +4118,8 @@ def require_settings_critical_text_fields(
 
 
 def expected_update_status_text(path: str) -> str | None:
-    if path in BROWSER_REVIEW_UPDATE_STATUS_TEXT:
-        return BROWSER_REVIEW_UPDATE_STATUS_TEXT[path]
-    if path.startswith("states/settings-general-update-"):
-        browser_path = path.replace("states/settings-", "settings/", 1)
-        return BROWSER_REVIEW_UPDATE_STATUS_TEXT.get(browser_path)
-    return None
+    surface_path = settings_surface_path(path)
+    return BROWSER_REVIEW_UPDATE_STATUS_TEXT.get(surface_path)
 
 
 def require_removed_chrome_settings_absent(path: str, value: dict[str, object], failures: list[str]) -> None:
@@ -4963,14 +5162,15 @@ def validate_localhost_alias_manifest(path: str, values: dict[str, object], fail
 
 
 def expected_localhost_alias_route(path: str) -> str | None:
-    for overlay_id, aliases in LOCALHOST_OVERLAY_ALIASES.items():
-        for alias_slug, alias_route in aliases:
-            stem = f"localhost-overlays/{overlay_id}-alias-{alias_slug}"
-            if path == f"{stem}.png":
+    alias_parts = web_overlay_alias_parts(path, "localhost-overlays")
+    if alias_parts is None:
+        return None
+
+    overlay_id, alias_slug, _preview_mode = alias_parts
+    for expected_overlay_id, aliases in LOCALHOST_OVERLAY_ALIASES.items():
+        for expected_alias_slug, alias_route in aliases:
+            if overlay_id == expected_overlay_id and alias_slug == expected_alias_slug:
                 return alias_route
-            for mode in preview_modes_for_overlay(overlay_id):
-                if path == f"{stem}-{mode}.png":
-                    return alias_route
     return None
 
 
@@ -4989,18 +5189,28 @@ def validate_settings_region_manifest(path: str, values: dict[str, object], fail
 
 
 def validate_browser_settings_component_manifest(path: str, values: dict[str, object], failures: list[str]) -> None:
-    expected_size = BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS.get(path)
+    is_future_component = path.startswith("components/settings-future/")
+    expected_size = (
+        BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS.get(path)
+        if is_future_component
+        else BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS.get(path)
+    )
     if expected_size is None:
         failures.append(f"{path}: unknown browser settings component crop")
         return
 
-    if values.get("surface") != "browser-review-settings-component":
-        failures.append(f"{path}: expected browser-review-settings-component surface, got {values.get('surface')!r}")
-    if values.get("captureMode") != "settings-component-crop":
-        failures.append(f"{path}: expected settings-component-crop captureMode, got {values.get('captureMode')!r}")
-    if values.get("comparisonMode") != "browser-review-settings-component-vs-windows-settings-component":
+    expected_surface = "browser-review-settings-future-component" if is_future_component else "browser-review-settings-component"
+    expected_capture_mode = "settings-future-component-crop" if is_future_component else "settings-component-crop"
+    expected_comparison_mode = "browser-review-only-future-settings-component" if is_future_component else "browser-review-settings-component-vs-windows-settings-component"
+    expected_comparison_limit = "review-only-unwired-preview" if is_future_component else "same-design-coordinate-crop"
+
+    if values.get("surface") != expected_surface:
+        failures.append(f"{path}: expected {expected_surface} surface, got {values.get('surface')!r}")
+    if values.get("captureMode") != expected_capture_mode:
+        failures.append(f"{path}: expected {expected_capture_mode} captureMode, got {values.get('captureMode')!r}")
+    if values.get("comparisonMode") != expected_comparison_mode:
         failures.append(f"{path}: missing settings component comparison mode")
-    if values.get("comparisonLimit") != "same-design-coordinate-crop":
+    if values.get("comparisonLimit") != expected_comparison_limit:
         failures.append(f"{path}: missing settings component comparison limit")
 
     crop_bounds = values.get("cropBounds")
@@ -5018,12 +5228,40 @@ def validate_browser_settings_component_manifest(path: str, values: dict[str, ob
     if isinstance(scenario, dict):
         scenario_crop = scenario.get("cropBounds")
         require_rect(path, scenario_crop, "settings component scenario crop bounds", failures)
-        if scenario.get("captureMode") != "settings-component-crop":
-            failures.append(f"{path}: scenario evidence missing settings-component-crop captureMode")
-        if scenario.get("comparisonMode") != "browser-review-settings-component-vs-windows-settings-component":
+        if scenario.get("captureMode") != expected_capture_mode:
+            failures.append(f"{path}: scenario evidence missing {expected_capture_mode} captureMode")
+        if scenario.get("comparisonMode") != expected_comparison_mode:
             failures.append(f"{path}: scenario evidence missing settings component comparison mode")
     else:
         failures.append(f"{path}: missing scenario evidence for settings component crop")
+
+    if is_future_component:
+        require_future_visibility_context_evidence(path, values.get("uiEvidence"), failures)
+
+
+def require_future_visibility_context_evidence(path: str, value: object, failures: list[str]) -> None:
+    if path != "components/settings-future/visibility-context.png":
+        return
+
+    ui = typed_dict(value)
+    geometry = typed_dict(ui.get("geometryMatrix"))
+    elements = evidence_list(geometry, "elements")
+    evidence_keys = {
+        str(get_manifest_value(typed_dict(element), "evidenceKey") or "")
+        for element in elements
+    }
+    ids = {
+        str(get_manifest_value(typed_dict(element), "id") or "")
+        for element in elements
+    }
+    for key in (
+        "future.visibility-context.in-pit",
+        "future.visibility-context.spotting",
+        "future.visibility-context.out-of-car",
+        "future.visibility-context.garage",
+    ):
+        if key not in evidence_keys and not any(key in item for item in ids):
+            failures.append(f"{path}: missing visibility-context evidence key {key!r}")
 
 
 def normalize_manifest_region(value: object) -> str:
@@ -5574,7 +5812,8 @@ def validate_input_mock_data_variant(path: str, values: dict[str, object], failu
             failures.append(
                 f"{path}: input mock-data expected syntheticStateKind='input-state-mock-data', got {provenance.get('syntheticStateKind')!r}"
             )
-    if "input-state-mock-data" not in str(values.get("path") or path):
+    path_text = str(values.get("path") or path)
+    if "input-state-mock-data" not in path_text and not path_text.endswith("/mock-data.png"):
         failures.append(f"{path}: input mock-data screenshot filename should carry the mock-data signal")
 
 
@@ -8227,8 +8466,8 @@ def read_browser_review_variant_specs(repo_root: Path, failures: list[str]) -> d
         variants[key] = match.group(3)
 
     track_map_fallback_markers = (
-        "browser-overlays/track-map-fallback.png",
-        "localhost-overlays/track-map-fallback.png",
+        "webOverlayScreenshotPath('browser-overlays', 'track-map', 'fallback')",
+        "webOverlayScreenshotPath('localhost-overlays', 'track-map', 'fallback')",
         "trackMap=fallback",
         "fixtureVariant: 'circle-fallback'",
     )
@@ -11009,21 +11248,24 @@ def mutation_manifest_parity_screenshot_sets(
     for overlay_id, size in WINDOWS_NATIVE_OVERLAY_SIZES.items():
         for mode in preview_modes_for_overlay(overlay_id):
             screenshot = mutation_preview_manifest(overlay_id, mode, size)
-            browser[f"browser-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
-            localhost[f"localhost-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
-            windows[f"native-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
+            browser_path = web_overlay_screenshot_path("browser-overlays", overlay_id, mode)
+            localhost_path = web_overlay_screenshot_path("localhost-overlays", overlay_id, mode)
+            windows_path = f"native-overlays/{overlay_id}-{mode}.png"
+            browser[browser_path] = copy.deepcopy(screenshot)
+            localhost[localhost_path] = copy.deepcopy(screenshot)
+            windows[windows_path] = copy.deepcopy(screenshot)
             if native_preview_size_mismatch == (overlay_id, mode):
-                windows[f"native-overlays/{overlay_id}-{mode}.png"]["width"] = size[0] + 17
+                windows[windows_path]["width"] = size[0] + 17
             if localhost_header_value_mismatch == (overlay_id, mode):
-                localhost[f"localhost-overlays/{overlay_id}-{mode}.png"]["headerItems"][0]["value"] = "06:36:00"
+                localhost[localhost_path]["headerItems"][0]["value"] = "06:36:00"
             if native_header_tone_mismatch == (overlay_id, mode):
-                windows[f"native-overlays/{overlay_id}-{mode}.png"]["headerItems"][0]["tone"] = "warning"
+                windows[windows_path]["headerItems"][0]["tone"] = "warning"
 
     for overlay_id, slug in WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS:
         size = WINDOWS_NATIVE_OVERLAY_SIZES[overlay_id]
         screenshot = mutation_variant_manifest(overlay_id, slug, size)
-        browser[f"browser-overlays/{web_variant_stem(overlay_id, slug)}.png"] = copy.deepcopy(screenshot)
-        localhost[f"localhost-overlays/{web_variant_stem(overlay_id, slug)}.png"] = copy.deepcopy(screenshot)
+        browser[web_overlay_variant_screenshot_path("browser-overlays", overlay_id, slug)] = copy.deepcopy(screenshot)
+        localhost[web_overlay_variant_screenshot_path("localhost-overlays", overlay_id, slug)] = copy.deepcopy(screenshot)
         windows[f"native-overlays/{overlay_id}-{slug}.png"] = copy.deepcopy(screenshot)
 
     if missing_windows_variant is not None:
@@ -11127,48 +11369,11 @@ def expected_windows_settings_pngs(overlay_ids: list[str]) -> set[str]:
 
 
 def expected_browser_review_settings_pngs(overlay_ids: list[str]) -> set[str]:
-    paths = {
-        "settings/general.png",
-        "settings/general-update-disabled.png",
-        "settings/general-update-not-installed.png",
-        "settings/general-update-idle.png",
-        "settings/general-update-up-to-date.png",
-        "settings/general-update-available.png",
-        "settings/general-update-checking.png",
-        "settings/general-update-downloading.png",
-        "settings/general-update-pending-restart.png",
-        "settings/general-update-applying.png",
-        "settings/general-update-failed.png",
-        "settings/diagnostics.png",
-        "settings/support.png",
-        "settings/inputs.png",
-        "settings/inputs-content.png",
-        *(f"settings/general-preview-{mode}.png" for mode in PREVIEW_MODES),
-    }
-    for overlay_id in overlay_ids:
-        for region in regions_for_overlay(overlay_id):
-            suffix = "" if region == "general" else f"-{region}"
-            paths.add(f"settings/{overlay_id}{suffix}.png")
-    return paths
+    return set(browser_review_settings_pngs_for_overlay_ids(overlay_ids))
 
 
 def regions_for_overlay(overlay_id: str) -> tuple[str, ...]:
-    if overlay_id == "garage-cover":
-        return ("general", "preview")
-    if overlay_id == "stream-chat":
-        return ("general", "content", "twitch")
-    if overlay_id == "car-radar":
-        return ("general",)
-    if overlay_id in {
-        "standings",
-        "relative",
-        "fuel-calculator",
-        "gap-to-leader",
-        "session-weather",
-        "pit-service",
-    }:
-        return ("general", "content", "header")
-    return ("general", "content")
+    return settings_regions_for_overlay(overlay_id)
 
 
 def preview_modes_for_overlay(overlay_id: str) -> tuple[str, ...]:
@@ -11184,8 +11389,9 @@ def expected_overlay_preview_size(
 
 
 def preview_mode_from_overlay_path(relative_path: str) -> str:
+    stem = relative_path.rsplit("/", 1)[-1].removesuffix(".png")
     for mode in PREVIEW_MODES:
-        if relative_path.endswith(f"-{mode}.png"):
+        if stem == mode or stem.endswith(f"-{mode}"):
             return mode
     return "race"
 

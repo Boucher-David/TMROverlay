@@ -152,12 +152,13 @@ export function renderSettingsGeneralReviewHtml({ previewMode = 'off', reviewSta
   });
 }
 
-export function renderAppValidatorReviewHtml({ previewMode = 'off', selectedTab = 'general', selectedRegion = 'general', reviewState = null } = {}) {
+export function renderAppValidatorReviewHtml({ previewMode = 'off', selectedTab = 'general', selectedRegion = 'general', reviewState = null, reviewComponent = null } = {}) {
   return renderSettingsReviewHtml({
     previewMode,
     selectedTab,
     selectedRegion,
-    reviewState
+    reviewState,
+    reviewComponent
   });
 }
 
@@ -338,7 +339,8 @@ function renderSettingsReviewHtml({
   previewMode = 'off',
   selectedTab = 'general',
   selectedRegion = 'general',
-  reviewState = null
+  reviewState = null,
+  reviewComponent = null
 }) {
   const settingsCss = assetText('styles/settings-general.css')
     .replace('{{THEME_CSS_VARIABLES}}', themeCssVariables())
@@ -347,7 +349,8 @@ function renderSettingsReviewHtml({
     previewMode,
     selectedTab,
     selectedRegion,
-    reviewState
+    reviewState,
+    reviewComponent
   });
 
   return assetText('templates/settings-general.html')
@@ -576,12 +579,13 @@ export function browserOverlayApiResponse(name, path, { live, settings = {}, mod
   return null;
 }
 
-function settingsAppConfig({ previewMode = 'off', selectedTab = 'general', selectedRegion = 'general', reviewState = null } = {}) {
+function settingsAppConfig({ previewMode = 'off', selectedTab = 'general', selectedRegion = 'general', reviewState = null, reviewComponent = null } = {}) {
   const normalizedPreviewMode = normalizePreviewMode(previewMode);
   return {
     previewMode: normalizedPreviewMode,
     selectedTab,
     selectedRegion,
+    reviewComponent: normalizeReviewComponent(reviewComponent),
     unitSystem: normalizeUnitSystem(reviewState?.unitSystem || 'Metric'),
     support: {
       rawCaptureEnabled: reviewState?.support?.rawCaptureEnabled === true,
@@ -597,6 +601,10 @@ function settingsAppConfig({ previewMode = 'off', selectedTab = 'general', selec
     sessionLabels: ['Practice', 'Qualifying', 'Race'],
     overlays: settingsAppOverlays(reviewState, normalizedPreviewMode)
   };
+}
+
+function normalizeReviewComponent(value) {
+  return value === 'visibility-context' ? value : null;
 }
 
 function settingsAppOverlays(reviewState = null, previewMode = 'off') {

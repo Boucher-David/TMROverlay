@@ -252,21 +252,21 @@ function screenshotRoutes(surface) {
   const routes = [];
   if (surface === 'browser-review' || surface === 'all') {
     routes.push(
-      settingsRoute('settings/general.png', '/review/app', { tab: 'general', region: 'general' }),
-      settingsRoute('settings/general-update-disabled.png', '/review/app?update=disabled', { tab: 'general', region: 'general', updateStatus: 'disabled' }),
-      settingsRoute('settings/general-update-not-installed.png', '/review/app?update=not-installed', { tab: 'general', region: 'general', updateStatus: 'not-installed' }),
-      settingsRoute('settings/general-update-idle.png', '/review/app?update=idle', { tab: 'general', region: 'general', updateStatus: 'idle' }),
-      settingsRoute('settings/general-update-up-to-date.png', '/review/app?update=up-to-date', { tab: 'general', region: 'general', updateStatus: 'up-to-date' }),
-      settingsRoute('settings/general-update-available.png', '/review/app?update=available', { tab: 'general', region: 'general', updateStatus: 'available' }),
-      settingsRoute('settings/general-update-checking.png', '/review/app?update=checking', { tab: 'general', region: 'general', updateStatus: 'checking' }),
-      settingsRoute('settings/general-update-downloading.png', '/review/app?update=downloading', { tab: 'general', region: 'general', updateStatus: 'downloading' }),
-      settingsRoute('settings/general-update-pending-restart.png', '/review/app?update=pending-restart', { tab: 'general', region: 'general', updateStatus: 'pending-restart' }),
-      settingsRoute('settings/general-update-applying.png', '/review/app?update=applying', { tab: 'general', region: 'general', updateStatus: 'applying' }),
-      settingsRoute('settings/general-update-failed.png', '/review/app?update=failed', { tab: 'general', region: 'general', updateStatus: 'failed' }),
-      settingsRoute('settings/diagnostics.png', '/review/app?tab=support', { tab: 'support', region: 'general' }),
-      settingsRoute('settings/support.png', '/review/app?tab=support', { tab: 'support', region: 'general', pathAlias: 'windows-settings-support' }),
-      settingsRoute('settings/inputs.png', '/review/app?tab=input-state', { tab: 'input-state', overlayId: 'input-state', region: 'general', pathAlias: 'windows-settings-inputs' }),
-      settingsRoute('settings/inputs-content.png', '/review/app?tab=input-state&region=content', { tab: 'input-state', overlayId: 'input-state', region: 'content', pathAlias: 'windows-settings-inputs-content' }),
+      settingsRoute(settingsAppScreenshotPath('general'), '/review/app', { tab: 'general', region: 'general' }),
+      settingsRoute(settingsAppScreenshotPath('update-disabled'), '/review/app?update=disabled', { tab: 'general', region: 'general', updateStatus: 'disabled' }),
+      settingsRoute(settingsAppScreenshotPath('update-not-installed'), '/review/app?update=not-installed', { tab: 'general', region: 'general', updateStatus: 'not-installed' }),
+      settingsRoute(settingsAppScreenshotPath('update-idle'), '/review/app?update=idle', { tab: 'general', region: 'general', updateStatus: 'idle' }),
+      settingsRoute(settingsAppScreenshotPath('update-up-to-date'), '/review/app?update=up-to-date', { tab: 'general', region: 'general', updateStatus: 'up-to-date' }),
+      settingsRoute(settingsAppScreenshotPath('update-available'), '/review/app?update=available', { tab: 'general', region: 'general', updateStatus: 'available' }),
+      settingsRoute(settingsAppScreenshotPath('update-checking'), '/review/app?update=checking', { tab: 'general', region: 'general', updateStatus: 'checking' }),
+      settingsRoute(settingsAppScreenshotPath('update-downloading'), '/review/app?update=downloading', { tab: 'general', region: 'general', updateStatus: 'downloading' }),
+      settingsRoute(settingsAppScreenshotPath('update-pending-restart'), '/review/app?update=pending-restart', { tab: 'general', region: 'general', updateStatus: 'pending-restart' }),
+      settingsRoute(settingsAppScreenshotPath('update-applying'), '/review/app?update=applying', { tab: 'general', region: 'general', updateStatus: 'applying' }),
+      settingsRoute(settingsAppScreenshotPath('update-failed'), '/review/app?update=failed', { tab: 'general', region: 'general', updateStatus: 'failed' }),
+      settingsRoute(settingsTabScreenshotPath('support', 'diagnostics'), '/review/app?tab=support', { tab: 'support', region: 'general' }),
+      settingsRoute(settingsTabScreenshotPath('support'), '/review/app?tab=support', { tab: 'support', region: 'general', pathAlias: 'windows-settings-support' }),
+      settingsRoute(settingsTabScreenshotPath('input-state'), '/review/app?tab=input-state', { tab: 'input-state', overlayId: 'input-state', region: 'general', pathAlias: 'windows-settings-inputs' }),
+      settingsRoute(settingsTabScreenshotPath('input-state', 'content'), '/review/app?tab=input-state&region=content', { tab: 'input-state', overlayId: 'input-state', region: 'content', pathAlias: 'windows-settings-inputs-content' }),
       ...settingsComponentRoutes(),
       installerReviewRoute('review-installer/welcome.png', '/review/installer?menu=welcome', { menuId: 'welcome' }),
       installerReviewRoute('review-installer/installer-page-02.png', '/review/installer?menu=installer-page-02', { menuId: 'installer-page-02' }),
@@ -274,7 +274,7 @@ function screenshotRoutes(surface) {
       installerReviewRoute('review-installer/cancel-confirm.png', '/review/installer?menu=cancel-confirm', { menuId: 'cancel-confirm' }),
       ...previewModes.map((mode) =>
         settingsRoute(
-          `settings/general-preview-${mode}.png`,
+          settingsAppScreenshotPath(`preview-${mode}`),
           `/review/app?preview=${encodeURIComponent(mode)}`,
           { tab: 'general', region: 'general', previewMode: mode }))
     );
@@ -283,7 +283,7 @@ function screenshotRoutes(surface) {
       for (const region of regionsForOverlay(overlayId)) {
         const suffix = region === 'general' ? '' : `-${region}`;
         routes.push(settingsRoute(
-          `settings/${overlayId}${suffix}.png`,
+          settingsTabScreenshotPath(overlayId, region),
           `/review/app?tab=${encodeURIComponent(overlayId)}${region === 'general' ? '' : `&region=${encodeURIComponent(region)}`}`,
           { tab: overlayId, overlayId, region }));
       }
@@ -293,42 +293,42 @@ function screenshotRoutes(surface) {
   for (const overlayId of overlayIds) {
     if (surface === 'browser-review' || surface === 'all') {
       routes.push(overlayRoute(
-        `browser-overlays/${overlayId}.png`,
+        webOverlayScreenshotPath('browser-overlays', overlayId, 'default'),
         withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, 'race'),
         { surface: 'browser-review-overlay', overlayId, previewMode: 'race' }));
       if (overlayId === 'track-map') {
         routes.push(overlayRoute(
-          'browser-overlays/track-map-fallback.png',
+          webOverlayScreenshotPath('browser-overlays', 'track-map', 'fallback'),
           `${withPreview('/review/overlays/track-map', 'race')}&trackMap=fallback`,
           { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: 'circle-fallback' }));
       }
       for (const variant of nonHappyPathOverlayVariants.filter((item) => item.overlayId === overlayId)) {
         routes.push(overlayRoute(
-          `browser-overlays/${overlayId}-${variant.slug}.png`,
+          webOverlayScreenshotPath('browser-overlays', overlayId, variant.slug),
           `${withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
           { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null }));
       }
     }
     if (surface === 'localhost' || surface === 'all') {
       routes.push(overlayRoute(
-        `localhost-overlays/${overlayId}.png`,
+        webOverlayScreenshotPath('localhost-overlays', overlayId, 'default'),
         withPreview(`/overlays/${encodeURIComponent(overlayId)}`, 'race'),
         { surface: 'localhost-overlay', overlayId, previewMode: 'race' }));
       if (overlayId === 'track-map') {
         routes.push(overlayRoute(
-          'localhost-overlays/track-map-fallback.png',
+          webOverlayScreenshotPath('localhost-overlays', 'track-map', 'fallback'),
           `${withPreview('/overlays/track-map', 'race')}&trackMap=fallback`,
           { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: 'circle-fallback' }));
       }
       for (const variant of nonHappyPathOverlayVariants.filter((item) => item.overlayId === overlayId)) {
         routes.push(overlayRoute(
-          `localhost-overlays/${overlayId}-${variant.slug}.png`,
+          webOverlayScreenshotPath('localhost-overlays', overlayId, variant.slug),
           `${withPreview(`/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
           { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null }));
       }
       for (const alias of localhostAliasesForOverlay(overlayId)) {
         routes.push(overlayRoute(
-          `localhost-overlays/${overlayId}-alias-${aliasSlug(alias)}.png`,
+          webOverlayAliasScreenshotPath('localhost-overlays', overlayId, aliasSlug(alias), 'default'),
           withPreview(alias, 'race'),
           { surface: 'localhost-overlay', overlayId, previewMode: 'race', routeAlias: alias }));
       }
@@ -336,18 +336,18 @@ function screenshotRoutes(surface) {
     for (const mode of previewModesForOverlay(overlayId)) {
       if (surface === 'browser-review' || surface === 'all') {
         routes.push(overlayRoute(
-          `browser-overlays/${overlayId}-${mode}.png`,
+          webOverlayScreenshotPath('browser-overlays', overlayId, mode),
           withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, mode),
           { surface: 'browser-review-overlay', overlayId, previewMode: mode, minBytes: previewMinBytes(overlayId, mode) }));
       }
       if (surface === 'localhost' || surface === 'all') {
         routes.push(overlayRoute(
-          `localhost-overlays/${overlayId}-${mode}.png`,
+          webOverlayScreenshotPath('localhost-overlays', overlayId, mode),
           withPreview(`/overlays/${encodeURIComponent(overlayId)}`, mode),
           { surface: 'localhost-overlay', overlayId, previewMode: mode, minBytes: previewMinBytes(overlayId, mode) }));
         for (const alias of localhostAliasesForOverlay(overlayId)) {
           routes.push(overlayRoute(
-            `localhost-overlays/${overlayId}-alias-${aliasSlug(alias)}-${mode}.png`,
+            webOverlayAliasScreenshotPath('localhost-overlays', overlayId, aliasSlug(alias), mode),
             withPreview(alias, mode),
             { surface: 'localhost-overlay', overlayId, previewMode: mode, routeAlias: alias, minBytes: previewMinBytes(overlayId, mode) }));
         }
@@ -356,6 +356,23 @@ function screenshotRoutes(surface) {
   }
 
   return routes;
+}
+
+function settingsAppScreenshotPath(name) {
+  return `settings/app/${name}.png`;
+}
+
+function settingsTabScreenshotPath(tab, region = 'general') {
+  const fileName = region === 'general' ? 'general' : region;
+  return `settings/${tab}/${fileName}.png`;
+}
+
+function webOverlayScreenshotPath(prefix, overlayId, slug) {
+  return `${prefix}/${overlayId}/${slug}.png`;
+}
+
+function webOverlayAliasScreenshotPath(prefix, overlayId, alias, slug) {
+  return `${prefix}/${overlayId}/alias-${alias}${slug === 'default' ? '' : `-${slug}`}.png`;
 }
 
 function withPreview(urlPath, mode) {
@@ -449,6 +466,8 @@ function settingsRoute(relativePath, urlPath, metadata = {}) {
 function settingsComponentRoutes() {
   const route = (fileName, urlPath, clip, metadata = {}) =>
     settingsComponentRoute(`components/settings/${fileName}.png`, urlPath, clip, metadata);
+  const futureRoute = (fileName, urlPath, clip, metadata = {}) =>
+    settingsFutureComponentRoute(`components/settings-future/${fileName}.png`, urlPath, clip, metadata);
   const value = (key, fallback) => {
     const number = Number(settingsGeometry[key]);
     return Number.isFinite(number) ? number : fallback;
@@ -475,6 +494,7 @@ function settingsComponentRoutes() {
     route('content-matrix', '/review/app?tab=relative&region=content', { x: panelX, y: panelWithRegionsY, width: value('contentMatrixWidth', 834), height: value('contentMatrixPreviewHeight', 222) }, { tab: 'relative', overlayId: 'relative', region: 'content' }),
     route('chat-inputs', '/review/app?tab=stream-chat&region=content', { x: panelX, y: panelWithRegionsY, width: value('chatInputsWidth', 650), height: value('chatInputsHeight', 204) }, { tab: 'stream-chat', overlayId: 'stream-chat', region: 'content' }),
     route('support-buttons', '/review/app?tab=support', { x: panelX, y: panelNoRegionsY, width: panelWideWidth, height: value('supportPanelHeight', 278) }, { tab: 'support', region: 'general' }),
+    futureRoute('visibility-context', '/review/app?component=visibility-context', { x: panelX, y: panelNoRegionsY, width: panelSmallWidth, height: value('overlayControlsPanelHeight', 266) }, { tab: 'general', region: 'general', reviewComponent: 'visibility-context' }),
     route('browser-source', '/review/app?tab=relative', { x: panelX + panelSmallWidth + gridGap, y: panelWithRegionsY, width: value('browserSourcePanelWidth', 414), height: value('browserSourcePanelHeight', 132) }, { tab: 'relative', overlayId: 'relative', region: 'general' })
   ];
 }
@@ -489,6 +509,23 @@ function settingsComponentRoute(relativePath, urlPath, clip, metadata = {}) {
     comparisonMode: 'browser-review-settings-component-vs-windows-settings-component',
     comparisonLimit: 'same-design-coordinate-crop'
   });
+}
+
+function settingsFutureComponentRoute(relativePath, urlPath, clip, metadata = {}) {
+  return settingsRoute(relativePath, urlPath, {
+    ...metadata,
+    clip,
+    minBytes: 1_000,
+    captureMode: 'settings-future-component-crop',
+    surface: 'browser-review-settings-future-component',
+    comparisonMode: 'browser-review-only-future-settings-component',
+    comparisonLimit: 'review-only-unwired-preview'
+  });
+}
+
+function isSettingsComponentRoute(route) {
+  return route.surface === 'browser-review-settings-component'
+    || route.surface === 'browser-review-settings-future-component';
 }
 
 function overlayRoute(relativePath, urlPath, metadata = {}) {
@@ -1237,7 +1274,7 @@ function uiEvidence(route, dom) {
 
 function settingsEvidenceDom(route, dom) {
   const elements = Array.isArray(dom?.layout?.elements) ? dom.layout.elements : [];
-  if (route.surface !== 'browser-review-settings-component' || !route.clip) {
+  if (!isSettingsComponentRoute(route) || !route.clip) {
     return dom;
   }
 
@@ -1545,7 +1582,7 @@ function settingsLayoutHealthEvidence(route, dom, elements, navigation) {
   const shell = elements.find((element) => element.role === 'settings-shell');
   const content = elements.find((element) => element.role === 'settings-content');
   const contentBody = elements.find((element) => element.role === 'settings-content-body');
-  const isComponentCrop = route.surface === 'browser-review-settings-component';
+  const isComponentCrop = isSettingsComponentRoute(route);
   const expectsRegion = route.region
     && route.region !== 'general'
     && route.tab

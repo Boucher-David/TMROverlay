@@ -26,6 +26,13 @@ from validate_overlay_screenshots import (
     input_rail_item_visible_text,
     preview_modes_for_overlay,
     resolve_windows_installer_root,
+    settings_app_screenshot_path,
+    settings_preview_screenshot_path,
+    settings_regions_for_overlay,
+    settings_tab_screenshot_path,
+    settings_update_screenshot_path,
+    web_overlay_alias_screenshot_path,
+    web_overlay_screenshot_path,
     web_overlay_variant_manifest_path_map,
     windows_native_variant_manifest_path_map,
 )
@@ -170,8 +177,8 @@ def compare_browser_and_localhost(
     stats: ComparisonStats,
 ) -> None:
     for overlay_id in BROWSER_REVIEW_OVERLAY_IDS:
-        browser_path = f"browser-overlays/{overlay_id}.png"
-        localhost_path = f"localhost-overlays/{overlay_id}.png"
+        browser_path = web_overlay_screenshot_path("browser-overlays", overlay_id, "default")
+        localhost_path = web_overlay_screenshot_path("localhost-overlays", overlay_id, "default")
         compare_pair(
             "browser vs localhost",
             browser_path,
@@ -183,8 +190,8 @@ def compare_browser_and_localhost(
             strict_geometry=True,
         )
         for mode in preview_modes_for_overlay(overlay_id):
-            browser_path = f"browser-overlays/{overlay_id}-{mode}.png"
-            localhost_path = f"localhost-overlays/{overlay_id}-{mode}.png"
+            browser_path = web_overlay_screenshot_path("browser-overlays", overlay_id, mode)
+            localhost_path = web_overlay_screenshot_path("localhost-overlays", overlay_id, mode)
             compare_pair(
                 "browser vs localhost",
                 browser_path,
@@ -216,8 +223,8 @@ def compare_browser_and_localhost(
 
     for overlay_id, aliases in LOCALHOST_OVERLAY_ALIASES.items():
         for alias_slug, _alias_route in aliases:
-            canonical_path = f"localhost-overlays/{overlay_id}.png"
-            alias_path = f"localhost-overlays/{overlay_id}-alias-{alias_slug}.png"
+            canonical_path = web_overlay_screenshot_path("localhost-overlays", overlay_id, "default")
+            alias_path = web_overlay_alias_screenshot_path("localhost-overlays", overlay_id, alias_slug)
             compare_pair(
                 "localhost canonical vs alias",
                 canonical_path,
@@ -229,8 +236,8 @@ def compare_browser_and_localhost(
                 strict_geometry=True,
             )
             for mode in preview_modes_for_overlay(overlay_id):
-                canonical_path = f"localhost-overlays/{overlay_id}-{mode}.png"
-                alias_path = f"localhost-overlays/{overlay_id}-alias-{alias_slug}-{mode}.png"
+                canonical_path = web_overlay_screenshot_path("localhost-overlays", overlay_id, mode)
+                alias_path = web_overlay_alias_screenshot_path("localhost-overlays", overlay_id, alias_slug, mode)
                 compare_pair(
                     "localhost canonical vs alias",
                     canonical_path,
@@ -252,7 +259,7 @@ def compare_browser_and_windows(
 ) -> None:
     for overlay_id in WINDOWS_NATIVE_OVERLAY_SIZES:
         for mode in preview_modes_for_overlay(overlay_id):
-            browser_path = f"browser-overlays/{overlay_id}-{mode}.png"
+            browser_path = web_overlay_screenshot_path("browser-overlays", overlay_id, mode)
             windows_path = f"native-overlays/{overlay_id}-{mode}.png"
             pair_tolerance = web_native_geometry_tolerance(overlay_id, geometry_tolerance)
             compare_pair(
@@ -1978,38 +1985,28 @@ def compare_settings_pages(
 
 def settings_page_pairs() -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = [
-        ("settings/general.png", "states/settings-general.png"),
-        ("settings/general-update-disabled.png", "states/settings-general-update-disabled.png"),
-        ("settings/general-update-not-installed.png", "states/settings-general-update-not-installed.png"),
-        ("settings/general-update-idle.png", "states/settings-general-update-idle.png"),
-        ("settings/general-update-up-to-date.png", "states/settings-general-update-up-to-date.png"),
-        ("settings/general-update-available.png", "states/settings-general-update-available.png"),
-        ("settings/general-update-checking.png", "states/settings-general-update-checking.png"),
-        ("settings/general-update-downloading.png", "states/settings-general-update-downloading.png"),
-        ("settings/general-update-pending-restart.png", "states/settings-general-update-pending-restart.png"),
-        ("settings/general-update-applying.png", "states/settings-general-update-applying.png"),
-        ("settings/general-update-failed.png", "states/settings-general-update-failed.png"),
-        ("settings/diagnostics.png", "states/settings-support.png"),
-        ("settings/support.png", "states/settings-support.png"),
-        ("settings/inputs.png", "states/settings-inputs.png"),
+        (settings_app_screenshot_path("general"), "states/settings-general.png"),
+        (settings_update_screenshot_path("disabled"), "states/settings-general-update-disabled.png"),
+        (settings_update_screenshot_path("not-installed"), "states/settings-general-update-not-installed.png"),
+        (settings_update_screenshot_path("idle"), "states/settings-general-update-idle.png"),
+        (settings_update_screenshot_path("up-to-date"), "states/settings-general-update-up-to-date.png"),
+        (settings_update_screenshot_path("available"), "states/settings-general-update-available.png"),
+        (settings_update_screenshot_path("checking"), "states/settings-general-update-checking.png"),
+        (settings_update_screenshot_path("downloading"), "states/settings-general-update-downloading.png"),
+        (settings_update_screenshot_path("pending-restart"), "states/settings-general-update-pending-restart.png"),
+        (settings_update_screenshot_path("applying"), "states/settings-general-update-applying.png"),
+        (settings_update_screenshot_path("failed"), "states/settings-general-update-failed.png"),
+        (settings_tab_screenshot_path("support", "diagnostics"), "states/settings-support.png"),
+        (settings_tab_screenshot_path("support"), "states/settings-support.png"),
+        (settings_tab_screenshot_path("input-state"), "states/settings-inputs.png"),
     ]
     for mode in ("practice", "qualifying", "race"):
-        pairs.append((f"settings/general-preview-{mode}.png", f"states/settings-general-preview-{mode}.png"))
+        pairs.append((settings_preview_screenshot_path(mode), f"states/settings-general-preview-{mode}.png"))
     for overlay_id in BROWSER_REVIEW_OVERLAY_IDS:
-        if overlay_id == "garage-cover":
-            regions = ("general", "preview")
-        elif overlay_id == "stream-chat":
-            regions = ("general", "content", "twitch")
-        elif overlay_id == "car-radar":
-            regions = ("general",)
-        elif overlay_id in {"standings", "relative", "fuel-calculator", "gap-to-leader", "session-weather", "pit-service"}:
-            regions = ("general", "content", "header")
-        else:
-            regions = ("general", "content")
-        for region in regions:
+        for region in settings_regions_for_overlay(overlay_id):
             suffix = "" if region == "general" else f"-{region}"
             windows_stem = "inputs" if overlay_id == "input-state" else overlay_id
-            pairs.append((f"settings/{overlay_id}{suffix}.png", f"states/settings-{windows_stem}{suffix}.png"))
+            pairs.append((settings_tab_screenshot_path(overlay_id, region), f"states/settings-{windows_stem}{suffix}.png"))
     return pairs
 
 

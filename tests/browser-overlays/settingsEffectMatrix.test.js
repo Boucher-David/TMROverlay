@@ -46,9 +46,9 @@ describe('settings effect matrix', () => {
       const model = (await server.getJson(modelPath('standings'))).model;
       expect.soft(model.effectiveSettings.rendered.browserSource).toMatchObject({
         baseWidth: 677,
-        baseHeight: 824,
+        baseHeight: 313,
         width: 846,
-        height: 1030,
+        height: 391,
         scalePercent: 125,
         opacityPercent: 80
       });

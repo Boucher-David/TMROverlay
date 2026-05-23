@@ -30,8 +30,15 @@
       const state = {
         selectedTab: initialTab(),
         selectedRegion: initialRegion(),
+        reviewComponent: config.reviewComponent || null,
         previewMode: config.previewMode || 'off',
         unitSystem: config.unitSystem || 'Metric',
+        visibilityContext: {
+          inPit: true,
+          spotting: true,
+          outOfCar: false,
+          garage: true
+        },
         support: {
           rawCaptureEnabled: config.support?.rawCaptureEnabled === true,
           latestBundlePath: config.support?.latestBundlePath || '',
@@ -100,6 +107,7 @@
 
       function setTab(tabId) {
         if (!knownTab(tabId)) return;
+        state.reviewComponent = null;
         state.selectedTab = tabId;
         const overlay = currentOverlay();
         const regions = regionsFor(overlay);
@@ -131,6 +139,7 @@
         if (state.selectedTab !== 'general') params.set('tab', state.selectedTab);
         if (currentOverlay() && state.selectedRegion !== 'general') params.set('region', state.selectedRegion);
         if (state.previewMode !== 'off') params.set('preview', state.previewMode);
+        if (state.reviewComponent) params.set('component', state.reviewComponent);
         const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`;
         window.history.replaceState(null, '', next);
       }
@@ -187,6 +196,9 @@
       }
 
       function renderContent() {
+        if (state.reviewComponent === 'visibility-context') {
+          return renderContentShell('Visibility', 'Overlay availability contexts.', null, renderVisibilityContextPreview());
+        }
         if (state.selectedTab === 'general') {
           return renderContentShell('General', 'Shared units.', null, renderGeneralPage());
         }
@@ -271,6 +283,22 @@
               node('p', '', {}, ['Hidden overlays stay hidden; Stream Chat is not forced open.'])
             ])
           ])
+        ];
+      }
+
+      function renderVisibilityContextPreview() {
+        const contextRows = [
+          ['In pit', 'inPit'],
+          ['Spotting', 'spotting'],
+          ['Out of car', 'outOfCar'],
+          ['Garage', 'garage']
+        ];
+        return [
+          panel('Visibility Contexts', 'visibility-context-panel', contextRows.map(([label, key]) =>
+            row(label, toggle(state.visibilityContext[key], (isOn) => {
+              state.visibilityContext[key] = isOn;
+              render();
+            }, label), `future.visibility-context.${slugEvidenceKey(label)}`)))
         ];
       }
 

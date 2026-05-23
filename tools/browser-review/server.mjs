@@ -250,6 +250,7 @@ const server = createServer((request, response) => {
         previewMode: url.searchParams.get('preview') || 'off',
         selectedTab: url.searchParams.get('tab') || 'general',
         selectedRegion: url.searchParams.get('region') || 'general',
+        reviewComponent: url.searchParams.get('component') || null,
         reviewState: reviewStateForRequest(url.searchParams)
       })));
       return;
@@ -1673,7 +1674,11 @@ const sharedEffectiveSettingKeys = new Set([
 
 function reviewEffectiveBrowserSource(overlayId, overlayState, previewMode, model = null) {
   const sourceSize = settingsBrowserSourceSize(overlayId, overlayState, previewMode);
-  if (overlayId === 'fuel-calculator') {
+  if (overlayId === 'standings') {
+    const baseHeight = standingsBrowserSourceHeightForModel(model, sourceSize.baseHeight);
+    sourceSize.baseHeight = baseHeight;
+    sourceSize.height = Math.round(baseHeight * sourceSize.scale);
+  } else if (overlayId === 'fuel-calculator') {
     const baseHeight = fuelBrowserSourceHeightForModel(model, sourceSize.baseHeight);
     sourceSize.baseHeight = baseHeight;
     sourceSize.height = Math.round(baseHeight * sourceSize.scale);
@@ -1687,6 +1692,43 @@ function reviewEffectiveBrowserSource(overlayId, overlayState, previewMode, mode
     opacity: Number((opacityPercent / 100).toFixed(3)),
     opacityPercent
   };
+}
+
+function standingsBrowserSourceHeightForModel(model, fallbackHeight) {
+  if (!model || !Array.isArray(model.rows) || model.rows.length <= 0) {
+    return fallbackHeight;
+  }
+
+  const hasHeader = Array.isArray(model.headerItems)
+    && model.headerItems.some((item) => String(item?.value || '').trim());
+  const persistedHeight = 313 - (hasHeader ? 0 : 38);
+  return reviewStandingsHeightForRows(model.rows.length, Math.max(28, persistedHeight), hasHeader, false);
+}
+
+function reviewStandingsHeightForRows(rowCount, persistedHeight, showHeader, showFooter) {
+  const rows = Math.max(1, Math.min(24, Number(rowCount || 0)));
+  const persistedRows = reviewStandingsVisibleRowsForHeight(persistedHeight, showHeader, showFooter);
+  if (rows <= persistedRows) return persistedHeight;
+
+  return Math.max(
+    persistedHeight,
+    reviewStandingsHeaderReserveHeight(showHeader)
+      + (showFooter ? 32 : 8)
+      + 1
+      + 30
+      + rows * (30 + 5));
+}
+
+function reviewStandingsVisibleRowsForHeight(height, showHeader, showFooter) {
+  const bodyHeight = Number(height || 0)
+    - reviewStandingsHeaderReserveHeight(showHeader)
+    - (showFooter ? 32 : 8)
+    - 1;
+  return Math.max(1, Math.floor((bodyHeight - 30) / (30 + 5)));
+}
+
+function reviewStandingsHeaderReserveHeight(showHeader) {
+  return showHeader ? 38 + 12 : 16;
 }
 
 function fuelBrowserSourceHeightForModel(model, fallbackHeight) {

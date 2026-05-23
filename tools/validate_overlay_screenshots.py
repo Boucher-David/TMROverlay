@@ -394,6 +394,7 @@ OVERLAY_VARIANT_SPECS = (
     ("standings", "focused-class-only", "fixture=standings-focused-class-only", True, None),
     ("standings", "starting-grid", "fixture=standings-starting-grid", True, None),
     ("standings", "no-content", "fixture=standings-no-content", True, None),
+    ("standings", "min-scale", "fixture=standings-min-scale", False, None),
     ("relative", "chrome-off", "fixture=chrome-off", True, None),
     ("relative", "rightmost-evidence", "fixture=rightmost-evidence", True, None),
     ("relative", "driver-only", "fixture=relative-driver-only", True, None),
@@ -569,6 +570,7 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("standings", "focused-class-only"): (677, 240),
     ("standings", "starting-grid"): (677, 313),
     ("standings", "no-content"): (284, 28),
+    ("standings", "min-scale"): (406, 188),
     ("relative", "chrome-off"): (392, 274),
     ("relative", "rightmost-evidence"): (440, 308),
     ("relative", "driver-only"): (274, 308),
@@ -5935,9 +5937,39 @@ def validate_input_min_scale_variant(path: str, values: dict[str, object], failu
     if path.startswith(("browser-overlays/", "localhost-overlays/")):
         require_equal(path, "input min-scale manifest scale", values.get("minScale"), 0.6, failures)
         require_size_object(path, "input min-scale configured/min viewport", {"width": values.get("width"), "height": values.get("height")}, 312, 156, failures, required=False)
+        validate_min_scale_effective_settings(path, values, "input min-scale", 312, 156, failures)
     else:
         require_size_object(path, "input min-scale native configured size", {"width": values.get("width"), "height": values.get("height")}, 312, 156, failures, required=False)
     require_input_min_scale_bounds(path, values, failures)
+
+
+def validate_min_scale_effective_settings(
+    path: str,
+    values: dict[str, object],
+    label: str,
+    expected_width: int,
+    expected_height: int,
+    failures: list[str],
+) -> None:
+    effective = typed_dict(values.get("effectiveSettings"))
+    rendered = typed_dict(effective.get("rendered"))
+    browser_source = typed_dict(rendered.get("browserSource"))
+    if not browser_source:
+        failures.append(f"{path}: {label} missing effectiveSettings rendered browserSource evidence")
+        return
+
+    require_equal(path, f"{label} effective scalePercent", browser_source.get("scalePercent"), 60, failures)
+    require_equal(path, f"{label} effective scale", browser_source.get("scale"), 0.6, failures)
+    require_size_object(
+        path,
+        f"{label} effective browserSource size",
+        {"width": browser_source.get("width"), "height": browser_source.get("height")},
+        expected_width,
+        expected_height,
+        failures,
+        required=True)
+    settings = evidence_list(effective, "settings")
+    require_effective_setting_value(path, settings, "scalePercent", 60, failures)
 
 
 def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
@@ -6163,9 +6195,10 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
         if not pit_rows or "#60" not in combined_row_text(pit_rows[0]):
             failures.append(f"{path}: standings expected #60 pit row with IN marker")
     validate_rows_monotonic(path, rows, failures)
-    validate_standings_row_geometry(path, rows, failures)
+    scale = standings_validation_scale(path, values)
+    validate_standings_row_geometry(path, rows, failures, scale=scale)
     validate_standings_bounded_height(path, values, rows, failures)
-    validate_standings_column_fit_evidence(path, columns, rows, expected_labels, expected_widths, failures)
+    validate_standings_column_fit_evidence(path, columns, rows, expected_labels, expected_widths, failures, scale=scale)
     if slug not in {"driver-only", "starting-grid"} and mode == "race":
         if slug not in {"focused-class-only", "one-class"}:
             assert_cell_foreground(path, rows, "#8", "FAST", ("182, 92, 255", "#B65CFF"), failures)
@@ -6225,10 +6258,13 @@ def validate_standings_variant(path: str, values: dict[str, object], slug: str, 
         "focused-class-only",
         "starting-grid",
         "no-content",
+        "min-scale",
     }:
         failures.append(f"{path}: unknown standings fixture variant {slug!r}")
         return
     validate_standings_contract(path, values, failures)
+    if slug == "min-scale":
+        validate_standings_min_scale_variant(path, values, failures)
 
 
 def validate_standings_session_timing_semantics(
@@ -6478,17 +6514,48 @@ def validate_standings_no_content_variant(path: str, values: dict[str, object], 
         require_effective_standings_setting(path, values, key, False, failures)
 
 
-def validate_standings_row_geometry(path: str, rows: list[object], failures: list[str]) -> None:
+def validate_standings_min_scale_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "standings min-scale bodyKind", values.get("bodyKind"), "table", failures)
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        require_equal(path, "standings min-scale manifest scale", values.get("minScale"), 0.6, failures)
+        require_equal(path, "standings min-scale capture transform", values.get("scaleTransform"), 0.6, failures)
+        require_size_object(
+            path,
+            "standings min-scale scaled screenshot size",
+            {"width": values.get("width"), "height": values.get("height")},
+            406,
+            188,
+            failures,
+            required=False)
+        validate_min_scale_effective_settings(path, values, "standings min-scale", 406, 188, failures)
+
+
+def standings_validation_scale(path: str, values: dict[str, object]) -> float:
+    if screenshot_variant_key(path) == ("standings", "min-scale"):
+        scale = numeric(values.get("scaleTransform")) or numeric(values.get("minScale"))
+        if scale > 0:
+            return scale
+    return 1.0
+
+
+def validate_standings_row_geometry(path: str, rows: list[object], failures: list[str], *, scale: float = 1.0) -> None:
+    data_min, data_max = scaled_bounds(22, 34, scale)
+    header_min, header_max = scaled_bounds(24, 46, scale)
     for index, row in enumerate(rows):
         height = rect_number(get_manifest_value(row, "bounds"), "height")
         if height is None:
             failures.append(f"{path}: standings row {index} missing row bounds height")
             continue
         if normalize_row_kind(row) == "class-header":
-            if not (24 <= height <= 46):
-                failures.append(f"{path}: standings class header row {index} expected 24..46px height, got {height!r}")
-        elif not (22 <= height <= 34):
-            failures.append(f"{path}: standings data row {index} expected 22..34px height, got {height!r}")
+            if not (header_min <= height <= header_max):
+                failures.append(f"{path}: standings class header row {index} expected {header_min:g}..{header_max:g}px height, got {height!r}")
+        elif not (data_min <= height <= data_max):
+            failures.append(f"{path}: standings data row {index} expected {data_min:g}..{data_max:g}px height, got {height!r}")
+
+
+def scaled_bounds(minimum: float, maximum: float, scale: float) -> tuple[float, float]:
+    normalized_scale = scale if scale > 0 else 1.0
+    return minimum * normalized_scale - 0.75, maximum * normalized_scale + 0.75
 
 
 def validate_standings_column_fit_evidence(
@@ -6498,6 +6565,8 @@ def validate_standings_column_fit_evidence(
     expected_labels: list[str],
     expected_widths: list[int],
     failures: list[str],
+    *,
+    scale: float = 1.0,
 ) -> None:
     for index, column in enumerate(columns):
         if not isinstance(column, dict):
@@ -6508,7 +6577,7 @@ def validate_standings_column_fit_evidence(
         if path.startswith(("browser-overlays/", "localhost-overlays/", "native-overlays/")):
             if not isinstance(rendered_width, (int, float)) or rendered_width <= 0:
                 failures.append(f"{path}: standings column {label!r} missing positive renderedWidth evidence")
-            elif isinstance(configured_width, (int, float)) and rendered_width < min(30, configured_width):
+            elif isinstance(configured_width, (int, float)) and rendered_width < min(30 * scale, configured_width * scale):
                 failures.append(f"{path}: standings column {label!r} renderedWidth {rendered_width!r} is too small for configured width {configured_width!r}")
             require_rect(path, get_manifest_value(column, "bounds"), f"standings column {label!r} bounds", failures)
 
@@ -9052,6 +9121,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="standings min-scale rightmost column clips out of scaled content",
+        path="browser-overlays/standings-min-scale.png",
+        base=mutation_standings_min_scale_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 5, "renderedCells", 7, "bounds", "x"), 410),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("V102-020 standings rightmost column rendered cell bounds must fit within V102-020 standings rightmost column content bounds",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="session weather metric units switch to imperial",
         path="browser-overlays/session-weather-race.png",
         base=mutation_session_weather_screenshot(),
@@ -10380,6 +10458,62 @@ def mutation_standings_screenshot() -> dict[str, object]:
     }
 
 
+def mutation_standings_min_scale_screenshot() -> dict[str, object]:
+    screenshot = copy.deepcopy(mutation_standings_screenshot())
+    scale = 0.6
+    screenshot["fixtureVariant"] = "min-scale"
+    screenshot["minScale"] = scale
+    screenshot["scaleTransform"] = scale
+    screenshot["width"] = 406
+    screenshot["height"] = 188
+    screenshot["status"] = "scoring | forced-preview-state"
+    screenshot["source"] = "source: preview fixture minimum-scale layout"
+    screenshot["contentBounds"] = {"x": 0, "y": 0, "width": 406, "height": 188}
+    screenshot["layout"] = {
+        "root": {"x": 0, "y": 0, "width": 406, "height": 188},
+        "contentBounds": {"x": 0, "y": 0, "width": 406, "height": 188},
+    }
+    scale_bounds_in_place(screenshot["modelEvidence"], scale)
+    effective = typed_dict(screenshot.get("effectiveSettings"))
+    effective["sources"]["browserReview"]["fixtureVariant"] = "standings-min-scale"
+    effective["sources"]["localhostObs"]["fixtureVariant"] = "standings-min-scale"
+    effective["sources"]["windowsNative"]["fixtureVariant"] = "standings-min-scale"
+    effective["rendered"]["browserSource"] = {
+        "baseWidth": 677,
+        "baseHeight": 313,
+        "width": 406,
+        "height": 188,
+        "scale": 0.6,
+        "scalePercent": 60,
+        "opacity": 1,
+        "opacityPercent": 100,
+    }
+    effective["settings"].append({"key": "scalePercent", "value": 60})
+    screenshot["scenarioEvidence"] = mutation_scenario_evidence(
+        slug="min-scale",
+        query="fixture=standings-min-scale",
+        body_kind="table",
+        status="scoring | forced-preview-state",
+        source="source: preview fixture minimum-scale layout",
+        should_render=True,
+        row_count=6)
+    return screenshot
+
+
+def scale_bounds_in_place(value: object, scale: float) -> None:
+    if isinstance(value, dict):
+        bounds = value.get("bounds")
+        if isinstance(bounds, dict):
+            for key in ("x", "y", "width", "height"):
+                if isinstance(bounds.get(key), (int, float)):
+                    bounds[key] = round(float(bounds[key]) * scale, 3)
+        for child in value.values():
+            scale_bounds_in_place(child, scale)
+    elif isinstance(value, list):
+        for child in value:
+            scale_bounds_in_place(child, scale)
+
+
 def mutation_table_row(
     index: int,
     kind: str,
@@ -10734,6 +10868,7 @@ def mutation_input_min_scale_screenshot() -> dict[str, object]:
             status="trace live | ABS active",
             should_render=True,
         ),
+        "effectiveSettings": mutation_min_scale_effective_settings("input-state", "inputs", 520, 260, 312, 156),
         "modelEvidence": {
             "inputs": {
                 "hasContent": True,
@@ -10770,6 +10905,35 @@ def mutation_input_min_scale_screenshot() -> dict[str, object]:
             },
         },
     }
+
+
+def mutation_min_scale_effective_settings(
+    overlay_id: str,
+    body_kind: str,
+    base_width: int,
+    base_height: int,
+    width: int,
+    height: int,
+) -> dict[str, object]:
+    effective = mutation_effective_settings(
+        overlay_id,
+        "race",
+        body_kind,
+        should_render=True,
+        row_count=0,
+        extra_settings=[{"key": "scalePercent", "value": 60}],
+        fixture_variant="min-scale")
+    effective["rendered"]["browserSource"] = {
+        "baseWidth": base_width,
+        "baseHeight": base_height,
+        "width": width,
+        "height": height,
+        "scale": 0.6,
+        "scalePercent": 60,
+        "opacity": 1,
+        "opacityPercent": 100,
+    }
+    return effective
 
 
 def mutation_input_min_scale_item_children(kind: str, bounds: dict[str, int]) -> list[dict[str, object]]:
@@ -11207,6 +11371,7 @@ def mutation_scenario_evidence(
     body_kind: str,
     status: str,
     should_render: bool,
+    source: str | None = None,
     row_count: int | None = None,
     metric_count: int | None = None,
     flag_count: int | None = None,
@@ -11216,6 +11381,8 @@ def mutation_scenario_evidence(
         "bodyKind": body_kind,
         "shouldRender": should_render,
     }
+    if source is not None:
+        summary["source"] = source
     if row_count is not None:
         summary["rowCount"] = row_count
     if metric_count is not None:

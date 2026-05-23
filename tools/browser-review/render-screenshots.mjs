@@ -104,6 +104,7 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'standings', slug: 'focused-class-only', query: 'fixture=standings-focused-class-only' },
   { overlayId: 'standings', slug: 'starting-grid', query: 'fixture=standings-starting-grid' },
   { overlayId: 'standings', slug: 'no-content', query: 'fixture=standings-no-content' },
+  { overlayId: 'standings', slug: 'min-scale', query: 'fixture=standings-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'relative', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'relative', slug: 'rightmost-evidence', query: 'fixture=rightmost-evidence' },
   { overlayId: 'relative', slug: 'driver-only', query: 'fixture=relative-driver-only' },
@@ -306,7 +307,7 @@ function screenshotRoutes(surface) {
         routes.push(overlayRoute(
           webOverlayScreenshotPath('browser-overlays', overlayId, variant.slug),
           `${withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
-          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null }));
+          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null, scaleTransform: variant.scaleTransform || null, exactClip: variant.scaleTransform ? true : null }));
       }
     }
     if (surface === 'localhost' || surface === 'all') {
@@ -324,7 +325,7 @@ function screenshotRoutes(surface) {
         routes.push(overlayRoute(
           webOverlayScreenshotPath('localhost-overlays', overlayId, variant.slug),
           `${withPreview(`/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
-          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null }));
+          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null, scaleTransform: variant.scaleTransform || null, exactClip: variant.scaleTransform ? true : null }));
       }
       for (const alias of localhostAliasesForOverlay(overlayId)) {
         routes.push(overlayRoute(
@@ -574,6 +575,7 @@ async function captureRoute(page, route, manifest) {
   const element = page.locator(route.selector).first();
   await element.waitFor({ state: 'visible', timeout: 5_000 });
   await page.waitForTimeout(settleMilliseconds);
+  await injectCaptureTransform(page, route);
   const model = await readOverlayModel(route);
   const dom = await readDomDiagnostics(element);
   const runtimeAssets = await readRuntimeAssetEvidence(page, route);
@@ -623,6 +625,7 @@ async function captureRoute(page, route, manifest) {
     comparisonLimit: route.comparisonLimit || null,
     compositingMode: route.compositingMode || null,
     captureBackdrop: route.captureBackdrop || null,
+    scaleTransform: route.scaleTransform || null,
     overlayId: route.overlayId || null,
     title: stringOrNull(model?.title),
     tab: route.tab || null,
@@ -656,6 +659,23 @@ async function captureRoute(page, route, manifest) {
     width: artifact.width,
     height: artifact.height,
     bytes: artifact.bytes
+  });
+}
+
+async function injectCaptureTransform(page, route) {
+  const scale = Number(route.scaleTransform);
+  if (!Number.isFinite(scale) || scale <= 0 || scale === 1) {
+    return;
+  }
+
+  const selector = String(route.selector || '.overlay');
+  await page.addStyleTag({
+    content: `
+      ${selector} {
+        transform: scale(${scale});
+        transform-origin: top left;
+      }
+    `
   });
 }
 
@@ -2716,6 +2736,8 @@ function scenarioEvidence(route, model, layout = null) {
     captureMode: route.captureMode || null,
     cropBounds: route.clip || null,
     configuredOverlaySize: route.configuredOverlaySize || null,
+    minScale: route.minScale || null,
+    scaleTransform: route.scaleTransform || null,
     comparisonMode: route.comparisonMode || null,
     comparisonLimit: route.comparisonLimit || null,
     compositingMode: route.compositingMode || null,

@@ -37,6 +37,43 @@ test.describe('browser overlay Playwright integration', () => {
     expect(requests).not.toContain('/api/snapshot');
   });
 
+  test('keeps standings cells visible in the minimum-scale screenshot transform', async ({ page }) => {
+    await installBrowserOverlayRoutes(page, 'standings', {
+      live: freshLiveSnapshot({}),
+      model: standingsDisplayModel()
+    });
+
+    await page.setViewportSize({ width: 720, height: 360 });
+    await page.goto('http://localhost:8765/overlays/standings?preview=race&fixture=standings-min-scale');
+    await page.addStyleTag({
+      content: '.overlay { transform: scale(0.6); transform-origin: top left; }'
+    });
+
+    await expect(page.locator('tbody tr')).toHaveCount(6);
+    await expect(page.locator('thead th')).toHaveText(['Pos', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST', 'PIT']);
+    await expect(page.locator('tbody tr').last().locator('td').last()).toHaveText('IN');
+
+    const fit = await page.evaluate(() => {
+      const overlay = document.querySelector('.overlay')?.getBoundingClientRect();
+      const cells = Array.from(document.querySelectorAll('thead th, tbody tr:not(.class-header) td'));
+      const escaped = cells
+        .map((cell) => ({ text: cell.textContent?.trim() || '', rect: cell.getBoundingClientRect() }))
+        .filter((cell) => overlay && (
+          cell.rect.left < overlay.left - 1
+          || cell.rect.right > overlay.right + 1
+          || cell.rect.top < overlay.top - 1
+          || cell.rect.bottom > overlay.bottom + 1));
+      return {
+        overlayWidth: overlay?.width ?? 0,
+        overlayHeight: overlay?.height ?? 0,
+        escaped
+      };
+    });
+    expect(fit.overlayWidth).toBeCloseTo(406, 0);
+    expect(fit.overlayHeight).toBeGreaterThan(180);
+    expect(fit.escaped).toEqual([]);
+  });
+
   test('fits standings rows inside advertised OBS browser source height', async ({ page }) => {
     const model = standingsDisplayModel({ rows: standingsRecommendedBrowserSourceRows() });
     const sourceSize = settingsBrowserSourceSize('standings', {

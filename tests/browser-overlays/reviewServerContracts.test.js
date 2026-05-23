@@ -223,6 +223,38 @@ describe('browser review server validation contracts', () => {
     ).toHaveLength(1);
   });
 
+  it('exposes deterministic minimum-scale fixtures for wide table and input overlays', async () => {
+    const standings = (await reviewServer.getJson('/api/overlay-model/standings?preview=race&fixture=standings-min-scale')).model;
+    expect.soft(columnLabels(standings)).toEqual(['Pos', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST', 'PIT']);
+    expect.soft(standings.rows || []).toHaveLength(6);
+    expect.soft(tableText(standings)).toContain('Tech Mates Racing');
+    expect.soft(tableText(standings)).toContain('IN');
+    expect.soft(standings.effectiveSettings.rendered.browserSource).toMatchObject({
+      baseWidth: 677,
+      baseHeight: 313,
+      width: 406,
+      height: 188,
+      scale: 0.6,
+      scalePercent: 60
+    });
+    expect.soft(standings.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'scalePercent',
+      value: 60
+    }));
+
+    const input = (await reviewServer.getJson('/api/overlay-model/input-state?preview=race&fixture=input-min-scale')).model;
+    expect.soft(input.bodyKind).toBe('inputs');
+    expect.soft(input.inputs).toMatchObject({ hasGraph: true, hasRail: true, hasContent: true });
+    expect.soft(input.effectiveSettings.rendered.browserSource).toMatchObject({
+      baseWidth: 520,
+      baseHeight: 260,
+      width: 312,
+      height: 156,
+      scale: 0.6,
+      scalePercent: 60
+    });
+  });
+
   it('proves v1.0.2 Gap To Leader trend, threat, color, and focus-window evidence', async () => {
     const model = (await reviewServer.getJson('/api/overlay-model/gap-to-leader?preview=race')).model;
     const graph = model.graph || {};

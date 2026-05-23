@@ -138,7 +138,7 @@
           "status": "partial",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "artifacts": ["browser-overlays/standings/chrome-off.png", "browser-overlays/standings/starting-grid.png", "browser-overlays/standings/no-content.png"],
-          "gaps": ["explicit telemetry no-data with chrome-on is missing", "minimum-scale table-column preservation is missing"]
+          "gaps": ["explicit telemetry no-data with chrome-on is missing", "Windows-native minimum-scale table-column preservation is still missing"]
         },
         {
           "id": "standings-practice-no-results-stability",
@@ -164,17 +164,23 @@
           "id": "standings-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "partial",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
-          "assertions": ["scalePercent=60 preserves enabled columns", "rightmost enabled cell fits", "table geometry scales instead of dropping columns"]
+          "artifacts": ["browser-overlays/standings/min-scale.png", "localhost-overlays/standings/min-scale.png"],
+          "testFiles": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js", "tools/browser-review/render-screenshots.mjs", "tools/validate_overlay_screenshots.py"],
+          "assertions": ["scalePercent=60 preserves enabled columns", "rightmost enabled cell fits", "table geometry scales instead of dropping columns"],
+          "gaps": ["Windows-native min-scale parity is not fully represented", "minimum-scale proof is still synthetic rather than capture-derived"]
         },
         {
           "id": "standings-obs-readiness",
           "family": "localhost-route-and-aliases",
           "tier": "tier2-capture-derived-replay",
-          "status": "missing",
+          "status": "partial",
           "surfaces": ["compactReplay", "localhostObs"],
-          "assertions": ["raw scoring exists but OBS not-requested is reported as readiness failure", "source URL and client-kind counts are preserved"]
+          "fixtures": ["fixtures/telemetry-analysis/forensics-smoke/obs-readiness-all-overlays"],
+          "testFiles": ["tests/tools/test_overlay_forensics.py", "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs"],
+          "assertions": ["raw scoring exists but OBS not-requested is reported as readiness failure", "source URL and client-kind counts are preserved"],
+          "gaps": ["full-capture OBS scene/source correlation is still optional evidence"]
         }
       ]
     },
@@ -280,10 +286,10 @@
           "status": "partial",
           "surfaces": ["compactReplay", "localhostObs"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/fuel-measured-burn-real-data.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Telemetry/LiveOverlayDiagnosticsRecorderTests.cs"],
           "captureTargets": ["capture-20260522-204847-774 full race with completed local green laps and refuel"],
           "assertions": ["current-session measured burn becomes available when completed green laps exist", "pit-window fuel increase is detected when net fuel rises"],
-          "gaps": ["production model replay from this compact snapshot is still missing because the compact fixture stores aggregate post-race evidence, not ordered green-lap fuel frames", "Windows native render replay from this compact snapshot is still missing"]
+          "gaps": ["production measured-burn replay from this compact snapshot is still missing because the compact fixture stores aggregate post-race evidence, not ordered green-lap fuel frames", "Windows native render replay from this compact snapshot is still missing"]
         },
         {
           "id": "fuel-minimum-scale",
@@ -384,18 +390,21 @@
           "status": "partial",
           "surfaces": ["compactReplay", "localhostObs"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/pit-service-refuel-pit-window-real-data.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs", "tests/TmrOverlay.App.Tests/Telemetry/LiveOverlayDiagnosticsRecorderTests.cs"],
           "captureTargets": ["capture-20260522-204847-774 pit-service window with PitSvFuel request and measured refuel"],
-          "assertions": ["PitSvFlags transitions are sampled", "net fuel delta and requested fuel produce refuel-detected state", "local-strategy context reason is explicit"],
+          "assertions": ["PitSvFlags transitions are sampled", "net fuel delta and requested fuel produce refuel-detected state", "gradual fuel increments accumulate into one refuel event", "local-strategy context reason is explicit"],
           "gaps": ["Windows native render replay from this compact snapshot is still missing"]
         },
         {
           "id": "pit-obs-readiness",
           "family": "localhost-route-and-aliases",
           "tier": "tier2-capture-derived-replay",
-          "status": "missing",
+          "status": "partial",
           "surfaces": ["compactReplay", "localhostObs"],
-          "assertions": ["raw pit-service signals exist but OBS not-requested is reported as readiness failure"]
+          "fixtures": ["fixtures/telemetry-analysis/forensics-smoke/obs-readiness-all-overlays"],
+          "testFiles": ["tests/tools/test_overlay_forensics.py", "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs"],
+          "assertions": ["raw pit-service signals exist but OBS not-requested is reported as readiness failure"],
+          "gaps": ["full-capture OBS scene/source correlation is still optional evidence"]
         },
         {
           "id": "pit-minimum-scale",
@@ -445,8 +454,9 @@
           "tier": "tier1-ci-contract-fixtures",
           "status": "partial",
           "surfaces": ["browserReview", "localhostObs"],
-          "artifacts": ["browser-overlays/input-state/min-scale.png"],
-          "gaps": ["Windows-native min-scale parity is not fully represented", "uploaded 60% example suggests graph/rail visual quality needs stronger assertions"],
+          "artifacts": ["browser-overlays/input-state/min-scale.png", "localhost-overlays/input-state/min-scale.png"],
+          "testFiles": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js", "tools/browser-review/render-screenshots.mjs", "tools/validate_overlay_screenshots.py"],
+          "gaps": ["Windows-native min-scale parity is not fully represented", "uploaded 60% example still needs direct visual comparison against generated artifacts"],
           "assertions": ["wheel, graph, rails, and labels fit within scaled bounds", "trace remains visible when data exists"]
         },
         {
@@ -673,17 +683,20 @@
           "status": "partial",
           "surfaces": ["compactReplay", "localhostObs"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/flags-meatball-local-policy.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
           "assertions": ["global repair/furled/black bits require local-driver or session-context evidence before local critical display"],
-          "gaps": ["production model/render replay separating local and global flag evidence is still missing", "Windows native render replay from this compact counterexample is still missing"]
+          "gaps": ["Windows native render replay from this compact counterexample is still missing"]
         },
         {
           "id": "flags-obs-readiness",
           "family": "localhost-route-and-aliases",
           "tier": "tier2-capture-derived-replay",
-          "status": "missing",
+          "status": "partial",
           "surfaces": ["compactReplay", "localhostObs"],
-          "assertions": ["raw flag data exists but OBS not-requested is reported as readiness failure"]
+          "fixtures": ["fixtures/telemetry-analysis/forensics-smoke/obs-readiness-all-overlays"],
+          "testFiles": ["tests/tools/test_overlay_forensics.py", "tests/TmrOverlay.App.Tests/Diagnostics/OverlayForensicsPackageServiceTests.cs"],
+          "assertions": ["raw flag data exists but OBS not-requested is reported as readiness failure"],
+          "gaps": ["full-capture OBS scene/source correlation is still optional evidence"]
         },
         {
           "id": "flags-minimum-scale",

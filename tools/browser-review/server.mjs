@@ -2043,6 +2043,14 @@ function effectiveSettingsOverlayState(overlayId, overlayState, previewMode = 'o
     };
   }
 
+  if (fixtureVariant(searchParams) === 'standings-min-scale'
+      || fixtureVariant(searchParams) === 'input-min-scale') {
+    effectiveState = {
+      ...effectiveState,
+      scalePercent: 60
+    };
+  }
+
   if (fixtureVariant(searchParams) === 'chrome-off' && collapsibleBrowserSourceChromeIds.has(overlayId)) {
     const session = sessionKeyFromPreview(previewMode);
     effectiveState = {
@@ -3595,7 +3603,8 @@ function standingsDisplayModel(previewLabel = 'review fixture', session = 'race'
   const classLayoutFixture = {
     'standings-one-class': 'one-class layout',
     'standings-two-class': 'two-class layout',
-    'standings-three-class': 'three-class layout'
+    'standings-three-class': 'three-class layout',
+    'standings-min-scale': 'minimum-scale layout'
   }[fixture] || '';
   const statusPrefix = isStartingGrid ? 'starting grid' : 'scoring';
   const source = isStartingGrid

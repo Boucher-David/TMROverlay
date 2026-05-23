@@ -1,0 +1,541 @@
+using System.Globalization;
+using System.Text.Json;
+using TmrOverlay.App.History;
+using TmrOverlay.App.Overlays.BrowserSources;
+using TmrOverlay.App.Overlays.Content;
+using TmrOverlay.App.Overlays.PitService;
+using TmrOverlay.App.Overlays.TrackMap;
+using TmrOverlay.Core.History;
+using TmrOverlay.Core.Overlays;
+using TmrOverlay.Core.Settings;
+using TmrOverlay.Core.Telemetry.Live;
+using Xunit;
+
+namespace TmrOverlay.App.Tests.Overlays;
+
+public sealed class OverlayRealDataSnapshotProductionModelTests
+{
+    [Fact]
+    public void RelativePracticeTimingSnapshot_BuildsProductionRowsFromEstimatedTiming()
+    {
+        var snapshotFixture = ReadSnapshot("relative-practice-timing-real-data.json");
+        var settings = new ApplicationSettings();
+        var relative = EnableOverlay(settings, "relative");
+        relative.SetIntegerOption(OverlayOptionKeys.RelativeCarsEachSide, 1, 0, 8);
+        var now = DateTimeOffset.Parse("2026-05-23T12:00:00Z", CultureInfo.InvariantCulture);
+        var snapshot = RelativePracticeSnapshot(snapshotFixture, now);
+
+        var built = Factory().TryBuild("relative", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.True(response.Model.ShouldRender);
+        Assert.Equal("source: model-v2 timing fallback", response.Model.Source);
+        var rows = response.Model.Rows.Where(row => !row.IsPlaceholder).ToArray();
+        var expectedRows = Get(snapshotFixture, "expected", "rows").EnumerateArray().ToArray();
+        Assert.Equal(expectedRows.Length, rows.Length);
+        Assert.Equal("-3.220", Cell(response.Model, rows[0], OverlayContentColumnSettings.DataGap));
+        Assert.Equal("0.000", Cell(response.Model, rows[1], OverlayContentColumnSettings.DataGap));
+        Assert.Equal("+3.040", Cell(response.Model, rows[2], OverlayContentColumnSettings.DataGap));
+        Assert.True(rows[1].IsReference);
+
+        foreach (var text in rows.Select(row => Cell(response.Model, row, OverlayContentColumnSettings.DataGap)))
+        {
+            Assert.DoesNotContain("m", text, StringComparison.Ordinal);
+            Assert.NotEqual("--", text);
+        }
+    }
+
+    [Fact]
+    public void StandingsPracticeNoResultsSnapshot_KeepsProductionRowsEmptyAndChromeStable()
+    {
+        var snapshotFixture = ReadSnapshot("standings-practice-no-results-stability.json");
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "standings");
+        var now = DateTimeOffset.Parse("2026-05-23T12:00:00Z", CultureInfo.InvariantCulture);
+        var snapshot = FreshSnapshot(now, "Practice") with
+        {
+            Models = FreshSnapshot(now, "Practice").Models with
+            {
+                Session = Session("Practice") with
+                {
+                    SessionTimeSeconds = 120d,
+                    SessionTimeRemainSeconds = 600d,
+                    SessionState = Int(Get(snapshotFixture, "rawEvidence"), "sessionState")
+                }
+            }
+        };
+
+        var built = Factory().TryBuild("standings", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.True(response.Model.ShouldRender);
+        Assert.Empty(response.Model.Rows);
+        Assert.Equal(Int(Get(snapshotFixture, "expected"), "bodyRowCount"), response.Model.Rows.Count);
+        Assert.Equal("waiting for standings", response.Model.Status);
+        Assert.Contains(response.Model.HeaderItems, item => item.Key == "timeRemaining" && item.Value == "00:10:00");
+        Assert.Equal("chrome-only-placeholder", response.Model.EffectiveSettings!.Rendered.UnavailableContentPolicy);
+        var bodyText = string.Join(" ", response.Model.Rows.SelectMany(row => row.Cells));
+        foreach (var pattern in Get(snapshotFixture, "expected", "forbiddenTextPatterns").EnumerateArray().Select(item => item.GetString()!))
+        {
+            Assert.DoesNotContain(pattern, bodyText, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void TrackMapFocusSnapshot_BuildsFocusAndPracticePolicyMarkers()
+    {
+        var snapshotFixture = ReadSnapshot("track-map-focus-and-practice-marker-policy.json");
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "track-map");
+        var now = DateTimeOffset.Parse("2026-05-23T12:00:00Z", CultureInfo.InvariantCulture);
+        var snapshot = TrackMapSnapshot(snapshotFixture, now);
+
+        var built = Factory().TryBuild("track-map", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.True(response.Model.ShouldRender);
+        var trackMap = response.Model.TrackMap;
+        Assert.NotNull(trackMap);
+        var markers = trackMap!.Markers.OrderBy(marker => marker.CarIdx).ToArray();
+        Assert.Collection(
+            markers.Select(marker => marker.CarIdx),
+            carIdx => Assert.Equal(10, carIdx),
+            carIdx => Assert.Equal(22, carIdx));
+        Assert.DoesNotContain(markers, marker => marker.CarIdx == 33);
+
+        var focus = Assert.Single(markers, marker => marker.CarIdx == Int(Get(snapshotFixture, "expected", "focusMarker"), "carIdx"));
+        var player = Assert.Single(markers, marker => marker.CarIdx == Int(Get(snapshotFixture, "expected", "playerMarker"), "carIdx"));
+        Assert.True(focus.IsFocus);
+        Assert.False(focus.IsPlayerFocus);
+        Assert.Equal("#FFDA59", focus.ClassColorHex);
+        Assert.False(player.IsFocus);
+        Assert.Equal("#00AEEF", player.ClassColorHex);
+
+        var renderedFocus = Assert.Single(trackMap.RenderModel.Markers, marker => marker.CarIdx == focus.CarIdx);
+        var renderedPlayer = Assert.Single(trackMap.RenderModel.Markers, marker => marker.CarIdx == player.CarIdx);
+        Assert.True(renderedFocus.Radius > renderedPlayer.Radius);
+        AssertColor(renderedFocus.Fill, red: 255, green: 218, blue: 89);
+        AssertColor(renderedPlayer.Fill, red: 0, green: 174, blue: 239);
+    }
+
+    [Fact]
+    public void FlagsMeatballSnapshot_BuildsConfirmedCriticalMeatball()
+    {
+        var snapshotFixture = ReadSnapshot("flags-meatball-local-policy.json");
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "flags");
+        var now = DateTimeOffset.Parse("2026-05-23T12:00:00Z", CultureInfo.InvariantCulture);
+        var sessionFlags = Int(Get(snapshotFixture, "rawEvidence", "localDriverEvidence"), "globalSessionFlags");
+        var snapshot = FreshSnapshot(now, "Race") with
+        {
+            Models = FreshSnapshot(now, "Race").Models with
+            {
+                Session = Session("Race") with
+                {
+                    SessionState = 4,
+                    SessionFlags = sessionFlags
+                }
+            }
+        };
+
+        var built = Factory().TryBuild("flags", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.True(response.Model.ShouldRender);
+        var flag = Assert.Single(response.Model.Flags!.Flags);
+        Assert.Equal("meatball", flag.Kind);
+        Assert.Equal("critical", flag.Category);
+        Assert.Equal("Repair", flag.Label);
+        Assert.Equal("error", flag.Tone);
+    }
+
+    [Fact]
+    public void PitServiceRefuelWindowSnapshot_BuildsFuelRequestRow()
+    {
+        var snapshotFixture = ReadSnapshot("pit-service-refuel-pit-window-real-data.json");
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "pit-service");
+        var now = DateTimeOffset.Parse("2026-05-23T12:00:00Z", CultureInfo.InvariantCulture);
+        var pitWindow = Get(snapshotFixture, "rawEvidence", "selectedPitWindow");
+        var fuelPit = LiveFuelPitModel.Empty with
+        {
+            HasData = true,
+            Quality = LiveModelQuality.Reliable,
+            OnPitRoad = true,
+            PitstopActive = true,
+            PlayerCarInPitStall = true,
+            PitServiceStatus = Int(pitWindow, "entryPitServiceStatus"),
+            PitServiceFlags = Int(pitWindow, "entryPitServiceFlags"),
+            PitServiceFuelLiters = Double(pitWindow, "entryPitServiceFuelLiters"),
+            FuelLevelEvidence = LiveSignalEvidence.Reliable("FuelLevel"),
+            InstantaneousBurnEvidence = LiveSignalEvidence.Reliable("FuelUsePerHour")
+        };
+        var snapshot = FreshSnapshot(now, "Race") with
+        {
+            Models = FreshSnapshot(now, "Race").Models with
+            {
+                Session = Session("Race") with
+                {
+                    SessionState = 4,
+                    SessionTimeRemainSeconds = 238d,
+                    SessionLapsRemain = 148,
+                    SessionLapsTotal = 179
+                },
+                RaceEvents = LiveRaceEventModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    IsOnTrack = false,
+                    OnPitRoad = true
+                },
+                FuelPit = fuelPit,
+                PitService = LivePitServiceModel.FromFuelPit(fuelPit, LiveTireCompoundModel.Empty)
+            }
+        };
+
+        var built = Factory().TryBuild("pit-service", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.True(response.Model.ShouldRender);
+        var fuel = Assert.Single(response.Model.Metrics, row => row.Label == "Fuel request");
+        Assert.Equal("requested | 30.0 L", fuel.Value);
+        Assert.Collection(
+            fuel.Segments,
+            segment => Assert.Equal("Requested", segment.Label),
+            segment => Assert.Equal("Selected", segment.Label));
+        Assert.All(fuel.Segments, segment => Assert.Equal("30.0 L", segment.Value));
+        foreach (var label in Get(snapshotFixture, "expected", "fuelRequestRow", "forbiddenSegmentLabels").EnumerateArray().Select(item => item.GetString()!))
+        {
+            Assert.DoesNotContain(response.Model.Metrics, row => string.Equals(row.Label, label, StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(response.Model.Metrics.SelectMany(row => row.Segments), segment => string.Equals(segment.Label, label, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private static BrowserOverlayModelFactory Factory()
+    {
+        return new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+    }
+
+    private static OverlaySettings EnableOverlay(ApplicationSettings settings, string overlayId)
+    {
+        var (width, height) = overlayId switch
+        {
+            "fuel-calculator" => (503, 315),
+            "pit-service" => (530, 707),
+            "track-map" => (360, 360),
+            _ => (400, 300)
+        };
+        var overlay = settings.GetOrAddOverlay(overlayId, width, height);
+        overlay.Enabled = true;
+        return overlay;
+    }
+
+    private static LiveTelemetrySnapshot FreshSnapshot(DateTimeOffset now, string sessionType)
+    {
+        return LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Sequence = 1,
+            Models = LiveRaceModels.Empty with
+            {
+                Session = Session(sessionType),
+                DriverDirectory = LiveDriverDirectoryModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    PlayerCarIdx = 10,
+                    FocusCarIdx = 10,
+                    ReferenceCarClass = 4098
+                },
+                Reference = LiveReferenceModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    PlayerCarIdx = 10,
+                    FocusCarIdx = 10,
+                    FocusIsPlayer = true,
+                    ReferenceCarClass = 4098,
+                    IsOnTrack = true,
+                    PlayerTrackSurface = 3,
+                    TrackSurface = 3
+                },
+                RaceEvents = LiveRaceEventModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    IsOnTrack = true
+                }
+            }
+        };
+    }
+
+    private static LiveSessionModel Session(string sessionType)
+    {
+        return LiveSessionModel.Empty with
+        {
+            HasData = true,
+            Quality = LiveModelQuality.Reliable,
+            SessionType = sessionType,
+            SessionState = string.Equals(sessionType, "Race", StringComparison.OrdinalIgnoreCase) ? 4 : 4
+        };
+    }
+
+    private static LiveTelemetrySnapshot RelativePracticeSnapshot(JsonElement fixture, DateTimeOffset now)
+    {
+        var raw = Get(fixture, "rawEvidence");
+        var timing = Get(raw, "estimatedTiming");
+        var spatial = Get(raw, "spatialPlacement");
+        var focusCarIdx = Int(timing, "focusCarIdx");
+        var aheadCarIdx = Int(timing, "aheadCarIdx");
+        var behindCarIdx = Int(timing, "behindCarIdx");
+        var focusLapDistPct = Double(spatial, "focusLapDistPct");
+        var aheadGap = Math.Abs(Double(Get(fixture, "expected", "rows").EnumerateArray().First(row => String(row, "role") == "ahead"), "gapSeconds"));
+        var behindGap = Math.Abs(Double(Get(fixture, "expected", "rows").EnumerateArray().First(row => String(row, "role") == "behind"), "gapSeconds"));
+        var rows = new[]
+        {
+            RelativeRow(aheadCarIdx, isAhead: true, relativeSeconds: aheadGap, relativeLaps: Double(spatial, "aheadLapDistPct") - focusLapDistPct),
+            RelativeRow(behindCarIdx, isBehind: true, relativeSeconds: behindGap, relativeLaps: Double(spatial, "behindLapDistPct") - focusLapDistPct)
+        };
+        var focusTiming = TimingRow(
+            focusCarIdx,
+            isPlayer: true,
+            isFocus: true,
+            lapDistPct: focusLapDistPct,
+            estimatedTimeSeconds: Double(timing, "focusSeconds"),
+            classColorHex: "#00AEEF",
+            hasTakenGrid: true);
+        var snapshot = FreshSnapshot(now, "Practice");
+        return snapshot with
+        {
+            Models = snapshot.Models with
+            {
+                Reference = snapshot.Models.Reference with
+                {
+                    FocusCarIdx = focusCarIdx,
+                    LapDistPct = focusLapDistPct,
+                    EstimatedTimeSeconds = Double(timing, "focusSeconds")
+                },
+                Timing = LiveTimingModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    PlayerCarIdx = focusCarIdx,
+                    FocusCarIdx = focusCarIdx,
+                    PlayerRow = focusTiming,
+                    FocusRow = focusTiming,
+                    OverallRows =
+                    [
+                        TimingRow(aheadCarIdx, lapDistPct: Double(spatial, "aheadLapDistPct"), estimatedTimeSeconds: Double(timing, "aheadSeconds")),
+                        focusTiming,
+                        TimingRow(behindCarIdx, lapDistPct: Double(spatial, "behindLapDistPct"), estimatedTimeSeconds: Double(timing, "behindSeconds"))
+                    ],
+                    ClassRows = []
+                },
+                Relative = new LiveRelativeModel(
+                    HasData: true,
+                    Quality: LiveModelQuality.Reliable,
+                    ReferenceCarIdx: focusCarIdx,
+                    Rows: rows)
+            }
+        };
+    }
+
+    private static LiveTelemetrySnapshot TrackMapSnapshot(JsonElement fixture, DateTimeOffset now)
+    {
+        var raw = Get(fixture, "rawEvidence");
+        var playerCarIdx = Int(raw, "playerCarIdx");
+        var focusCarIdx = Int(raw, "focusCarIdx");
+        var timingRows = Get(raw, "timingRows")
+            .EnumerateArray()
+            .Select(row => TimingRow(
+                carIdx: Int(row, "carIdx"),
+                isPlayer: String(row, "role") == "player",
+                isFocus: String(row, "role") == "focus",
+                lapDistPct: Double(row, "lapDistPct"),
+                classColorHex: String(row, "classColor"),
+                hasTakenGrid: Bool(row, "hasTakenGrid"),
+                carClassName: String(row, "carClass")))
+            .ToArray();
+        var focusRow = timingRows.Single(row => row.CarIdx == focusCarIdx);
+        var playerRow = timingRows.Single(row => row.CarIdx == playerCarIdx);
+        var snapshot = FreshSnapshot(now, "Practice");
+        return snapshot with
+        {
+            Models = snapshot.Models with
+            {
+                DriverDirectory = snapshot.Models.DriverDirectory with
+                {
+                    PlayerCarIdx = playerCarIdx,
+                    FocusCarIdx = focusCarIdx
+                },
+                Reference = snapshot.Models.Reference with
+                {
+                    PlayerCarIdx = playerCarIdx,
+                    FocusCarIdx = focusCarIdx,
+                    FocusIsPlayer = false,
+                    HasExplicitNonPlayerFocus = true,
+                    LapDistPct = focusRow.LapDistPct,
+                    PlayerLapDistPct = playerRow.LapDistPct,
+                    TrackSurface = 3,
+                    PlayerTrackSurface = 3
+                },
+                Timing = LiveTimingModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    PlayerCarIdx = playerCarIdx,
+                    FocusCarIdx = focusCarIdx,
+                    PlayerRow = playerRow,
+                    FocusRow = focusRow,
+                    OverallRows = timingRows,
+                    ClassRows = []
+                }
+            }
+        };
+    }
+
+    private static LiveRelativeRow RelativeRow(
+        int carIdx,
+        bool isAhead = false,
+        bool isBehind = false,
+        double? relativeSeconds = null,
+        double? relativeLaps = null)
+    {
+        return new LiveRelativeRow(
+            CarIdx: carIdx,
+            Quality: LiveModelQuality.Reliable,
+            Source: "model-v2 timing fallback",
+            IsAhead: isAhead,
+            IsBehind: isBehind,
+            IsSameClass: false,
+            TimingEvidence: LiveSignalEvidence.Reliable("CarIdxEstTime"),
+            PlacementEvidence: LiveSignalEvidence.Reliable("CarIdxLapDistPct"),
+            DriverName: null,
+            OverallPosition: null,
+            ClassPosition: null,
+            CarClass: null,
+            RelativeSeconds: relativeSeconds,
+            RelativeLaps: relativeLaps,
+            RelativeMeters: null,
+            OnPitRoad: false);
+    }
+
+    private static LiveTimingRow TimingRow(
+        int carIdx,
+        bool isPlayer = false,
+        bool isFocus = false,
+        double? lapDistPct = null,
+        double? estimatedTimeSeconds = null,
+        string? classColorHex = null,
+        bool hasTakenGrid = true,
+        string? carClassName = "GT3")
+    {
+        return new LiveTimingRow(
+            CarIdx: carIdx,
+            Quality: LiveModelQuality.Reliable,
+            Source: "compact-real-data",
+            IsPlayer: isPlayer,
+            IsFocus: isFocus,
+            IsOverallLeader: false,
+            IsClassLeader: false,
+            HasTiming: true,
+            HasSpatialProgress: lapDistPct is not null,
+            CanUseForRadarPlacement: false,
+            TimingEvidence: LiveSignalEvidence.Reliable("CarIdxEstTime"),
+            SpatialEvidence: LiveSignalEvidence.Reliable("CarIdxLapDistPct"),
+            RadarPlacementEvidence: LiveSignalEvidence.Unavailable("radar", "not_applicable"),
+            GapEvidence: LiveSignalEvidence.Unavailable("class-gap", "not_applicable"),
+            DriverName: null,
+            TeamName: null,
+            CarNumber: carIdx.ToString(CultureInfo.InvariantCulture),
+            CarClassName: carClassName,
+            CarClassColorHex: classColorHex,
+            OverallPosition: null,
+            ClassPosition: null,
+            CarClass: null,
+            LapCompleted: 5,
+            LapDistPct: lapDistPct,
+            ProgressLaps: lapDistPct is null ? null : 5d + lapDistPct,
+            F2TimeSeconds: null,
+            EstimatedTimeSeconds: estimatedTimeSeconds,
+            LastLapTimeSeconds: null,
+            BestLapTimeSeconds: null,
+            GapSecondsToClassLeader: null,
+            GapLapsToClassLeader: null,
+            IntervalSecondsToPreviousClassRow: null,
+            IntervalLapsToPreviousClassRow: null,
+            DeltaSecondsToFocus: null,
+            TrackSurface: 3,
+            OnPitRoad: false,
+            HasTakenGrid: hasTakenGrid);
+    }
+
+    private static string Cell(BrowserOverlayDisplayModel model, BrowserOverlayDisplayRow row, string dataKey)
+    {
+        var index = model.Columns.ToList().FindIndex(column => string.Equals(column.DataKey, dataKey, StringComparison.Ordinal));
+        Assert.True(index >= 0, $"Missing column {dataKey}");
+        return row.Cells[index];
+    }
+
+    private static void AssertColor(TrackMapRenderColor color, int red, int green, int blue)
+    {
+        Assert.Equal(red, color.Red);
+        Assert.Equal(green, color.Green);
+        Assert.Equal(blue, color.Blue);
+    }
+
+    private static JsonElement ReadSnapshot(string fileName)
+    {
+        var path = Path.Combine(SnapshotRoot(), fileName);
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var root = document.RootElement.Clone();
+        Assert.Equal(1, Int(root, "schemaVersion"));
+        return root;
+    }
+
+    private static string SnapshotRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(
+                directory.FullName,
+                "fixtures",
+                "telemetry-analysis",
+                "overlay-real-data-snapshots");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("fixtures/telemetry-analysis/overlay-real-data-snapshots");
+    }
+
+    private static JsonElement Get(JsonElement element, params string[] path)
+    {
+        foreach (var item in path)
+        {
+            element = element.GetProperty(item);
+        }
+
+        return element;
+    }
+
+    private static int Int(JsonElement element, string property) => element.GetProperty(property).GetInt32();
+
+    private static double Double(JsonElement element, string property) => element.GetProperty(property).GetDouble();
+
+    private static string String(JsonElement element, string property) => element.GetProperty(property).GetString()!;
+
+    private static bool Bool(JsonElement element, string property) => element.GetProperty(property).GetBoolean();
+}

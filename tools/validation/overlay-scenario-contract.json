@@ -147,10 +147,10 @@
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/standings-practice-no-results-stability.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
           "captureTargets": ["v1.1.0 practice capture with scoring.framesWithData=0"],
           "assertions": ["no render/hidden flashing before accepted scoring source", "waiting or hidden policy is stable", "race GAP/INT/leader semantics do not leak into practice"],
-          "gaps": ["browser/localhost/native render replay from this compact snapshot is still missing"]
+          "gaps": ["Windows native render replay from this compact snapshot is still missing"]
         },
         {
           "id": "standings-starting-grid-real-data",
@@ -217,10 +217,10 @@
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/relative-practice-timing-real-data.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
           "captureTargets": ["v1.1.0 practice capture with nearby cars, no official lap delta, and populated CarIdxEstTime"],
           "assertions": ["practice timing uses valid SDK timing evidence when iRacing shows seconds", "meter-only or -- fallback is explained by missing evidence", "race-only session-state gate does not block practice estimated rows"],
-          "gaps": ["browser/localhost/native render replay from this compact snapshot is still missing"]
+          "gaps": ["Windows native render replay from this compact snapshot is still missing"]
         },
         {
           "id": "relative-minimum-scale",
@@ -278,12 +278,12 @@
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
           "status": "partial",
-          "surfaces": ["compactReplay"],
+          "surfaces": ["compactReplay", "localhostObs"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/fuel-measured-burn-real-data.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js"],
           "captureTargets": ["capture-20260522-204847-774 full race with completed local green laps and refuel"],
           "assertions": ["current-session measured burn becomes available when completed green laps exist", "pit-window fuel increase is detected when net fuel rises"],
-          "gaps": ["production model replay from this compact snapshot is still missing", "browser/localhost/native render replay from this compact snapshot is still missing"]
+          "gaps": ["production model replay from this compact snapshot is still missing because the compact fixture stores aggregate post-race evidence, not ordered green-lap fuel frames", "Windows native render replay from this compact snapshot is still missing"]
         },
         {
           "id": "fuel-minimum-scale",
@@ -382,12 +382,12 @@
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
           "status": "partial",
-          "surfaces": ["compactReplay"],
+          "surfaces": ["compactReplay", "localhostObs"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/pit-service-refuel-pit-window-real-data.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
           "captureTargets": ["capture-20260522-204847-774 pit-service window with PitSvFuel request and measured refuel"],
           "assertions": ["PitSvFlags transitions are sampled", "net fuel delta and requested fuel produce refuel-detected state", "local-strategy context reason is explicit"],
-          "gaps": ["production model replay from this compact snapshot is still missing", "browser/localhost/native render replay from this compact snapshot is still missing"]
+          "gaps": ["Windows native render replay from this compact snapshot is still missing"]
         },
         {
           "id": "pit-obs-readiness",
@@ -605,21 +605,21 @@
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-focus-and-practice-marker-policy.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
           "captureTargets": ["v1.1.0 practice focus switch CamCarIdx 0 -> 4 -> 5 -> 4"],
           "assertions": ["focused GT3 marker becomes isFocus=true with focus radius", "non-player focus uses correct marker tone", "stale LMP2 focus is rejected"],
-          "gaps": ["browser/localhost/native rendered marker geometry from this compact snapshot is still missing"]
+          "gaps": ["Windows native rendered marker geometry from this compact snapshot is still missing"]
         },
         {
           "id": "track-map-practice-marker-policy",
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
           "status": "partial",
-          "surfaces": ["compactReplay"],
+          "surfaces": ["compactReplay", "localhostObs"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-focus-and-practice-marker-policy.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
           "assertions": ["practice/open-session valid lap-distance markers do not depend on HasTakenGrid", "race pre-grid pending-grid policy remains separate"],
-          "gaps": ["render replay comparing hidden pending-grid markers against visible focus markers is still missing"]
+          "gaps": ["Windows native render replay comparing hidden pending-grid markers against visible focus markers is still missing"]
         },
         {
           "id": "track-map-minimum-scale",
@@ -661,21 +661,21 @@
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/flags-meatball-local-policy.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
           "captureTargets": ["capture-20260522-194832-318 confirmed race-long meatball"],
           "assertions": ["confirmed real meatball remains displayed", "local-driver evidence/source is preserved", "duration alone is not treated as false-positive evidence"],
-          "gaps": ["browser/localhost/native render replay from this compact snapshot is still missing"]
+          "gaps": ["Windows native render replay from this compact snapshot is still missing"]
         },
         {
           "id": "flags-local-vs-global-policy",
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
           "status": "partial",
-          "surfaces": ["compactReplay"],
+          "surfaces": ["compactReplay", "localhostObs"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/flags-meatball-local-policy.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js"],
           "assertions": ["global repair/furled/black bits require local-driver or session-context evidence before local critical display"],
-          "gaps": ["production model/render replay separating local and global flag evidence is still missing"]
+          "gaps": ["production model/render replay separating local and global flag evidence is still missing", "Windows native render replay from this compact counterexample is still missing"]
         },
         {
           "id": "flags-obs-readiness",

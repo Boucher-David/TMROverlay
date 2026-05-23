@@ -3,6 +3,12 @@
   "tracker": "v1.1.md",
   "updated": "2026-05-23",
   "purpose": "Parseable matrix for overlay-specific screenshot, replay, and cross-surface parity scenarios. This is the planning contract for what each overlay must prove across browser review, localhost/OBS, Windows native, compact replay fixtures, and optional full-capture replay.",
+  "productDescriptor": {
+    "source": "src/TmrOverlay.Core/Overlays/OverlayBehaviorDescriptorCatalog.cs",
+    "validatedBy": ["tests/TmrOverlay.App.Tests/Overlays/OverlayBehaviorDescriptorContractTests.cs"],
+    "matchKey": "overlays[].id",
+    "relationship": "The app does not consume this JSON. App-owned overlay behavior descriptors define stable product policy; this contract references and tests against those descriptors so screenshot and replay coverage stays aligned."
+  },
   "statusValues": {
     "covered": "The scenario has deterministic validation in the named tier and surfaces.",
     "partial": "Some validation exists, but it is missing a surface, a semantic assertion, replay evidence, or a known edge case.",

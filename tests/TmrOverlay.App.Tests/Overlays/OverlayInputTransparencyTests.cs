@@ -44,6 +44,15 @@ public sealed class OverlayInputTransparencyTests
     }
 
     [Fact]
+    public void DesignV2StandingsRendersChromeOnlyWaitingState()
+    {
+        Assert.True(DesignV2LiveOverlayForm.ShouldRenderStandingsTable(columnCount: 8, rowCount: 0, hasChrome: true));
+        Assert.True(DesignV2LiveOverlayForm.ShouldRenderStandingsTable(columnCount: 8, rowCount: 1, hasChrome: false));
+        Assert.False(DesignV2LiveOverlayForm.ShouldRenderStandingsTable(columnCount: 8, rowCount: 0, hasChrome: false));
+        Assert.False(DesignV2LiveOverlayForm.ShouldRenderStandingsTable(columnCount: 0, rowCount: 1, hasChrome: true));
+    }
+
+    [Fact]
     public void StreamChatHitRegion_AllowsHeaderDragAndKeepsBodyClickThrough()
     {
         var size = new Size(420, 320);

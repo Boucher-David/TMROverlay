@@ -651,7 +651,12 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             viewModel.Source,
             rows.Length == 0 ? DesignV2Evidence.Unavailable : DesignV2Evidence.Measured,
             new DesignV2TableBody(columns, rows),
-            ShouldRender: columns.Length > 0 && rows.Length > 0);
+            ShouldRender: ShouldRenderStandingsTable(columns.Length, rows.Length, showHeader || showFooter));
+    }
+
+    internal static bool ShouldRenderStandingsTable(int columnCount, int rowCount, bool hasChrome)
+    {
+        return columnCount > 0 && (rowCount > 0 || hasChrome);
     }
 
     private bool EnsureClientHeightForStandingsRows(int rowCount, bool showHeader, bool showFooter)

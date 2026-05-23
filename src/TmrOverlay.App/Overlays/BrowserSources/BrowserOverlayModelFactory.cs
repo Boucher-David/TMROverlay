@@ -267,6 +267,8 @@ internal sealed class BrowserOverlayModelFactory
             .ToArray();
         var headerItems = HeaderItems(overlay, snapshot, viewModel.Status, viewModel.Rows.Count == 0 ? "waiting" : "info");
 
+        var shouldRender = ShouldRenderTable(columns, rows)
+            || ShouldRenderChromeOnlyTable(columns, headerItems);
         return BrowserOverlayDisplayModel.Table(
             StandingsOverlayDefinition.Definition.Id,
             StandingsOverlayDefinition.Definition.DisplayName,
@@ -275,7 +277,7 @@ internal sealed class BrowserOverlayModelFactory
             columns,
             rows,
             headerItems,
-            ShouldRenderTable(columns, rows));
+            shouldRender);
     }
 
     private static string StandingsCell(StandingsOverlayRowViewModel row, string dataKey)
@@ -389,6 +391,13 @@ internal sealed class BrowserOverlayModelFactory
         IReadOnlyList<BrowserOverlayDisplayRow> rows)
     {
         return columns.Count > 0 && rows.Count > 0;
+    }
+
+    private static bool ShouldRenderChromeOnlyTable(
+        IReadOnlyList<OverlayContentBrowserColumn> columns,
+        IReadOnlyList<BrowserOverlayHeaderItem> headerItems)
+    {
+        return columns.Count > 0 && headerItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
     }
 
     private static string RelativeCell(RelativeOverlayRowViewModel row, string dataKey)
@@ -3181,6 +3190,11 @@ internal sealed class BrowserOverlayModelFactory
             return "section-aware-placeholders";
         }
 
+        if (IsChromeOnlyUnavailablePlaceholderModel(model))
+        {
+            return "chrome-only-placeholder";
+        }
+
         return !HasSemanticRenderedContent(model) ? "suppress-rendered-content" : null;
     }
 
@@ -3189,6 +3203,15 @@ internal sealed class BrowserOverlayModelFactory
         return string.Equals(model.OverlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             && model.MetricSections?.Any(section => section.Rows.Count > 0) == true
             && model.Status.Contains("weather unavailable", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsChromeOnlyUnavailablePlaceholderModel(BrowserOverlayDisplayModel model)
+    {
+        return string.Equals(model.OverlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && model.ShouldRender
+            && model.Columns.Count > 0
+            && model.Rows.Count == 0
+            && model.HeaderItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
     }
 
     private static bool IsUnavailableModel(BrowserOverlayDisplayModel model)
@@ -3221,7 +3244,8 @@ internal sealed class BrowserOverlayModelFactory
     {
         var unavailableContentPolicy = UnavailableContentPolicy(model);
         if (!IsUnavailableModel(model)
-            || string.Equals(unavailableContentPolicy, "section-aware-placeholders", StringComparison.Ordinal))
+            || string.Equals(unavailableContentPolicy, "section-aware-placeholders", StringComparison.Ordinal)
+            || string.Equals(unavailableContentPolicy, "chrome-only-placeholder", StringComparison.Ordinal))
         {
             return model;
         }

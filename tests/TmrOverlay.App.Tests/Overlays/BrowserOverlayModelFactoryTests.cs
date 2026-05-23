@@ -375,6 +375,44 @@ public sealed class BrowserOverlayModelFactoryTests
     }
 
     [Fact]
+    public void StandingsLocalhostModel_RendersHeaderChromeWhileWaitingForRows()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "standings");
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var snapshot = LocalPlayerSnapshot(now) with
+        {
+            Models = LocalPlayerSnapshot(now).Models with
+            {
+                Session = LiveSessionModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    SessionType = "Practice",
+                    SessionTimeSeconds = 120d,
+                    SessionTimeRemainSeconds = 600d
+                }
+            }
+        };
+
+        var built = factory.TryBuild("standings", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.True(response.Model.ShouldRender);
+        Assert.NotEmpty(response.Model.Columns);
+        Assert.Empty(response.Model.Rows);
+        Assert.Equal("waiting for standings", response.Model.Status);
+        Assert.Contains(response.Model.HeaderItems, item => item.Key == "timeRemaining" && item.Value == "00:10:00");
+        Assert.Equal("chrome-only-placeholder", response.Model.EffectiveSettings!.Rendered.UnavailableContentPolicy);
+    }
+
+    [Fact]
     public void TrackMapLocalhostModel_PollsHiddenWhenTelemetryIsUnavailable()
     {
         var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions

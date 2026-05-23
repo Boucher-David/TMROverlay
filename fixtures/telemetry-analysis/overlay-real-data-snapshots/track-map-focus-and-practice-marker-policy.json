@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "track-map-focus-and-practice-marker-policy",
+  "overlayId": "track-map",
+  "scenarioIds": ["track-map-focus-real-data", "track-map-practice-marker-policy"],
+  "source": {
+    "captureId": "v1.1.0-practice-observation",
+    "sourceCategory": "open-practice-non-player-focus",
+    "redaction": "compact-summary",
+    "note": "Practice observation where focus was a GT3 while local/player context remained an LMP2-like row; map focus marker must follow focus, not player."
+  },
+  "provenance": {
+    "sessionType": "Practice",
+    "sessionPhase": "green",
+    "focusRelation": "non-player",
+    "sampleWindowSeconds": 6.0
+  },
+  "rawEvidence": {
+    "sessionType": "Practice",
+    "playerCarIdx": 10,
+    "focusCarIdx": 22,
+    "focusDiffersFromPlayer": true,
+    "timingRows": [
+      {
+        "carIdx": 10,
+        "role": "player",
+        "carClass": "LMP2",
+        "lapDistPct": 0.412,
+        "hasTakenGrid": true,
+        "classColor": "#00AEEF"
+      },
+      {
+        "carIdx": 22,
+        "role": "focus",
+        "carClass": "GT3",
+        "lapDistPct": 0.624,
+        "hasTakenGrid": false,
+        "classColor": "#FFDA59"
+      },
+      {
+        "carIdx": 33,
+        "role": "opponent-pending-grid",
+        "carClass": "GT3",
+        "lapDistPct": 0.180,
+        "hasTakenGrid": false,
+        "classColor": "#FFDA59"
+      }
+    ]
+  },
+  "expected": {
+    "mapSource": "generated-or-fallback-with-live-markers",
+    "focusMarker": {
+      "carIdx": 22,
+      "isPlayerFocus": false,
+      "classColor": "#FFDA59",
+      "radiusGreaterThanPlayer": true
+    },
+    "playerMarker": {
+      "carIdx": 10,
+      "isFocus": false,
+      "classColor": "#00AEEF"
+    },
+    "practiceMarkerPolicy": {
+      "hideNonFocusWithoutTakenGrid": true,
+      "keepFocusWithoutTakenGrid": true,
+      "hiddenCarIdxs": [33],
+      "visibleCarIdxs": [10, 22]
+    }
+  }
+}

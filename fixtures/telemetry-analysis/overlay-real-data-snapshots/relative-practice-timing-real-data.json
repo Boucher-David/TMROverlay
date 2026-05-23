@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "relative-practice-timing-real-data",
+  "overlayId": "relative",
+  "scenarioIds": ["relative-practice-timing-real-data"],
+  "source": {
+    "captureId": "v1.1.0-practice-observation",
+    "sourceCategory": "open-practice-player-focus",
+    "redaction": "compact-summary",
+    "note": "Real open-practice observation where iRacing showed a faster-class car about 3 seconds behind while official lap delta was unavailable."
+  },
+  "provenance": {
+    "sessionType": "Practice",
+    "sessionPhase": "green",
+    "focusRelation": "player",
+    "sampleWindowSeconds": 4.0
+  },
+  "rawEvidence": {
+    "sessionType": "Practice",
+    "officialLapDeltaAvailable": false,
+    "estimatedTiming": {
+      "available": true,
+      "field": "CarIdxEstTime",
+      "focusCarIdx": 10,
+      "focusSeconds": 126.40,
+      "aheadCarIdx": 21,
+      "aheadSeconds": 123.18,
+      "behindCarIdx": 32,
+      "behindSeconds": 129.44
+    },
+    "spatialPlacement": {
+      "field": "CarIdxLapDistPct",
+      "focusLapDistPct": 0.482,
+      "aheadLapDistPct": 0.490,
+      "behindLapDistPct": 0.474
+    }
+  },
+  "expected": {
+    "shouldRender": true,
+    "modelSource": "model-v2 timing fallback",
+    "mustUseSeconds": true,
+    "mustNotUseMetersFallback": true,
+    "rows": [
+      {
+        "role": "ahead",
+        "carIdx": 21,
+        "gapSeconds": -3.22,
+        "display": "-3.220"
+      },
+      {
+        "role": "reference",
+        "carIdx": 10,
+        "gapSeconds": 0.0,
+        "display": "0.000"
+      },
+      {
+        "role": "behind",
+        "carIdx": 32,
+        "gapSeconds": 3.04,
+        "display": "+3.040"
+      }
+    ],
+    "forbiddenTextPatterns": ["m", "--"]
+  }
+}

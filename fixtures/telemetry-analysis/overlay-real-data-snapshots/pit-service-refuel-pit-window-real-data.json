@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "id": "pit-service-refuel-pit-window-real-data",
+  "overlayId": "pit-service",
+  "scenarioIds": ["pit-refuel-real-data"],
+  "source": {
+    "captureId": "capture-20260522-204847-774",
+    "sourceCategory": "full-race-pit-service-refuel",
+    "redaction": "compact-summary",
+    "note": "Race capture with PitSv request frames and a local pit-service window where requested fuel was about 30 L and post-race history measured a matching refuel."
+  },
+  "provenance": {
+    "sessionType": "Race",
+    "sessionPhase": "pit-service",
+    "focusRelation": "player",
+    "sampleWindowSeconds": 42.489
+  },
+  "rawEvidence": {
+    "sessionType": "Race",
+    "liveDiagnostics": {
+      "pitServiceSignalFrames": 206109,
+      "pitServiceRequestFrames": 201446,
+      "pitServiceChangeFrames": 126,
+      "pitWindowCount": 3,
+      "pitWindowsWithFuelIncrease": 0,
+      "fuelIncreaseEventFrames": 0,
+      "pitServiceLocalStrategyUnavailableReasonCounts": {
+        "garage": 26,
+        "not_in_car": 2918
+      }
+    },
+    "selectedPitWindow": {
+      "startSessionTimeSeconds": 2117.216666674952,
+      "endSessionTimeSeconds": 2159.7666666754926,
+      "durationSeconds": 42.489,
+      "entryFuelLiters": 3.8224141597747803,
+      "exitFuelLiters": 33.45134735107422,
+      "netFuelDeltaLiters": 29.62893319129944,
+      "sawFuelIncrease": false,
+      "sawPitstopActive": true,
+      "sawPlayerPitStall": true,
+      "sawPitServiceChange": true,
+      "entryPitServiceStatus": 0,
+      "lastPitServiceStatus": 0,
+      "entryPitServiceFlags": 48,
+      "lastPitServiceFlags": 0,
+      "entryPitServiceFuelLiters": 30.000001907348633,
+      "lastPitServiceFuelLiters": 30.000001907348633
+    },
+    "postRacePitStop": {
+      "stopNumber": 4,
+      "entryRaceTimeSeconds": 2117.216666674952,
+      "exitRaceTimeSeconds": 2159.7833333421595,
+      "pitLaneSeconds": 42.5666666672073,
+      "pitStallSeconds": 17.316666666886704,
+      "serviceActiveSeconds": 17.450000000221735,
+      "fuelBeforeLiters": 3.8224141597747803,
+      "fuelAfterLiters": 33.45108413696289,
+      "fuelAddedLiters": 29.62866997718811,
+      "fuelFillRateLitersPerSecond": 1.6979180502470843,
+      "confidenceFlags": ["team_car_array", "local_fuel_scalar", "pit_stall_signal", "service_active_signal"]
+    }
+  },
+  "expected": {
+    "pitWindowHasRefuelRequest": true,
+    "pitWindowShouldDetectFuelIncrease": true,
+    "minimumNetFuelIncreaseLiters": 25.0,
+    "requestedFuelLiters": 30.0,
+    "requestFlagMask": 16,
+    "actualLiveDiagnosticsMissedFuelIncrease": true,
+    "localStrategyContext": {
+      "selectedPitWindowReason": "available",
+      "unavailableReasonCountsAreOutOfWindowContext": true
+    },
+    "fuelRequestRow": {
+      "label": "Fuel request",
+      "segmentLabels": ["Requested", "Selected"],
+      "forbiddenSegmentLabels": ["Estimated", "Recommended", "Need", "Plan", "Fuel to finish"]
+    },
+    "mustNotUseFuelCalculatorStrategy": true
+  }
+}

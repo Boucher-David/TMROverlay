@@ -1046,6 +1046,81 @@ public sealed class LiveOverlayDiagnosticsRecorderTests
     }
 
     [Fact]
+    public void CompleteCollection_DetectsPitWindowFuelIncreaseFromNetFuelDelta()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-diagnostics");
+            Directory.CreateDirectory(captureDirectory);
+            var recorder = CreateRecorder(storage);
+            var context = CreateContext();
+            var startedAtUtc = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+            recorder.StartCollection("capture-diagnostics", startedAtUtc);
+
+            foreach (var (offsetSeconds, fuelLevelLiters) in new[] { (0d, 5.0d), (1d, 5.2d), (2d, 5.4d), (3d, 5.6d) })
+            {
+                recorder.RecordFrame(
+                    CreateSnapshot(
+                        context,
+                        CreateSample(
+                            startedAtUtc.AddSeconds(offsetSeconds),
+                            sessionTime: offsetSeconds,
+                            focusCarIdx: 10,
+                            carLeftRight: 1,
+                            focusF2TimeSeconds: 500d + offsetSeconds,
+                            classPosition: 3,
+                            observedPosition: 25,
+                            observedClassPosition: 10,
+                            observedLapDistPct: 0.5d,
+                            fuelLevelLiters: fuelLevelLiters,
+                            onPitRoad: true,
+                            playerCarInPitStall: true,
+                            pitServiceStatus: 1,
+                            pitServiceFlags: 0x10,
+                            pitServiceFuelLiters: 30d),
+                        sequence: (long)offsetSeconds + 1));
+            }
+
+            recorder.RecordFrame(
+                CreateSnapshot(
+                    context,
+                    CreateSample(
+                        startedAtUtc.AddSeconds(4),
+                        sessionTime: 4d,
+                        focusCarIdx: 10,
+                        carLeftRight: 1,
+                        focusF2TimeSeconds: 504d,
+                        classPosition: 3,
+                        observedPosition: 25,
+                        observedClassPosition: 10,
+                        observedLapDistPct: 0.5d,
+                        fuelLevelLiters: 5.6d),
+                    sequence: 5));
+
+            var path = recorder.CompleteCollection(startedAtUtc.AddSeconds(5), captureDirectory);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path!));
+            var fuel = document.RootElement.GetProperty("fuel");
+            Assert.Equal(1, fuel.GetProperty("pitWindowCount").GetInt32());
+            Assert.Equal(1, fuel.GetProperty("pitWindowsWithFuelIncrease").GetInt32());
+            Assert.Equal(1, fuel.GetProperty("fuelIncreaseEventFrames").GetInt32());
+            var pitWindow = fuel.GetProperty("pitWindows").EnumerateArray().Single();
+            Assert.True(pitWindow.GetProperty("sawFuelIncrease").GetBoolean());
+            Assert.Equal(0.6d, pitWindow.GetProperty("netFuelDeltaLiters").GetDouble(), 3);
+            Assert.Equal(0.6d, pitWindow.GetProperty("maxFuelIncreaseLiters").GetDouble(), 3);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void CompleteCollection_FlagsNonRaceRaceProjectionWhenModelStillContainsIt()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-live-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));

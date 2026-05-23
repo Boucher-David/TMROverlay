@@ -74,7 +74,9 @@
     },
     "fuelRequestRow": {
       "label": "Fuel request",
+      "value": "requested | 30.0 L",
       "segmentLabels": ["Requested", "Selected"],
+      "segmentValues": ["Yes", "30.0 L"],
       "forbiddenSegmentLabels": ["Estimated", "Recommended", "Need", "Plan", "Fuel to finish"]
     },
     "mustNotUseFuelCalculatorStrategy": true

@@ -234,6 +234,8 @@ class OverlayRealDataSnapshotTests(unittest.TestCase):
             window["entryPitServiceFuelLiters"],
             places=3,
         )
+        self.assertEqual(["Requested", "Selected"], expected["fuelRequestRow"]["segmentLabels"])
+        self.assertEqual(["Yes", "30.0 L"], expected["fuelRequestRow"]["segmentValues"])
         self.assertGreaterEqual(window["netFuelDeltaLiters"], expected["minimumNetFuelIncreaseLiters"])
         self.assertGreater(window["exitFuelLiters"], window["entryFuelLiters"])
         self.assertFalse(window["sawFuelIncrease"])

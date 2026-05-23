@@ -197,14 +197,22 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
 
         Assert.True(built);
         Assert.True(response.Model.ShouldRender);
+        var expectedFuelRequestRow = Get(snapshotFixture, "expected", "fuelRequestRow");
         var fuel = Assert.Single(response.Model.Metrics, row => row.Label == "Fuel request");
-        Assert.Equal("requested | 30.0 L", fuel.Value);
+        Assert.Equal(String(expectedFuelRequestRow, "value"), fuel.Value);
         Assert.Collection(
             fuel.Segments,
-            segment => Assert.Equal("Requested", segment.Label),
-            segment => Assert.Equal("Selected", segment.Label));
-        Assert.All(fuel.Segments, segment => Assert.Equal("30.0 L", segment.Value));
-        foreach (var label in Get(snapshotFixture, "expected", "fuelRequestRow", "forbiddenSegmentLabels").EnumerateArray().Select(item => item.GetString()!))
+            segment =>
+            {
+                Assert.Equal(StringAt(expectedFuelRequestRow, "segmentLabels", 0), segment.Label);
+                Assert.Equal(StringAt(expectedFuelRequestRow, "segmentValues", 0), segment.Value);
+            },
+            segment =>
+            {
+                Assert.Equal(StringAt(expectedFuelRequestRow, "segmentLabels", 1), segment.Label);
+                Assert.Equal(StringAt(expectedFuelRequestRow, "segmentValues", 1), segment.Value);
+            });
+        foreach (var label in Get(expectedFuelRequestRow, "forbiddenSegmentLabels").EnumerateArray().Select(item => item.GetString()!))
         {
             Assert.DoesNotContain(response.Model.Metrics, row => string.Equals(row.Label, label, StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(response.Model.Metrics.SelectMany(row => row.Segments), segment => string.Equals(segment.Label, label, StringComparison.OrdinalIgnoreCase));
@@ -536,6 +544,9 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
     private static double Double(JsonElement element, string property) => element.GetProperty(property).GetDouble();
 
     private static string String(JsonElement element, string property) => element.GetProperty(property).GetString()!;
+
+    private static string StringAt(JsonElement element, string property, int index) =>
+        element.GetProperty(property)[index].GetString()!;
 
     private static bool Bool(JsonElement element, string property) => element.GetProperty(property).GetBoolean();
 }

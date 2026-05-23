@@ -159,7 +159,7 @@ test.describe('real-data compact snapshot browser rendering', () => {
     await expect(page.locator('.metric')).toHaveCount(1);
     await expect(page.locator('.metric .label')).toHaveText(snapshot.expected.fuelRequestRow.label);
     await expect(page.locator('.segment-label')).toHaveText(snapshot.expected.fuelRequestRow.segmentLabels);
-    await expect(page.locator('.segment-value')).toHaveText(['30.0 L', '30.0 L']);
+    await expect(page.locator('.segment-value')).toHaveText(snapshot.expected.fuelRequestRow.segmentValues);
     const contentText = await page.locator('#content').textContent();
     for (const label of snapshot.expected.fuelRequestRow.forbiddenSegmentLabels) {
       expect(contentText).not.toContain(label);
@@ -377,11 +377,11 @@ function pitServiceRefuelModel(snapshot) {
       title: 'Service',
       rows: [{
         label: row.label,
-        value: 'requested',
+        value: row.value,
         tone: 'info',
-        segments: row.segmentLabels.map((label) => ({
+        segments: row.segmentLabels.map((label, index) => ({
           label,
-          value: `${snapshot.expected.requestedFuelLiters.toFixed(1)} L`,
+          value: row.segmentValues[index],
           tone: 'info'
         }))
       }]

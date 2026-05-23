@@ -17,6 +17,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private const double SectorBoundarySeedThreshold = 0.0125d;
     private const double LapStartSeedThreshold = 0.02d;
     private const double MaximumContinuousSectorProgressDelta = 0.12d;
+    private const double MinimumPitWindowFuelIncreaseLiters = 0.25d;
     private const int MaxPitWindowSamples = 20;
     private const int BlackFlagMask = 0x00010000 | 0x00020000 | 0x00080000 | 0x00200000 | 0x00400000;
     private const int YellowFamilyFlagMask = 0x00000008
@@ -3576,14 +3577,29 @@ internal sealed class LiveOverlayDiagnosticsRecorder
 
             if (fuelLiters is { } currentFuel)
             {
-                if (LastFuelLiters is { } previousFuel && currentFuel - previousFuel > 0.25d)
+                var frameIncreaseLiters = LastFuelLiters is { } previousFuel
+                    ? currentFuel - previousFuel
+                    : (double?)null;
+                var netIncreaseLiters = EntryFuelLiters is { } entryFuel
+                    ? currentFuel - entryFuel
+                    : frameIncreaseLiters;
+                var hasFrameIncrease = frameIncreaseLiters.GetValueOrDefault() > MinimumPitWindowFuelIncreaseLiters;
+                var hasNetIncrease = netIncreaseLiters.GetValueOrDefault() > MinimumPitWindowFuelIncreaseLiters;
+                if (hasFrameIncrease || hasNetIncrease)
                 {
+                    var hadFuelIncrease = SawFuelIncrease;
+                    var detectedIncreaseLiters = hasFrameIncrease
+                        ? frameIncreaseLiters!.Value
+                        : netIncreaseLiters!.Value;
+                    var cumulativeIncreaseLiters = netIncreaseLiters is > 0d
+                        ? netIncreaseLiters.Value
+                        : detectedIncreaseLiters;
                     SawFuelIncrease = true;
-                    LastFuelIncreaseLiters = currentFuel - previousFuel;
+                    LastFuelIncreaseLiters = detectedIncreaseLiters;
                     MaxFuelIncreaseLiters = MaxFuelIncreaseLiters is { } max
-                        ? Math.Max(max, currentFuel - (EntryFuelLiters ?? previousFuel))
-                        : currentFuel - (EntryFuelLiters ?? previousFuel);
-                    ConsumedFuelIncreaseEvent = true;
+                        ? Math.Max(max, cumulativeIncreaseLiters)
+                        : cumulativeIncreaseLiters;
+                    ConsumedFuelIncreaseEvent = hasFrameIncrease || !hadFuelIncrease;
                 }
 
                 LastFuelLiters = currentFuel;

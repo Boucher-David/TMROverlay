@@ -295,8 +295,8 @@
                   button('Open Bundle Folder', () => runSupportAction('openDiagnostics', 'Opened diagnostics folder.'), { 'data-evidence-key': 'support.bundle.open-folder' })
                 ]),
                 node('div', 'body-lines compact', {}, [
-                  node('p', '', { 'data-evidence-key': 'support.capture.raw.description' }, ['Raw iRacing frame capture runs only when requested.']),
-                  node('p', '', { 'data-evidence-key': 'support.bundle.create.description' }, ['Create a bundle after reproducing an issue.'])
+                  node('p', '', { 'data-evidence-key': 'support.capture.raw.description' }, ['Raw iRacing capture runs only when requested.']),
+                  node('p', '', { 'data-evidence-key': 'support.bundle.create.description' }, ['Forensics save when capture finishes.'])
                 ]),
                 support.statusText ? node('p', `support-status ${support.statusTone}`, {}, [support.statusText]) : null
               ]),
@@ -998,7 +998,7 @@
 
       function setRawCaptureEnabled(isOn) {
         state.support.rawCaptureEnabled = isOn;
-        setSupportStatus(isOn ? 'Enhanced iRacing telemetry capture will start with live data.' : 'Enhanced iRacing telemetry capture disabled.', 'success');
+        setSupportStatus(isOn ? 'Enhanced capture will save forensics at session end.' : 'Enhanced iRacing telemetry capture disabled.', 'success');
         persistSettings({ kind: 'support', action: 'rawCapture', enabled: isOn });
         render();
       }

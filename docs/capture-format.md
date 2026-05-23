@@ -18,6 +18,8 @@ After capture finalization, the app also writes compact post-session sidecars wh
 
 These sidecars are additive. Existing raw captures without them remain readable, startup recovery can fill missing sidecars later, and source `.ibt` files are not copied into capture directories by default.
 
+When raw capture finalization succeeds, the app also creates an initial overlay forensics package under `%LOCALAPPDATA%\TmrOverlay\forensics\<capture-id>`. That package is not part of the immutable raw capture directory. It indexes the capture, compact sidecars, storage boundary, and replay limitations so the offline replay tool can add model/pixel evidence later without mutating the capture. If that forensics folder has already been enriched by the replay tool, later app finalization or startup recovery must preserve it instead of replacing it with a starter package.
+
 Compact edge-case telemetry artifacts and live overlay diagnostics collected without raw capture are not part of the raw capture format. They are written separately under the logs root as JSON and may be included in diagnostics bundles without including `telemetry.bin`.
 
 ## `telemetry-schema.json`

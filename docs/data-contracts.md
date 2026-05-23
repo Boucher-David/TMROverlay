@@ -29,6 +29,9 @@ their format version, but the app should not rewrite them in place:
 - raw capture `latest-session.yaml` and `session-info/*.yaml`
 - compact sidecars such as `capture-synthesis.json`, `ibt-analysis/*.json`,
   `live-model-parity.json`, and `live-overlay-diagnostics.json`
+- app-owned overlay forensics packages under `forensics/<capture-id>/`, including
+  `storage-boundary.json`, `input-inventory.json`, `overlay-forensics.json`, and
+  derived replay artifacts when present
 
 ### Disposable Runtime Data
 
@@ -55,6 +58,13 @@ baseline for:
 - track-map `generationVersion = 1`
 - raw-capture manifest `formatVersion = 1`
 - runtime-state `runtimeStateVersion = 1`
+
+App-owned overlay forensics packages are diagnostic/support output, not durable
+settings, history, or generated map state. Introducing
+`%LOCALAPPDATA%\TmrOverlay\forensics\<capture-id>` does not rewrite the v0.19.0
+baseline snapshot because no released durable reader schema changes. Future
+snapshots should add only compact, sanitized forensics fixtures when production
+readers or validators start depending on a released forensics contract.
 
 The v0.19.0 snapshot intentionally contains representative user choices,
 schema-shaped history samples, generated map geometry, raw-capture metadata, and
@@ -83,7 +93,8 @@ At minimum, include:
 
 Keep snapshots compact, synthetic or sanitized, and source-reviewable. Do not
 commit raw `telemetry.bin`, source `.ibt`, private driver/team identity, local
-absolute paths, diagnostics bundles, or full session YAML.
+absolute paths, diagnostics bundles, bulky forensics packages, or full session
+YAML.
 
 ## Required Validation
 

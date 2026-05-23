@@ -559,7 +559,7 @@ internal sealed class DesignV2SettingsSurface : Control
                 var accepted = _callbacks.SetRawCaptureEnabled(isOn);
                 SetSupportStatus(
                     accepted
-                        ? (isOn ? "Enhanced iRacing telemetry capture will start with live data." : "Enhanced iRacing telemetry capture disabled.")
+                        ? (isOn ? "Enhanced capture will save forensics at session end." : "Enhanced iRacing telemetry capture disabled.")
                         : "Enhanced iRacing telemetry capture change was rejected while capture is active.",
                     !accepted);
                 RebuildDynamicControls();
@@ -1281,8 +1281,8 @@ internal sealed class DesignV2SettingsSurface : Control
         DrawText(graphics, LatestBundleValueText(latestPath), SupportBundleValueBounds(), SupportBundleValueFontSize, FontStyle.Bold, TextPrimary, monospaced: true);
         var supportDescriptionLines = new[]
         {
-            "Raw iRacing frame capture runs only when requested.",
-            "Create a bundle after reproducing an issue."
+            "Raw iRacing capture runs only when requested.",
+            "Forensics save when capture finishes."
         };
         for (var index = 0; index < supportDescriptionLines.Length; index++)
         {

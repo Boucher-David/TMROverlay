@@ -377,6 +377,26 @@ BROWSER_ONLY_OVERLAY_IDS = {
 
 BROWSER_FULL_CANVAS_COMPARISON_OVERLAYS: set[str] = set()
 
+MIN_SCALE_EXPECTED_SIZES = {
+    ("standings", "min-scale"): (406, 188),
+    ("fuel-calculator", "min-scale"): (302, 179),
+    ("relative", "min-scale"): (235, 185),
+    ("track-map", "min-scale"): (216, 216),
+    ("stream-chat", "min-scale"): (228, 312),
+    ("flags", "min-scale"): (216, 102),
+    ("session-weather", "min-scale"): (278, 298),
+    ("pit-service", "min-scale"): (318, 424),
+    ("input-state", "min-scale"): (312, 156),
+    ("car-radar", "min-scale"): (180, 180),
+    ("gap-to-leader", "min-scale"): (392, 202),
+    ("garage-cover", "min-scale"): (864, 540),
+}
+
+MIN_SCALE_EFFECTIVE_BROWSER_SOURCE_SIZES = {
+    **MIN_SCALE_EXPECTED_SIZES,
+    ("garage-cover", "min-scale"): (768, 432),
+}
+
 OVERLAY_VARIANT_SPECS = (
     ("fuel-calculator", "waiting", "fixture=fuel-waiting", True, None),
     ("fuel-calculator", "calculating", "fixture=fuel-calculating", True, None),
@@ -395,17 +415,23 @@ OVERLAY_VARIANT_SPECS = (
     ("standings", "focused-class-only", "fixture=standings-focused-class-only", True, None),
     ("standings", "starting-grid", "fixture=standings-starting-grid", True, None),
     ("standings", "no-content", "fixture=standings-no-content", True, None),
-    ("standings", "min-scale", "fixture=standings-min-scale", False, None),
+    ("standings", "content-off-chrome-on", "fixture=standings-content-off-chrome-on", True, None),
+    ("standings", "min-scale", "fixture=standings-min-scale", True, None),
     ("relative", "chrome-off", "fixture=chrome-off", True, None),
     ("relative", "rightmost-evidence", "fixture=rightmost-evidence", True, None),
     ("relative", "driver-only", "fixture=relative-driver-only", True, None),
     ("relative", "position-driver", "fixture=relative-position-driver", True, None),
     ("relative", "rows-2", "fixture=relative-rows-2", True, None),
     ("relative", "no-content", "fixture=relative-no-content", True, None),
+    ("relative", "min-scale", "fixture=relative-min-scale", True, None),
     ("fuel-calculator", "chrome-off", "fixture=chrome-off", True, None),
+    ("fuel-calculator", "min-scale", "fixture=fuel-calculator-min-scale", True, None),
     ("gap-to-leader", "chrome-off", "fixture=chrome-off", True, None),
+    ("gap-to-leader", "min-scale", "fixture=gap-to-leader-min-scale", True, None),
     ("session-weather", "chrome-off", "fixture=chrome-off", True, None),
+    ("session-weather", "min-scale", "fixture=session-weather-min-scale", True, None),
     ("pit-service", "chrome-off", "fixture=chrome-off", True, None),
+    ("pit-service", "min-scale", "fixture=pit-service-min-scale", True, None),
     ("session-weather", "missing", "fixture=session-weather-missing", True, None),
     ("session-weather", "session-off", "fixture=session-weather-session-off", True, None),
     ("session-weather", "weather-off", "fixture=session-weather-weather-off", True, None),
@@ -427,17 +453,22 @@ OVERLAY_VARIANT_SPECS = (
     ("car-radar", "right", "fixture=car-radar-right", True, None),
     ("car-radar", "both-sides", "fixture=car-radar-both-sides", True, None),
     ("car-radar", "clear", "fixture=car-radar-clear", True, None),
+    ("car-radar", "min-scale", "fixture=car-radar-min-scale", True, None),
     ("gap-to-leader", "no-cars", "fixture=gap-no-cars", True, None),
     ("gap-to-leader", "trend-row-off", "fixture=gap-trend-row-off", True, None),
     ("gap-to-leader", "trend-off", "fixture=gap-trend-off", True, None),
     ("gap-to-leader", "graph-off", "fixture=gap-graph-off", True, None),
     ("track-map", "circle-fallback", "trackMap=fallback", True, "track-map-fallback"),
     ("track-map", "no-markers", "fixture=track-map-no-markers", True, None),
+    ("track-map", "min-scale", "fixture=track-map-min-scale", True, None),
     ("flags", "all-kinds", "fixture=flags-all-kinds", True, None),
+    ("flags", "min-scale", "fixture=flags-min-scale", True, None),
     ("garage-cover", "hidden", "fixture=garage-hidden", False, None),
     ("garage-cover", "garage-visible", "fixture=garage-visible", False, None),
     ("garage-cover", "stale", "fixture=garage-stale", False, None),
     ("garage-cover", "disconnected", "fixture=garage-disconnected", False, None),
+    ("garage-cover", "min-scale", "fixture=garage-visible-min-scale", False, None),
+    ("stream-chat", "min-scale", "fixture=stream-chat-min-scale", True, None),
     ("stream-chat", "twitch-rich", "fixture=stream-chat-twitch-rich", True, None),
     ("stream-chat", "streamlabs-configured", "fixture=stream-chat-streamlabs-configured", True, None),
 )
@@ -541,6 +572,7 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS = {
     ("standings", "class-separators-off"),
     ("standings", "focused-class-only"),
     ("standings", "no-content"),
+    ("standings", "content-off-chrome-on"),
     ("session-weather", "missing"),
     ("session-weather", "session-off"),
     ("session-weather", "weather-off"),
@@ -571,13 +603,14 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("standings", "focused-class-only"): (677, 240),
     ("standings", "starting-grid"): (677, 313),
     ("standings", "no-content"): (284, 28),
+    ("standings", "content-off-chrome-on"): (284, 40),
     ("standings", "min-scale"): (406, 188),
     ("relative", "chrome-off"): (392, 274),
     ("relative", "rightmost-evidence"): (440, 308),
     ("relative", "driver-only"): (274, 308),
     ("relative", "position-driver"): (322, 308),
     ("relative", "rows-2"): (392, 246),
-    ("relative", "no-content"): (360, 308),
+    ("relative", "no-content"): (360, 274),
     ("gap-to-leader", "chrome-off"): (654, 298),
     ("gap-to-leader", "trend-row-off"): (654, 336),
     ("gap-to-leader", "trend-off"): (444, 336),
@@ -587,6 +620,11 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("input-state", "graph-only"): (380, 260),
     ("input-state", "rail-only"): (276, 260),
 }
+WEB_OVERLAY_VARIANT_EXPECTED_SIZES.update({
+    key: size
+    for key, size in MIN_SCALE_EXPECTED_SIZES.items()
+    if key != ("input-state", "min-scale")
+})
 
 WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZES = {
     # Native chrome-off screenshots prove the chrome height actually collapses.
@@ -613,11 +651,16 @@ WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("relative", "driver-only"): (274, 308),
     ("relative", "position-driver"): (322, 308),
     ("relative", "rows-2"): (392, 246),
-    ("relative", "no-content"): (360, 308),
+    ("relative", "no-content"): (360, 274),
     ("input-state", "graph-only"): (380, 260),
     ("input-state", "rail-only"): (276, 260),
     ("input-state", "no-content"): (276, 260),
 }
+WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZES.update({
+    key: size
+    for key, size in MIN_SCALE_EXPECTED_SIZES.items()
+    if key[0] != "garage-cover"
+})
 
 WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS = {
     ("session-weather", "missing"),
@@ -1914,7 +1957,10 @@ def is_expected_hidden_relative_state(path: str, values: Optional[dict[str, obje
 
 
 def allows_empty_table_evidence(path: str) -> bool:
-    return is_expected_hidden_relative_state(path) or screenshot_variant_key(path) == ("standings", "no-content")
+    return is_expected_hidden_relative_state(path) or screenshot_variant_key(path) in {
+        ("standings", "no-content"),
+        ("standings", "content-off-chrome-on"),
+    }
 
 
 def overlay_variant_index(
@@ -2995,7 +3041,7 @@ def validate_effective_settings_contract(path: str, values: dict[str, object], f
             expected_class_separators = False
         elif variant_key == ("standings", "focused-class-only"):
             expected_other_class_rows = 0
-        elif variant_key == ("standings", "no-content"):
+        elif variant_key in {("standings", "no-content"), ("standings", "content-off-chrome-on")}:
             expected_standings_content = {key: False for key in expected_standings_content}
         for key, expected in expected_standings_content.items():
             require_effective_setting_value(path, settings, key, expected, failures)
@@ -5372,6 +5418,14 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
 
     validate_overlay_variant_scenario(path, values, overlay_id, slug, failures)
 
+    if slug == "min-scale":
+        validate_min_scale_variant(path, values, overlay_id, failures)
+        if overlay_id == "standings":
+            validate_standings_variant(path, values, slug, failures)
+        elif overlay_id == "input-state":
+            validate_input_min_scale_variant(path, values, failures)
+        return
+
     if slug == "chrome-off":
         validate_chrome_off_variant(path, values, failures)
         if overlay_id == "standings":
@@ -5552,6 +5606,13 @@ def validate_fuel_calculating_variant(path: str, values: dict[str, object], fail
     sections = section_map(model_evidence(values))
     require_sequence(path, "fuel calculating sections", list(sections), ["Race Information"], failures)
     require_section_rows(path, sections, "Race Information", ["Plan", "Fuel"], failures)
+    require_fuel_rendered_content_height(
+        path,
+        values,
+        row_count=2,
+        section_count=1,
+        label="fuel calculating compact height",
+        failures=failures)
     require_segments(
         path,
         sections,
@@ -5597,6 +5658,20 @@ def validate_fuel_content_off_variant(path: str, values: dict[str, object], slug
     elif slug == "race-information-off":
         require_section_rows(path, sections, "Stint Targets", ["Stint 1", "Stint 2", "Stint 3"], failures)
 
+    compact_expectations = {
+        "stint-targets-off": (2, 1),
+        "race-information-off": (3, 1),
+    }
+    if slug in compact_expectations:
+        row_count, section_count = compact_expectations[slug]
+        require_fuel_rendered_content_height(
+            path,
+            values,
+            row_count=row_count,
+            section_count=section_count,
+            label=f"fuel {slug} compact height",
+            failures=failures)
+
     labels = metric_row_labels(model_evidence(values))
     hidden_labels = {
         "plan-off": ["Plan"],
@@ -5620,6 +5695,8 @@ def validate_relative_rightmost_variant(path: str, values: dict[str, object], fa
 def validate_relative_no_content_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
     require_equal(path, "relative no-content bodyKind", values.get("bodyKind"), "table", failures)
     validate_hidden_relative_contract(path, values, "no enabled content", failures)
+    settings = evidence_list(typed_dict(values.get("effectiveSettings")), "settings")
+    require_effective_setting_value(path, settings, "chrome.header.time-remaining.race", False, failures)
 
 
 def validate_session_weather_missing_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -5948,6 +6025,38 @@ def validate_input_min_scale_variant(path: str, values: dict[str, object], failu
     require_input_min_scale_bounds(path, values, failures)
 
 
+def validate_min_scale_variant(path: str, values: dict[str, object], overlay_id: str, failures: list[str]) -> None:
+    expected_size = MIN_SCALE_EXPECTED_SIZES.get((overlay_id, "min-scale"))
+    if expected_size is None:
+        failures.append(f"{path}: min-scale variant has no expected size for {overlay_id}")
+        return
+
+    expected_width, expected_height = expected_size
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        require_equal(path, f"{overlay_id} min-scale manifest scale", values.get("minScale"), 0.6, failures)
+        if values.get("scaleTransform") is not None:
+            require_equal(path, f"{overlay_id} min-scale capture transform", values.get("scaleTransform"), 0.6, failures)
+            require_size_object(
+                path,
+                f"{overlay_id} min-scale scaled screenshot size",
+                {"width": values.get("width"), "height": values.get("height")},
+                expected_width,
+                expected_height,
+                failures,
+                required=False)
+        effective_width, effective_height = MIN_SCALE_EFFECTIVE_BROWSER_SOURCE_SIZES.get((overlay_id, "min-scale"), expected_size)
+        validate_min_scale_effective_settings(path, values, f"{overlay_id} min-scale", effective_width, effective_height, failures)
+    else:
+        require_size_object(
+            path,
+            f"{overlay_id} min-scale native configured size",
+            {"width": values.get("width"), "height": values.get("height")},
+            expected_width,
+            expected_height,
+            failures,
+            required=False)
+
+
 def validate_min_scale_effective_settings(
     path: str,
     values: dict[str, object],
@@ -6174,6 +6283,9 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
     if slug == "no-content":
         validate_standings_no_content_variant(path, values, failures)
         return
+    if slug == "content-off-chrome-on":
+        validate_standings_content_off_chrome_on_variant(path, values, failures)
+        return
 
     expected_labels, expected_widths, expected_alignments = expected_standings_columns(mode, slug)
     require_sequence(path, "standings column labels", [text_value(column, "label") for column in columns], expected_labels, failures)
@@ -6263,6 +6375,7 @@ def validate_standings_variant(path: str, values: dict[str, object], slug: str, 
         "focused-class-only",
         "starting-grid",
         "no-content",
+        "content-off-chrome-on",
         "min-scale",
     }:
         failures.append(f"{path}: unknown standings fixture variant {slug!r}")
@@ -6517,6 +6630,44 @@ def validate_standings_no_content_variant(path: str, values: dict[str, object], 
         "standings.content.standings.pit.enabled",
     ):
         require_effective_standings_setting(path, values, key, False, failures)
+
+
+def validate_standings_content_off_chrome_on_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "standings content-off chrome-on bodyKind", values.get("bodyKind"), "table", failures)
+    require_equal(path, "standings content-off chrome-on status", values.get("status"), "chrome only | content disabled", failures)
+    require_equal(path, "standings content-off chrome-on shouldRender", values.get("shouldRender"), True, failures)
+    require_equal(path, "standings content-off chrome-on rowCount", values.get("rowCount"), 0, failures)
+    model = model_evidence(values)
+    if evidence_list(model, "columns"):
+        failures.append(f"{path}: standings content-off chrome-on expected no rendered columns")
+    if evidence_list(model, "rows"):
+        failures.append(f"{path}: standings content-off chrome-on expected no rendered rows")
+    header_items = visible_header_items(values)
+    if not header_items:
+        failures.append(f"{path}: standings content-off chrome-on expected visible headerItems")
+    elif not any(str(item.get("key") or "").lower() == "timeremaining" for item in header_items):
+        failures.append(f"{path}: standings content-off chrome-on expected timeRemaining header item, got {header_items!r}")
+    text = str(values.get("textSample") or "")
+    if "06:37:08" not in text and not path.startswith("native-overlays/"):
+        failures.append(f"{path}: standings content-off chrome-on textSample should include time remaining header, got {text!r}")
+    for stale in ("Kousuke", "Kauan", "Tech Mates Racing", "Tommie Wittens", "Leader", "1:54.228"):
+        if stale.lower() in text.lower():
+            failures.append(f"{path}: standings content-off chrome-on leaked stale standings content {text!r}")
+            break
+    for key in (
+        "standings.content.standings.class-position.enabled",
+        "standings.content.standings.car-number.enabled",
+        "standings.content.standings.driver.enabled",
+        "standings.content.standings.gap.enabled",
+        "standings.content.standings.interval.enabled",
+        "standings.content.standings.fastest-lap.enabled",
+        "standings.content.standings.last-lap.enabled",
+        "standings.content.standings.pit.enabled",
+    ):
+        require_effective_standings_setting(path, values, key, False, failures)
+    if not path.startswith("native-overlays/"):
+        settings = evidence_list(typed_dict(values.get("effectiveSettings")), "settings")
+        require_effective_setting_value(path, settings, "chrome.header.time-remaining.race", True, failures)
 
 
 def validate_standings_min_scale_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -7710,6 +7861,61 @@ def require_shrunk_overlay_height(
     source_height = browser_source.get("height")
     if isinstance(source_height, int) and source_height >= full_height:
         failures.append(f"{path}: {label} browser source height expected below {full_height}, got {source_height}")
+
+
+def expected_fuel_content_height(row_count: int, section_count: int, failures: list[str]) -> Optional[int]:
+    geometry = typed_dict(overlay_geometry_contract_for_constants().get("metricRows"))
+    required_keys = [
+        "minimumFuelCalculatorHeight",
+        "headerChromeHeight",
+        "fuelContentVerticalPadding",
+        "fuelSectionTitleReserveHeight",
+        "segmentedRowHeight",
+        "rowGap",
+        "sectionGap",
+        "collapsedFooterReserveHeight",
+    ]
+    missing = [key for key in required_keys if not is_numeric_value(geometry.get(key))]
+    if missing:
+        failures.append(f"overlay-geometry.json: missing fuel height contract keys {missing}")
+        return None
+
+    if row_count <= 0 or section_count <= 0:
+        return round(numeric(geometry["minimumFuelCalculatorHeight"]))
+
+    row_gaps = round(max(0, row_count - section_count) * numeric(geometry["rowGap"]))
+    section_gaps = round(max(0, section_count - 1) * numeric(geometry["sectionGap"]))
+    height = (
+        numeric(geometry["headerChromeHeight"])
+        + numeric(geometry["fuelContentVerticalPadding"])
+        + section_count * numeric(geometry["fuelSectionTitleReserveHeight"])
+        + round(row_count * numeric(geometry["segmentedRowHeight"]))
+        + row_gaps
+        + section_gaps
+        + numeric(geometry["collapsedFooterReserveHeight"])
+    )
+    return round(max(numeric(geometry["minimumFuelCalculatorHeight"]), min(height, 298)))
+
+
+def require_fuel_rendered_content_height(
+    path: str,
+    values: dict[str, object],
+    row_count: int,
+    section_count: int,
+    label: str,
+    failures: list[str],
+) -> None:
+    expected_height = expected_fuel_content_height(row_count, section_count, failures)
+    if expected_height is None:
+        return
+
+    require_equal(path, f"{label} screenshot height", values.get("height"), expected_height, failures)
+    rendered = typed_dict(typed_dict(values.get("effectiveSettings")).get("rendered"))
+    browser_source = typed_dict(rendered.get("browserSource"))
+    require_equal(path, f"{label} browserSource baseHeight", browser_source.get("baseHeight"), expected_height, failures)
+    require_equal(path, f"{label} browserSource height", browser_source.get("height"), expected_height, failures)
+    layout = typed_dict(rendered.get("layout"))
+    require_equal(path, f"{label} unusedHeightRatio", layout.get("unusedHeightRatio"), 0, failures)
 
 
 def require_section_rows(path: str, sections: dict[str, dict[str, object]], title: str, expected_labels: list[str], failures: list[str]) -> None:
@@ -9365,6 +9571,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         mutate=lambda screenshot: set_nested_value(screenshot, ("effectiveSettings", "rendered", "browserSource"), None),
         validate=validate_effective_settings_contract,
         expected_tokens=("rendered missing browserSource size evidence",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="fuel calculating compact fixture keeps full height",
+        path="browser-overlays/fuel-calculator/calculating.png",
+        base=mutation_fuel_calculating_screenshot(),
+        mutate=mutate_fuel_calculating_full_height,
+        validate=validate_fuel_calculating_variant,
+        expected_tokens=("fuel calculating compact height screenshot height",),
         failures=failures,
     )
     expect_mutation_failure(
@@ -11148,6 +11363,87 @@ def mutation_effective_settings_screenshot(
             row_count=0,
             extra_settings=settings),
     }
+
+
+def mutation_fuel_calculating_screenshot() -> dict[str, object]:
+    plan_segments = [
+        {"label": "Race", "value": "31 laps", "tone": "info"},
+        {"label": "Remain", "value": "30.4 laps", "tone": "info"},
+        {"label": "Stints", "value": "Calculating", "tone": "waiting"},
+        {"label": "Stops", "value": "Calculating", "tone": "waiting"},
+        {"label": "Save", "value": "Calculating", "tone": "waiting"},
+    ]
+    fuel_segments = [
+        {"label": "Current", "value": "74.0 L", "tone": "info"},
+        {"label": "Burn", "value": "Calculating", "tone": "waiting"},
+        {"label": "Tank", "value": "Calculating", "tone": "waiting"},
+        {"label": "Need", "value": "Calculating", "tone": "waiting"},
+    ]
+    effective = mutation_effective_settings(
+        "fuel-calculator",
+        "race",
+        "metrics",
+        should_render=True,
+        row_count=0,
+        fixture_variant="fuel-calculating")
+    effective["rendered"]["browserSource"] = {
+        "baseWidth": 503,
+        "baseHeight": 161,
+        "width": 503,
+        "height": 161,
+        "scale": 1,
+        "scalePercent": 100,
+        "opacity": 1,
+        "opacityPercent": 100,
+    }
+    effective["rendered"]["layout"] = {
+        "contentRowCount": 4,
+        "unusedHeightRatio": 0,
+    }
+    effective["rendered"]["fuelStrategy"] = {
+        "additionalFuelNeedState": "unavailable",
+        "successCopyRequiresMeasuredNeed": True,
+    }
+    return {
+        "overlayId": "fuel-calculator",
+        "fixtureVariant": "calculating",
+        "previewMode": "race",
+        "bodyKind": "metrics",
+        "status": "calculating strategy",
+        "shouldRender": True,
+        "width": 503,
+        "height": 161,
+        "textSample": "RACE INFORMATION PLAN RACE 31 laps REMAIN 30.4 laps STINTS Calculating STOPS Calculating SAVE Calculating FUEL CURRENT 74.0 L BURN Calculating TANK Calculating NEED Calculating",
+        "modelEvidence": {
+            "metricSections": [
+                {
+                    "title": "Race Information",
+                    "rows": [
+                        {
+                            "label": "Plan",
+                            "value": "31 laps | Calculating | Calculating",
+                            "tone": "waiting",
+                            "segments": plan_segments,
+                        },
+                        {
+                            "label": "Fuel",
+                            "value": "74.0 L | Calculating | Calculating",
+                            "tone": "waiting",
+                            "segments": fuel_segments,
+                        },
+                    ],
+                },
+            ],
+        },
+        "effectiveSettings": effective,
+    }
+
+
+def mutate_fuel_calculating_full_height(screenshot: dict[str, object]) -> None:
+    set_nested_value(screenshot, ("height",), 298)
+    set_nested_value(screenshot, ("effectiveSettings", "rendered", "browserSource", "baseHeight"), 298)
+    set_nested_value(screenshot, ("effectiveSettings", "rendered", "browserSource", "height"), 298)
+    set_nested_value(screenshot, ("effectiveSettings", "rendered", "layout", "unusedHeightRatio"), 0.46)
 
 
 def mutation_effective_settings(

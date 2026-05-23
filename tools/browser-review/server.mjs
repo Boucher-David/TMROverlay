@@ -127,6 +127,16 @@ const sectionOffContentLabelsByFixture = new Map([
     'Last lap',
     'Pit status'
   ]],
+  ['standings-content-off-chrome-on', [
+    'Class position',
+    'Car number',
+    'Driver',
+    'Class gap',
+    'Previous interval',
+    'Fastest lap',
+    'Last lap',
+    'Pit status'
+  ]],
   ['fuel-plan-off', [
     'Plan'
   ]],
@@ -953,7 +963,7 @@ function applyReviewFixtureToLiveSnapshot(live, fixture) {
     if (variant === 'stale') {
       live.lastUpdatedAtUtc = '2026-05-17T12:00:00.000Z';
     }
-    const garageVisible = variant === 'visible';
+    const garageVisible = variant === 'visible' || variant.startsWith('visible-');
     models.raceEvents = {
       ...(models.raceEvents || {}),
       hasData: variant !== 'disconnected',
@@ -1358,7 +1368,10 @@ function hiddenProductDisplayModel(overlayId, previewMode = 'off', searchParams 
   const sessionDisabled = Object.hasOwn(overlayState?.sessions || {}, session) && overlayState.sessions[session] === false;
   const relativeQualifying = overlayId === 'relative' && normalizedPreviewMode === 'qualifying';
   const noRenderableContent = !reviewHasRenderableContent(overlayId, overlayState, session);
-  if (!overlayDisabled && !sessionDisabled && !relativeQualifying && !noRenderableContent) {
+  const chromeOnlyRenderable = noRenderableContent
+    && overlayId === 'standings'
+    && chromeEnabled(overlayState, 'header', 'Time remaining', session, true);
+  if (!overlayDisabled && !sessionDisabled && !relativeQualifying && (!noRenderableContent || chromeOnlyRenderable)) {
     return null;
   }
 
@@ -2043,8 +2056,27 @@ function effectiveSettingsOverlayState(overlayId, overlayState, previewMode = 'o
     };
   }
 
-  if (fixtureVariant(searchParams) === 'standings-min-scale'
-      || fixtureVariant(searchParams) === 'input-min-scale') {
+  if (
+    (overlayId === 'standings' && fixtureVariant(searchParams) === 'standings-no-content')
+    || (overlayId === 'relative' && fixtureVariant(searchParams) === 'relative-no-content')
+  ) {
+    const session = sessionKeyFromPreview(previewMode);
+    effectiveState = {
+      ...effectiveState,
+      chrome: {
+        ...(effectiveState.chrome || {}),
+        header: {
+          ...(effectiveState.chrome?.header || {}),
+          'Time remaining': {
+            ...(effectiveState.chrome?.header?.['Time remaining'] || {}),
+            [session]: false
+          }
+        }
+      }
+    };
+  }
+
+  if (fixtureVariant(searchParams).endsWith('-min-scale')) {
     effectiveState = {
       ...effectiveState,
       scalePercent: 60
@@ -2331,7 +2363,7 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
   // BrowserOverlayDisplayModel JSON contract used by production browser sources.
   switch (overlayId) {
     case 'standings':
-      return withChrome(filterTableModelContent(filterStandingsReviewRows(standingsDisplayModel(previewLabel, session, fixture), overlayState), 'standings', overlayState, session));
+      return withChrome(filterTableModelContent(filterStandingsReviewRows(standingsDisplayModel(previewLabel, session, fixture), overlayState), 'standings', overlayState, session, fixture));
     case 'relative':
       {
         const effectiveOverlayState = fixture === 'rightmost-evidence'
@@ -3265,7 +3297,7 @@ function findClassHeaderBefore(rows, index) {
   return -1;
 }
 
-function filterTableModelContent(model, overlayId, overlayState, session = null) {
+function filterTableModelContent(model, overlayId, overlayState, session = null, fixture = '') {
   const labelForColumn = (column) => tableContentLabel(overlayId, column);
   const columnsWithIndex = (model.columns || []).map((column, index) => ({
     column,
@@ -3273,23 +3305,29 @@ function filterTableModelContent(model, overlayId, overlayState, session = null)
     contentLabel: labelForColumn(column)
   }));
   const visible = columnsWithIndex.filter((entry) => contentEnabled(overlayState, entry.contentLabel, tableContentDefault(overlayId, entry.contentLabel), [], session));
+  const suppressFallbackColumn = overlayId === 'standings'
+    && visible.length === 0
+    && chromeEnabled(overlayState, 'header', 'Time remaining', session, true);
   const retained = visible.length
     ? visible
-    : overlayId === 'relative'
+    : overlayId === 'relative' || suppressFallbackColumn
       ? []
       : columnsWithIndex.filter((entry) => entry.contentLabel === 'Driver').slice(0, 1);
   return {
     ...model,
+    status: suppressFallbackColumn ? 'chrome only | content disabled' : model.status,
     columns: retained.map((entry) => entry.column),
-    rows: (model.rows || []).map((row) => row.isClassHeader
-      ? row
-      : {
-          ...row,
-          cells: retained.map((entry) => row.cells?.[entry.index] ?? ''),
-          ...(Array.isArray(row.cellTones)
-            ? { cellTones: retained.map((entry) => row.cellTones?.[entry.index] || null) }
-            : {})
-        })
+    rows: suppressFallbackColumn
+      ? []
+      : (model.rows || []).map((row) => row.isClassHeader
+        ? row
+        : {
+            ...row,
+            cells: retained.map((entry) => row.cells?.[entry.index] ?? ''),
+            ...(Array.isArray(row.cellTones)
+              ? { cellTones: retained.map((entry) => row.cellTones?.[entry.index] || null) }
+              : {})
+          })
   };
 }
 

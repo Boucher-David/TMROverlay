@@ -1345,8 +1345,18 @@ internal sealed class OverlayManager : IDisposable
         OverlaySettings settings,
         OverlaySessionKind? sessionKind = null)
     {
-        return OverlayContentSizing.HasRenderableContent(definition, settings, sessionKind)
+        return (OverlayContentSizing.HasRenderableContent(definition, settings, sessionKind)
+                || CanRenderChromeWithoutBodyData(definition, settings, sessionKind))
             && GapWindowEnabled(definition, settings);
+    }
+
+    private static bool CanRenderChromeWithoutBodyData(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind)
+    {
+        return string.Equals(definition.Id, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && OverlayChromeSettings.ShowHeaderTimeRemainingForSession(settings, sessionKind);
     }
 
     private static bool GapWindowEnabled(OverlayDefinition definition, OverlaySettings settings)

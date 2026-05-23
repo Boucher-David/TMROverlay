@@ -505,12 +505,11 @@
           "id": "standings-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "partial",
+          "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
-          "artifacts": ["browser-overlays/standings/min-scale.png", "localhost-overlays/standings/min-scale.png"],
-          "testFiles": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js", "tools/browser-review/render-screenshots.mjs", "tools/validate_overlay_screenshots.py"],
-          "assertions": ["scalePercent=60 preserves enabled columns", "rightmost enabled cell fits", "table geometry scales instead of dropping columns"],
-          "gaps": ["Windows-native min-scale parity is not fully represented", "minimum-scale proof is still synthetic rather than capture-derived"]
+          "artifacts": ["browser-overlays/standings/min-scale.png", "localhost-overlays/standings/min-scale.png", "native-overlays/standings-min-scale.png"],
+          "testFiles": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js", "tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
+          "assertions": ["scalePercent=60 preserves enabled columns", "rightmost enabled cell fits", "table geometry scales instead of dropping columns"]
         },
         {
           "id": "standings-obs-readiness",
@@ -545,8 +544,17 @@
           "tier": "tier1-ci-contract-fixtures",
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
-          "artifacts": ["browser-overlays/relative/default.png", "browser-overlays/relative/practice.png", "browser-overlays/relative/qualifying.png", "browser-overlays/relative/race.png"],
+          "artifacts": ["browser-overlays/relative/default.png", "browser-overlays/relative/practice.png", "browser-overlays/relative/race.png"],
           "assertions": ["reference row remains centered", "row identities and lap relationship classes are compared"]
+        },
+        {
+          "id": "relative-qualifying-unsupported",
+          "family": "unavailable-state",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/relative/qualifying.png", "localhost-overlays/relative/qualifying.png", "native-overlays/relative-qualifying.png"],
+          "assertions": ["qualifying mode is explicitly hidden/unsupported", "hidden qualifying state does not expose rows, columns, or visible header items"]
         },
         {
           "id": "relative-content-variants",
@@ -586,8 +594,10 @@
           "id": "relative-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/relative/min-scale.png", "localhost-overlays/relative/min-scale.png", "native-overlays/relative-min-scale.png"],
+          "testFiles": ["tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
           "assertions": ["scalePercent=60 preserves configured columns and rows", "rightmost evidence fits", "table geometry scales without responsive column hiding"]
         },
         {
@@ -641,12 +651,13 @@
           "tier": "tier2-capture-derived-replay",
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/fuel-calculator/calculating.png", "browser-overlays/fuel-calculator/stint-targets-off.png", "browser-overlays/fuel-calculator/race-information-off.png"],
           "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
-          "testFiles": ["tests/tools/test_model_timeline_validator.py"],
-          "validatorRules": ["tools/analysis/validate_model_timeline.py:fuel-compact-height-unused", "tools/analysis/validate_model_timeline.py:fuel-compact-height-too-tall"],
+          "testFiles": ["tests/tools/test_model_timeline_validator.py", "tests/browser-overlays/reviewServerContracts.test.js"],
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:fuel-compact-height-unused", "tools/analysis/validate_model_timeline.py:fuel-compact-height-too-tall", "tools/validate_overlay_screenshots.py:validate_fuel_calculating_variant", "tools/validate_overlay_screenshots.py:require_fuel_rendered_content_height"],
           "captureTargets": ["v1.1.0 race with two visible rows and larger persisted/default surface"],
           "assertions": ["rendered section/row count drives recommended height unless user or OBS size is locked", "unusedHeightRatio is reported", "size reason is rendered-content, settings-content, custom-size, or persisted-window"],
-          "gaps": ["temporal model fixture proves the strict size policy, but compact real-data browser/localhost/Windows screenshot manifests are still missing"]
+          "gaps": ["synthetic browser/localhost/Windows screenshot variants now prove compact rendered height for two-row and three-row Fuel layouts", "compact real-data browser/localhost/Windows screenshot manifests are still missing"]
         },
         {
           "id": "fuel-measured-burn-and-refuel",
@@ -691,8 +702,10 @@
           "id": "fuel-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/fuel-calculator/min-scale.png", "localhost-overlays/fuel-calculator/min-scale.png", "native-overlays/fuel-calculator-min-scale.png"],
+          "testFiles": ["tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
           "assertions": ["scalePercent=60 keeps visible metric rows readable", "scale does not reduce row budget unless explicitly contracted"]
         }
       ]
@@ -752,8 +765,10 @@
           "id": "weather-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/session-weather/min-scale.png", "localhost-overlays/session-weather/min-scale.png", "native-overlays/session-weather-min-scale.png"],
+          "testFiles": ["tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
           "assertions": ["scalePercent=60 keeps session/weather rows readable without clipping or hidden content"]
         }
       ]
@@ -817,8 +832,10 @@
           "id": "pit-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/pit-service/min-scale.png", "localhost-overlays/pit-service/min-scale.png", "native-overlays/pit-service-min-scale.png"],
+          "testFiles": ["tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
           "assertions": ["scalePercent=60 keeps service rows and tire grid readable without clipping"]
         }
       ]
@@ -859,11 +876,10 @@
           "id": "inputs-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "partial",
-          "surfaces": ["browserReview", "localhostObs"],
-          "artifacts": ["browser-overlays/input-state/min-scale.png", "localhost-overlays/input-state/min-scale.png"],
-          "testFiles": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js", "tools/browser-review/render-screenshots.mjs", "tools/validate_overlay_screenshots.py"],
-          "gaps": ["Windows-native min-scale parity is not fully represented", "uploaded 60% example still needs direct visual comparison against generated artifacts"],
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/input-state/min-scale.png", "localhost-overlays/input-state/min-scale.png", "native-overlays/input-state-min-scale.png"],
+          "testFiles": ["tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js", "tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
           "assertions": ["wheel, graph, rails, and labels fit within scaled bounds", "trace remains visible when data exists"]
         },
         {
@@ -958,8 +974,10 @@
           "id": "radar-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/car-radar/min-scale.png", "localhost-overlays/car-radar/min-scale.png", "native-overlays/car-radar-min-scale.png"],
+          "testFiles": ["tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
           "assertions": ["scalePercent=60 keeps warning geometry visible and centered within radar bounds"]
         }
       ]
@@ -1012,8 +1030,10 @@
           "id": "gap-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/gap-to-leader/min-scale.png", "localhost-overlays/gap-to-leader/min-scale.png", "native-overlays/gap-to-leader-min-scale.png"],
+          "testFiles": ["tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
           "assertions": ["scalePercent=60 keeps graph, trend, and metric rows readable without clipping or hidden content"]
         },
         {
@@ -1099,8 +1119,10 @@
           "id": "track-map-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/track-map/min-scale.png", "localhost-overlays/track-map/min-scale.png", "native-overlays/track-map-min-scale.png"],
+          "testFiles": ["tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
           "assertions": ["scalePercent=60 keeps map, markers, and labels visible and proportionally scaled"]
         }
       ]
@@ -1166,8 +1188,10 @@
           "id": "flags-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/flags/min-scale.png", "localhost-overlays/flags/min-scale.png", "native-overlays/flags-min-scale.png"],
+          "testFiles": ["tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
           "assertions": ["scalePercent=60 keeps active flag icons and labels visible without clipping"]
         }
       ]
@@ -1211,6 +1235,16 @@
           "status": "partial",
           "surfaces": ["compactReplay", "localhostObs"],
           "assertions": ["route requested, model hidden, model rendered, and route not requested are separate classifications"]
+        },
+        {
+          "id": "garage-cover-minimum-scale",
+          "family": "minimum-scale",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs"],
+          "artifacts": ["browser-overlays/garage-cover/min-scale.png", "localhost-overlays/garage-cover/min-scale.png"],
+          "testFiles": ["tools/browser-review/render-screenshots.mjs", "tools/validate_overlay_screenshots.py"],
+          "assertions": ["scalePercent=60 keeps the visible garage cover image proportional", "Windows native remains not_applicable because Garage Cover is a browser/localhost live cover surface"]
         },
         {
           "id": "garage-cover-native-parity-declaration",
@@ -1281,8 +1315,10 @@
           "id": "stream-chat-minimum-scale",
           "family": "minimum-scale",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/stream-chat/min-scale.png", "localhost-overlays/stream-chat/min-scale.png", "native-overlays/stream-chat-min-scale.png"],
+          "testFiles": ["tools/browser-review/render-screenshots.mjs", "tools/TmrOverlay.WindowsScreenshots/Program.cs", "tools/validate_overlay_screenshots.py"],
           "assertions": ["scalePercent=60 keeps chat rows, header, and close affordance readable without clipping"]
         },
         {

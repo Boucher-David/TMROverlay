@@ -1,7 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startReviewServer } from './reviewServerTestHost.js';
 
 let reviewServer;
+const overlayGeometry = JSON.parse(fs.readFileSync(
+  path.join(process.cwd(), 'src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json'),
+  'utf8'
+));
 
 beforeAll(async () => {
   reviewServer = await startReviewServer();
@@ -87,25 +93,41 @@ describe('browser review server validation contracts', () => {
     const calculating = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-calculating')).model;
     expect.soft(calculating.status).toBe('calculating strategy');
     expect.soft(metricSectionTitles(calculating)).toEqual(['Race Information']);
+    expect.soft(metricRowLabels(calculating, 'Race Information')).toEqual(['Plan', 'Fuel']);
     expect.soft(allMetricText(calculating)).toMatch(/\bCalculating\b/);
     expect.soft(allMetricText(calculating)).not.toMatch(/\bCovered\b|\bNone\b/);
     expect.soft(calculating.effectiveSettings.rendered.fuelStrategy).toMatchObject({
       additionalFuelNeedState: 'unavailable',
       successCopyRequiresMeasuredNeed: true
     });
-    expect.soft(calculating.effectiveSettings.rendered.browserSource.baseHeight).toBeLessThan(298);
+    expect.soft(fuelRenderedRowCount(calculating)).toBe(2);
+    expect.soft(calculating.effectiveSettings.rendered.layout).toMatchObject({
+      contentRowCount: 4,
+      unusedHeightRatio: 0
+    });
+    expect.soft(calculating.effectiveSettings.rendered.browserSource).toMatchObject({
+      baseWidth: 503,
+      baseHeight: expectedFuelContentHeight(2, 1),
+      width: 503,
+      height: expectedFuelContentHeight(2, 1),
+      scalePercent: 100
+    });
 
     const stintsOff = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-stint-targets-off')).model;
     expect.soft(metricSectionTitles(stintsOff)).toEqual(['Race Information']);
     expect.soft(metricRowLabels(stintsOff, 'Race Information')).toEqual(['Plan', 'Fuel']);
     expect.soft(allMetricText(stintsOff)).not.toMatch(/\bStint Targets\b|\bStint 1\b/);
-    expect.soft(stintsOff.effectiveSettings.rendered.browserSource.baseHeight).toBeLessThan(298);
+    expect.soft(fuelRenderedRowCount(stintsOff)).toBe(2);
+    expect.soft(stintsOff.effectiveSettings.rendered.browserSource.baseHeight).toBe(expectedFuelContentHeight(2, 1));
+    expect.soft(stintsOff.effectiveSettings.rendered.browserSource.height).toBe(expectedFuelContentHeight(2, 1));
 
     const raceInfoOff = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-race-information-off')).model;
     expect.soft(metricSectionTitles(raceInfoOff)).toEqual(['Stint Targets']);
     expect.soft(metricRowLabels(raceInfoOff, 'Stint Targets')).toEqual(['Stint 1', 'Stint 2', 'Stint 3']);
     expect.soft(allMetricText(raceInfoOff)).not.toMatch(/\bRace Information\b|\bPlan\b|\bFuel\b/);
-    expect.soft(raceInfoOff.effectiveSettings.rendered.browserSource.baseHeight).toBeLessThan(298);
+    expect.soft(fuelRenderedRowCount(raceInfoOff)).toBe(3);
+    expect.soft(raceInfoOff.effectiveSettings.rendered.browserSource.baseHeight).toBe(expectedFuelContentHeight(3, 1));
+    expect.soft(raceInfoOff.effectiveSettings.rendered.browserSource.height).toBe(expectedFuelContentHeight(3, 1));
   });
 
   it('proves v1.0.2 non-race display contracts in practice and qualifying previews', async () => {
@@ -253,6 +275,36 @@ describe('browser review server validation contracts', () => {
       scale: 0.6,
       scalePercent: 60
     });
+  });
+
+  it('distinguishes standings all-chrome-off no-content from chrome-only no-content', async () => {
+    const hidden = (await reviewServer.getJson('/api/overlay-model/standings?preview=race&fixture=standings-no-content')).model;
+    expect.soft(hidden.shouldRender).toBe(false);
+    expect.soft(hidden.status).toBe('hidden | no enabled content');
+    expect.soft(hidden.columns || []).toEqual([]);
+    expect.soft(hidden.rows || []).toEqual([]);
+    expect.soft(hidden.headerItems || []).toEqual([]);
+    expect.soft(hidden.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'chrome.header.time-remaining.race',
+      value: false
+    }));
+
+    const chromeOnly = (await reviewServer.getJson('/api/overlay-model/standings?preview=race&fixture=standings-content-off-chrome-on')).model;
+    expect.soft(chromeOnly.shouldRender).toBe(true);
+    expect.soft(chromeOnly.status).toBe('chrome only | content disabled');
+    expect.soft(chromeOnly.columns || []).toEqual([]);
+    expect.soft(chromeOnly.rows || []).toEqual([]);
+    expect.soft(chromeOnly.headerItems || []).toEqual([
+      expect.objectContaining({ key: 'timeRemaining', value: '06:37:08' })
+    ]);
+    expect.soft(chromeOnly.effectiveSettings.rendered).toMatchObject({
+      shouldRender: true,
+      rowCount: 0
+    });
+    expect.soft(chromeOnly.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'chrome.header.time-remaining.race',
+      value: true
+    }));
   });
 
   it('proves v1.0.2 Gap To Leader trend, threat, color, and focus-window evidence', async () => {
@@ -424,6 +476,11 @@ describe('browser review server validation contracts', () => {
     expect.soft(noContent.columns || []).toEqual([]);
     expect.soft(noContent.rows || []).toEqual([]);
     expect.soft(noContent.headerItems || []).toEqual([]);
+    expect.soft(noContent.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'chrome.header.time-remaining.race',
+      session: 'race',
+      value: false
+    }));
     for (const key of [
       'relative.content.relative.position.enabled',
       'relative.content.relative.driver.enabled',
@@ -612,9 +669,19 @@ describe('browser review server validation contracts', () => {
 
       const model = (await reviewServer.getJson(`/api/overlay-model/${overlayId}?preview=race`)).model;
 
-      expectHiddenOverlayModel(model, overlayId);
-      expect.soft(model.status, `${overlayId}: no-content hidden status`).toMatch(/no enabled content/i);
-      expect.soft(model.effectiveSettings.rendered.shouldRender, `${overlayId}: effective rendered hidden`).toBe(false);
+      if (overlayId === 'standings') {
+        expect.soft(model.shouldRender, 'standings: chrome-only no-content should render chrome').toBe(true);
+        expect.soft(model.status, 'standings: chrome-only status').toBe('chrome only | content disabled');
+        expect.soft(model.rows ?? [], 'standings: chrome-only rows').toEqual([]);
+        expect.soft(model.headerItems ?? [], 'standings: chrome-only header').toEqual([
+          expect.objectContaining({ key: 'timeRemaining', value: '06:37:08' })
+        ]);
+        expect.soft(model.effectiveSettings.rendered.shouldRender, 'standings: effective rendered chrome-only').toBe(true);
+      } else {
+        expectHiddenOverlayModel(model, overlayId);
+        expect.soft(model.status, `${overlayId}: no-content hidden status`).toMatch(/no enabled content/i);
+        expect.soft(model.effectiveSettings.rendered.shouldRender, `${overlayId}: effective rendered hidden`).toBe(false);
+      }
     }
   });
 });
@@ -675,6 +742,30 @@ function metricRowLabels(model, sectionTitle) {
     .filter((section) => section.title === sectionTitle)
     .flatMap((section) => section.rows || [])
     .map((row) => row.label);
+}
+
+function fuelRenderedRowCount(model) {
+  return (model.metricSections || [])
+    .filter((section) => (section.rows || []).length > 0)
+    .reduce((total, section) => total + (section.rows || []).length, 0);
+}
+
+function expectedFuelContentHeight(rowCount, sectionCount) {
+  const metricRows = overlayGeometry.metricRows;
+  if (rowCount <= 0 || sectionCount <= 0) {
+    return metricRows.minimumFuelCalculatorHeight;
+  }
+
+  const rowGaps = Math.round(Math.max(0, rowCount - sectionCount) * metricRows.rowGap);
+  const sectionGaps = Math.round(Math.max(0, sectionCount - 1) * metricRows.sectionGap);
+  const height = metricRows.headerChromeHeight
+    + metricRows.fuelContentVerticalPadding
+    + sectionCount * metricRows.fuelSectionTitleReserveHeight
+    + Math.round(rowCount * metricRows.segmentedRowHeight)
+    + rowGaps
+    + sectionGaps
+    + metricRows.collapsedFooterReserveHeight;
+  return Math.max(metricRows.minimumFuelCalculatorHeight, Math.min(height, 298));
 }
 
 function allMetricText(model) {

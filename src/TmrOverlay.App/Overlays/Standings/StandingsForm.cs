@@ -550,9 +550,9 @@ internal sealed class StandingsForm : PersistentOverlayForm
 
     private IReadOnlyList<OverlayContentColumnState> DisplayColumns()
     {
-        return OverlayContentColumnSettings.VisibleColumnsFor(
+        return OverlayContentColumnSettings.EnabledColumnsFor(
             _settings,
-            OverlayContentColumnSettings.Standings);
+            OverlayContentColumnSettings.Standings.Columns);
     }
 
     private int TableMinimumWidth()

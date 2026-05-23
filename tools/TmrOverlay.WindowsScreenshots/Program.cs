@@ -1105,6 +1105,7 @@ internal static class Program
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "stint-targets-off", "Stint Targets Off"),
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "race-information-off", "Race Information Off"),
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "no-data", "No Data"),
+            new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "one-class", "One Class"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "two-class", "Two Classes"),
@@ -1115,26 +1116,32 @@ internal static class Program
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "focused-class-only", "Focused Class Only"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "starting-grid", "Starting Grid"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "no-content", "No Content"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "content-off-chrome-on", "Content Off Chrome On"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "rightmost-evidence", "Rightmost Evidence"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "driver-only", "Driver Only"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "position-driver", "Position Driver"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "rows-2", "Rows 2 Each Side"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "no-content", "No Content"),
+            new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
+            new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "missing", "Missing Data"),
             new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "session-off", "Session Off"),
             new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "weather-off", "Weather Off"),
             new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "no-data", "No Data"),
+            new NativeOverlayVariantSpec(SessionWeatherOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "idle", "Idle"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "session-off", "Session Off"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "signal-off", "Signal Off"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "service-off", "Service Off"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "tire-analysis-off", "Tire Analysis Off"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "no-data", "No Data"),
+            new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "mock-data", "Mock Data"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "graph-only", "Graph Only"),
             new NativeOverlayVariantSpec(InputStateOverlayDefinition.Definition.Id, "rail-only", "Rail Only"),
@@ -1146,13 +1153,17 @@ internal static class Program
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "right", "Right"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "both-sides", "Both Sides"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "clear", "Clear"),
+            new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "no-cars", "No Cars"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "trend-row-off", "Trend Row Off"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "trend-off", "Trend Off"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "graph-off", "Graph Off"),
             new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "circle-fallback", "Circle Fallback"),
             new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "no-markers", "No Markers"),
+            new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(FlagsOverlayDefinition.Definition.Id, "all-kinds", "All Kinds"),
+            new NativeOverlayVariantSpec(FlagsOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
+            new NativeOverlayVariantSpec(StreamChatOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(StreamChatOverlayDefinition.Definition.Id, "twitch-rich", "Twitch Rich"),
             new NativeOverlayVariantSpec(StreamChatOverlayDefinition.Definition.Id, "streamlabs-configured", "Streamlabs Configured")
         ];
@@ -1257,6 +1268,19 @@ internal static class Program
             return WithoutSharedChrome(chromeModel);
         }
 
+        if (string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewFlagsModel();
+            }
+
+            if (ReviewAlignedNativeModel(overlayId, OverlaySessionKind.Race) is { } minScaleModel)
+            {
+                return minScaleModel;
+            }
+        }
+
         if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
             if (string.Equals(slug, "one-class", StringComparison.OrdinalIgnoreCase))
@@ -1323,6 +1347,11 @@ internal static class Program
                     ShouldRender = false,
                     HeaderText = string.Empty
                 };
+            }
+
+            if (string.Equals(slug, "content-off-chrome-on", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsChromeOnlyModel();
             }
         }
 
@@ -1579,6 +1608,18 @@ internal static class Program
                     .Select(column => new DesignV2Column(column.Label, column.Width, column.Alignment))
                     .ToArray(),
                 rows),
+            HeaderText: "06:37:08",
+            ShowFooter: false);
+    }
+
+    private static DesignV2OverlayModel ReviewStandingsChromeOnlyModel()
+    {
+        return new DesignV2OverlayModel(
+            "Standings",
+            "chrome only | content disabled",
+            string.Empty,
+            DesignV2Evidence.Measured,
+            new DesignV2TableBody([], []),
             HeaderText: "06:37:08",
             ShowFooter: false);
     }
@@ -2897,6 +2938,24 @@ internal static class Program
         return new DesignV2OverlayModel(
             "Flags",
             "green + blue + yellow + debris + caution + red + black + repair + white + checkered",
+            "source: session flags telemetry",
+            DesignV2Evidence.Live,
+            new DesignV2FlagsBody(flags, IsWaiting: false, ManagedEnabled: true, SettingsOverlayActive: false),
+            ShowHeader: false,
+            ShowFooter: false);
+    }
+
+    private static DesignV2OverlayModel ReviewFlagsModel()
+    {
+        var flags = new[]
+        {
+            new FlagOverlayDisplayItem(FlagDisplayKind.Yellow, FlagDisplayCategory.Yellow, "Yellow", null, SimpleTelemetryTone.Warning),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Blue, FlagDisplayCategory.Blue, "Blue", null, SimpleTelemetryTone.Info),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Checkered, FlagDisplayCategory.Finish, "Checkered", null, SimpleTelemetryTone.Info)
+        };
+        return new DesignV2OverlayModel(
+            "Flags",
+            "yellow + blue + checkered",
             "source: session flags telemetry",
             DesignV2Evidence.Live,
             new DesignV2FlagsBody(flags, IsWaiting: false, ManagedEnabled: true, SettingsOverlayActive: false),
@@ -9296,6 +9355,11 @@ internal static class Program
                 relativeSettings.SetBooleanOption(OverlayContentColumnSettings.SessionEnabledOptionKey(key, OverlaySessionKind.Race), enabled);
             }
 
+            if (string.Equals(slug, "no-content", StringComparison.OrdinalIgnoreCase))
+            {
+                SetSharedChromeOptions(relativeSettings, enabled: false);
+            }
+
             var size = OverlayContentSizing.BaseSizeFor(definition, relativeSettings, OverlaySessionKind.Race);
             relativeSettings.Width = size.Width;
             relativeSettings.Height = size.Height;
@@ -9373,17 +9437,16 @@ internal static class Program
             return missingWeatherSettings;
         }
 
-        if (!string.Equals(definition.Id, InputStateOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
         var scale = 0.6d;
-        var settings = OverlaySettingsFor(
-            definition,
-            width: Math.Max(80, (int)Math.Round(definition.DefaultWidth * scale)),
-            height: Math.Max(80, (int)Math.Round(definition.DefaultHeight * scale)));
+        var settings = OverlaySettingsFor(definition);
+        var baseSize = OverlayContentSizing.BaseSizeFor(definition, settings, OverlaySessionKind.Race);
+        settings.Width = Math.Max(80, (int)Math.Round(baseSize.Width * scale));
+        settings.Height = Math.Max(80, (int)Math.Round(baseSize.Height * scale));
         settings.Scale = scale;
         return settings;
     }
@@ -9432,7 +9495,8 @@ internal static class Program
             or "class-separators-off"
             or "focused-class-only"
             or "starting-grid"
-            or "no-content";
+            or "no-content"
+            or "content-off-chrome-on";
     }
 
     private static void ApplyStandingsVariantSettings(OverlaySettings settings, string slug)
@@ -9456,6 +9520,12 @@ internal static class Program
         else if (string.Equals(slug, "no-content", StringComparison.OrdinalIgnoreCase))
         {
             SetOnlyStandingsColumnsEnabled(settings, []);
+            SetSharedChromeOptions(settings, enabled: false);
+        }
+        else if (string.Equals(slug, "content-off-chrome-on", StringComparison.OrdinalIgnoreCase))
+        {
+            SetOnlyStandingsColumnsEnabled(settings, []);
+            SetSharedChromeOptions(settings, enabled: true);
         }
     }
 

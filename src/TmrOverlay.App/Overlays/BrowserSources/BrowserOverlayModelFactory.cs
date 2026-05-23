@@ -241,38 +241,50 @@ internal sealed class BrowserOverlayModelFactory
             settings,
             OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
         var overlay = FindOverlay(settings, StandingsOverlayDefinition.Definition.Id);
+        var sessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot);
+        var hasRenderableContent = overlay is null
+            || OverlayContentSizing.HasRenderableContent(
+                StandingsOverlayDefinition.Definition,
+                overlay,
+                sessionKind);
         var viewModel = StandingsOverlayViewModel.From(
             snapshot,
             now,
             browserSettings.MaximumRows,
             browserSettings.OtherClassRowsPerClass,
             browserSettings.ClassSeparatorsEnabled);
-        var columns = BrowserColumnsWithValidationCapacity(browserSettings.Columns);
-        var rows = viewModel.Rows
-            .Select(row => new BrowserOverlayDisplayRow(
-                Cells: columns
-                    .Select(column => StandingsCell(row, column.DataKey))
-                    .ToArray(),
-                IsReference: row.IsReference,
-                IsClassHeader: row.IsClassHeader,
-                IsPit: !string.IsNullOrWhiteSpace(row.Pit),
-                IsPartial: row.IsPartial,
-                IsPendingGrid: row.IsPendingGrid,
-                CarClassColorHex: row.CarClassColorHex,
-                HeaderTitle: row.IsClassHeader ? row.Driver : null,
-                HeaderDetail: row.IsClassHeader ? ClassHeaderDetail(row.Gap, row.Interval) : null,
-                CellTones: columns
-                    .Select(column => StandingsCellTone(row, column.DataKey))
-                    .ToArray()))
-            .ToArray();
+        var columns = hasRenderableContent
+            ? BrowserColumnsWithValidationCapacity(browserSettings.Columns)
+            : [];
+        var rows = hasRenderableContent
+            ? viewModel.Rows
+                .Select(row => new BrowserOverlayDisplayRow(
+                    Cells: columns
+                        .Select(column => StandingsCell(row, column.DataKey))
+                        .ToArray(),
+                    IsReference: row.IsReference,
+                    IsClassHeader: row.IsClassHeader,
+                    IsPit: !string.IsNullOrWhiteSpace(row.Pit),
+                    IsPartial: row.IsPartial,
+                    IsPendingGrid: row.IsPendingGrid,
+                    CarClassColorHex: row.CarClassColorHex,
+                    HeaderTitle: row.IsClassHeader ? row.Driver : null,
+                    HeaderDetail: row.IsClassHeader ? ClassHeaderDetail(row.Gap, row.Interval) : null,
+                    CellTones: columns
+                        .Select(column => StandingsCellTone(row, column.DataKey))
+                        .ToArray()))
+                .ToArray()
+            : [];
         var headerItems = HeaderItems(overlay, snapshot, viewModel.Status, viewModel.Rows.Count == 0 ? "waiting" : "info");
 
         var shouldRender = ShouldRenderTable(columns, rows)
-            || ShouldRenderChromeOnlyTable(columns, headerItems);
+            || ShouldRenderChromeOnlyTable(headerItems);
         return BrowserOverlayDisplayModel.Table(
             StandingsOverlayDefinition.Definition.Id,
             StandingsOverlayDefinition.Definition.DisplayName,
-            BrowserStatus(headerItems, viewModel.Status),
+            hasRenderableContent
+                ? BrowserStatus(headerItems, viewModel.Status)
+                : "chrome only | content disabled",
             SourceText(overlay, snapshot, viewModel.Source),
             columns,
             rows,
@@ -394,10 +406,9 @@ internal sealed class BrowserOverlayModelFactory
     }
 
     private static bool ShouldRenderChromeOnlyTable(
-        IReadOnlyList<OverlayContentBrowserColumn> columns,
         IReadOnlyList<BrowserOverlayHeaderItem> headerItems)
     {
-        return columns.Count > 0 && headerItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
+        return headerItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
     }
 
     private static string RelativeCell(RelativeOverlayRowViewModel row, string dataKey)
@@ -2656,10 +2667,16 @@ internal sealed class BrowserOverlayModelFactory
             return "hidden | qualifying unsupported";
         }
 
-        if (!OverlayContentSizing.HasRenderableContent(definition, overlay, sessionKind)
-            || !GapWindowEnabled(overlay))
+        if (!GapWindowEnabled(overlay))
         {
             return "hidden | no enabled content";
+        }
+
+        if (!OverlayContentSizing.HasRenderableContent(definition, overlay, sessionKind))
+        {
+            return CanRenderChromeWithoutBodyData(definition, overlay, snapshot, sessionKind)
+                ? null
+                : "hidden | no enabled content";
         }
 
         var context = LiveLocalStrategyContext.ForRequirement(snapshot, now, definition.ContextRequirement);
@@ -2675,6 +2692,17 @@ internal sealed class BrowserOverlayModelFactory
         }
 
         return null;
+    }
+
+    private static bool CanRenderChromeWithoutBodyData(
+        OverlayDefinition definition,
+        OverlaySettings overlay,
+        LiveTelemetrySnapshot snapshot,
+        OverlaySessionKind? sessionKind)
+    {
+        return string.Equals(definition.Id, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && OverlayChromeSettings.ShowHeaderTimeRemainingForSession(overlay, sessionKind)
+            && !string.IsNullOrWhiteSpace(OverlayHeaderTimeFormatter.FormatTimeRemaining(snapshot));
     }
 
     private static string HiddenBodyKind(string overlayId)

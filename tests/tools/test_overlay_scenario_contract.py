@@ -145,6 +145,23 @@ class OverlayScenarioContractTests(unittest.TestCase):
                     "Covered scenarios must cite a screenshot artifact, fixture, test, or validator rule.",
                 )
 
+    def test_populated_session_mode_scenarios_do_not_reference_hidden_artifacts(self):
+        for scenario in self.all_scenarios():
+            if scenario.get("family") != "populated" or not scenario["id"].endswith("-populated-session-modes"):
+                continue
+
+            with self.subTest(scenario_id=scenario["id"]):
+                hidden_artifacts = [
+                    artifact
+                    for artifact in scenario.get("artifacts", [])
+                    if screenshots.is_expected_hidden_relative_state(artifact)
+                ]
+                self.assertEqual(
+                    [],
+                    hidden_artifacts,
+                    "Populated session-mode scenarios must not cite known hidden/no-render artifacts.",
+                )
+
     def test_partial_and_missing_scenarios_explain_the_gap_or_assertion(self):
         for scenario in self.all_scenarios():
             if scenario["status"] not in {"partial", "missing"}:

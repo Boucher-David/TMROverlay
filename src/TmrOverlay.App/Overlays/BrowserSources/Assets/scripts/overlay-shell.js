@@ -426,6 +426,7 @@
       updateOverlayRuntimeClasses(model);
       if (!model) {
         postBrowserSourceEvent('model-null');
+        contentEl.hidden = false;
         contentEl.innerHTML = '<div class="empty">Waiting for overlay model.</div>';
         renderHeaderItems(null, 'waiting for model');
         clearFooterSource();
@@ -436,6 +437,7 @@
         postBrowserSourceEvent('model-hidden', model);
         modelRootOpacity = rootOpacityFromModel(model);
         applyOverlayOpacity(0);
+        contentEl.hidden = false;
         contentEl.innerHTML = '';
         clearHeaderItems();
         clearFooterSource();
@@ -451,6 +453,7 @@
       const rows = Array.isArray(model.rows) ? model.rows : [];
       const metricSectionHtml = metricSections.map(metricSection).join('');
       const sectionHtml = gridSections.map(gridSection).join('');
+      contentEl.hidden = false;
       if (model.bodyKind === 'summary-table') {
         const summary = metrics.length
           ? `<div class="metric-list" style="margin-bottom: 10px;">${metrics.map(metricRow).join('')}</div>`
@@ -471,7 +474,13 @@
           ? `${metricsHtml}${metricSectionHtml}${sectionHtml}`
           : '';
       } else {
-        contentEl.innerHTML = rowsTable(displayModelHeaders(model), rows);
+        const headers = displayModelHeaders(model);
+        if (headers.length === 0 && rows.length === 0) {
+          contentEl.innerHTML = '';
+          contentEl.hidden = true;
+        } else {
+          contentEl.innerHTML = rowsTable(headers, rows);
+        }
       }
 
       renderHeaderItems(model, model.status || 'live');

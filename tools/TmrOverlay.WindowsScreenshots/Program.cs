@@ -7664,7 +7664,7 @@ internal static class Program
         AddEffectiveSetting(values, "overlayEnabled", false);
         AddEffectiveSetting(values, $"session.{session}.enabled", NativeEffectiveSessionEnabled(overlayId, session));
         AddEffectiveSetting(values, "general.unitSystem", metadata.UnitSystem ?? "Metric");
-        AddEffectiveSetting(values, "scalePercent", 100);
+        AddEffectiveSetting(values, "scalePercent", NativeEffectiveScalePercent(settings));
         AddEffectiveSetting(
             values,
             "opacityPercent",
@@ -7914,6 +7914,12 @@ internal static class Program
         return string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             ? string.Equals(session, "race", StringComparison.Ordinal)
             : true;
+    }
+
+    private static int NativeEffectiveScalePercent(OverlaySettings settings)
+    {
+        var scale = double.IsFinite(settings.Scale) ? settings.Scale : 1d;
+        return (int)Math.Round(Math.Clamp(scale, 0.6d, 2d) * 100d, MidpointRounding.AwayFromZero);
     }
 
     private static string NativeChromeHeaderTimeRemainingKey(OverlaySessionKind sessionKind)

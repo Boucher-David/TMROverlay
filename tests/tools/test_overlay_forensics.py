@@ -52,6 +52,7 @@ class OverlayForensicsSmokeTests(unittest.TestCase):
         for overlay_id, (state, severity) in expected_states.items():
             with self.subTest(overlay_id=overlay_id):
                 readiness = report["overlays"][overlay_id]["obsReadiness"]
+                self.assertTrue(readiness["obsProcessPresent"])
                 self.assertIn(readiness["state"], allowed_states)
                 self.assertEqual(state, readiness["state"])
                 self.assertEqual(severity, readiness["severity"])

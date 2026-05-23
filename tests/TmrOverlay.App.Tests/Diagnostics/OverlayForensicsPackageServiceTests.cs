@@ -219,7 +219,11 @@ public sealed class OverlayForensicsPackageServiceTests
 
         Assert.Equal(12, overlays.EnumerateObject().Count());
         Assert.All(overlays.EnumerateObject(), overlay =>
-            Assert.Contains(overlay.Value.GetProperty("state").GetString(), expectedStates));
+        {
+            var state = overlay.Value.GetProperty("state").GetString();
+            Assert.NotNull(state);
+            Assert.Contains(state!, expectedStates);
+        });
         AssertOverlayReadiness(overlays, "standings", "not-requested");
         AssertOverlayReadiness(overlays, "relative", "page-loaded-no-model");
         AssertOverlayReadiness(overlays, "gap-to-leader", "not-requested");
@@ -235,6 +239,53 @@ public sealed class OverlayForensicsPackageServiceTests
         AssertOverlayReadiness(overlays, "flags", "model-rendered");
         AssertOverlayReadiness(overlays, "track-map", "browser-source-error");
         AssertOverlayReadiness(overlays, "stream-chat", "model-rendered");
+    }
+
+    [Fact]
+    public void CreateInitialPackage_DetectsObsFromForegroundHistory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-forensics-service-test", Guid.NewGuid().ToString("N"));
+        var storage = CreateStorage(root);
+        var service = CreateService(storage);
+        var captureId = "capture-20260523-foreground-obs";
+        var captureDirectory = Path.Combine(storage.CaptureRoot, captureId);
+        Directory.CreateDirectory(captureDirectory);
+        Directory.CreateDirectory(storage.DiagnosticsRoot);
+        File.WriteAllText(
+            Path.Combine(captureDirectory, "capture-manifest.json"),
+            $$"""{ "formatVersion": 1, "captureId": "{{captureId}}" }""");
+        var diagnosticsBundle = Path.Combine(storage.DiagnosticsRoot, "session-finalization.zip");
+        using (var archive = ZipFile.Open(diagnosticsBundle, ZipArchiveMode.Create))
+        {
+            AddZipText(
+                archive,
+                "metadata/localhost-overlays.json",
+                """
+                {
+                  "pathCounts": {},
+                  "pageEventOverlayCounts": {},
+                  "clientCounts": {}
+                }
+                """);
+            AddZipText(
+                archive,
+                "metadata/window-z-order.json",
+                """
+                {
+                  "windows": [
+                    { "processName": "iRacingSim64DX11", "title": "iRacing.com Simulator" }
+                  ],
+                  "foregroundHistory": [
+                    { "processName": "obs64", "title": "OBS 32.1.2" }
+                  ]
+                }
+                """);
+        }
+
+        var output = service.CreateInitialPackage(captureDirectory, captureId, diagnosticsBundle, "unit-test");
+
+        using var readiness = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "obs-readiness.json")));
+        Assert.True(readiness.RootElement.GetProperty("obsProcessPresent").GetBoolean());
     }
 
     [Fact]

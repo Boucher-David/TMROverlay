@@ -1740,19 +1740,27 @@ def client_counts_for_path(path_client_counts: dict[str, Any], path: str) -> dic
 
 
 def obs_process_present(localhost: dict[str, Any] | None, window_z_order: dict[str, Any] | None) -> bool | None:
-    for window in (window_z_order or {}).get("windows") or []:
-        if not isinstance(window, dict):
-            continue
-        process = str(window.get("processName") or window.get("name") or "")
-        title = str(window.get("title") or "")
-        if "obs" in process.lower() or "obs" in title.lower():
-            return True
+    window_data = window_z_order or {}
+    if obs_window_like(window_data.get("foregroundWindow")):
+        return True
+    for key in ("windows", "foregroundHistory"):
+        for window in window_data.get(key) or []:
+            if obs_window_like(window):
+                return True
     if not localhost:
         return None
     client_counts = localhost.get("clientCounts") or {}
     if int(client_counts.get("obs", 0) or 0) > 0:
         return True
     return None
+
+
+def obs_window_like(window: Any) -> bool:
+    if not isinstance(window, dict):
+        return False
+    process = str(window.get("processName") or window.get("name") or "")
+    title = str(window.get("title") or "")
+    return "obs" in process.lower() or "obs" in title.lower()
 
 
 def default_route_stats(overlay_id: str) -> dict[str, Any]:

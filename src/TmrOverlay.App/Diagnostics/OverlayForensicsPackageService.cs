@@ -588,25 +588,38 @@ internal sealed class OverlayForensicsPackageService
 
     private static bool HasObsWindow(JsonDocument? document)
     {
-        if (document is null
-            || !document.RootElement.TryGetProperty("windows", out var windows)
+        if (document is null)
+        {
+            return false;
+        }
+
+        var root = document.RootElement;
+        if (root.TryGetProperty("foregroundWindow", out var foregroundWindow)
+            && IsObsWindow(foregroundWindow))
+        {
+            return true;
+        }
+
+        return HasObsWindow(root, "windows") || HasObsWindow(root, "foregroundHistory");
+    }
+
+    private static bool HasObsWindow(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var windows)
             || windows.ValueKind != JsonValueKind.Array)
         {
             return false;
         }
 
-        foreach (var window in windows.EnumerateArray())
-        {
-            var process = TryGetString(window, "processName") ?? TryGetString(window, "name") ?? string.Empty;
-            var title = TryGetString(window, "title") ?? string.Empty;
-            if (process.Contains("obs", StringComparison.OrdinalIgnoreCase)
-                || title.Contains("obs", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
+        return windows.EnumerateArray().Any(IsObsWindow);
+    }
 
-        return false;
+    private static bool IsObsWindow(JsonElement window)
+    {
+        var process = TryGetString(window, "processName") ?? TryGetString(window, "name") ?? string.Empty;
+        var title = TryGetString(window, "title") ?? string.Empty;
+        return process.Contains("obs", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("obs", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? TryGetString(JsonElement element, string propertyName)

@@ -150,6 +150,7 @@ internal static class Program
                 services.AddSingleton<LiveOverlayWindowCaptureStore>();
                 services.AddSingleton<ForegroundWindowTracker>();
                 services.AddSingleton<DiagnosticsBundleService>();
+                services.AddSingleton<OverlayForensicsPackageService>();
                 services.AddSingleton<TelemetryCaptureState>();
                 services.AddSingleton<TelemetryEdgeCaseRecorder>();
                 services.AddSingleton<LiveModelParityRecorder>();

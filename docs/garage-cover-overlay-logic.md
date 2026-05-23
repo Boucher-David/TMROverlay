@@ -8,6 +8,8 @@ The overlay reads `LiveTelemetrySnapshot.Models.RaceEvents.IsGarageVisible`, whi
 
 The localhost route is served at `/overlays/garage-cover`. During normal fresh telemetry, it appears only when `IsGarageVisible` is true. It fails closed to the configured cover or fallback when telemetry is disconnected, not collecting, stale, or the localhost snapshot request fails; this avoids transparent flashes while OBS or the app is starting.
 
+Garage Cover is treated as an OBS privacy/safety route, not an ordinary native overlay visibility surface. Its localhost model must not be suppressed solely because an older saved overlay setting has `enabled=false`; the telemetry safety state decides whether the cover should render.
+
 The settings tab shows the configured cover image in a Preview region and keeps import/clear actions in General. The current V1 UI does not expose a separate test-cover button; the localhost page itself still follows live garage visibility or the stored diagnostic preview state when one is set internally.
 
 When fresh telemetry reports `IsGarageVisible` as false and no diagnostic preview state is active, the localhost page fades out.

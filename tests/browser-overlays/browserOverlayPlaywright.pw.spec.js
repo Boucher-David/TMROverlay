@@ -1113,7 +1113,7 @@ test.describe('browser overlay Playwright integration', () => {
       await expect(page.getByText('Data Analysis Opt-out')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Car / track history' })).toBeDisabled();
       await page.getByRole('button', { name: 'Enhanced iRacing Telemetry Capture' }).click();
-      await expect(page.getByText('Enhanced iRacing telemetry capture will start with live data.')).toBeVisible();
+      await expect(page.getByText('Enhanced capture will save forensics at session end.')).toBeVisible();
       await expect.poll(() => hasPatch({ kind: 'support', action: 'rawCapture', enabled: true })).toBe(true);
       await page.reload();
       await expect(page.getByRole('button', { name: 'Enhanced iRacing Telemetry Capture' })).toHaveAttribute('aria-pressed', 'true');

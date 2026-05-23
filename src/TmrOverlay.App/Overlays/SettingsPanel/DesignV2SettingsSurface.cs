@@ -559,7 +559,7 @@ internal sealed class DesignV2SettingsSurface : Control
                 var accepted = _callbacks.SetRawCaptureEnabled(isOn);
                 SetSupportStatus(
                     accepted
-                        ? (isOn ? "Enhanced iRacing telemetry capture will start with live data." : "Enhanced iRacing telemetry capture disabled.")
+                        ? (isOn ? "Enhanced capture will save forensics at session end." : "Enhanced iRacing telemetry capture disabled.")
                         : "Enhanced iRacing telemetry capture change was rejected while capture is active.",
                     !accepted);
                 RebuildDynamicControls();
@@ -1281,8 +1281,8 @@ internal sealed class DesignV2SettingsSurface : Control
         DrawText(graphics, LatestBundleValueText(latestPath), SupportBundleValueBounds(), SupportBundleValueFontSize, FontStyle.Bold, TextPrimary, monospaced: true);
         var supportDescriptionLines = new[]
         {
-            "Raw iRacing frame capture runs only when requested.",
-            "Create a bundle after reproducing an issue."
+            "Raw iRacing capture runs only when requested.",
+            "Forensics save when capture finishes."
         };
         for (var index = 0; index < supportDescriptionLines.Length; index++)
         {
@@ -1847,6 +1847,13 @@ internal sealed class DesignV2SettingsSurface : Control
         if (image is not null && image.Width > 0 && image.Height > 0)
         {
             DrawAspectFill(graphics, image, Rectangle.Inflate(rect, -12, -10));
+            return;
+        }
+
+        using var defaultImage = GarageCoverImageStore.TryLoadDefaultPreviewImage();
+        if (defaultImage is not null && defaultImage.Width > 0 && defaultImage.Height > 0)
+        {
+            DrawAspectFill(graphics, defaultImage, Rectangle.Inflate(rect, -12, -10));
             return;
         }
 

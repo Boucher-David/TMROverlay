@@ -74,6 +74,16 @@ public sealed class GarageCoverBrowserSettingsTests
     }
 
     [Fact]
+    public void DefaultImage_ResolvesBundledBrandAsset()
+    {
+        var path = GarageCoverImageStore.ResolveDefaultImagePath();
+
+        Assert.NotNull(path);
+        Assert.True(File.Exists(path));
+        Assert.Contains(Path.GetFileName(path) ?? string.Empty, new[] { "GarageCoverDefault.png", "Team_Logo_4k_TMRBRANDING.png" });
+    }
+
+    [Fact]
     public void From_ReturnsImageMetadataAndTransientPreviewState()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-garage-cover-settings-test", Guid.NewGuid().ToString("N"));

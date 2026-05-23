@@ -1031,7 +1031,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
     private void AddSupportCaptureControls(TabPage page, int x, int top, int width)
     {
         var title = CreateSectionLabel("Enhanced iRacing Telemetry Capture", x, top, width);
-        var note = CreateMutedLabel("If we ask for a repro, enable this before joining/driving, then create a diagnostics bundle after.", x + 4, top + 30, width);
+        var note = CreateMutedLabel("If we ask for a repro, enable this before joining/driving. Forensics save when capture finishes.", x + 4, top + 30, width);
         _rawCaptureCheckBox = CreateCheckBox("Capture future live telemetry", _captureState.Snapshot().RawCaptureEnabled, x + 4, top + 66, 320);
         _rawCaptureCheckBox.CheckedChanged += (_, _) => RawCaptureCheckBoxChanged();
 

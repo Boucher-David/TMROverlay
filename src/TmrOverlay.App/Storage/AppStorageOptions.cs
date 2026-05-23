@@ -21,6 +21,8 @@ internal sealed class AppStorageOptions
 
     public required string DiagnosticsRoot { get; init; }
 
+    public string ForensicsRoot { get; init; } = string.Empty;
+
     public required string TrackMapRoot { get; init; }
 
     public required string EventsRoot { get; init; }
@@ -52,6 +54,7 @@ internal sealed class AppStorageOptions
             LogsRoot = ResolveChildPath(storageSection["LogsRoot"], appDataRoot, "logs"),
             SettingsRoot = ResolveChildPath(storageSection["SettingsRoot"], appDataRoot, "settings"),
             DiagnosticsRoot = ResolveChildPath(storageSection["DiagnosticsRoot"], appDataRoot, "diagnostics"),
+            ForensicsRoot = ResolveChildPath(storageSection["ForensicsRoot"], appDataRoot, "forensics"),
             TrackMapRoot = ResolveChildPath(storageSection["TrackMapRoot"], appDataRoot, Path.Combine("track-maps", "user")),
             EventsRoot = ResolveChildPath(storageSection["EventsRoot"], appDataRoot, Path.Combine("logs", "events")),
             RuntimeStatePath = ResolveChildPath(storageSection["RuntimeStatePath"], appDataRoot, "runtime-state.json")

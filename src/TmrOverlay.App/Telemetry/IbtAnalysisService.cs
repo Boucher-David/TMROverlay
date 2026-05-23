@@ -198,7 +198,7 @@ internal sealed class IbtAnalysisService
             var status = JsonSerializer.Deserialize<IbtAnalysisStatusDocument>(
                 File.ReadAllText(statusPath),
                 JsonOptions);
-            return string.Equals(status?.Status, IbtAnalysisStatus.Succeeded, StringComparison.OrdinalIgnoreCase);
+            return status is not null && IbtAnalysisStatus.IsUsableSuccess(status.Status);
         }
         catch
         {
@@ -261,6 +261,11 @@ internal sealed class IbtAnalysisService
         var comparison = BuildComparison(liveSchema, ibt.Fields);
         var context = ParseContext(ibt.SessionInfoYaml);
         var source = candidate.ToSource();
+        var sessionMatch = BuildSessionMatch(
+            TryReadCaptureContext(captureDirectory, manifest),
+            context,
+            manifest,
+            source);
 
         var schemaSummary = new IbtSchemaSummaryDocument(
             AnalysisVersion: 1,
@@ -310,15 +315,22 @@ internal sealed class IbtAnalysisService
         }
 
         stopwatch.Stop();
+        var statusValue = sessionMatch.Status == "mismatch"
+            ? IbtAnalysisStatus.SucceededWithWarnings
+            : IbtAnalysisStatus.Succeeded;
+        var statusReason = sessionMatch.Status == "mismatch"
+            ? "candidate_session_mismatch"
+            : null;
         var status = new IbtAnalysisStatusDocument(
             AnalysisVersion: 1,
             GeneratedAtUtc: DateTimeOffset.UtcNow,
-            Status: IbtAnalysisStatus.Succeeded,
-            Reason: null,
+            Status: statusValue,
+            Reason: statusReason,
             TelemetryRoot: _options.TelemetryRoot,
             OutputDirectory: outputDirectory,
             Source: source,
             CandidateSelection: candidateSelection.ToSummary(),
+            SessionMatch: sessionMatch,
             Guardrails: Guardrails(),
             OutputFiles: [SchemaSummaryFileName, SchemaComparisonFileName, FieldSummaryFileName, LocalCarSummaryFileName],
             ElapsedMilliseconds: stopwatch.ElapsedMilliseconds,
@@ -360,6 +372,7 @@ internal sealed class IbtAnalysisService
             OutputDirectory: outputDirectory,
             Source: candidateSelection?.Candidate?.ToSource(),
             CandidateSelection: candidateSelection?.ToSummary(),
+            SessionMatch: null,
             Guardrails: Guardrails(),
             OutputFiles: [],
             ElapsedMilliseconds: 0,
@@ -400,6 +413,7 @@ internal sealed class IbtAnalysisService
             OutputDirectory: outputDirectory,
             Source: null,
             CandidateSelection: null,
+            SessionMatch: null,
             Guardrails: Guardrails(),
             OutputFiles: [],
             ElapsedMilliseconds: 0,
@@ -1018,6 +1032,103 @@ internal sealed class IbtAnalysisService
         }
     }
 
+    private static HistoricalSessionContext? TryReadCaptureContext(
+        string captureDirectory,
+        CaptureManifest? manifest)
+    {
+        var fileName = FirstNonEmpty(manifest?.LatestSessionInfoFile, "latest-session.yaml");
+        var sessionInfoPath = Path.Combine(captureDirectory, fileName ?? "latest-session.yaml");
+        if (!File.Exists(sessionInfoPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return SessionInfoSummaryParser.Parse(File.ReadAllText(sessionInfoPath));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static IbtSessionMatchSummary BuildSessionMatch(
+        HistoricalSessionContext? captureContext,
+        HistoricalSessionContext sourceContext,
+        CaptureManifest? manifest,
+        IbtSourceFile source)
+    {
+        var captureCombo = captureContext is null ? null : HistoricalComboIdentity.From(captureContext);
+        var sourceCombo = HistoricalComboIdentity.From(sourceContext);
+        bool? trackMatched = null;
+        bool? carMatched = null;
+        bool? sessionMatched = null;
+        bool? startDateMatched = null;
+        var mismatches = new List<string>();
+
+        if (captureCombo is not null)
+        {
+            trackMatched = CompareKnownKeys(captureCombo.TrackKey, sourceCombo.TrackKey);
+            carMatched = CompareKnownKeys(captureCombo.CarKey, sourceCombo.CarKey);
+            sessionMatched = CompareKnownKeys(captureCombo.SessionKey, sourceCombo.SessionKey);
+            AddMismatch(mismatches, "track", trackMatched);
+            AddMismatch(mismatches, "car", carMatched);
+            AddMismatch(mismatches, "session", sessionMatched);
+        }
+
+        if (manifest is not null && source.DiskStartedAtUtc is not null)
+        {
+            startDateMatched = manifest.StartedAtUtc.UtcDateTime.Date == source.DiskStartedAtUtc.Value.UtcDateTime.Date;
+            AddMismatch(mismatches, "start-date", startDateMatched);
+        }
+
+        var hasComparableEvidence = trackMatched is not null
+            || carMatched is not null
+            || sessionMatched is not null
+            || startDateMatched is not null;
+        var status = mismatches.Count > 0
+            ? "mismatch"
+            : hasComparableEvidence
+                ? "matched"
+                : "unknown";
+
+        return new IbtSessionMatchSummary(
+            Status: status,
+            Reason: status == "unknown" ? "insufficient_session_identity" : null,
+            CaptureCombo: captureCombo,
+            SourceCombo: sourceCombo,
+            TrackMatched: trackMatched,
+            CarMatched: carMatched,
+            SessionMatched: sessionMatched,
+            StartDateMatched: startDateMatched,
+            Mismatches: mismatches);
+    }
+
+    private static bool? CompareKnownKeys(string? expected, string? actual)
+    {
+        if (IsUnknownKey(expected) || IsUnknownKey(actual))
+        {
+            return null;
+        }
+
+        return string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsUnknownKey(string? key)
+    {
+        return string.IsNullOrWhiteSpace(key)
+            || key.Contains("unknown", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AddMismatch(List<string> mismatches, string dimension, bool? matched)
+    {
+        if (matched == false)
+        {
+            mismatches.Add(dimension);
+        }
+    }
+
     private static CaptureManifest? TryReadManifest(string captureDirectory)
     {
         var manifestPath = Path.Combine(captureDirectory, "capture-manifest.json");
@@ -1308,8 +1419,15 @@ internal sealed class IbtAnalysisService
 internal static class IbtAnalysisStatus
 {
     public const string Succeeded = "succeeded";
+    public const string SucceededWithWarnings = "succeeded_with_warnings";
     public const string Skipped = "skipped";
     public const string Failed = "failed";
+
+    public static bool IsUsableSuccess(string status)
+    {
+        return string.Equals(status, Succeeded, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, SucceededWithWarnings, StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 internal sealed record IbtAnalysisResult(
@@ -1340,6 +1458,7 @@ internal sealed record IbtAnalysisStatusDocument(
     string OutputDirectory,
     IbtSourceFile? Source,
     IbtCandidateSelectionSummary? CandidateSelection,
+    IbtSessionMatchSummary? SessionMatch,
     IbtAnalysisGuardrails Guardrails,
     IReadOnlyList<string> OutputFiles,
     long ElapsedMilliseconds,
@@ -1350,6 +1469,17 @@ internal sealed record IbtAnalysisStatusDocument(
     int? CommonFieldCount,
     int? IbtOnlyFieldCount,
     int? LiveOnlyFieldCount);
+
+internal sealed record IbtSessionMatchSummary(
+    string Status,
+    string? Reason,
+    HistoricalComboIdentity? CaptureCombo,
+    HistoricalComboIdentity? SourceCombo,
+    bool? TrackMatched,
+    bool? CarMatched,
+    bool? SessionMatched,
+    bool? StartDateMatched,
+    IReadOnlyList<string> Mismatches);
 
 internal sealed record IbtAnalysisGuardrails(
     int MaxCandidateAgeMinutes,

@@ -30,6 +30,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
     private readonly SessionHistoryStore _sessionHistoryStore;
     private readonly PostRaceAnalysisPipeline _postRaceAnalysisPipeline;
     private readonly DiagnosticsBundleService _diagnosticsBundleService;
+    private readonly OverlayForensicsPackageService _forensicsPackageService;
     private readonly ILiveTelemetrySink _liveTelemetrySink;
     private readonly ILiveTelemetrySource _liveTelemetrySource;
     private readonly TelemetryCaptureState _state;
@@ -65,6 +66,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         SessionHistoryStore sessionHistoryStore,
         PostRaceAnalysisPipeline postRaceAnalysisPipeline,
         DiagnosticsBundleService diagnosticsBundleService,
+        OverlayForensicsPackageService forensicsPackageService,
         ILiveTelemetrySink liveTelemetrySink,
         LiveTelemetryStore liveTelemetrySource,
         TelemetryCaptureState state,
@@ -84,6 +86,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         _sessionHistoryStore = sessionHistoryStore;
         _postRaceAnalysisPipeline = postRaceAnalysisPipeline;
         _diagnosticsBundleService = diagnosticsBundleService;
+        _forensicsPackageService = forensicsPackageService;
         _liveTelemetrySink = liveTelemetrySink;
         _liveTelemetrySource = liveTelemetrySource;
         _state = state;
@@ -1965,7 +1968,15 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 finalizeSucceeded);
         }
 
-        CreateEndOfSessionDiagnosticsBundle(finalization);
+        var diagnosticsBundlePath = CreateEndOfSessionDiagnosticsBundle(finalization);
+        if (capture is not null)
+        {
+            CreateInitialForensicsPackage(
+                capture.DirectoryPath,
+                capture.CaptureId,
+                diagnosticsBundlePath,
+                "session-finalization");
+        }
     }
 
     private void CompleteLiveModelParity(string? captureDirectory, DateTimeOffset finishedAtUtc)
@@ -2038,6 +2049,11 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                     pending.CaptureId,
                     waitForIRacingExit: true,
                     cancellationToken).ConfigureAwait(false);
+                CreateInitialForensicsPackage(
+                    pending.DirectoryPath,
+                    pending.CaptureId,
+                    null,
+                    "startup-recovery");
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -2196,6 +2212,18 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                     result.SourcePath,
                     result.ElapsedMilliseconds);
                 await TryGenerateTrackMapAsync(result.SourcePath, captureId, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(result.Status, IbtAnalysisStatus.SucceededWithWarnings, StringComparison.OrdinalIgnoreCase))
+            {
+                _events.Record("ibt_analysis_saved_with_warnings", properties);
+                _state.RecordWarning($"IBT analysis completed with warnings: {result.Reason ?? "unknown"}");
+                _logger.LogWarning(
+                    "Saved IBT analysis for {CaptureDirectory} from {IbtPath} with warnings. Reason: {Reason}.",
+                    captureDirectory,
+                    result.SourcePath,
+                    result.Reason);
                 return;
             }
 
@@ -2424,13 +2452,14 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             reason);
     }
 
-    private void CreateEndOfSessionDiagnosticsBundle(CaptureFinalizationContext finalization)
+    private string? CreateEndOfSessionDiagnosticsBundle(CaptureFinalizationContext finalization)
     {
         var diagnosticsStarted = Stopwatch.GetTimestamp();
         var diagnosticsSucceeded = false;
+        string? bundlePath = null;
         try
         {
-            var bundlePath = _diagnosticsBundleService.CreateBundle(DiagnosticsBundleSources.SessionFinalization);
+            bundlePath = _diagnosticsBundleService.CreateBundle(DiagnosticsBundleSources.SessionFinalization);
             _events.Record("diagnostics_bundle_created", new Dictionary<string, string?>
             {
                 ["bundlePath"] = bundlePath,
@@ -2462,6 +2491,34 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 AppPerformanceMetricIds.TelemetryFinalizeDiagnosticsBundle,
                 diagnosticsStarted,
                 diagnosticsSucceeded);
+        }
+
+        return bundlePath;
+    }
+
+    private void CreateInitialForensicsPackage(
+        string captureDirectory,
+        string? captureId,
+        string? diagnosticsBundlePath,
+        string source)
+    {
+        try
+        {
+            _forensicsPackageService.CreateInitialPackage(captureDirectory, captureId, diagnosticsBundlePath, source);
+        }
+        catch (Exception exception)
+        {
+            _events.Record("overlay_forensics_package_failed", new Dictionary<string, string?>
+            {
+                ["captureId"] = captureId,
+                ["captureDirectory"] = captureDirectory,
+                ["source"] = source,
+                ["error"] = exception.GetType().Name
+            });
+            _logger.LogWarning(
+                exception,
+                "Failed to create initial overlay forensics package for {CaptureId}.",
+                captureId);
         }
     }
 

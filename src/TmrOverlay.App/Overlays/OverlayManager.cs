@@ -70,6 +70,7 @@ internal sealed class OverlayManager : IDisposable
     private string? _appliedFontFamily;
     private string? _appliedUnitSystem;
     private Form? _settingsZOrderForm;
+    private string? _selectedSettingsOverlayTabId;
     private bool _radarSettingsPreviewVisible;
     private bool _settingsOverlayActive;
     private bool _startupShown;
@@ -652,6 +653,7 @@ internal sealed class OverlayManager : IDisposable
         var succeeded = false;
         Form? activeSettingsForm = null;
         ReconcileSettingsOverlayActiveWithVisibility();
+        RefreshRadarSettingsPreviewVisibility(applySettings: false);
         var keepSettingsActive = _settingsOverlayActive
             && _forms.TryGetValue(SettingsOverlayDefinition.Definition.Id, out activeSettingsForm)
             && activeSettingsForm.Visible
@@ -826,23 +828,41 @@ internal sealed class OverlayManager : IDisposable
 
     private void SelectSettingsOverlayTab(string? overlayId)
     {
-        var radarPreviewVisible = false;
-        if (string.Equals(overlayId, CarRadarOverlayDefinition.Definition.Id, StringComparison.Ordinal))
-        {
-            var radarSettings = _settings?.GetOrAddOverlay(
-                CarRadarOverlayDefinition.Definition.Id,
-                CarRadarOverlayDefinition.Definition.DefaultWidth,
-                CarRadarOverlayDefinition.Definition.DefaultHeight,
-                defaultEnabled: false);
-            radarPreviewVisible = radarSettings?.Enabled == true;
-        }
+        _selectedSettingsOverlayTabId = overlayId;
+        RefreshRadarSettingsPreviewVisibility(applySettings: true);
+    }
+
+    private void RefreshRadarSettingsPreviewVisibility(bool applySettings)
+    {
+        var radarSettings = _settings?.GetOrAddOverlay(
+            CarRadarOverlayDefinition.Definition.Id,
+            CarRadarOverlayDefinition.Definition.DefaultWidth,
+            CarRadarOverlayDefinition.Definition.DefaultHeight,
+            defaultEnabled: false);
+        var radarPreviewVisible = ShouldShowRadarSettingsPreview(
+            _selectedSettingsOverlayTabId,
+            IsSettingsWindowActiveAndVisible(),
+            radarSettings?.Enabled == true);
         if (_radarSettingsPreviewVisible == radarPreviewVisible)
         {
             return;
         }
 
         _radarSettingsPreviewVisible = radarPreviewVisible;
-        ApplyOverlaySettings();
+        if (applySettings)
+        {
+            ApplyOverlaySettings();
+        }
+    }
+
+    internal static bool ShouldShowRadarSettingsPreview(
+        string? selectedSettingsOverlayTabId,
+        bool settingsWindowActiveAndVisible,
+        bool radarOverlayEnabled)
+    {
+        return settingsWindowActiveAndVisible
+            && radarOverlayEnabled
+            && string.Equals(selectedSettingsOverlayTabId, CarRadarOverlayDefinition.Definition.Id, StringComparison.Ordinal);
     }
 
     private static void ApplyRadarSettingsPreview(Form form, bool previewVisible)
@@ -1524,11 +1544,13 @@ internal sealed class OverlayManager : IDisposable
         form.Activated += (_, _) =>
         {
             _settingsOverlayActive = true;
+            RefreshRadarSettingsPreviewVisibility(applySettings: true);
             ApplyEmergencyOverlayZOrder();
         };
         form.Deactivate += (_, _) =>
         {
             _settingsOverlayActive = false;
+            RefreshRadarSettingsPreviewVisibility(applySettings: true);
             ApplyEmergencyOverlayZOrder();
         };
     }

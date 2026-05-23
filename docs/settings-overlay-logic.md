@@ -133,14 +133,14 @@ The settings UI only shows Practice, Qualifying, and Race. Toggling Practice app
 
 ## Radar Settings Preview
 
-When the user selects the radar settings tab:
+When the user selects the radar settings tab while the Settings window is active:
 
 1. `SettingsOverlayForm` reports the selected tab id.
 2. `OverlayManager` sees that the selected overlay id is `car-radar`.
 3. If the radar overlay is enabled, the radar overlay is forced visible even if filtered out by session rules.
 4. `CarRadarForm.SetSettingsPreviewVisible(true)` forces radar alpha to full so the user can see changes.
 
-When leaving the radar tab, preview mode is turned off. If the radar overlay is disabled, selecting its settings tab does not override the `Visible` checkbox.
+When leaving the radar tab, hiding/deactivating Settings, or alt-tabbing back to the sim so Settings is no longer active, preview mode is turned off. If the radar overlay is disabled, selecting its settings tab does not override the `Visible` checkbox.
 
 ## Settings Tab Previews
 

@@ -54,7 +54,7 @@ By default, TmrOverlay stores user data outside the install folder under:
 %LOCALAPPDATA%\TmrOverlay
 ```
 
-That app-data root contains settings, history, logs, diagnostics, runtime state, generated track maps, and optional captures. Updating or replacing the app does not delete this data. Startup/update cleanup only removes stale legacy installer identity folders/shortcuts; uninstalling an installed Velopack build removes this app-data root as part of uninstall cleanup.
+That app-data root contains settings, history, logs, diagnostics, forensics packages, runtime state, generated track maps, and optional captures. Updating or replacing the app does not delete this data. Startup/update cleanup only removes stale legacy installer identity folders/shortcuts; uninstalling an installed Velopack build removes this app-data root as part of uninstall cleanup.
 
 Durable app data is protected by versioned release snapshots under `fixtures/data-contracts/`. Each future durable schema change should keep the previous released snapshot loading through current code and should add a new snapshot when the release changes the persisted contract. See [docs/data-contracts.md](docs/data-contracts.md).
 
@@ -169,6 +169,14 @@ The settings Support tab and tray menu can create diagnostics bundles under:
 ```
 
 Bundles include app/storage metadata, telemetry state, evidence-quality warnings, latest-capture evidence summaries, release update state, localhost request state, IBT analysis settings/status, track-map inventory plus current-track lookup evidence, live telemetry synthesis, performance snapshots, recent logs/events, runtime state, settings, latest capture metadata and compact sidecars, recent history summaries, and advanced collection artifacts when present.
+
+When Enhanced iRacing Telemetry Capture is enabled, the app creates an initial overlay forensics package for the finished raw capture under:
+
+```text
+%LOCALAPPDATA%\TmrOverlay\forensics\<capture-id>
+```
+
+That package indexes the explicit capture and related compact sidecars for follow-up replay analysis. Diagnostics bundles may reference this evidence, but raw telemetry and forensics artifacts stay outside the diagnostics bundle by default. The app will not create this package unless enhanced telemetry capture produced a raw capture.
 
 If the Settings UI is frozen and a bundle cannot be created, collect `%LOCALAPPDATA%\TmrOverlay\logs` and the latest `%LOCALAPPDATA%\TmrOverlay\captures` folder from the diagnostic patch build.
 

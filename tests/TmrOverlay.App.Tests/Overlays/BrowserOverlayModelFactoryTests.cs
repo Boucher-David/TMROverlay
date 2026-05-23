@@ -105,6 +105,29 @@ public sealed class BrowserOverlayModelFactoryTests
     }
 
     [Fact]
+    public void GarageCoverModel_FailsClosedEvenWhenLegacySettingsAreDisabled()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        settings.GetOrAddOverlay("garage-cover", 1280, 720).Enabled = false;
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var staleSnapshot = LocalPlayerSnapshot(now.AddSeconds(-5));
+
+        Assert.True(factory.TryBuild("garage-cover", staleSnapshot, settings, now, out var response));
+
+        Assert.NotNull(response.Model.GarageCover);
+        Assert.True(response.Model.GarageCover!.ShouldCover);
+        Assert.True(response.Model.ShouldRender);
+        Assert.True(response.Model.EffectiveSettings!.Rendered.ShouldRender);
+        Assert.Equal("telemetry_stale", response.Model.GarageCover.Detection.State);
+    }
+
+    [Fact]
     public void EffectiveSettings_IncludesScaleAwareBrowserSourceSize()
     {
         var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions

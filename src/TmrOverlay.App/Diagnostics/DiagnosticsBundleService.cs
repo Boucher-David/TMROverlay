@@ -2197,6 +2197,10 @@ internal sealed class DiagnosticsBundleService
         string? status = null;
         string? reason = null;
         string? sourcePath = null;
+        string? candidateSelectedPath = null;
+        string? sessionMatchStatus = null;
+        string? sessionMatchReason = null;
+        IReadOnlyList<string> sessionMatchMismatches = [];
         string? statusReadError = null;
         if (!string.IsNullOrWhiteSpace(statusPath) && File.Exists(statusPath))
         {
@@ -2205,7 +2209,19 @@ internal sealed class DiagnosticsBundleService
                 var node = JsonNode.Parse(File.ReadAllText(statusPath));
                 status = (string?)node?["status"];
                 reason = (string?)node?["reason"];
-                sourcePath = (string?)node?["sourcePath"];
+                candidateSelectedPath = (string?)node?["candidateSelection"]?["selectedPath"];
+                sourcePath = (string?)node?["sourcePath"]
+                    ?? (string?)node?["source"]?["path"]
+                    ?? candidateSelectedPath;
+                sessionMatchStatus = (string?)node?["sessionMatch"]?["status"];
+                sessionMatchReason = (string?)node?["sessionMatch"]?["reason"];
+                sessionMatchMismatches = node?["sessionMatch"]?["mismatches"] is JsonArray mismatches
+                    ? mismatches
+                        .Select(item => (string?)item)
+                        .Where(item => !string.IsNullOrWhiteSpace(item))
+                        .Select(item => item!)
+                        .ToArray()
+                    : [];
             }
             catch (Exception exception)
             {
@@ -2233,6 +2249,10 @@ internal sealed class DiagnosticsBundleService
                 Status: status,
                 Reason: reason,
                 SourcePath: sourcePath,
+                CandidateSelectedPath: candidateSelectedPath,
+                SessionMatchStatus: sessionMatchStatus,
+                SessionMatchReason: sessionMatchReason,
+                SessionMatchMismatches: sessionMatchMismatches,
                 StatusReadError: statusReadError));
     }
 
@@ -4755,4 +4775,8 @@ internal sealed record LatestCaptureIbtAnalysisDiagnostics(
     string? Status,
     string? Reason,
     string? SourcePath,
+    string? CandidateSelectedPath,
+    string? SessionMatchStatus,
+    string? SessionMatchReason,
+    IReadOnlyList<string> SessionMatchMismatches,
     string? StatusReadError);

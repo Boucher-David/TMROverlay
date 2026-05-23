@@ -670,7 +670,17 @@ public sealed class DiagnosticsBundleServiceTests
             File.WriteAllText(Path.Combine(captureDirectory, "telemetry.bin"), "raw");
             var ibtAnalysisDirectory = Path.Combine(captureDirectory, "ibt-analysis");
             Directory.CreateDirectory(ibtAnalysisDirectory);
-            File.WriteAllText(Path.Combine(ibtAnalysisDirectory, "status.json"), """{"status":"skipped"}""");
+            File.WriteAllText(
+                Path.Combine(ibtAnalysisDirectory, "status.json"),
+                """
+                {
+                  "status":"succeeded_with_warnings",
+                  "reason":"candidate_session_mismatch",
+                  "source":{"path":"/tmp/source.ibt"},
+                  "candidateSelection":{"selectedPath":"/tmp/source.ibt"},
+                  "sessionMatch":{"status":"mismatch","mismatches":["track"]}
+                }
+                """);
             File.WriteAllText(Path.Combine(ibtAnalysisDirectory, "ibt-schema-summary.json"), "{}");
             File.WriteAllText(Path.Combine(ibtAnalysisDirectory, "source.ibt"), "raw ibt");
 
@@ -1663,7 +1673,12 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.True(((bool?)ibtAnalysisJson?["telemetryLoggingEnabled"]) == true);
                 Assert.Equal(Path.Combine(root, "ibt"), (string?)ibtAnalysisJson?["telemetryRoot"]);
                 Assert.True(((bool?)ibtAnalysisJson?["latestCapture"]?["statusExists"]) == true);
-                Assert.Equal("skipped", (string?)ibtAnalysisJson?["latestCapture"]?["status"]);
+                Assert.Equal("succeeded_with_warnings", (string?)ibtAnalysisJson?["latestCapture"]?["status"]);
+                Assert.Equal("candidate_session_mismatch", (string?)ibtAnalysisJson?["latestCapture"]?["reason"]);
+                Assert.Equal("/tmp/source.ibt", (string?)ibtAnalysisJson?["latestCapture"]?["sourcePath"]);
+                Assert.Equal("/tmp/source.ibt", (string?)ibtAnalysisJson?["latestCapture"]?["candidateSelectedPath"]);
+                Assert.Equal("mismatch", (string?)ibtAnalysisJson?["latestCapture"]?["sessionMatchStatus"]);
+                Assert.Equal("track", (string?)ibtAnalysisJson?["latestCapture"]?["sessionMatchMismatches"]?[0]);
             }
 
             var liveTelemetrySynthesisEntry = archive.GetEntry("metadata/live-telemetry-synthesis.json");

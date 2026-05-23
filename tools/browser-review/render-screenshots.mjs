@@ -665,7 +665,7 @@ async function captureRoute(page, route, manifest) {
     contentBounds: dom.contentBounds,
     layout: dom.layout,
     uiEvidence: uiEvidence(route, dom),
-    modelEvidence: modelLayoutEvidence(model, dom.layout),
+    modelEvidence: modelLayoutEvidence(model, dom.layout, route),
     v102Evidence: v102EvidenceForRoute(route),
     runtimeAssets,
     scenarioEvidence: scenarioEvidence(route, model, dom.layout),
@@ -1919,11 +1919,12 @@ function settingsPreviewEvidence(elements) {
   };
 }
 
-function modelLayoutEvidence(model, layout) {
+function modelLayoutEvidence(model, layout, route = null) {
   if (!model || typeof model !== 'object') {
     return null;
   }
 
+  const scaleContext = modelEvidenceScaleContext(model, route);
   const tableRendering = tableRenderedEvidence(layout);
   const metricRendering = metricRenderedEvidence(layout);
   let gridRowCursor = 0;
@@ -1931,6 +1932,7 @@ function modelLayoutEvidence(model, layout) {
     contract: 'overlay-model-layout-evidence/v1',
     bodyKind: stringOrNull(model.bodyKind),
     unitSystem: screenshotUnitSystem,
+    scale: scaleContext,
     columns: (Array.isArray(model.columns) ? model.columns : []).map((column, index) => {
       const rendered = tableRendering.headers[index] || null;
       return {
@@ -1981,8 +1983,8 @@ function modelLayoutEvidence(model, layout) {
         })
       };
     }),
-    graph: graphModelEvidence(model, layout),
-    inputs: model.inputs ? inputEvidence(model.inputs, layout) : null,
+    graph: graphModelEvidence(model, layout, scaleContext),
+    inputs: model.inputs ? inputEvidence(model.inputs, layout, scaleContext) : null,
     flags: model.flags ? {
       count: arrayLength(model.flags?.flags),
       kinds: (Array.isArray(model.flags?.flags) ? model.flags.flags : []).map((flag) => stringOrNull(flag?.kind)),
@@ -1993,12 +1995,29 @@ function modelLayoutEvidence(model, layout) {
         columns: flagGrid(arrayLength(model.flags?.flags)).columns,
         rows: flagGrid(arrayLength(model.flags?.flags)).rows
       },
-      cells: flagCellEvidence(model.flags, layout)
+      cells: flagCellEvidence(model.flags, layout, scaleContext)
     } : null,
     carRadar: carRadarVectorEvidence(model.carRadar?.renderModel, layout),
     trackMap: trackMapVectorEvidence(model.trackMap?.renderModel || model.trackMap, layout),
     garageCover: model.garageCover ? garageCoverEvidence(model.garageCover, layout) : null,
     streamChat: model.streamChat ? streamChatEvidence(model.streamChat, layout) : null
+  };
+}
+
+function modelEvidenceScaleContext(model, route = null) {
+  const routeScaleTransform = positiveScaleOrNull(route?.scaleTransform);
+  const routeMinScale = positiveScaleOrNull(route?.minScale);
+  const modelRenderScale = positiveScaleOrNull(graphEvidenceRenderScale(model)) || null;
+  const effectiveRenderScale = routeScaleTransform
+    || (modelRenderScale && modelRenderScale !== 1 ? modelRenderScale : null)
+    || routeMinScale
+    || modelRenderScale
+    || 1;
+  return {
+    routeScaleTransform,
+    routeMinScale,
+    modelRenderScale,
+    effectiveRenderScale: roundNumber(effectiveRenderScale)
   };
 }
 
@@ -2276,13 +2295,27 @@ function renderedGridCellBounds(renderedCells, cellIndex, value) {
   return renderedCells.find((cell) => cell.text === text)?.bounds || null;
 }
 
-function flagCellEvidence(flags, layout) {
+function flagCellEvidence(flags, layout, scaleContext = null) {
   const renderedFlags = Array.isArray(flags?.flags) ? flags.flags : [];
   const grid = flagGrid(renderedFlags.length);
   const svgBounds = findElementBounds(layout, 'flags', 'flags-v2') || findElementBounds(layout, 'content');
-  const cells = svgBounds ? computedFlagCells(svgBounds, grid, renderedFlags.length) : elementsForRole(layout, 'flag-cell').map((element) => element.bounds);
+  const renderScale = effectiveRenderScale(scaleContext);
+  const unscaledSvgBounds = svgBounds ? inverseScaleRect(svgBounds, renderScale) : null;
+  const unscaledCells = unscaledSvgBounds
+    ? computedFlagCells(unscaledSvgBounds, grid, renderedFlags.length)
+    : null;
+  const cells = unscaledCells
+    ? unscaledCells.map((cell) => scaleRectEvidence(cell, renderScale))
+    : elementsForRole(layout, 'flag-cell').map((element) => element.bounds);
   return renderedFlags.map((flag, index) => {
+    const unscaledCellBounds = unscaledCells?.[index] || null;
     const cellBounds = cells[index] || null;
+    const clothBounds = unscaledCellBounds
+      ? scaleRectEvidence(flagClothBounds(unscaledCellBounds), renderScale)
+      : cellBounds ? flagClothBounds(cellBounds) : null;
+    const labelBounds = unscaledCellBounds
+      ? scaleRectEvidence(flagLabelBounds(unscaledCellBounds), renderScale)
+      : cellBounds ? flagLabelBounds(cellBounds) : null;
     return {
       index,
       row: Math.floor(index / Math.max(1, grid.columns)),
@@ -2293,8 +2326,8 @@ function flagCellEvidence(flags, layout) {
       detail: stringOrNull(flag?.detail),
       fill: flagColor(flagVisualKind(flag)),
       bounds: cellBounds,
-      clothBounds: cellBounds ? flagClothBounds(cellBounds) : null,
-      labelBounds: cellBounds ? flagLabelBounds(cellBounds) : null
+      clothBounds,
+      labelBounds
     };
   });
 }
@@ -2396,6 +2429,7 @@ function carRadarVectorEvidence(renderModel, layout) {
     || findElementBounds(layout, 'car-radar', 'radar-v2')
     || findElementBounds(layout, 'content');
   const scale = vectorScale(target, sourceWidth, sourceHeight);
+  const strokeScale = vectorStrokeScale(scale);
   const shouldRender = renderModel.shouldRender === true;
   const primitives = shouldRender ? [
     vectorShapePrimitive('background', 'ellipse', renderModel.background, scale),
@@ -2411,13 +2445,13 @@ function carRadarVectorEvidence(renderModel, layout) {
     bounds: scaleRect(scale, car),
     fill: colorToCss(car?.fill),
     stroke: colorToCss(car?.stroke),
-    strokeWidth: numberOrNull(car?.strokeWidth),
+    strokeWidth: scaleScalarEvidence(car?.strokeWidth, strokeScale),
     label: stringOrNull(car?.label)
   })) : [];
   const labels = shouldRender ? (Array.isArray(renderModel.labels) ? renderModel.labels : []).map((label) => ({
     text: stringOrNull(label?.text),
     bounds: scaleRect(scale, label),
-    fontSize: numberOrNull(label?.fontSize),
+    fontSize: scaleScalarEvidence(label?.fontSize, strokeScale),
     bold: Boolean(label?.bold),
     alignment: stringOrNull(label?.alignment),
     color: colorToCss(label?.color)
@@ -2430,6 +2464,7 @@ function carRadarVectorEvidence(renderModel, layout) {
     targetBounds: target || null,
     scaleX: scale?.scaleX || null,
     scaleY: scale?.scaleY || null,
+    strokeScale,
     carCount: arrayLength(renderModel.cars),
     itemCount: items.length,
     primitiveCount: primitives.length,
@@ -2453,6 +2488,7 @@ function trackMapVectorEvidence(renderModel, layout) {
     || findElementBounds(layout, 'track-map', 'track')
     || findElementBounds(layout, 'content');
   const scale = vectorScale(target, sourceWidth, sourceHeight);
+  const strokeScale = vectorStrokeScale(scale);
   const primitives = (Array.isArray(renderModel.primitives) ? renderModel.primitives : [])
     .map((primitive, index) => vectorPrimitiveEvidence(primitive, index, scale));
   const items = (Array.isArray(renderModel.markers) ? renderModel.markers : [])
@@ -2473,6 +2509,7 @@ function trackMapVectorEvidence(renderModel, layout) {
     targetBounds: target || null,
     scaleX: scale?.scaleX || null,
     scaleY: scale?.scaleY || null,
+    strokeScale,
     shouldRender: renderModel.isAvailable === false ? false : true,
     items,
     primitives,
@@ -2485,6 +2522,7 @@ function vectorShapePrimitive(id, kind, shape, scale) {
     return null;
   }
 
+  const strokeScale = vectorStrokeScale(scale);
   return {
     kind,
     id,
@@ -2495,11 +2533,12 @@ function vectorShapePrimitive(id, kind, shape, scale) {
     sweepDegrees: numberOrNull(shape?.sweepDegrees),
     fill: colorToCss(shape?.fill),
     stroke: colorToCss(shape?.stroke),
-    strokeWidth: numberOrNull(shape?.strokeWidth)
+    strokeWidth: scaleScalarEvidence(shape?.strokeWidth, strokeScale)
   };
 }
 
 function vectorPrimitiveEvidence(primitive, index, scale) {
+  const strokeScale = vectorStrokeScale(scale);
   const points = (Array.isArray(primitive?.points) ? primitive.points : [])
     .map((point) => scalePoint(scale, point))
     .filter(Boolean);
@@ -2514,11 +2553,12 @@ function vectorPrimitiveEvidence(primitive, index, scale) {
     sweepDegrees: numberOrNull(primitive?.sweepDegrees),
     fill: colorToCss(primitive?.fill),
     stroke: colorToCss(primitive?.stroke),
-    strokeWidth: numberOrNull(primitive?.strokeWidth)
+    strokeWidth: scaleScalarEvidence(primitive?.strokeWidth, strokeScale)
   };
 }
 
 function trackMapMarkerEvidence(marker, index, scale) {
+  const strokeScale = vectorStrokeScale(scale);
   const markerRadius = numberOr(marker?.radius, 0);
   const alertRingRadius = numberOr(marker?.alertRingRadius, 0);
   const radius = Math.max(markerRadius, alertRingRadius);
@@ -2536,7 +2576,7 @@ function trackMapMarkerEvidence(marker, index, scale) {
     }) : null,
     fill: colorToCss(marker?.fill),
     stroke: colorToCss(marker?.stroke),
-    strokeWidth: numberOrNull(marker?.strokeWidth),
+    strokeWidth: scaleScalarEvidence(marker?.strokeWidth, strokeScale),
     label: stringOrNull(marker?.label),
     labelColor: colorToCss(marker?.labelColor),
     alertKind: stringOrNull(marker?.alertKind),
@@ -2549,11 +2589,12 @@ function trackMapMarkerEvidence(marker, index, scale) {
       })
       : null,
     alertRingStroke: colorToCss(marker?.alertRingStroke),
-    alertRingStrokeWidth: numberOrNull(marker?.alertRingStrokeWidth)
+    alertRingStrokeWidth: scaleScalarEvidence(marker?.alertRingStrokeWidth, strokeScale)
   };
 }
 
 function trackMapMarkerLabelEvidence(marker, scale) {
+  const strokeScale = vectorStrokeScale(scale);
   const center = scalePoint(scale, { x: marker?.x, y: marker?.y });
   const fontSize = numberOr(marker?.labelFontSize, 7.6) * numberOr(scale?.scaleY, 1);
   const radius = numberOr(marker?.radius, 5.7) * numberOr(scale?.scaleX, 1);
@@ -2565,7 +2606,7 @@ function trackMapMarkerLabelEvidence(marker, scale) {
       width: radius * 2,
       height: fontSize * 1.4
     }) : null,
-    fontSize: numberOrNull(marker?.labelFontSize),
+    fontSize: scaleScalarEvidence(marker?.labelFontSize, strokeScale),
     bold: true,
     alignment: 'center',
     color: colorToCss(marker?.labelColor)
@@ -2839,9 +2880,9 @@ function stableJson(value) {
     .join(',')}}`;
 }
 
-function graphModelEvidence(model, layout) {
+function graphModelEvidence(model, layout, scaleContext = null) {
   if (model?.graph) {
-    return graphEvidence(model.graph, layout);
+    return graphEvidence(model.graph, layout, model, scaleContext);
   }
 
   if (model?.bodyKind === 'graph' && Array.isArray(model?.points)) {
@@ -2851,15 +2892,21 @@ function graphModelEvidence(model, layout) {
       endSeconds: Math.max(1, model.points.length - 1),
       maxGapSeconds: Math.max(1, ...model.points.map(Number).filter(Number.isFinite)),
       comparisonLabel: stringOrNull(model?.status) || '--'
-    }, layout);
+    }, layout, model, scaleContext);
   }
 
   return null;
 }
 
-function graphEvidence(graph, layout) {
+function graphEvidence(graph, layout, model = null, scaleContext = null) {
   const canvasBounds = findElementBounds(layout, 'graph-canvas', 'model-graph');
-  const geometry = canvasBounds ? browserGraphGeometry(graph, canvasBounds) : null;
+  const renderScale = scaleContext ? effectiveRenderScale(scaleContext) : graphEvidenceRenderScale(model);
+  const geometryBounds = canvasBounds && renderScale !== 1
+    ? inverseScaleRect(canvasBounds, renderScale)
+    : canvasBounds;
+  const geometry = geometryBounds
+    ? scaleGraphGeometry(browserGraphGeometry(graph, geometryBounds), renderScale)
+    : null;
   const geometrySeries = Array.isArray(geometry?.series) ? geometry.series : [];
   return {
     startSeconds: numberOrNull(graph?.startSeconds),
@@ -2911,6 +2958,154 @@ function graphEvidence(graph, layout) {
     weatherCount: arrayLength(graph?.weather),
     leaderChangeCount: arrayLength(graph?.leaderChanges),
     driverChangeCount: arrayLength(graph?.driverChanges)
+  };
+}
+
+function graphEvidenceRenderScale(model) {
+  const browserSource = model?.effectiveSettings?.rendered?.browserSource || {};
+  const explicitScale = Number(browserSource.scale);
+  if (Number.isFinite(explicitScale) && explicitScale > 0) {
+    return roundNumber(explicitScale);
+  }
+
+  const width = Number(browserSource.width);
+  const baseWidth = Number(browserSource.baseWidth);
+  if (Number.isFinite(width) && Number.isFinite(baseWidth) && width > 0 && baseWidth > 0) {
+    return roundNumber(width / baseWidth);
+  }
+
+  return 1;
+}
+
+function positiveScaleOrNull(value) {
+  const scale = Number(value);
+  return Number.isFinite(scale) && scale > 0 ? roundNumber(scale) : null;
+}
+
+function effectiveRenderScale(scaleContext = null) {
+  return positiveScaleOrNull(scaleContext?.effectiveRenderScale) || 1;
+}
+
+function vectorStrokeScale(scale) {
+  if (!scale) {
+    return 1;
+  }
+
+  const scaleX = Number(scale.scaleX);
+  const scaleY = Number(scale.scaleY);
+  if (!Number.isFinite(scaleX) || scaleX <= 0 || !Number.isFinite(scaleY) || scaleY <= 0) {
+    return 1;
+  }
+
+  return roundNumber(Math.min(scaleX, scaleY));
+}
+
+function scaleScalarEvidence(value, scale) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return null;
+  }
+
+  return roundNumber(number * (positiveScaleOrNull(scale) || 1));
+}
+
+function inverseScaleRect(rect, scale) {
+  if (!rect || !Number.isFinite(scale) || scale <= 0 || scale === 1) {
+    return rect;
+  }
+
+  return {
+    x: roundNumber(numberOr(rect.x, 0) / scale),
+    y: roundNumber(numberOr(rect.y, 0) / scale),
+    width: roundNumber(numberOr(rect.width, 0) / scale),
+    height: roundNumber(numberOr(rect.height, 0) / scale)
+  };
+}
+
+function scaleGraphGeometry(geometry, scale) {
+  if (!geometry || !Number.isFinite(scale) || scale <= 0 || scale === 1) {
+    return geometry;
+  }
+
+  return {
+    ...geometry,
+    frame: scaleRectEvidence(geometry.frame, scale),
+    plot: scaleRectEvidence(geometry.plot, scale),
+    axis: scaleRectEvidence(geometry.axis, scale),
+    labelLane: scaleRectEvidence(geometry.labelLane, scale),
+    metricsTable: scaleRectEvidence(geometry.metricsTable, scale),
+    gridLines: (geometry.gridLines || []).map((line) => scaleLineEvidence(line, scale)),
+    weatherBands: (geometry.weatherBands || []).map((band) => ({
+      ...band,
+      bounds: scaleRectEvidence(band.bounds, scale)
+    })),
+    markers: (geometry.markers || []).map((marker) => ({
+      ...marker,
+      start: scalePointEvidence(marker.start, scale),
+      end: scalePointEvidence(marker.end, scale)
+    })),
+    metricRows: (geometry.metricRows || []).map((row) => ({
+      ...row,
+      bounds: scaleRectEvidence(row.bounds, scale),
+      cells: (row.cells || []).map((cell) => ({
+        ...cell,
+        bounds: scaleRectEvidence(cell.bounds, scale),
+        textMetrics: scaleCanvasTextMetrics(cell.textMetrics, scale)
+      }))
+    })),
+    series: (geometry.series || []).map((series) => ({
+      ...series,
+      strokeWidth: numberOrNull(Number(series.strokeWidth) * scale),
+      latestPoint: scalePointEvidence(series.latestPoint, scale),
+      points: (series.points || []).map((point) => ({
+        ...point,
+        point: scalePointEvidence(point.point, scale)
+      }))
+    }))
+  };
+}
+
+function scaleLineEvidence(line, scale) {
+  return {
+    ...line,
+    strokeWidth: numberOrNull(Number(line?.strokeWidth) * scale),
+    start: scalePointEvidence(line?.start, scale),
+    end: scalePointEvidence(line?.end, scale)
+  };
+}
+
+function scaleRectEvidence(rect, scale) {
+  if (!rect) return rect;
+  return {
+    ...rect,
+    x: roundNumber(numberOr(rect.x, 0) * scale),
+    y: roundNumber(numberOr(rect.y, 0) * scale),
+    width: roundNumber(numberOr(rect.width, 0) * scale),
+    height: roundNumber(numberOr(rect.height, 0) * scale)
+  };
+}
+
+function scalePointEvidence(point, scale) {
+  if (!point) return point;
+  return {
+    ...point,
+    x: roundNumber(numberOr(point.x, 0) * scale),
+    y: roundNumber(numberOr(point.y, 0) * scale)
+  };
+}
+
+function scaleCanvasTextMetrics(metrics, scale) {
+  if (!metrics) return metrics;
+  return {
+    ...metrics,
+    availableWidth: roundNumber(numberOr(metrics.availableWidth, 0) * scale),
+    availableHeight: roundNumber(numberOr(metrics.availableHeight, 0) * scale),
+    measuredWidth: roundNumber(numberOr(metrics.measuredWidth, 0) * scale),
+    measuredHeight: roundNumber(numberOr(metrics.measuredHeight, 0) * scale)
   };
 }
 
@@ -3226,12 +3421,12 @@ function graphThreatEvidence(metric) {
   };
 }
 
-function inputEvidence(inputs, layout) {
+function inputEvidence(inputs, layout, scaleContext = null) {
   const canvasBounds = findElementBounds(layout, 'input-graph', 'input-graph')
     || findElementBounds(layout, 'graph-canvas', 'input-graph');
   const railBounds = findElementBounds(layout, 'input-rail', 'input-rail');
   const gridLines = canvasBounds ? inputGridLines(canvasBounds) : [];
-  const series = canvasBounds ? inputTraceSeries(inputs, canvasBounds) : [];
+  const series = canvasBounds ? inputTraceSeries(inputs, canvasBounds, scaleContext) : [];
   return {
     hasContent: booleanOrNull(inputs?.hasContent),
     hasGraph: booleanOrNull(inputs?.hasGraph),
@@ -3380,9 +3575,10 @@ function inputGridLines(bounds) {
   });
 }
 
-function inputTraceSeries(inputs, bounds) {
+function inputTraceSeries(inputs, bounds, scaleContext = null) {
   const trace = Array.isArray(inputs?.trace) ? inputs.trace : [];
   const series = [];
+  const renderScale = effectiveRenderScale(scaleContext);
   addTrace(Boolean(inputs?.showThrottleTrace), 'throttle', '#62ff9f', 'throttle', 2);
   addTrace(Boolean(inputs?.showBrakeTrace), 'brake', '#ff6274', 'brake', 2);
   addTrace(Boolean(inputs?.showClutchTrace), 'clutch', '#00e8ff', 'clutch', 2);
@@ -3395,7 +3591,7 @@ function inputTraceSeries(inputs, bounds) {
       curves.push({ start, control1: start, control2: end, end });
     }
     if (curves.length) {
-      series.push({ kind: 'brake-abs', color: '#ffd15b', strokeWidth: 3, pointCount: 0, curveCount: curves.length, points: [], curves });
+      series.push({ kind: 'brake-abs', color: '#ffd15b', strokeWidth: scaleScalarEvidence(3, renderScale), pointCount: 0, curveCount: curves.length, points: [], curves });
     }
   }
   return series;
@@ -3407,12 +3603,12 @@ function inputTraceSeries(inputs, bounds) {
       const start = { x: round(bounds.x + 8), y: round(y) };
       const end = { x: round(bounds.x + bounds.width - 8), y: round(y) };
       const curves = [{ start, control1: start, control2: end, end }];
-      series.push({ kind, color: colorWithAlpha(color, 0.24), strokeWidth, pointCount: 0, curveCount: curves.length, points: [], curves });
+      series.push({ kind, color: colorWithAlpha(color, 0.24), strokeWidth: scaleScalarEvidence(strokeWidth, renderScale), pointCount: 0, curveCount: curves.length, points: [], curves });
       return;
     }
     const points = trace.map((point, index) => inputTracePoint(point?.[key], index, trace.length, bounds));
     const curves = smoothTraceCurves(points);
-    series.push({ kind, color, strokeWidth, pointCount: points.length, curveCount: curves.length, points, curves });
+    series.push({ kind, color, strokeWidth: scaleScalarEvidence(strokeWidth, renderScale), pointCount: points.length, curveCount: curves.length, points, curves });
   }
 }
 

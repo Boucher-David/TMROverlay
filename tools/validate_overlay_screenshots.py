@@ -684,7 +684,8 @@ WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("standings", "class-separators-off"): (677, 313),
     ("standings", "focused-class-only"): (677, 313),
     ("standings", "starting-grid"): (677, 313),
-    ("standings", "no-content"): (284, 313),
+    ("standings", "no-content"): (284, 28),
+    ("standings", "content-off-chrome-on"): (284, 40),
     ("relative", "chrome-off"): (392, 274),
     ("relative", "rightmost-evidence"): (440, 308),
     ("relative", "driver-only"): (274, 308),
@@ -5233,18 +5234,21 @@ def require_rendered_text_fit(
     cell: dict[str, object],
     label: str,
     failures: list[str],
+    *,
+    require_metrics: bool = False,
 ) -> None:
     text = str(cell.get("text") or cell.get("value") or "").strip()
     if not text:
         return
 
+    expects_metrics = require_metrics or path.startswith(("browser-overlays/", "localhost-overlays/"))
     metrics = typed_dict(get_manifest_value(cell, "textMetrics"))
     if not metrics:
-        if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        if expects_metrics:
             failures.append(f"{path}: {label} missing text fit metrics")
         return
 
-    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+    if expects_metrics:
         for key in ("availableWidth", "availableHeight", "measuredWidth", "measuredHeight"):
             if not isinstance(get_manifest_value(metrics, key), (int, float)):
                 failures.append(f"{path}: {label} text fit metrics missing numeric {key}")
@@ -6447,6 +6451,7 @@ def validate_native_min_scale_render_evidence(
         int(values.get("width") or 0),
         int(values.get("height") or 0),
         failures)
+    validate_native_min_scale_layout_elements_fit(path, layout, root, label, failures)
 
     effective = typed_dict(values.get("effectiveSettings"))
     rendered = typed_dict(effective.get("rendered"))
@@ -6480,6 +6485,31 @@ def validate_native_min_scale_render_evidence(
             f"{path}: {label} native min-scale expected unscaled base larger than rendered screenshot, "
             f"got base {base_width}x{base_height} and rendered {values.get('width')}x{values.get('height')}"
         )
+
+
+def validate_native_min_scale_layout_elements_fit(
+    path: str,
+    layout: dict[str, object],
+    root: dict[str, object],
+    label: str,
+    failures: list[str],
+) -> None:
+    elements = layout_elements(layout)
+    if not elements:
+        failures.append(f"{path}: {label} missing native scaled layout element evidence")
+        return
+
+    for index, element in enumerate(elements):
+        bounds = typed_dict(get_manifest_value(element, "bounds"))
+        role = element_role(element) or "element"
+        require_rect_within(
+            path,
+            f"{label} layout element {index} {role} bounds",
+            bounds,
+            root,
+            f"{label} rendered layout root",
+            failures,
+            tolerance=1.0)
 
 
 def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
@@ -7176,7 +7206,12 @@ def validate_standings_column_fit_evidence(
             require_rect(path, cell.get("bounds"), f"standings data row {row_index} {label!r} cell bounds", failures)
             if isinstance(cell.get("bounds"), dict) and isinstance(row.get("bounds"), dict):
                 require_rect_within(path, f"standings data row {row_index} {label!r} cell bounds", cell.get("bounds"), row.get("bounds"), "standings row bounds", failures, tolerance=1.0)
-            require_rendered_text_fit(path, cell, f"standings data row {row_index} {label!r} cell", failures)
+            require_rendered_text_fit(
+                path,
+                cell,
+                f"standings data row {row_index} {label!r} cell",
+                failures,
+                require_metrics=path.startswith("native-overlays/"))
 
 
 def require_effective_standings_setting(
@@ -7357,6 +7392,27 @@ def validate_relative_contract(path: str, values: dict[str, object], failures: l
         actual = row_cells(rows[index])
         if actual != expected:
             failures.append(f"{path}: relative row {index} expected cells {expected!r}, got {actual!r}")
+        row = rows[index]
+        rendered_cells = evidence_list(row, "renderedCells") if isinstance(row, dict) else []
+        if len(rendered_cells) != len(expected_labels):
+            failures.append(f"{path}: relative row {index} expected {len(expected_labels)} rendered cells, got {len(rendered_cells)}")
+            continue
+        for cell_index, cell in enumerate(rendered_cells):
+            if not isinstance(cell, dict):
+                continue
+            label = expected_labels[cell_index]
+            column_name = text_value(cell, "column")
+            if column_name and column_name.lower() != label.lower():
+                failures.append(f"{path}: relative row {index} cell {cell_index} expected column {label!r}, got {column_name!r}")
+            require_rect(path, cell.get("bounds"), f"relative row {index} {label!r} cell bounds", failures)
+            if isinstance(cell.get("bounds"), dict) and isinstance(row.get("bounds"), dict):
+                require_rect_within(path, f"relative row {index} {label!r} cell bounds", cell.get("bounds"), row.get("bounds"), "relative row bounds", failures, tolerance=1.0)
+            require_rendered_text_fit(
+                path,
+                cell,
+                f"relative row {index} {label!r} cell",
+                failures,
+                require_metrics=path.startswith("native-overlays/"))
     expected_deltas = (
         {
             expected_reference_index - 1: 1,
@@ -9773,6 +9829,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="native standings min-scale clips scaled layout element",
+        path="native-overlays/standings-min-scale.png",
+        base=mutation_native_standings_min_scale_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("layout", "elements", 2, "bounds", "x"), 410),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("standings min-scale layout element 2 cell bounds must fit within standings min-scale rendered layout root",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="session weather metric units switch to imperial",
         path="browser-overlays/session-weather-race.png",
         base=mutation_session_weather_screenshot(),
@@ -10015,6 +10080,24 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 4, "renderedCells", 3, "textMetrics"), {"fitsWidth": True, "fitsHeight": True}),
         validate=validate_overlay_variant_contract,
         expected_tokens=("text fit metrics missing numeric availableWidth",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="native relative Delta cell loses numeric text-fit evidence",
+        path="native-overlays/relative-rightmost-evidence.png",
+        base=mutation_relative_rightmost_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 4, "renderedCells", 2, "textMetrics"), {"fitsWidth": True, "fitsHeight": True}),
+        validate=validate_relative_contract,
+        expected_tokens=("relative row 4 'Delta' cell text fit metrics missing numeric availableWidth",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="native standings data cell loses numeric text-fit evidence",
+        path="native-overlays/standings-race.png",
+        base=mutation_standings_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 1, "renderedCells", 5, "textMetrics"), {"fitsWidth": True, "fitsHeight": True}),
+        validate=validate_standings_contract,
+        expected_tokens=("standings data row 0 'FAST' cell text fit metrics missing numeric availableWidth",),
         failures=failures,
     )
     expect_mutation_failure(
@@ -11204,6 +11287,11 @@ def mutation_native_standings_min_scale_screenshot() -> dict[str, object]:
     screenshot = mutation_standings_min_scale_screenshot()
     screenshot["layout"]["unscaledRoot"] = {"x": 0, "y": 0, "width": 677, "height": 313}
     screenshot["layout"]["renderScale"] = 0.6
+    screenshot["layout"]["elements"] = [
+        {"role": "content", "bounds": {"x": 10, "y": 32, "width": 386, "height": 146}},
+        {"role": "row", "bounds": {"x": 10, "y": 68, "width": 386, "height": 20}},
+        {"role": "cell", "bounds": {"x": 360, "y": 70, "width": 38, "height": 16}},
+    ]
     screenshot["effectiveSettings"]["sources"]["windowsNative"]["routePath"] = "native://standings"
     scenario = typed_dict(screenshot.get("scenarioEvidence"))
     scenario.pop("urlPath", None)

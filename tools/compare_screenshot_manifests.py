@@ -497,7 +497,11 @@ def compare_effective_settings_evidence(
             failures,
             stats,
         )
-        if left_rendered.get("shouldRender") is not False or right_rendered.get("shouldRender") is not False:
+        left_raw_row_count = left_rendered.get("rowCount")
+        right_raw_row_count = right_rendered.get("rowCount")
+        left_row_count = left_raw_row_count if isinstance(left_raw_row_count, (int, float)) and math.isfinite(float(left_raw_row_count)) else 0
+        right_row_count = right_raw_row_count if isinstance(right_raw_row_count, (int, float)) and math.isfinite(float(right_raw_row_count)) else 0
+        if (left_rendered.get("shouldRender") is not False or right_rendered.get("shouldRender") is not False) and max(left_row_count, right_row_count) > 0:
             for side, rendered in (("left", left_rendered), ("right", right_rendered)):
                 if not as_list(rendered.get("columnKeys")):
                     failures.append(f"{context}: {side} effectiveSettings rendered table evidence missing columnKeys")

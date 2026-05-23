@@ -14,6 +14,7 @@ import {
   renderAppValidatorReviewHtml,
   renderInstallerReviewHtml,
   renderSettingsGeneralReviewHtml,
+  overlayGeometry,
   settingsBrowserSourceSize
 } from '../../tests/browser-overlays/browserOverlayAssets.js';
 
@@ -1767,11 +1768,24 @@ function fuelBrowserSourceHeightForModel(model, fallbackHeight) {
 }
 
 function fuelContentHeight(rowCount, sectionCount) {
-  if (rowCount <= 0 || sectionCount <= 0) return 126;
-  const rowGaps = Math.max(0, rowCount - sectionCount) * 5;
-  const sectionGaps = Math.max(0, sectionCount - 1) * 8;
-  const height = 38 + 26 + sectionCount * 14 + rowCount * 35 + rowGaps + sectionGaps + 8;
-  return Math.max(126, Math.min(315, height));
+  const metricRows = overlayGeometry().metricRows || {};
+  const minimumHeight = metricGeometryNumber(metricRows, 'minimumFuelCalculatorHeight', 126);
+  if (rowCount <= 0 || sectionCount <= 0) return minimumHeight;
+  const rowGaps = Math.max(0, rowCount - sectionCount) * metricGeometryNumber(metricRows, 'rowGap', 5);
+  const sectionGaps = Math.max(0, sectionCount - 1) * metricGeometryNumber(metricRows, 'sectionGap', 8);
+  const height = metricGeometryNumber(metricRows, 'headerChromeHeight', 38)
+    + metricGeometryNumber(metricRows, 'fuelContentVerticalPadding', 26)
+    + sectionCount * metricGeometryNumber(metricRows, 'fuelSectionTitleReserveHeight', 14)
+    + rowCount * metricGeometryNumber(metricRows, 'segmentedRowHeight', 35)
+    + rowGaps
+    + sectionGaps
+    + metricGeometryNumber(metricRows, 'collapsedFooterReserveHeight', 8);
+  return Math.round(Math.max(minimumHeight, Math.min(315, height)));
+}
+
+function metricGeometryNumber(metricRows, key, fallback) {
+  const value = Number(metricRows?.[key]);
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function effectiveRenderedRowCount(model) {
@@ -1818,7 +1832,7 @@ function syntheticStateKind(fixture) {
   const normalized = String(fixture || '').trim();
   if (!normalized) return null;
   if (normalized === 'input-state-mock-data') return 'input-state-mock-data';
-  if (/waiting|no-cars|no-content|no-data|hidden|unavailable/i.test(normalized)) return 'forced-unavailable';
+  if (/waiting|no-cars|no-content|no-data|no-markers|hidden|unavailable/i.test(normalized)) return 'forced-unavailable';
   if (/right|all-kinds|twitch|rich|evidence|graph-only|rail-only|min-scale/i.test(normalized)) return 'forced-preview-state';
   return 'fixture-variant';
 }
@@ -1897,7 +1911,9 @@ function layoutDensityEvidence(overlayId, model, browserSource) {
   if (!['fuel-calculator', 'pit-service'].includes(overlayId)) return null;
   const contentRowCount = semanticContentRowCount(model);
   const sectionCount = (model?.metricSections || []).length + (model?.gridSections || []).length;
-  const estimatedContentHeight = Math.max(0, 38 + contentRowCount * 30 + sectionCount * 18);
+  const estimatedContentHeight = overlayId === 'fuel-calculator'
+    ? fuelContentHeight(contentRowCount, sectionCount)
+    : Math.max(0, 38 + contentRowCount * 30 + sectionCount * 18);
   const height = Number(browserSource?.height || 0);
   const unusedHeightRatio = height > 0
     ? Math.max(0, Math.min(1, (height - estimatedContentHeight) / height))
@@ -2082,7 +2098,9 @@ function effectiveSettingsOverlayState(overlayId, overlayState, previewMode = 'o
     };
   }
 
-  if (overlayId === 'garage-cover' && fixtureVariant(searchParams).startsWith('garage-')) {
+  if (overlayId === 'garage-cover'
+    && fixtureVariant(searchParams).startsWith('garage-')
+    && !Object.hasOwn(effectiveState, 'enabled')) {
     effectiveState = {
       ...effectiveState,
       enabled: true

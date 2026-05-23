@@ -358,6 +358,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private float RenderScale()
     {
+        if (_settings is null)
+        {
+            return 1f;
+        }
+
         var scale = _settings.Scale;
         return double.IsFinite(scale)
             ? (float)Math.Clamp(scale, 0.6d, 2d)
@@ -3233,7 +3238,12 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private static DesignV2LayoutCell ScaleCell(DesignV2LayoutCell cell, float scale)
     {
-        return cell with { Bounds = ScaleRect(cell.Bounds, scale) };
+        return cell with
+        {
+            Bounds = ScaleRect(cell.Bounds, scale),
+            TextBounds = ScaleRect(cell.TextBounds, scale),
+            TextFontPointSize = ScaleNullableValue(cell.TextFontPointSize, scale)
+        };
     }
 
     private static DesignV2LayoutMetricRow ScaleMetricRow(DesignV2LayoutMetricRow row, float scale)
@@ -3433,7 +3443,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         return value is { } finite ? ScaleValue(finite, scale) : null;
     }
 
-    private static DesignV2LayoutDiagnostics BuildLayoutDiagnostics(Rectangle bounds, DesignV2OverlayModel model)
+    private DesignV2LayoutDiagnostics BuildLayoutDiagnostics(Rectangle bounds, DesignV2OverlayModel model)
     {
         var client = LayoutRect(bounds);
         var constants = new DesignV2LayoutConstants(
@@ -3654,6 +3664,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             x = rowRect.Left;
             var cells = new List<DesignV2LayoutCell>();
             var rowTextColor = TableTextColor(table, row);
+            var textTop = rowRect.Top + Math.Max(0f, (rowRect.Height - 16f) / 2f);
             for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
             {
                 var column = columns[columnIndex];
@@ -3670,7 +3681,14 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                     LayoutRect(cellRect),
                     column.Alignment)
                 {
-                    Foreground = ColorHex(TableCellTextColor(row, columnIndex, rowTextColor))
+                    Foreground = ColorHex(TableCellTextColor(row, columnIndex, rowTextColor)),
+                    TextBounds = LayoutRect(new RectangleF(
+                        x + padding,
+                        textTop,
+                        Math.Max(1f, column.RenderedWidth - padding * 2f),
+                        16f)),
+                    TextFontPointSize = 9f,
+                    TextFontStyle = row.IsReference || columnIndex == 0 ? "bold" : "regular"
                 });
                 x += column.RenderedWidth;
             }
@@ -8931,7 +8949,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         return width switch
         {
             <= 38f => 3f,
-            <= 62f => 5f,
+            <= 80f => 5f,
             _ => 8f
         };
     }
@@ -9214,6 +9232,12 @@ internal sealed record DesignV2LayoutCell(
     public string? Foreground { get; init; }
 
     public string? Background { get; init; }
+
+    public DesignV2LayoutRect? TextBounds { get; init; }
+
+    public float? TextFontPointSize { get; init; }
+
+    public string? TextFontStyle { get; init; }
 }
 
 internal sealed record DesignV2LayoutMetricRow(

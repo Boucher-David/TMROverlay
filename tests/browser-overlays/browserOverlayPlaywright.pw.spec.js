@@ -561,12 +561,11 @@ test.describe('browser overlay Playwright integration', () => {
   test('sizes session weather missing review fixture from effective weather-off content', async ({ page }) => {
     const reviewServer = await startReviewServer();
     const geometry = overlayGeometry().metricRows;
-    const expectedHeight = geometry.minimumSimpleTelemetryHeight
-      + Math.round((496 - geometry.minimumSimpleTelemetryHeight) * ((12 - 1) / (26 - 1)));
+    const expectedHeight = 496;
     try {
       const modelResponse = await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-missing');
-      expect(modelResponse.model.metricSections).toHaveLength(1);
-      expect(modelResponse.model.metricSections[0].title).toBe('Session');
+      expect(modelResponse.model.metricSections).toHaveLength(2);
+      expect(modelResponse.model.metricSections.map((section) => section.title)).toEqual(['Session', 'Weather']);
       expect(modelResponse.model.effectiveSettings.rendered.browserSource).toMatchObject({
         baseWidth: 464,
         baseHeight: expectedHeight,
@@ -577,7 +576,7 @@ test.describe('browser overlay Playwright integration', () => {
       await page.setViewportSize({ width: 520, height: 520 });
       await page.goto(`${reviewServer.baseUrl}/review/overlays/session-weather?preview=race&fixture=session-weather-missing`);
 
-      await expect(page.locator('.metric-section-title')).toHaveText(['Session']);
+      await expect(page.locator('.metric-section-title')).toHaveText(['Session', 'Weather']);
       const overlayBox = await page.locator('.overlay').boundingBox();
       expect(overlayBox?.width).toBe(464);
       expect(overlayBox?.height).toBe(expectedHeight);

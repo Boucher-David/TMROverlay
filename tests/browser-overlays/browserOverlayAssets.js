@@ -2841,15 +2841,20 @@ function trackMapDisplayModel(page, live, settings) {
   const hasGeneratedTrackMap = hasGeneratedTrackMapAsset(settings?.trackMap);
   const renderModel = trackMapRenderModel(live, settings);
   const markers = trackMapMarkers(live);
+  const shouldRender = telemetryIsAvailable(live) && renderModel.markers.length > 0;
   return {
     ...emptyDisplayModel(page.page.id, page.title),
-    status: hasGeneratedTrackMap ? 'live' : 'track map | circle fallback',
+    status: shouldRender
+      ? hasGeneratedTrackMap ? 'live' : 'track map | circle fallback'
+      : telemetryIsAvailable(live) ? 'no active markers' : 'waiting for telemetry',
     headerItems: [],
-    source: hasGeneratedTrackMap
-      ? 'source: IBT-derived Nurburgring 24h track map | live position telemetry'
-      : 'source: live position telemetry | map fallback: no generated track map',
+    source: shouldRender
+      ? hasGeneratedTrackMap
+        ? 'source: IBT-derived Nurburgring 24h track map | live position telemetry'
+        : 'source: live position telemetry | map fallback: no generated track map'
+      : 'source: live position telemetry | no active markers',
     bodyKind: 'track-map',
-    shouldRender: telemetryIsAvailable(live) && renderModel.markers.length > 0,
+    shouldRender,
     trackMap: {
       markers,
       sectors: live?.models?.trackMap?.sectors || [],

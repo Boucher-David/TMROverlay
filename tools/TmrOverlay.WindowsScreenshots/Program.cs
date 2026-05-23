@@ -1270,6 +1270,13 @@ internal static class Program
 
         if (string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))
         {
+            if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsModel(
+                    OverlaySessionKind.Race,
+                    sourceOverride: "source: preview fixture minimum-scale layout");
+            }
+
             if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
             {
                 return ReviewFlagsModel();
@@ -1553,14 +1560,25 @@ internal static class Program
 
     private static void ApplyNativeVariantCaptureSize(DesignV2LiveOverlayForm form, string overlayId, string slug)
     {
-        if (!string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(slug, "three-class", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
+            form.ClientSize = slug.ToLowerInvariant() switch
+            {
+                "no-content" => new Size(284, 28),
+                "content-off-chrome-on" => new Size(284, 40),
+                "three-class" => new Size(form.ClientSize.Width, 386),
+                _ => form.ClientSize
+            };
+            form.PerformLayout();
             return;
         }
 
-        form.ClientSize = new Size(form.ClientSize.Width, 386);
-        form.PerformLayout();
+        if (string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "missing", StringComparison.OrdinalIgnoreCase))
+        {
+            form.ClientSize = new Size(464, 496);
+            form.PerformLayout();
+        }
     }
 
     private static string? ReadDesignV2ModelFooter(DesignV2LiveOverlayForm form)
@@ -1617,7 +1635,7 @@ internal static class Program
         return new DesignV2OverlayModel(
             "Standings",
             "chrome only | content disabled",
-            string.Empty,
+            "source: preview fixture extremes",
             DesignV2Evidence.Measured,
             new DesignV2TableBody([], []),
             HeaderText: "06:37:08",
@@ -2052,10 +2070,14 @@ internal static class Program
     private static DesignV2OverlayModel ReviewTrackMapModel(bool includeMarkers = true, bool includeGeneratedMap = true)
     {
         TrackMapDocument? document = includeGeneratedMap ? ReviewTrackMapDocument() : null;
-        var status = includeGeneratedMap ? "live" : "track map | circle fallback";
-        var source = includeGeneratedMap
-            ? "source: IBT-derived Nurburgring 24h track map | live position telemetry"
-            : "source: live position telemetry | map fallback: no generated track map";
+        var status = includeMarkers
+            ? includeGeneratedMap ? "live" : "track map | circle fallback"
+            : "no active markers";
+        var source = includeMarkers
+            ? includeGeneratedMap
+                ? "source: IBT-derived Nurburgring 24h track map | live position telemetry"
+                : "source: live position telemetry | map fallback: no generated track map"
+            : "source: live position telemetry | no active markers";
         var viewModel = new TrackMapOverlayViewModel(
             Title: "Track Map",
             Status: status,
@@ -2084,7 +2106,7 @@ internal static class Program
             "Track Map",
             status,
             source,
-            DesignV2Evidence.Live,
+            includeMarkers ? DesignV2Evidence.Live : DesignV2Evidence.Unavailable,
             new DesignV2TrackMapBody(TrackMapRenderModel.FromViewModel(viewModel)),
             HeaderText: "06:37:08",
             ShowFooter: false,
@@ -4168,6 +4190,7 @@ internal static class Program
                     ? "settings-mutates-unit-system"
                     : "native-overlays-update-unit-system-in-place-without-form-recreation"
             },
+            provenance = NativeRenderedProvenance(metadata),
             v102Evidence = V102Evidence(metadata),
             sourceFiles,
             layoutHash = metadata.Layout is null ? null : Sha256(JsonSerializer.Serialize(metadata.Layout))
@@ -4197,6 +4220,7 @@ internal static class Program
             urlPath = payload.urlPath,
             modelSummary = payload.modelSummary,
             settingsContract = payload.settingsContract,
+            provenance = payload.provenance,
             v102Evidence = payload.v102Evidence,
             sourceFiles = payload.sourceFiles,
             layoutHash = payload.layoutHash,
@@ -4399,7 +4423,7 @@ internal static class Program
         if (string.Equals(metadata.Surface, "windows-native-overlay", StringComparison.Ordinal)
             && metadata.Layout is not null)
         {
-            return NativeLayoutEvidence(metadata.Layout);
+            return NativeLayoutEvidence(metadata);
         }
 
         return IsWindowsSettingsSurface(metadata)
@@ -7423,17 +7447,32 @@ internal static class Program
         return bounds is { } rect ? RectEvidence(rect, includeAspectRatio: true) : null;
     }
 
-    private static object? NativeLayoutEvidence(DesignV2LayoutDiagnostics? layout)
+    private static object? NativeLayoutEvidence(ScreenshotMetadata metadata)
     {
+        var layout = metadata.Layout;
         if (layout is null)
         {
             return null;
         }
 
+        var shouldRender = metadata.ShouldRender ?? NativeShouldRender(metadata);
         var elements = new List<object>();
-        AddLayoutElement(elements, "header", 0, layout.HeaderText, layout.Header, null, null);
-        AddLayoutElement(elements, "content", 0, NativeBodyText(layout.BodyLayout), layout.BodyLayout?.Bounds ?? layout.Body, null, null);
-        AddLayoutElement(elements, "footer", 0, layout.FooterText, layout.Footer, null, null);
+        AddLayoutElement(elements, "header", 0, shouldRender is false ? null : layout.HeaderText, layout.Header, null, null);
+        AddLayoutElement(elements, "content", 0, shouldRender is false ? null : NativeBodyText(layout.BodyLayout), layout.BodyLayout?.Bounds ?? layout.Body, null, null);
+        AddLayoutElement(elements, "footer", 0, shouldRender is false ? null : layout.FooterText, layout.Footer, null, null);
+
+        if (shouldRender is false)
+        {
+            return new
+            {
+                contract = "windows-native-layout/v1",
+                root = RectEvidence(layout.Client),
+                unscaledRoot = layout.UnscaledClient is { } hiddenUnscaledClient ? RectEvidence(hiddenUnscaledClient) : null,
+                renderScale = Math.Round(layout.RenderScale, 3),
+                contentBounds = NativeContentBounds(layout),
+                elements
+            };
+        }
 
         if (layout.BodyLayout is { } body)
         {
@@ -7512,17 +7551,17 @@ internal static class Program
             if (body.Vector is { } vector)
             {
                 AddLayoutElement(elements, $"{body.Kind}-vector", 0, null, vector.Target, null, null);
-                foreach (var primitive in vector.Primitives)
+                foreach (var primitive in vector.ShouldRender ? vector.Primitives : Array.Empty<DesignV2LayoutVectorPrimitive>())
                 {
                     AddLayoutElement(elements, $"{body.Kind}-primitive-{primitive.Kind}", elements.Count, primitive.Kind, primitive.Bounds, primitive.Stroke, primitive.Fill);
                 }
 
-                foreach (var item in vector.Items)
+                foreach (var item in vector.ShouldRender ? vector.Items : Array.Empty<DesignV2LayoutVectorItem>())
                 {
                     AddLayoutElement(elements, $"{body.Kind}-{item.Kind}", elements.Count, item.Id?.ToString() ?? item.Label, item.Bounds, item.Stroke, item.Fill);
                 }
 
-                foreach (var label in vector.Labels)
+                foreach (var label in vector.ShouldRender ? vector.Labels : Array.Empty<DesignV2LayoutVectorLabel>())
                 {
                     AddLayoutElement(elements, $"{body.Kind}-label", elements.Count, label.Text, label.Bounds, label.Color, null);
                 }
@@ -7603,6 +7642,29 @@ internal static class Program
         if (body is null)
         {
             return null;
+        }
+
+        if ((metadata.ShouldRender ?? NativeShouldRender(metadata)) is false)
+        {
+            return new
+            {
+                contract = "overlay-model-layout-evidence/v1",
+                bodyKind = NormalizedBodyKind(body.Kind),
+                nativeBodyKind = body.Kind,
+                unitSystem = metadata.UnitSystem ?? "Metric",
+                state = body.State,
+                columns = Array.Empty<object>(),
+                rows = Array.Empty<object>(),
+                metrics = Array.Empty<object>(),
+                metricSections = Array.Empty<object>(),
+                gridSections = Array.Empty<object>(),
+                graph = (object?)null,
+                inputs = (object?)null,
+                flags = (object?)null,
+                carRadar = (object?)null,
+                trackMap = (object?)null,
+                streamChat = (object?)null
+            };
         }
 
         return new
@@ -7703,7 +7765,8 @@ internal static class Program
                 fuelStrategy = NativeFuelStrategyEvidence(metadata),
                 browserSource = NativeEffectiveBrowserSource(metadata),
                 layout = NativeMetricLayoutEvidence(metadata),
-                mapFallback = NativeMapFallbackEvidence(metadata)
+                mapFallback = NativeMapFallbackEvidence(metadata),
+                provenance = NativeRenderedProvenance(metadata)
             },
             settings
         };
@@ -8137,6 +8200,7 @@ internal static class Program
                 "stint-targets-off" => "fuel-stint-targets-off",
                 "race-information-off" => "fuel-race-information-off",
                 "no-data" => "fuel-no-data",
+                "min-scale" => "fuel-calculator-min-scale",
                 _ => $"fuel-{slug}"
             },
             var id when string.Equals(id, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => $"standings-{slug}",
@@ -8169,6 +8233,7 @@ internal static class Program
                 "trend-row-off" => "gap-trend-row-off",
                 "trend-off" => "gap-trend-off",
                 "graph-off" => "gap-graph-off",
+                "min-scale" => "gap-to-leader-min-scale",
                 _ => $"gap-{slug}"
             },
             var id when string.Equals(id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => slug.ToLowerInvariant() switch
@@ -8405,7 +8470,9 @@ internal static class Program
                 .Distinct(StringComparer.Ordinal)
                 .Count()
                 + body.MetricGrids.Count;
-        var estimatedContentHeight = Math.Max(0, 38 + contentRowCount * 30 + sectionCount * 18);
+        var estimatedContentHeight = string.Equals(metadata.OverlayId, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            ? OverlayContentSizing.FuelCalculatorHeightForContent(contentRowCount, sectionCount)
+            : Math.Max(0, 38 + contentRowCount * 30 + sectionCount * 18);
         var clientHeight = metadata.Layout?.Client.Height ?? 0f;
         var unusedHeightRatio = clientHeight > 0f
             ? Math.Clamp((clientHeight - estimatedContentHeight) / clientHeight, 0f, 1f)
@@ -8416,6 +8483,52 @@ internal static class Program
             contentRowCount,
             unusedHeightRatio = Math.Round(unusedHeightRatio, 3)
         };
+    }
+
+    private static object NativeRenderedProvenance(ScreenshotMetadata metadata)
+    {
+        return new
+        {
+            evidenceClass = NativeIsUnavailableModel(metadata) ? "unavailable" : "synthetic-preview",
+            captureSpecific = false,
+            sourceContract = "tools/TmrOverlay.WindowsScreenshots/Program.cs",
+            syntheticStateKind = NativeSyntheticStateKind(metadata.FixtureVariant)
+        };
+    }
+
+    private static bool NativeIsUnavailableModel(ScreenshotMetadata metadata)
+    {
+        if ((metadata.ShouldRender ?? NativeShouldRender(metadata)) is false)
+        {
+            return true;
+        }
+
+        var status = metadata.Status ?? string.Empty;
+        return status.Contains("waiting", StringComparison.OrdinalIgnoreCase)
+            || status.Contains("unavailable", StringComparison.OrdinalIgnoreCase)
+            || status.Contains("hidden", StringComparison.OrdinalIgnoreCase)
+            || status.Contains("no marker", StringComparison.OrdinalIgnoreCase)
+            || status.Contains("no active marker", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? NativeSyntheticStateKind(string? fixtureVariant)
+    {
+        if (string.IsNullOrWhiteSpace(fixtureVariant))
+        {
+            return null;
+        }
+
+        return fixtureVariant.Contains("waiting", StringComparison.OrdinalIgnoreCase)
+            || fixtureVariant.Contains("no-cars", StringComparison.OrdinalIgnoreCase)
+            || fixtureVariant.Contains("no-content", StringComparison.OrdinalIgnoreCase)
+            || fixtureVariant.Contains("no-data", StringComparison.OrdinalIgnoreCase)
+            || fixtureVariant.Contains("no-markers", StringComparison.OrdinalIgnoreCase)
+            || fixtureVariant.Contains("hidden", StringComparison.OrdinalIgnoreCase)
+            || fixtureVariant.Contains("unavailable", StringComparison.OrdinalIgnoreCase)
+            ? "forced-unavailable"
+            : fixtureVariant.Contains("min-scale", StringComparison.OrdinalIgnoreCase)
+                ? "forced-preview-state"
+                : "fixture-variant";
     }
 
     private static string? NativeUnavailableContentPolicy(ScreenshotMetadata metadata)
@@ -8520,7 +8633,85 @@ internal static class Program
             evidence = cell.Evidence,
             foreground = cell.Foreground,
             background = cell.Background,
-            bounds = RectEvidence(cell.Bounds)
+            bounds = RectEvidence(cell.Bounds),
+            textMetrics = NativeCellTextMetrics(cell)
+        };
+    }
+
+    private static object? NativeCellTextMetrics(DesignV2LayoutCell cell)
+    {
+        var textBounds = cell.TextBounds;
+        if (string.IsNullOrWhiteSpace(cell.Text) || textBounds is null)
+        {
+            return null;
+        }
+
+        var fontStyle = string.Equals(cell.TextFontStyle, "bold", StringComparison.OrdinalIgnoreCase)
+            ? FontStyle.Bold
+            : FontStyle.Regular;
+        return DrawStringTextMetricsEvidence(
+            cell.Text,
+            textBounds,
+            cell.TextFontPointSize ?? 9f,
+            fontStyle,
+            cell.Alignment);
+    }
+
+    private static object? DrawStringTextMetricsEvidence(
+        string? text,
+        DesignV2LayoutRect bounds,
+        float pointSize,
+        FontStyle style,
+        string alignment)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        using var bitmap = new Bitmap(1, 1);
+        using var graphics = Graphics.FromImage(bitmap);
+        graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        using var font = new Font(
+            string.IsNullOrWhiteSpace(ScreenshotFontFamily) ? "Segoe UI" : ScreenshotFontFamily,
+            Math.Max(1f, pointSize),
+            style,
+            GraphicsUnit.Point);
+        using var format = new StringFormat
+        {
+            Trimming = StringTrimming.EllipsisCharacter,
+            FormatFlags = StringFormatFlags.NoWrap,
+            Alignment = alignment switch
+            {
+                "center" => StringAlignment.Center,
+                "right" => StringAlignment.Far,
+                _ => StringAlignment.Near
+            },
+            LineAlignment = StringAlignment.Center
+        };
+        var measured = graphics.MeasureString(
+            text,
+            font,
+            new SizeF(10_000f, Math.Max(1f, bounds.Height)),
+            format);
+        const double tolerance = 2d;
+        return new
+        {
+            textLength = text.Length,
+            availableWidth = Math.Round(bounds.Width, 3),
+            availableHeight = Math.Round(bounds.Height, 3),
+            measuredWidth = Math.Round(measured.Width, 3),
+            measuredHeight = Math.Round(measured.Height, 3),
+            fitsWidth = measured.Width <= bounds.Width + tolerance,
+            fitsHeight = measured.Height <= bounds.Height + tolerance,
+            overflowX = (string?)null,
+            overflowY = (string?)null,
+            whiteSpace = "nowrap",
+            measurementEngine = "GDI+ DrawString",
+            fontSize = Math.Round(pointSize, 3),
+            fontStyle = style.ToString(),
+            alignment,
+            trimming = "ellipsis"
         };
     }
 
@@ -9225,7 +9416,7 @@ internal static class Program
             AddText(parts, flag.Kind);
         }
 
-        if (body.Vector is { } vector)
+        if (body.Vector is { ShouldRender: true } vector)
         {
             foreach (var primitive in vector.Primitives.Take(24))
             {
@@ -9470,7 +9661,15 @@ internal static class Program
             var standingsSettings = OverlaySettingsFor(definition);
             ApplyStandingsVariantSettings(standingsSettings, slug);
             var size = OverlayContentSizing.BaseSizeFor(definition, standingsSettings, OverlaySessionKind.Race);
-            if (string.Equals(slug, "three-class", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(slug, "no-content", StringComparison.OrdinalIgnoreCase))
+            {
+                size = new Size(284, 28);
+            }
+            else if (string.Equals(slug, "content-off-chrome-on", StringComparison.OrdinalIgnoreCase))
+            {
+                size = new Size(284, 40);
+            }
+            else if (string.Equals(slug, "three-class", StringComparison.OrdinalIgnoreCase))
             {
                 size = new Size(size.Width, 386);
             }
@@ -9522,17 +9721,6 @@ internal static class Program
             inputSettings.Width = size.Width;
             inputSettings.Height = size.Height;
             return inputSettings;
-        }
-
-        if (string.Equals(definition.Id, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(slug, "missing", StringComparison.OrdinalIgnoreCase))
-        {
-            var missingWeatherSettings = OverlaySettingsFor(definition);
-            DisableSectionContent(missingWeatherSettings, definition.Id, "weather-off");
-            var size = OverlayContentSizing.BaseSizeFor(definition, missingWeatherSettings, OverlaySessionKind.Race);
-            missingWeatherSettings.Width = size.Width;
-            missingWeatherSettings.Height = size.Height;
-            return missingWeatherSettings;
         }
 
         if (!string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))

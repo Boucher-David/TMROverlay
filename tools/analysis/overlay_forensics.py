@@ -291,6 +291,7 @@ def main() -> int:
     parser.add_argument("--render", default="none", help="Requested renderers. Initial tool records requested gaps only.")
     parser.add_argument("--model-replay", default="auto", choices=["auto", "off", "required"], help="Run production C# overlay model replay when available.")
     parser.add_argument("--model-replay-command", default="", help="Explicit model replay command. Use {capture}, {sample_plan}, {output}, {overlays}, and {settings} placeholders.")
+    parser.add_argument("--timeline-validation", default="auto", choices=["auto", "off", "required"], help="Validate replayed overlay model timelines when model rows are available.")
     parser.add_argument("--settings", type=Path, help="Optional app settings JSON for production model replay.")
     parser.add_argument("--app-data-root", type=Path, help="Optional TmrOverlay app-data root to inventory history/settings next to the capture.")
     parser.add_argument("--renderer-command", default="", help="Explicit renderer command. Use {output}, {overlays}, and {renderer} placeholders.")
@@ -369,11 +370,13 @@ def main() -> int:
     write_json(output / "history-inventory.json", history_inventory)
 
     model_replay_result = run_model_replay(args, paths, output, overlays)
+    model_timeline_result = run_model_timeline_validation(args, output, overlays, model_replay_result)
     renderer_results = run_renderer_replays(args, output, overlays, model_replay_result)
     model_sample_summaries = build_model_sample_summaries(output, overlays)
     tool_runs = {
         "schemaVersion": 1,
         "modelReplay": model_replay_result,
+        "modelTimelineValidation": model_timeline_result,
         "rendererReplay": renderer_results,
     }
     write_json(output / "tool-runs.json", tool_runs)
@@ -409,6 +412,7 @@ def main() -> int:
     evidence_gaps = build_evidence_gaps(
         args.render,
         model_replay_result,
+        model_timeline_result,
         renderer_results,
         evidence_quality,
         localhost_models,
@@ -419,6 +423,7 @@ def main() -> int:
         manifest,
         output,
         model_replay_result,
+        model_timeline_result,
         renderer_results,
         evidence_gaps,
         history_inventory,
@@ -463,6 +468,7 @@ def main() -> int:
             "live-model-samples.json",
             "tool-runs.json",
             "model-replay-result.json",
+            "model-timeline-validation.json",
             "renderer-replay-<renderer>-result.json",
             "evidence-gaps.json",
             "package-status.json",
@@ -548,6 +554,65 @@ def run_model_replay(
     print(f"Running production model replay: {command_display(command)}", file=sys.stderr)
     result_path = output / "model-replay-result.json"
     return run_command_result(command, "model-replay", result_path, required=required)
+
+
+def run_model_timeline_validation(
+    args: argparse.Namespace,
+    output: Path,
+    overlays: list[str],
+    model_replay_result: dict[str, Any],
+) -> dict[str, Any]:
+    required = args.timeline_validation == "required"
+    report_path = output / "model-timeline-validation.json"
+    script = Path("tools/analysis/validate_model_timeline.py")
+    command = default_model_timeline_command(script, output, overlays, report_path)
+
+    if args.timeline_validation == "off":
+        return {
+            "schemaVersion": 1,
+            "status": "disabled",
+            "required": False,
+            "reason": "model timeline validation disabled by --timeline-validation off",
+        }
+    if not script.exists():
+        return {
+            "schemaVersion": 1,
+            "status": "skipped",
+            "required": required,
+            "reason": f"model timeline validator not found: {script}",
+            "command": command,
+        }
+    if not any_model_timeline_rows(output, overlays):
+        return {
+            "schemaVersion": 1,
+            "status": "skipped",
+            "required": required,
+            "reason": model_replay_result.get("reason") or "no replayed overlay model rows were found",
+            "command": command,
+        }
+
+    command_parts = [
+        sys.executable,
+        str(script),
+        "--forensics-output",
+        str(output),
+        "--overlays",
+        ",".join(overlays),
+        "--fail-on",
+        "off",
+        "--write-report",
+        str(report_path),
+    ]
+    print(f"Running model timeline validation: {command_display(command_parts)}", file=sys.stderr)
+    return run_command_result(command_parts, "model-timeline-validation", report_path, required=required)
+
+
+def any_model_timeline_rows(output: Path, overlays: list[str]) -> bool:
+    for overlay_id in overlays:
+        path = output / "overlays" / overlay_id / "models.jsonl"
+        if path.exists() and path.stat().st_size > 0:
+            return True
+    return False
 
 
 def run_renderer_replays(
@@ -642,6 +707,21 @@ def default_model_replay_command(project: Path, placeholders: dict[str, str]) ->
     return command_display(parts)
 
 
+def default_model_timeline_command(script: Path, output: Path, overlays: list[str], report_path: Path) -> str:
+    return command_display([
+        sys.executable,
+        str(script),
+        "--forensics-output",
+        str(output),
+        "--overlays",
+        ",".join(overlays),
+        "--fail-on",
+        "off",
+        "--write-report",
+        str(report_path),
+    ])
+
+
 def default_renderer_command(script: Path, placeholders: dict[str, str], limit: int) -> str:
     return command_display([
         "node",
@@ -698,7 +778,7 @@ def run_command_result(
         "stdoutTail": tail_text(completed.stdout),
         "stderrTail": tail_text(completed.stderr),
         **({"overlays": (result_document or {}).get("overlays")} if isinstance(result_document, dict) and (result_document or {}).get("overlays") is not None else {}),
-        **({"summary": result_document} if isinstance(result_document, dict) and kind == "model-replay" else {}),
+        **({"summary": result_document} if isinstance(result_document, dict) and kind in {"model-replay", "model-timeline-validation"} else {}),
     }
 
 
@@ -1706,6 +1786,7 @@ def semantic_checks(
 def build_evidence_gaps(
     requested_renderers: str,
     model_replay_result: dict[str, Any],
+    model_timeline_result: dict[str, Any],
     renderer_results: dict[str, Any],
     evidence_quality: dict[str, Any] | None,
     localhost_models: dict[str, Any] | None,
@@ -1731,6 +1812,17 @@ def build_evidence_gaps(
             "detail": model_replay_result.get("reason") or "Production model replay did not produce live-frame model rows.",
             "command": model_replay_result.get("command"),
         })
+    if model_timeline_result.get("status") not in {"produced", "disabled"}:
+        if model_replay_result.get("status") == "produced" or model_timeline_result.get("required"):
+            status = "fail" if model_timeline_result.get("required") else "warn"
+            gaps.append({
+                "status": status,
+                "kind": "model-timeline-validation-missing",
+                "detail": model_timeline_result.get("reason") or "Model timeline validation did not run.",
+                "command": model_timeline_result.get("command"),
+            })
+    elif model_timeline_result.get("status") == "produced":
+        append_model_timeline_gaps(gaps, model_timeline_result, overlay_reports)
     renderers = parse_csv(requested_renderers)
     for renderer in renderers:
         if renderer == "none":
@@ -1762,10 +1854,45 @@ def build_evidence_gaps(
     }
 
 
+def append_model_timeline_gaps(
+    gaps: list[dict[str, Any]],
+    model_timeline_result: dict[str, Any],
+    overlay_reports: dict[str, Any],
+) -> None:
+    report = model_timeline_result.get("summary") if isinstance(model_timeline_result.get("summary"), dict) else {}
+    timeline_overlays = report.get("overlays") if isinstance(report.get("overlays"), dict) else {}
+    for overlay_id in overlay_reports:
+        if overlay_id not in timeline_overlays:
+            gaps.append({
+                "status": "warn",
+                "kind": "model-timeline-overlay-missing",
+                "overlayId": overlay_id,
+                "detail": "Production model replay did not provide timeline rows for this overlay.",
+            })
+            continue
+
+        overlay_report = timeline_overlays.get(overlay_id) or {}
+        for issue in overlay_report.get("issues") or []:
+            status = issue.get("status")
+            if status not in {"warn", "fail"}:
+                continue
+            rule = issue.get("rule") or "model-timeline"
+            detail = issue.get("detail") or rule
+            gaps.append({
+                "status": status,
+                "kind": rule,
+                "overlayId": overlay_id,
+                "detail": detail,
+                "frameIndex": issue.get("frameIndex"),
+                "sessionTimeSeconds": issue.get("sessionTimeSeconds"),
+            })
+
+
 def build_package_status(
     manifest: dict[str, Any],
     output: Path,
     model_replay_result: dict[str, Any],
+    model_timeline_result: dict[str, Any],
     renderer_results: dict[str, Any],
     evidence_gaps: dict[str, Any],
     history_inventory: dict[str, Any],
@@ -1788,6 +1915,15 @@ def build_package_status(
             "reason": model_replay_result.get("reason"),
             "command": model_replay_result.get("command"),
         },
+        "modelTimelineValidation": {
+            "status": model_timeline_result.get("status"),
+            "required": model_timeline_result.get("required"),
+            "reason": model_timeline_result.get("reason"),
+            "command": model_timeline_result.get("command"),
+            "statusCounts": (model_timeline_result.get("summary") or {}).get("statusCounts")
+            if isinstance(model_timeline_result.get("summary"), dict)
+            else None,
+        },
         "rendererReplay": {
             renderer: {
                 "status": result.get("status"),
@@ -1801,12 +1937,13 @@ def build_package_status(
             ["status", "source", "aggregateCount", "summaryCount", "fuelHistoryAggregateCount", "analysisReportCount"],
         ),
         "evidenceGapCounts": status_counts,
-        "nextActions": package_next_actions(model_replay_result, renderer_results, evidence_gaps, history_inventory),
+        "nextActions": package_next_actions(model_replay_result, model_timeline_result, renderer_results, evidence_gaps, history_inventory),
     }
 
 
 def package_next_actions(
     model_replay_result: dict[str, Any],
+    model_timeline_result: dict[str, Any],
     renderer_results: dict[str, Any],
     evidence_gaps: dict[str, Any],
     history_inventory: dict[str, Any],
@@ -1818,6 +1955,14 @@ def package_next_actions(
             f"Run production model replay to add active model rows: {command}"
             if command
             else "Run production model replay to add active model rows."
+        )
+
+    if model_timeline_result.get("status") not in {"produced", "disabled"} and model_replay_result.get("status") == "produced":
+        command = model_timeline_result.get("command")
+        actions.append(
+            f"Run model timeline validation to classify temporal behavior: {command}"
+            if command
+            else "Run model timeline validation to classify temporal behavior."
         )
 
     for renderer, result in sorted(renderer_results.items()):
@@ -2307,9 +2452,11 @@ def render_markdown_report(
         )
     tool_runs = top_level.get("toolRuns") or {}
     model_run = tool_runs.get("modelReplay") or {}
+    timeline_run = tool_runs.get("modelTimelineValidation") or {}
     renderer_runs = tool_runs.get("rendererReplay") or {}
     lines.extend(["", "## Tool Runs", ""])
     lines.append(f"- Production model replay: `{model_run.get('status', 'unknown')}`")
+    lines.append(f"- Model timeline validation: `{timeline_run.get('status', 'unknown')}`")
     for renderer, result in renderer_runs.items():
         lines.append(f"- `{renderer}` renderer replay: `{result.get('status', 'unknown')}`")
     history = top_level.get("historyInventory") or {}

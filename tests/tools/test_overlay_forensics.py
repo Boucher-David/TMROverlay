@@ -160,6 +160,131 @@ class OverlayForensicsSmokeTests(unittest.TestCase):
         self.assertIn("production-model-replay-missing", gap_kinds)
         self.assertIn("browser-render-missing", gap_kinds)
 
+    def test_model_timeline_validation_records_temporal_failures(self):
+        with tempfile.TemporaryDirectory(prefix="tmr-forensics-timeline-") as temp_dir:
+            replay_script = Path(temp_dir) / "write_replay_rows.py"
+            write_replay_script(replay_script, "garage-cover", temporal_failure_rows("garage-cover"))
+            result, artifacts = run_forensics_artifacts(
+                "garage-cover-hidden-no-visible-signal",
+                model_replay="required",
+                model_replay_command=f"{sys.executable} {replay_script} --output {{output}}",
+                fail_on="missing-evidence",
+                assert_mode="strict")
+
+        self.assertEqual(2, result.returncode, result.stderr)
+        timeline_run = artifacts["report"]["toolRuns"]["modelTimelineValidation"]
+        gap_kinds = {gap["kind"] for gap in artifacts["report"]["evidenceGaps"]["gaps"]}
+
+        self.assertEqual("produced", timeline_run["status"])
+        self.assertEqual(1, timeline_run["summary"]["statusCounts"]["fail"])
+        self.assertEqual("produced", artifacts["package_status"]["modelTimelineValidation"]["status"])
+        self.assertIn("render-oscillation", gap_kinds)
+
+    def test_model_timeline_validation_records_clean_replay(self):
+        with tempfile.TemporaryDirectory(prefix="tmr-forensics-timeline-clean-") as temp_dir:
+            replay_script = Path(temp_dir) / "write_replay_rows.py"
+            write_replay_script(replay_script, "garage-cover", clean_timeline_rows("garage-cover"))
+            result, artifacts = run_forensics_artifacts(
+                "garage-cover-hidden-no-visible-signal",
+                model_replay="required",
+                model_replay_command=f"{sys.executable} {replay_script} --output {{output}}")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        timeline_run = artifacts["report"]["toolRuns"]["modelTimelineValidation"]
+        gap_kinds = {gap["kind"] for gap in artifacts["report"]["evidenceGaps"]["gaps"]}
+
+        self.assertEqual("produced", timeline_run["status"])
+        self.assertEqual({}, timeline_run["summary"]["statusCounts"])
+        self.assertEqual("produced", artifacts["package_status"]["modelTimelineValidation"]["status"])
+        self.assertFalse(any(kind.startswith("model-timeline") for kind in gap_kinds))
+
+    def test_model_timeline_validation_warns_when_replay_rows_are_missing(self):
+        with tempfile.TemporaryDirectory(prefix="tmr-forensics-timeline-missing-") as temp_dir:
+            replay_script = Path(temp_dir) / "empty_replay.py"
+            replay_script.write_text(
+                """
+import argparse
+import json
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--output", required=True)
+args = parser.parse_args()
+output = Path(args.output)
+output.mkdir(parents=True, exist_ok=True)
+(output / "model-replay-result.json").write_text(json.dumps({"schemaVersion": 1, "overlays": {}}), encoding="utf-8")
+""",
+                encoding="utf-8",
+            )
+            result, artifacts = run_forensics_artifacts(
+                "garage-cover-hidden-no-visible-signal",
+                model_replay="required",
+                model_replay_command=f"{sys.executable} {replay_script} --output {{output}}")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        timeline_run = artifacts["report"]["toolRuns"]["modelTimelineValidation"]
+        gap_kinds = {gap["kind"] for gap in artifacts["report"]["evidenceGaps"]["gaps"]}
+
+        self.assertEqual("skipped", timeline_run["status"])
+        self.assertIn("model-timeline-validation-missing", gap_kinds)
+
+    def test_model_timeline_validation_required_missing_rows_fails_strict_gate(self):
+        with tempfile.TemporaryDirectory(prefix="tmr-forensics-timeline-required-") as temp_dir:
+            replay_script = Path(temp_dir) / "empty_replay.py"
+            replay_script.write_text(
+                """
+import argparse
+import json
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--output", required=True)
+args = parser.parse_args()
+output = Path(args.output)
+output.mkdir(parents=True, exist_ok=True)
+(output / "model-replay-result.json").write_text(json.dumps({"schemaVersion": 1, "overlays": {}}), encoding="utf-8")
+""",
+                encoding="utf-8",
+            )
+            result, artifacts = run_forensics_artifacts(
+                "garage-cover-hidden-no-visible-signal",
+                model_replay="required",
+                model_replay_command=f"{sys.executable} {replay_script} --output {{output}}",
+                timeline_validation="required",
+                fail_on="missing-evidence",
+                assert_mode="strict")
+
+        self.assertEqual(2, result.returncode, result.stderr)
+        timeline_run = artifacts["report"]["toolRuns"]["modelTimelineValidation"]
+        fail_gaps = {
+            gap["kind"]
+            for gap in artifacts["report"]["evidenceGaps"]["gaps"]
+            if gap["status"] == "fail"
+        }
+
+        self.assertEqual("skipped", timeline_run["status"])
+        self.assertIn("model-timeline-validation-missing", fail_gaps)
+
+    def test_model_timeline_validation_warns_for_requested_overlay_without_rows(self):
+        with tempfile.TemporaryDirectory(prefix="tmr-forensics-timeline-partial-") as temp_dir:
+            replay_script = Path(temp_dir) / "write_replay_rows.py"
+            write_replay_script(replay_script, "standings", clean_timeline_rows("standings"))
+            result, artifacts = run_forensics_artifacts(
+                "obs-readiness-all-overlays",
+                overlays="standings,relative",
+                model_replay="required",
+                model_replay_command=f"{sys.executable} {replay_script} --output {{output}}",
+                fail_on="none")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        missing_gaps = [
+            gap
+            for gap in artifacts["report"]["evidenceGaps"]["gaps"]
+            if gap["kind"] == "model-timeline-overlay-missing"
+        ]
+
+        self.assertEqual(["relative"], [gap["overlayId"] for gap in missing_gaps])
+
     def assert_check(self, overlay: dict, check_id: str, status: str):
         checks = overlay["semanticResults"]["checks"]
         self.assertIn(
@@ -186,6 +311,7 @@ def run_forensics_artifacts(
     fail_on: str = "semantic",
     model_replay: str = "off",
     model_replay_command: str | None = None,
+    timeline_validation: str = "auto",
     render: str = "none",
     assert_mode: str = "strict",
     app_data_root: Path | None = None,
@@ -206,6 +332,8 @@ def run_forensics_artifacts(
             overlays,
             "--model-replay",
             model_replay,
+            "--timeline-validation",
+            timeline_validation,
             "--render",
             render,
             "--fail-on",
@@ -233,7 +361,62 @@ def run_forensics_artifacts(
             "report": json.loads(report_path.read_text(encoding="utf-8")),
             "package_status": json.loads((output / "package-status.json").read_text(encoding="utf-8")),
             "history_inventory": json.loads((output / "history-inventory.json").read_text(encoding="utf-8")),
+            "tool_runs": json.loads((output / "tool-runs.json").read_text(encoding="utf-8")),
+            "model_timeline_validation": json.loads((output / "model-timeline-validation.json").read_text(encoding="utf-8"))
+            if (output / "model-timeline-validation.json").exists()
+            else None,
         }
+
+
+def write_replay_script(path: Path, overlay_id: str, rows: list[dict]):
+    path.write_text(
+        f"""
+import argparse
+import json
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--output", required=True)
+args = parser.parse_args()
+
+output = Path(args.output)
+overlay_root = output / "overlays" / {overlay_id!r}
+overlay_root.mkdir(parents=True, exist_ok=True)
+rows = {rows!r}
+(overlay_root / "models.jsonl").write_text("\\n".join(json.dumps(row) for row in rows) + "\\n", encoding="utf-8")
+(output / "model-replay-result.json").write_text(json.dumps({{"schemaVersion": 1, "overlays": {{{overlay_id!r}: {{"rowCount": len(rows)}}}}}}), encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
+
+
+def clean_timeline_rows(overlay_id: str) -> list[dict]:
+    return [
+        model_timeline_row(overlay_id, 1, 1.0, True),
+        model_timeline_row(overlay_id, 2, 2.0, True),
+        model_timeline_row(overlay_id, 3, 3.0, True),
+    ]
+
+
+def temporal_failure_rows(overlay_id: str) -> list[dict]:
+    return [
+        model_timeline_row(overlay_id, 1, 1.0, True),
+        model_timeline_row(overlay_id, 2, 2.0, False, rows=[]),
+        model_timeline_row(overlay_id, 3, 3.0, True),
+    ]
+
+
+def model_timeline_row(overlay_id: str, frame_index: int, session_time: float, should_render: bool, rows: list[dict] | None = None) -> dict:
+    return {
+        "frameIndex": frame_index,
+        "sessionTimeSeconds": session_time,
+        "model": {
+            "overlayId": overlay_id,
+            "shouldRender": should_render,
+            "source": "live telemetry",
+            "rows": [{"carIdx": 7}] if rows is None else rows,
+        },
+    }
 
 
 if __name__ == "__main__":

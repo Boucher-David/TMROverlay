@@ -1188,6 +1188,39 @@ DriverInfo:
     }
 
     [Fact]
+    public void RecordFrame_UsesF2TimingForMulticlassApproachWhenEstimatedTimingDisagrees()
+    {
+        var store = new LiveTelemetryStore();
+        ApplyMulticlassClassOrderSession(store);
+
+        store.RecordFrame(CreateSample(
+            playerCarIdx: 10,
+            teamLapDistPct: 0.50d,
+            teamF2TimeSeconds: 100d,
+            teamEstimatedTimeSeconds: 50d,
+            teamCarClass: 4098,
+            nearbyCars:
+            [
+                new HistoricalCarProximity(
+                    CarIdx: 51,
+                    LapCompleted: 2,
+                    LapDistPct: 0.47d,
+                    F2TimeSeconds: 103d,
+                    EstimatedTimeSeconds: 45.4d,
+                    Position: 3,
+                    ClassPosition: 1,
+                    CarClass: 4100,
+                    TrackSurface: 3,
+                    OnPitRoad: false)
+            ]));
+
+        var approach = Assert.Single(store.Snapshot().Proximity.MulticlassApproaches);
+
+        Assert.Equal(51, approach.CarIdx);
+        Assert.Equal(-3d, approach.RelativeSeconds!.Value, precision: 6);
+    }
+
+    [Fact]
     public void RecordFrame_SurfacesNearestFasterClassApproachForCountdown()
     {
         var store = new LiveTelemetryStore();

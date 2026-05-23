@@ -271,6 +271,40 @@ public sealed class LiveProximitySnapshotTests
     }
 
     [Fact]
+    public void From_PrefersLiveF2TimingWhenEstimatedTimingDisagrees()
+    {
+        var context = new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity(),
+            Track = new HistoricalTrackIdentity(),
+            Session = new HistoricalSessionIdentity(),
+            Conditions = new HistoricalSessionInfoConditions()
+        };
+        var sample = CreateSample(
+            teamLapDistPct: 0.50d,
+            teamF2TimeSeconds: 100d,
+            teamEstimatedTimeSeconds: 50d,
+            nearbyCars:
+            [
+                new HistoricalCarProximity(
+                    CarIdx: 12,
+                    LapCompleted: 5,
+                    LapDistPct: 0.47d,
+                    F2TimeSeconds: 103d,
+                    EstimatedTimeSeconds: 45.4d,
+                    Position: 4,
+                    ClassPosition: 4,
+                    CarClass: 1,
+                    TrackSurface: 3,
+                    OnPitRoad: false)
+            ]);
+
+        var car = Assert.Single(LiveProximitySnapshot.From(context, sample).NearbyCars);
+
+        Assert.Equal(-3d, car.RelativeSeconds!.Value, precision: 6);
+    }
+
+    [Fact]
     public void From_DoesNotSynthesizeTimingWhenLiveTimingIsMissing()
     {
         var context = new HistoricalSessionContext

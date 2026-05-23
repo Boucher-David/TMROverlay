@@ -107,6 +107,259 @@
       "description": "Telemetry-rich captures must classify each expected OBS overlay as not-requested, page-loaded-no-model, model-polled-hidden, model-rendered, or browser-source-error."
     }
   ],
+  "settingsScenarios": [
+    {
+      "id": "settings-support-diagnostics-actions",
+      "area": "support",
+      "family": "settings-actions",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "covered",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "settings/support/general.png",
+        "settings/support/diagnostics.png",
+        "components/settings/support-buttons.png",
+        "states/settings-support.png"
+      ],
+      "testFiles": [
+        "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js:application diagnostics buttons update real review-server support state",
+        "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs:support.bundle.latest"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:support.bundle.latest.value",
+        "tools/validate_overlay_screenshots.py:components/settings/support-buttons.png"
+      ],
+      "assertions": [
+        "support tab exposes diagnostics status, latest-bundle value, raw-capture toggle, local-map toggle, create-bundle action, and open-folder action",
+        "review-server actions update durable support state instead of serving as inert buttons",
+        "support button and latest-bundle text bounds are part of settings uiEvidence"
+      ]
+    },
+    {
+      "id": "settings-support-analysis-opt-out-actions",
+      "area": "support",
+      "family": "settings-actions",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "partial",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "settings/support/diagnostics.png",
+        "components/settings/support-buttons.png",
+        "states/settings-support.png"
+      ],
+      "testFiles": [
+        "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs:support.analysis.local-map-building",
+        "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs:support.analysis.post-race-analysis"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:support analysis state evidence",
+        "tools/validate_overlay_screenshots.py:support.analysis.local-map-building.value"
+      ],
+      "assertions": [
+        "support tab exposes local map building as the active analysis opt-out toggle",
+        "car/track history, fuel history, radar calibration, and post-race analysis rows render as disabled/no-op controls until those product toggles are implemented",
+        "support analysis labels, details, values, and toggle bounds are part of settings uiEvidence"
+      ],
+      "gaps": [
+        "only local map building is an active production toggle today",
+        "disabled analysis toggles need explicit interaction tests before becoming writable product settings"
+      ]
+    },
+    {
+      "id": "settings-general-update-action-states",
+      "area": "general",
+      "family": "settings-actions",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "partial",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "settings/app/update-disabled.png",
+        "settings/app/update-not-installed.png",
+        "settings/app/update-idle.png",
+        "settings/app/update-up-to-date.png",
+        "settings/app/update-available.png",
+        "settings/app/update-checking.png",
+        "settings/app/update-downloading.png",
+        "settings/app/update-pending-restart.png",
+        "settings/app/update-applying.png",
+        "settings/app/update-failed.png",
+        "states/settings-general-update-disabled.png",
+        "states/settings-general-update-not-installed.png",
+        "states/settings-general-update-idle.png",
+        "states/settings-general-update-up-to-date.png",
+        "states/settings-general-update-available.png",
+        "states/settings-general-update-checking.png",
+        "states/settings-general-update-downloading.png",
+        "states/settings-general-update-pending-restart.png",
+        "states/settings-general-update-applying.png",
+        "states/settings-general-update-failed.png"
+      ],
+      "testFiles": [
+        "tests/TmrOverlay.App.Tests/Overlays/OverlayContentColumnSettingsTests.cs:SettingsGeneralUpdatesGeometryKeepsActionsBelowStatusRow",
+        "tests/TmrOverlay.App.Tests/Updates/ReleaseUpdateServiceTests.cs:StopAndDispose_CanRunRepeatedlyAfterStartupCheckIsCanceled"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:SETTINGS_UPDATE_STATUSES",
+        "tools/validate_overlay_screenshots.py:expected_update_status_text"
+      ],
+      "assertions": [
+        "disabled, not-installed, idle, up-to-date, available, checking, downloading, pending-restart, applying, and failed update states render distinct status text",
+        "update action buttons stay below the status row and inside the Updates panel",
+        "settings evidence captures status text fit for update rows"
+      ],
+      "gaps": [
+        "settings UI evidence proves action state rendering, not a full real installer install/restart outcome",
+        "real update lifecycle behavior remains covered by release-update service and diagnostics evidence rather than by a settings button scenario"
+      ]
+    },
+    {
+      "id": "settings-general-units-preview-actions",
+      "area": "general",
+      "family": "settings-actions",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "partial",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "components/settings/unit-choice.png",
+        "settings/app/preview-practice.png",
+        "settings/app/preview-qualifying.png",
+        "settings/app/preview-race.png",
+        "states/settings-general-preview-practice.png",
+        "states/settings-general-preview-qualifying.png",
+        "states/settings-general-preview-race.png"
+      ],
+      "testFiles": [
+        "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js:renders General settings preview controls without forcing hidden overlays",
+        "tests/browser-overlays/settingsEffectMatrix.test.js:fuel unit system imperial converts fuel values",
+        "tests/TmrOverlay.App.Tests/Diagnostics/DiagnosticsBundleServiceTests.cs:settings-general-preview"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:settings-preview-summary",
+        "tools/validate_overlay_screenshots.py:components/settings/unit-choice.png"
+      ],
+      "assertions": [
+        "General tab renders Metric/Imperial unit controls with measured settings evidence",
+        "Practice, Qualifying, and Race preview actions render deterministic preview state summaries",
+        "global preview does not force hidden overlays, Stream Chat, or Garage Cover open"
+      ],
+      "gaps": [
+        "unit selector click behavior is not yet represented by a dedicated settings-UI interaction test; current evidence is screenshot geometry plus model-level settings-effect coverage"
+      ]
+    },
+    {
+      "id": "settings-browser-source-copy-actions",
+      "area": "overlay-general",
+      "family": "settings-actions",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "covered",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "components/settings/browser-source.png",
+        "settings/standings/general.png",
+        "states/settings-standings.png"
+      ],
+      "testFiles": [
+        "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js:application browser source copy button writes the localhost overlay URL",
+        "tests/TmrOverlay.App.Tests/Overlays/OverlayContentColumnSettingsTests.cs:BrowserSourceSettingsGeometryKeepsCopyInsideContractPanel"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:browser source copy button fits panel",
+        "tools/validate_overlay_screenshots.py:components/settings/browser-source.png"
+      ],
+      "assertions": [
+        "copy action writes the selected overlay localhost URL to the clipboard",
+        "Copied feedback is visible after a successful copy",
+        "browser-source URL, recommended OBS size, and copy button bounds are captured by settings evidence"
+      ]
+    },
+    {
+      "id": "settings-garage-cover-image-fallback-actions",
+      "area": "garage-cover",
+      "family": "settings-actions",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "covered",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "settings/garage-cover/general.png",
+        "settings/garage-cover/preview.png",
+        "states/settings-garage-cover.png",
+        "states/settings-garage-cover-preview.png"
+      ],
+      "testFiles": [
+        "tests/TmrOverlay.App.Tests/Overlays/GarageCoverBrowserSettingsTests.cs:DefaultImage_ResolvesBundledBrandAsset",
+        "tests/TmrOverlay.App.Tests/Overlays/GarageCoverBrowserSettingsTests.cs:From_ReturnsImageMetadataAndTransientPreviewState",
+        "tests/browser-overlays/settingsEffectMatrix.test.js:garage cover preview stays settings-only",
+        "tests/browser-overlays/reviewServerContracts.test.js:does not make global session preview force Garage Cover preview visibility"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:settings-preview-stage",
+        "tools/validate_overlay_screenshots.py:settings-preview-image"
+      ],
+      "assertions": [
+        "Garage Cover settings keep import/clear/image preview in the settings surface without opening the live cover",
+        "missing or cleared user image falls back to the bundled default image",
+        "Garage Cover preview stage and image bounds are measured settings evidence"
+      ]
+    },
+    {
+      "id": "settings-stream-chat-provider-save-actions",
+      "area": "stream-chat",
+      "family": "settings-actions",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "partial",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "settings/stream-chat/content.png",
+        "settings/stream-chat/twitch.png",
+        "components/settings/chat-inputs.png",
+        "states/settings-stream-chat.png",
+        "states/settings-stream-chat-content.png",
+        "states/settings-stream-chat-twitch.png"
+      ],
+      "testFiles": [
+        "tests/browser-overlays/settingsEffectMatrix.test.js:stream chat provider twitch configures chat source",
+        "tests/TmrOverlay.App.Tests/Localhost/StreamChatOverlaySettingsTests.cs",
+        "tests/TmrOverlay.App.Tests/Overlays/OverlayContentColumnSettingsTests.cs:StreamChatSettingsSaveButtonStaysInsideContractPanel"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:stream chat provider width",
+        "tools/validate_overlay_screenshots.py:components/settings/chat-inputs.png"
+      ],
+      "assertions": [
+        "Stream Chat settings expose provider, Streamlabs URL, Twitch channel, Save action, and Twitch content rows",
+        "provider selection reaches the production browser/localhost Stream Chat settings model",
+        "Save button and chat input bounds are measured by shared settings geometry"
+      ],
+      "gaps": [
+        "Save-button click behavior for edited Streamlabs/Twitch text is not yet covered by a dedicated settings-UI interaction test"
+      ]
+    },
+    {
+      "id": "settings-radar-preview-lifetime-evidence",
+      "area": "car-radar",
+      "family": "settings-preview",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "partial",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "settings/car-radar/general.png",
+        "states/settings-car-radar.png"
+      ],
+      "testFiles": [
+        "tests/TmrOverlay.App.Tests/Overlays/OverlayInputTransparencyTests.cs:RadarSettingsPreview_RequiresActiveSettingsWindow"
+      ],
+      "validatorRules": [
+        "tools/analysis/overlay_forensics.py:settings preview ends when Settings is no longer the active preview context"
+      ],
+      "assertions": [
+        "radar settings preview requires the Car Radar tab, an active visible Settings window, and an enabled Radar overlay",
+        "selected tab alone cannot keep the live radar preview visible after focus returns to iRacing"
+      ],
+      "gaps": [
+        "scenario is still thin: no deterministic screenshot or diagnostics replay proves preview teardown across an actual focus-loss transition"
+      ]
+    }
+  ],
   "overlays": [
     {
       "id": "standings",

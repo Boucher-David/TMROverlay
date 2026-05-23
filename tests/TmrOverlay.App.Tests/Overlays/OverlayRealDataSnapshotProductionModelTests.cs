@@ -125,7 +125,8 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
         var settings = new ApplicationSettings();
         EnableOverlay(settings, "flags");
         var now = DateTimeOffset.Parse("2026-05-23T12:00:00Z", CultureInfo.InvariantCulture);
-        var sessionFlags = Int(Get(snapshotFixture, "rawEvidence", "localDriverEvidence"), "globalSessionFlags");
+        var localEvidence = Get(snapshotFixture, "rawEvidence", "localDriverEvidence");
+        var sessionFlags = Int(localEvidence, "globalSessionFlags");
         var snapshot = FreshSnapshot(now, "Race") with
         {
             Models = FreshSnapshot(now, "Race").Models with
@@ -134,7 +135,10 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
                 {
                     SessionState = 4,
                     SessionFlags = sessionFlags
-                }
+                },
+                IncidentPressure = IncidentPressure(
+                    Int(localEvidence, "playerCarIdx"),
+                    Int(localEvidence, "playerCarIdxSessionFlags"))
             }
         };
 
@@ -147,6 +151,34 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
         Assert.Equal("critical", flag.Category);
         Assert.Equal("Repair", flag.Label);
         Assert.Equal("error", flag.Tone);
+    }
+
+    [Fact]
+    public void FlagsGlobalOnlyCriticalSnapshot_DoesNotBuildLocalCriticalDisplay()
+    {
+        var snapshotFixture = ReadSnapshot("flags-meatball-local-policy.json");
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "flags");
+        var now = DateTimeOffset.Parse("2026-05-23T12:00:00Z", CultureInfo.InvariantCulture);
+        var globalOnly = Get(snapshotFixture, "rawEvidence", "globalOnlyCounterexample");
+        var snapshot = FreshSnapshot(now, "Race") with
+        {
+            Models = FreshSnapshot(now, "Race").Models with
+            {
+                Session = Session("Race") with
+                {
+                    SessionState = 4,
+                    SessionFlags = Int(globalOnly, "globalSessionFlags")
+                }
+            }
+        };
+
+        var built = Factory().TryBuild("flags", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.False(response.Model.ShouldRender);
+        Assert.Empty(response.Model.Flags!.Flags);
+        Assert.Equal(Bool(Get(snapshotFixture, "expected", "globalOnlyCriticalPolicy"), "shouldDisplayAsLocalCritical"), response.Model.ShouldRender);
     }
 
     [Fact]
@@ -484,6 +516,43 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
             OnPitRoad: false,
             HasTakenGrid: hasTakenGrid);
     }
+
+    private static LiveIncidentPressureModel IncidentPressure(int playerCarIdx, int? sessionFlags)
+    {
+        return LiveIncidentPressureModel.Empty with
+        {
+            HasData = true,
+            Quality = LiveModelQuality.Reliable,
+            Evidence = LiveSignalEvidence.Reliable("CarIdxSessionFlags"),
+            PlayerCarIdx = playerCarIdx,
+            FocusCarIdx = playerCarIdx,
+            Cars =
+            [
+                new LiveIncidentPressureCar(
+                    CarIdx: playerCarIdx,
+                    DriverName: null,
+                    TeamName: null,
+                    CarNumber: null,
+                    CarClass: null,
+                    IsPlayer: true,
+                    IsFocus: true,
+                    SessionFlags: sessionFlags,
+                    TrackSurface: 3,
+                    OnPitRoad: false,
+                    HasBlackFlag: HasFlag(sessionFlags, 0x00010000),
+                    HasDisqualifyFlag: HasFlag(sessionFlags, 0x00020000),
+                    HasRepairFlag: HasFlag(sessionFlags, 0x00100000),
+                    HasFurledFlag: HasFlag(sessionFlags, 0x00080000),
+                    IsCurrentlyOffTrack: false,
+                    ObservedOffTrackTransitions: 0,
+                    PressureScore: 0d,
+                    PressureLevel: "normal",
+                    Evidence: LiveSignalEvidence.Reliable("CarIdxSessionFlags"))
+            ]
+        };
+    }
+
+    private static bool HasFlag(int? flags, int mask) => (flags.GetValueOrDefault() & mask) == mask;
 
     private static string Cell(BrowserOverlayDisplayModel model, BrowserOverlayDisplayRow row, string dataKey)
     {

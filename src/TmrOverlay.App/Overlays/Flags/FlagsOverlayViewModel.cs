@@ -82,7 +82,8 @@ internal static class FlagsOverlayViewModel
         }
 
         var flags = session.SessionFlags;
-        var displayFlags = BuildDisplayFlags(flags, session.SessionState);
+        var localDriverFlags = LocalDriverSessionFlags(snapshot);
+        var displayFlags = BuildDisplayFlags(flags, session.SessionState, localDriverFlags);
         return new FlagOverlayDisplayViewModel(
             IsWaiting: false,
             Status: displayFlags.Count == 0 ? "none" : string.Join(" + ", displayFlags.Select(flag => flag.Label)),
@@ -374,12 +375,15 @@ internal static class FlagsOverlayViewModel
             : SimpleTelemetryTone.Normal;
     }
 
-    private static IReadOnlyList<FlagOverlayDisplayItem> BuildDisplayFlags(int? flags, int? sessionState)
+    private static IReadOnlyList<FlagOverlayDisplayItem> BuildDisplayFlags(
+        int? flags,
+        int? sessionState,
+        int? localDriverFlags = null)
     {
         var items = new List<PrioritizedFlagDisplayItem>();
         if (flags is { } value)
         {
-            AddCriticalFlags(value, items);
+            AddCriticalFlags(value, localDriverFlags, items);
             AddYellowFlags(value, items);
             AddIf(
                 value,
@@ -414,10 +418,13 @@ internal static class FlagsOverlayViewModel
             .ToArray();
     }
 
-    private static void AddCriticalFlags(int flags, List<PrioritizedFlagDisplayItem> items)
+    private static void AddCriticalFlags(
+        int globalFlags,
+        int? localDriverFlags,
+        List<PrioritizedFlagDisplayItem> items)
     {
         AddIf(
-            flags,
+            globalFlags,
             RedFlag,
             items,
             order: 10,
@@ -427,6 +434,12 @@ internal static class FlagsOverlayViewModel
                 "Red",
                 null,
                 SimpleTelemetryTone.Error));
+
+        if (localDriverFlags is not { } flags)
+        {
+            return;
+        }
+
         AddIf(
             flags,
             RepairFlag,
@@ -458,6 +471,24 @@ internal static class FlagsOverlayViewModel
                 blackLabels[0],
                 blackLabels.Count > 1 ? string.Join(" / ", blackLabels.Skip(1)) : null,
                 SimpleTelemetryTone.Error)));
+    }
+
+    private static int? LocalDriverSessionFlags(LiveTelemetrySnapshot snapshot)
+    {
+        var incidentPressure = snapshot.Models.IncidentPressure;
+        if (!incidentPressure.HasData)
+        {
+            return null;
+        }
+
+        var playerCarIdx = incidentPressure.PlayerCarIdx
+            ?? snapshot.Models.DriverDirectory.PlayerCarIdx
+            ?? snapshot.Models.Reference.PlayerCarIdx
+            ?? snapshot.Models.Timing.PlayerCarIdx;
+
+        return incidentPressure.Cars.FirstOrDefault(car =>
+                car.IsPlayer || (playerCarIdx is { } carIdx && car.CarIdx == carIdx))
+            ?.SessionFlags;
     }
 
     private static void AddYellowFlags(int flags, List<PrioritizedFlagDisplayItem> items)

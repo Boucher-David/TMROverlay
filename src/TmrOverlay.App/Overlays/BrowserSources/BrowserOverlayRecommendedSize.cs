@@ -1,5 +1,6 @@
 using System.Drawing;
 using TmrOverlay.App.Overlays.Content;
+using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
 
@@ -13,6 +14,17 @@ internal static class BrowserOverlayRecommendedSize
         OverlaySessionKind? sessionKind = null)
     {
         var baseSize = OverlayContentSizing.BaseSizeFor(definition, settings, sessionKind);
+        if (string.Equals(definition.Id, StandingsOverlayDefinition.Definition.Id, StringComparison.Ordinal))
+        {
+            baseSize = new Size(
+                baseSize.Width,
+                StandingsOverlaySizing.TargetClientHeightForRows(
+                    StandingsOverlaySizing.RecommendedBrowserSourceRows(settings, sessionKind),
+                    baseSize.Height,
+                    OverlayChromeSettings.ShowHeaderTimeRemainingForSession(settings, sessionKind),
+                    OverlayChromeSettings.ShowFooterSourceForSession(settings, sessionKind)));
+        }
+
         if (!OverlayContentColumnSettings.TryGetContentDefinition(definition.Id, out var contentDefinition)
             || contentDefinition.Columns.Count == 0)
         {

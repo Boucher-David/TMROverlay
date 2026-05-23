@@ -703,6 +703,7 @@ function settingsOverlaySubtitle(id) {
 
 export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = 'off') {
   const base = browserBaseSize(id);
+  let heightIncludesChromeSelection = false;
   if (id === 'input-state') {
     base[0] = inputStateBaseWidth(overlayState, base[0], previewMode);
   } else if (id === 'gap-to-leader') {
@@ -713,7 +714,10 @@ export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = '
     base[1] = fuelCalculatorBaseHeight(overlayState, previewMode, base[1]);
   } else if (id === 'standings' || id === 'relative') {
     base[0] = tableBaseWidth(id, overlayState, base[0], previewMode);
-    if (id === 'relative') {
+    if (id === 'standings') {
+      base[1] = standingsBaseHeight(overlayState, base[1], previewMode);
+      heightIncludesChromeSelection = true;
+    } else if (id === 'relative') {
       base[1] = relativeBaseHeight(overlayState, base[1]);
     }
   } else if (id === 'session-weather' || id === 'pit-service') {
@@ -721,7 +725,9 @@ export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = '
     base[0] = simpleSize[0];
     base[1] = simpleSize[1];
   }
-  base[1] = settingsChromeAdjustedBaseHeight(id, overlayState, base[1], previewMode);
+  if (!heightIncludesChromeSelection) {
+    base[1] = settingsChromeAdjustedBaseHeight(id, overlayState, base[1], previewMode);
+  }
   const scale = Math.max(0.6, Math.min(2, Number(overlayState.scalePercent || 100) / 100));
   return {
     baseWidth: Math.round(base[0]),
@@ -751,6 +757,58 @@ function browserBaseSize(id) {
     'session-weather': [overlaySizeNumber('sessionWeatherWidth', 464), overlaySizeNumber('sessionWeatherHeight', 496)],
     'pit-service': [overlaySizeNumber('pitServiceWidth', 530), overlaySizeNumber('pitServiceHeight', 707)]
   }[id] || [400, 300];
+}
+
+function standingsBaseHeight(overlayState, fullHeight, previewMode = 'off') {
+  const rows = standingsRecommendedRows(overlayState, previewMode);
+  return standingsHeightForRows(
+    rows,
+    fullHeight,
+    headerChromeEnabledForSizing('standings', overlayState, previewMode),
+    false);
+}
+
+function standingsRecommendedRows(overlayState, previewMode = 'off') {
+  const carsInClass = clampInteger(overlayState.carsInClass, 14, 1, 24);
+  const classSeparatorsEnabled = contentStateValueForSession(
+    overlayState,
+    'standings.class-separators.enabled',
+    'Multiclass sections',
+    true,
+    sizingSession('standings', previewMode));
+  if (!classSeparatorsEnabled) {
+    return carsInClass;
+  }
+
+  const otherRows = clampInteger(overlayState.otherClassRows, 2, 0, 6);
+  const classCount = otherRows > 0 ? 3 : 1;
+  return Math.max(1, Math.min(24, carsInClass + classCount + Math.max(0, classCount - 1) * otherRows));
+}
+
+function standingsHeightForRows(rowCount, persistedHeight, showHeader, showFooter) {
+  const rows = Math.max(1, Math.min(24, Number(rowCount || 0)));
+  const persistedRows = standingsVisibleRowsForHeight(persistedHeight, showHeader, showFooter);
+  if (rows <= persistedRows) return persistedHeight;
+
+  return Math.max(
+    persistedHeight,
+    standingsHeaderReserveHeight(showHeader)
+      + (showFooter ? 32 : 8)
+      + 1
+      + 30
+      + rows * (30 + 5));
+}
+
+function standingsVisibleRowsForHeight(height, showHeader, showFooter) {
+  const bodyHeight = Number(height || 0)
+    - standingsHeaderReserveHeight(showHeader)
+    - (showFooter ? 32 : 8)
+    - 1;
+  return Math.max(1, Math.floor((bodyHeight - 30) / (30 + 5)));
+}
+
+function standingsHeaderReserveHeight(showHeader) {
+  return showHeader ? 38 + 12 : 16;
 }
 
 function overlaySizeNumber(key, fallback) {

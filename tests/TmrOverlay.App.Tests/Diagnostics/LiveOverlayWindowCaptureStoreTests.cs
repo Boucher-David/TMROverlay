@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Text.Json;
 using TmrOverlay.App.Diagnostics;
+using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.App.Storage;
 using TmrOverlay.Core.Settings;
@@ -77,8 +78,9 @@ public sealed class LiveOverlayWindowCaptureStoreTests
             Assert.Equal("/overlays/standings", overlay.BrowserRoute);
             Assert.True(overlay.BrowserRequiresTelemetry);
             Assert.Equal(250, overlay.BrowserRefreshIntervalMilliseconds);
-            Assert.Equal(846, overlay.BrowserRecommendedWidth);
-            Assert.Equal(391, overlay.BrowserRecommendedHeight);
+            var expectedBrowserSize = BrowserOverlayRecommendedSize.ScaledFor(definition, settings);
+            Assert.Equal(expectedBrowserSize.Width, overlay.BrowserRecommendedWidth);
+            Assert.Equal(expectedBrowserSize.Height, overlay.BrowserRecommendedHeight);
             Assert.Equal(definition.DefaultWidth, overlay.DefaultWidth);
             Assert.Equal(definition.DefaultHeight, overlay.DefaultHeight);
             Assert.False(overlay.ScreenshotRepresentsCurrentState);

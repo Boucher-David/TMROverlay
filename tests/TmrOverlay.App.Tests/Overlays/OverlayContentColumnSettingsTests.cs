@@ -85,7 +85,7 @@ public sealed class OverlayContentColumnSettingsTests
         var size = BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings);
 
         Assert.Equal(1504, size.Width);
-        Assert.Equal(313, size.Height);
+        Assert.Equal(824, size.Height);
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class OverlayContentColumnSettingsTests
         var relativeSize = BrowserOverlayRecommendedSize.For(RelativeOverlayDefinition.Definition, relative);
 
         Assert.Equal(677, standingsSize.Width);
-        Assert.Equal(313, standingsSize.Height);
+        Assert.Equal(824, standingsSize.Height);
         Assert.Equal(392, relativeSize.Width);
         Assert.Equal(308, relativeSize.Height);
     }
@@ -203,7 +203,7 @@ public sealed class OverlayContentColumnSettingsTests
 
         var size = BrowserOverlayRecommendedSize.ScaledFor(StandingsOverlayDefinition.Definition, standings);
 
-        Assert.Equal(new Size(846, 391), size);
+        Assert.Equal(new Size(846, 1030), size);
     }
 
     [Fact]
@@ -269,16 +269,16 @@ public sealed class OverlayContentColumnSettingsTests
             StandingsOverlayDefinition.Definition.DefaultHeight);
 
         Assert.Equal(
-            new Size(677, 313),
+            new Size(677, 824),
             BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings));
         Assert.Equal(
-            new Size(557, 313),
+            new Size(557, 824),
             BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Practice));
 
         standings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, false);
 
         Assert.Equal(
-            new Size(557, 275),
+            new Size(557, 790),
             BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Practice));
         Assert.Equal(
             new Size(557, 275),
@@ -379,7 +379,7 @@ public sealed class OverlayContentColumnSettingsTests
             StandingsOverlayDefinition.Definition.DefaultHeight);
         standings.SetBooleanOption(Column(OverlayContentColumnSettings.StandingsPitColumnId).EnabledKey(standings.Id), false);
 
-        Assert.Equal(new Size(629, 313), BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Race));
+        Assert.Equal(new Size(629, 824), BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Race));
         Assert.Equal(new Size(629, 313), ScaledSize(method, StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Race));
     }
 

@@ -190,15 +190,42 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.True(built);
         var browserSource = response.Model.EffectiveSettings!.Rendered.BrowserSource;
         Assert.Equal(677, browserSource.BaseWidth);
-        Assert.Equal(313, browserSource.BaseHeight);
+        Assert.Equal(824, browserSource.BaseHeight);
         Assert.Equal(846, browserSource.Width);
-        Assert.Equal(391, browserSource.Height);
+        Assert.Equal(1030, browserSource.Height);
         Assert.Equal(1.25d, browserSource.Scale);
         Assert.Equal(125, browserSource.ScalePercent);
         Assert.Equal(0.8d, browserSource.Opacity);
         Assert.Equal(80, browserSource.OpacityPercent);
         Assert.Contains(response.Model.EffectiveSettings.Settings, setting => setting.Key == "scalePercent" && Equals(setting.Value, 125));
         Assert.Contains(response.Model.EffectiveSettings.Settings, setting => setting.Key == "opacityPercent" && Equals(setting.Value, 80));
+    }
+
+    [Fact]
+    public void EffectiveSettings_ExpandsStandingsBrowserSourceHeightForRenderedRows()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "standings");
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        var built = factory.TryBuild("standings", MultiCarGapSnapshot(now, sequence: 1, sessionTimeSeconds: 720d), settings, now, out var response);
+
+        Assert.True(built);
+        Assert.True(response.Model.Rows.Count > StandingsOverlaySizing.VisibleRowsForHeight(313, showHeader: true, showFooter: false));
+        var browserSource = response.Model.EffectiveSettings!.Rendered.BrowserSource;
+        var minimumBaseHeight = StandingsOverlaySizing.TargetClientHeightForRows(
+            response.Model.Rows.Count,
+            persistedHeight: 313,
+            showHeader: true,
+            showFooter: false);
+        Assert.True(browserSource.BaseHeight >= minimumBaseHeight);
+        Assert.True(browserSource.BaseHeight > 313);
     }
 
     [Fact]

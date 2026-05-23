@@ -2763,6 +2763,13 @@ internal sealed class BrowserOverlayModelFactory
                 browserBaseSize.Width,
                 FuelBrowserSourceHeight(model, browserBaseSize.Height));
         }
+        else if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && model.ShouldRender)
+        {
+            browserBaseSize = new System.Drawing.Size(
+                browserBaseSize.Width,
+                StandingsBrowserSourceHeight(model, browserBaseSize.Height));
+        }
 
         var browserScaledSize = new System.Drawing.Size(
             Math.Max(1, (int)Math.Round(browserBaseSize.Width * clampedScale)),
@@ -3100,6 +3107,21 @@ internal sealed class BrowserOverlayModelFactory
         return hasVisibleHeader
             ? height
             : Math.Max(OverlayGeometryContracts.MetricRows.MinimumChromeAdjustedHeight, height - OverlayGeometryContracts.MetricRows.HeaderChromeHeight);
+    }
+
+    private static int StandingsBrowserSourceHeight(BrowserOverlayDisplayModel model, int fallbackHeight)
+    {
+        if (!string.Equals(model.OverlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || model.Rows.Count <= 0)
+        {
+            return fallbackHeight;
+        }
+
+        return StandingsOverlaySizing.TargetClientHeightForRows(
+            model.Rows.Count,
+            fallbackHeight,
+            model.HeaderItems.Any(item => !string.IsNullOrWhiteSpace(item.Value)),
+            showFooter: false);
     }
 
     private static BrowserOverlayFuelStrategyEvidence? EffectiveFuelStrategyEvidence(

@@ -41,14 +41,14 @@ describe('settings effect matrix', () => {
       const overlay = overlayConfig(config, 'standings');
       expect.soft(overlay.scalePercent).toBe(125);
       expect.soft(overlay.opacityPercent).toBe(80);
-      expect.soft(overlay.browserSize).toBe('846 x 391');
+      expect.soft(overlay.browserSize).toBe('846 x 1030');
 
       const model = (await server.getJson(modelPath('standings'))).model;
       expect.soft(model.effectiveSettings.rendered.browserSource).toMatchObject({
         baseWidth: 677,
-        baseHeight: 313,
+        baseHeight: 824,
         width: 846,
-        height: 391,
+        height: 1030,
         scalePercent: 125,
         opacityPercent: 80
       });

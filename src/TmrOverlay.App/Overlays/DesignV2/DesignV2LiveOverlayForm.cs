@@ -680,37 +680,22 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             Math.Max(1, rowCount),
             1,
             StandingsOverlayViewModel.MaximumRenderedRows);
-        var persistedVisibleRows = StandingsVisibleRowsForHeight(persistedHeight, showHeader, showFooter);
-        if (visibleRows <= persistedVisibleRows)
-        {
-            return persistedHeight;
-        }
-
-        return Math.Max(
+        return StandingsOverlaySizing.TargetClientHeightForRows(
+            visibleRows,
             persistedHeight,
-            HeaderReserveHeight(showHeader) + FooterReserveHeight(showFooter) + 1 + RowHeight + (visibleRows * (RowHeight + RowGap)));
+            showHeader,
+            showFooter);
     }
 
     private static int StandingsVisibleRowsForHeight(int clientHeight, bool showHeader, bool showFooter)
     {
-        var bodyHeight = clientHeight - HeaderReserveHeight(showHeader) - FooterReserveHeight(showFooter) - 1;
-        return Math.Max(1, (bodyHeight - RowHeight) / (RowHeight + RowGap));
+        return StandingsOverlaySizing.VisibleRowsForHeight(clientHeight, showHeader, showFooter);
     }
 
     internal static bool ShouldAutoExpandStandingsRows(LiveTelemetrySnapshot snapshot)
     {
         return snapshot.SourceId is null
             || !snapshot.SourceId.StartsWith("session-preview-", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static int HeaderReserveHeight(bool showHeader)
-    {
-        return showHeader ? HeaderHeight + BodyGap : PaddingSize;
-    }
-
-    private static int FooterReserveHeight(bool showFooter)
-    {
-        return showFooter ? FooterHeight : 8;
     }
 
     private static IReadOnlyList<string> ValuesForStandingsRow(

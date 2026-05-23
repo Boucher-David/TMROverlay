@@ -8,7 +8,8 @@ import {
   overlayGeometry,
   renderAppValidatorReviewHtml,
   renderInstallerReviewHtml,
-  renderSettingsGeneralReviewHtml
+  renderSettingsGeneralReviewHtml,
+  settingsBrowserSourceSize
 } from './browserOverlayAssets.js';
 import { startReviewServer } from './reviewServerTestHost.js';
 
@@ -34,6 +35,35 @@ test.describe('browser overlay Playwright integration', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(requests).toContain('/api/overlay-model/standings');
     expect(requests).not.toContain('/api/snapshot');
+  });
+
+  test('fits standings rows inside advertised OBS browser source height', async ({ page }) => {
+    const model = standingsDisplayModel({ rows: standingsRecommendedBrowserSourceRows() });
+    const sourceSize = settingsBrowserSourceSize('standings', {
+      carsInClass: 14,
+      otherClassRows: 2
+    }, 'race');
+
+    await installBrowserOverlayRoutes(page, 'standings', {
+      live: freshLiveSnapshot({}),
+      model
+    });
+
+    await page.setViewportSize({ width: sourceSize.baseWidth, height: sourceSize.baseHeight });
+    await page.goto('http://localhost:8765/overlays/standings?preview=race');
+
+    await expect(page.locator('tbody tr')).toHaveCount(model.rows.length);
+    const fit = await page.evaluate(() => {
+      const overlay = document.querySelector('.overlay')?.getBoundingClientRect();
+      const lastRow = document.querySelector('tbody tr:last-child')?.getBoundingClientRect();
+      return {
+        lastRowBottom: lastRow?.bottom ?? 0,
+        overlayBottom: overlay?.bottom ?? 0,
+        viewportHeight: window.innerHeight
+      };
+    });
+    expect(fit.overlayBottom).toBeLessThanOrEqual(fit.viewportHeight + 1);
+    expect(fit.lastRowBottom).toBeLessThanOrEqual(fit.viewportHeight + 1);
   });
 
   test('uses native normal table height constants in browser layout', async ({ page }) => {
@@ -1794,6 +1824,35 @@ function standingsDisplayModel(overrides = {}) {
     headerItems: [{ key: 'timeRemaining', value: '06:37:08' }],
     ...overrides
   };
+}
+
+function standingsRecommendedBrowserSourceRows() {
+  const car = (position, number, driver, gap, interval, fastest, last, pit = '', extra = {}) =>
+    carRow([String(position), `#${number}`, driver, gap, interval, fastest, last, pit], extra);
+
+  return [
+    headerRow('GTP', '2 cars | 31.25 laps', '#C3413B'),
+    car(1, 4, 'Prototype Leader', 'Lap 31', '-28.1', '1:33.210', '1:34.012'),
+    car(2, 38, 'Prototype Chase', '+6.4', '+6.4', '1:33.880', '1:34.452'),
+    headerRow('LMP2', '2 cars | 30.80 laps', '#33CEFF'),
+    car(1, 8, 'LMP Two', 'Lap 30', '-9.5', '1:45.884', '1:46.210'),
+    car(2, 18, 'LMP Traffic', '+14.1', '+14.1', '1:46.231', '1:47.016'),
+    headerRow('GT3', '14 cars | 29.40 laps', '#FFAA00'),
+    car(1, 11, 'GT3 Leader', 'Lap 29', '-2.0', '1:53.112', '1:53.112'),
+    car(2, 71, 'Focus Racer', '+3.4', '0.0', '1:54.228', '1:54.901', '', { isReference: true }),
+    car(3, 91, 'Chaser One', '+8.9', '+5.5', '1:55.480', '1:56.004', 'IN', { isPit: true }),
+    car(4, 33, 'Chaser Two', '+15.2', '+6.3', '1:55.903', '1:56.440'),
+    car(5, 12, 'Chaser Three', '+21.7', '+6.5', '1:56.004', '1:56.881'),
+    car(6, 82, 'Chaser Four', '+30.0', '+8.3', '1:56.330', '1:57.210'),
+    car(7, 48, 'Chaser Five', '+42.4', '+12.4', '1:56.752', '1:58.004'),
+    car(8, 27, 'Chaser Six', '+55.0', '+12.6', '1:57.110', '1:58.334'),
+    car(9, 52, 'Chaser Seven', '+1:05.0', '+10.0', '1:57.402', '1:58.512'),
+    car(10, 63, 'Chaser Eight', '+1:22.5', '+17.5', '1:57.830', '1:59.030'),
+    car(11, 77, 'Chaser Nine', '+1:44.1', '+21.6', '1:58.012', '1:59.400'),
+    car(12, 5, 'Chaser Ten', '+2:03.6', '+19.5', '1:58.220', '2:00.100'),
+    car(13, 44, 'Chaser Eleven', '+2:30.0', '+26.4', '1:58.940', '2:00.430'),
+    car(14, 99, 'Chaser Twelve', '+3:02.4', '+32.4', '1:59.210', '2:01.004')
+  ];
 }
 
 function standingsWithoutPitColumn(overrides = {}) {

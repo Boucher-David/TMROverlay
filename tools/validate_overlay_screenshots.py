@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import re
 import struct
@@ -888,6 +889,7 @@ def main() -> int:
             "validator-mutations",
             "legacy-contact-sheets",
             "release-tutorial",
+            "forensics-screenshot-manifests",
         ),
         default="app-static",
         help="Screenshot artifact profile to validate.",
@@ -934,6 +936,9 @@ def main() -> int:
         return finish(failures)
     if args.profile == "release-tutorial":
         validate_release_tutorial(root, args.min_unique_bytes, failures)
+        return finish(failures)
+    if args.profile == "forensics-screenshot-manifests":
+        validate_forensics_screenshot_manifests(root, args.min_unique_bytes, failures)
         return finish(failures)
 
     # "tracked" is retained as a compatibility alias for the old default.
@@ -11817,6 +11822,158 @@ def validate_release_tutorial(root: Path, min_unique_bytes: int, failures: list[
             min_unique_bytes=min_unique_bytes,
             failures=failures,
         )
+
+
+def validate_forensics_screenshot_manifests(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
+    manifests = forensics_screenshot_manifest_paths(root)
+    if not manifests:
+        failures.append(f"{root}: no forensics screenshot manifests found")
+        return
+
+    for manifest_path in manifests:
+        validate_forensics_screenshot_manifest(manifest_path, min_unique_bytes, failures)
+
+
+def forensics_screenshot_manifest_paths(root: Path) -> list[Path]:
+    candidates = set(root.glob("overlays/*/screenshot-manifest.json"))
+    candidates.update(root.glob("*/overlays/*/screenshot-manifest.json"))
+    return sorted(candidates)
+
+
+def validate_forensics_screenshot_manifest(manifest_path: Path, min_unique_bytes: int, failures: list[str]) -> None:
+    label = str(manifest_path)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        failures.append(f"{label}: {exc}")
+        return
+    except json.JSONDecodeError as exc:
+        failures.append(f"{label}: invalid JSON: {exc}")
+        return
+    if not isinstance(manifest, dict):
+        failures.append(f"{label}: manifest must be an object")
+        return
+
+    overlay_id = str(manifest.get("overlayId") or "")
+    folder_overlay_id = forensics_manifest_folder_overlay_id(manifest_path)
+    if not folder_overlay_id:
+        failures.append(f"{label}: path must be under overlays/<overlay-id>/screenshot-manifest.json")
+    elif overlay_id != folder_overlay_id:
+        failures.append(f"{label}: overlayId expected {folder_overlay_id!r}, got {overlay_id!r}")
+    if overlay_id not in BROWSER_REVIEW_OVERLAY_IDS:
+        failures.append(f"{label}: unknown overlayId {overlay_id!r}")
+
+    if manifest.get("schemaVersion") != 1:
+        failures.append(f"{label}: schemaVersion expected 1, got {manifest.get('schemaVersion')!r}")
+    status = str(manifest.get("status") or "")
+    if status not in {"not-rendered", "skipped", "produced"}:
+        failures.append(f"{label}: status expected not-rendered/skipped/produced, got {status!r}")
+
+    screenshots = manifest.get("screenshots")
+    if not isinstance(screenshots, list):
+        failures.append(f"{label}: screenshots must be a list")
+        return
+
+    if status == "not-rendered":
+        if screenshots:
+            failures.append(f"{label}: not-rendered manifest must not contain screenshots")
+        gaps = manifest.get("gaps")
+        if not isinstance(gaps, list) or not any("renderer" in str(gap.get("kind") or gap.get("detail") or "") for gap in gaps if isinstance(gap, dict)):
+            failures.append(f"{label}: not-rendered manifest missing renderer gap evidence")
+        return
+
+    renderer = str(manifest.get("renderer") or "")
+    if status == "produced" and not renderer:
+        failures.append(f"{label}: produced manifest missing renderer")
+    captured_count = 0
+    for index, screenshot in enumerate(screenshots):
+        if not isinstance(screenshot, dict):
+            failures.append(f"{label}: screenshots[{index}] must be an object")
+            continue
+        captured = validate_forensics_screenshot_row(
+            manifest_path,
+            label,
+            index,
+            renderer,
+            screenshot,
+            min_unique_bytes,
+            failures,
+        )
+        if captured:
+            captured_count += 1
+
+    screenshot_count = manifest.get("screenshotCount")
+    if status == "produced":
+        if not isinstance(screenshot_count, int):
+            failures.append(f"{label}: produced manifest missing integer screenshotCount")
+        elif screenshot_count != captured_count:
+            failures.append(f"{label}: screenshotCount expected {captured_count}, got {screenshot_count}")
+
+
+def validate_forensics_screenshot_row(
+    manifest_path: Path,
+    manifest_label: str,
+    index: int,
+    renderer: str,
+    screenshot: dict[str, object],
+    min_unique_bytes: int,
+    failures: list[str],
+) -> bool:
+    row_label = f"{manifest_label}: screenshots[{index}]"
+    status = str(screenshot.get("status") or "")
+    captured_statuses = {"captured", "page-fallback-captured", "model-hidden-page-captured"}
+    if status not in captured_statuses:
+        failures.append(f"{row_label}: expected captured screenshot status, got {status!r}")
+        return False
+
+    for field in ("frameIndex", "path", "modelHash", "imageHash", "shouldRender", "modelStatus", "bodyKind", "visibleText"):
+        if field not in screenshot:
+            failures.append(f"{row_label}: missing {field}")
+
+    if status == "model-hidden-page-captured" and screenshot.get("shouldRender") is not False:
+        failures.append(f"{row_label}: model-hidden-page-captured expected shouldRender=false")
+
+    relative_path = screenshot.get("path")
+    if not isinstance(relative_path, str) or not relative_path:
+        failures.append(f"{row_label}: missing relative PNG path")
+        return True
+    if Path(relative_path).is_absolute() or ".." in Path(relative_path).parts:
+        failures.append(f"{row_label}: screenshot path must be relative and stay inside overlay folder: {relative_path!r}")
+        return True
+    if renderer and not relative_path.startswith(f"screenshots/{renderer}/"):
+        failures.append(f"{row_label}: screenshot path expected under screenshots/{renderer}/, got {relative_path!r}")
+
+    image_path = manifest_path.parent / relative_path
+    if not is_inside_directory(image_path.resolve(), manifest_path.parent.resolve()):
+        failures.append(f"{row_label}: screenshot path escapes overlay folder: {relative_path!r}")
+        return True
+    try:
+        metadata = inspect_png(image_path, min_unique_bytes)
+    except Exception as exc:  # noqa: BLE001 - CLI validation boundary.
+        failures.append(f"{row_label}: {relative_path}: {exc}")
+        return True
+    if metadata["unique_bytes"] < min_unique_bytes:
+        failures.append(f"{row_label}: {relative_path}: only {metadata['unique_bytes']} sampled decoded bytes; image may be blank")
+    if metadata["byte_range"] < 24:
+        failures.append(f"{row_label}: {relative_path}: decoded byte range {metadata['byte_range']}; image may be blank")
+
+    expected_hash = screenshot.get("imageHash")
+    actual_hash = hashlib.sha256(image_path.read_bytes()).hexdigest()
+    if expected_hash != actual_hash:
+        failures.append(f"{row_label}: imageHash expected {actual_hash}, got {expected_hash!r}")
+    return True
+
+
+def forensics_manifest_folder_overlay_id(manifest_path: Path) -> str | None:
+    parts = manifest_path.parts
+    for index, part in enumerate(parts):
+        if part == "overlays" and index + 1 < len(parts):
+            return parts[index + 1]
+    return None
+
+
+def is_inside_directory(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
 
 
 def validate_png(

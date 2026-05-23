@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "description": "Compact model timeline fixtures for broad temporal validators. These are synthetic minimized model rows, not raw telemetry captures.",
+  "fixtures": [
+    {
+      "path": "fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl",
+      "expectedStatus": "pass",
+      "scenarioIds": [
+        "standings-chrome-on-telemetry-no-data",
+        "radar-side-signal-placement-real-data",
+        "gap-pit-and-long-tail-real-data",
+        "fuel-compact-rendered-height"
+      ]
+    },
+    {
+      "path": "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl",
+      "expectedStatus": "fail",
+      "scenarioIds": [
+        "standings-practice-no-results-stability",
+        "radar-side-signal-placement-real-data",
+        "gap-pit-and-long-tail-real-data",
+        "fuel-compact-rendered-height",
+        "relative-practice-timing-real-data",
+        "track-map-focus-real-data"
+      ]
+    }
+  ]
+}

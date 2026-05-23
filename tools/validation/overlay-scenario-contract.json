@@ -467,12 +467,18 @@
           "id": "standings-chrome-on-telemetry-no-data",
           "family": "chrome-on-no-data-where-applicable",
           "tier": "tier1-ci-contract-fixtures",
-          "status": "missing",
+          "status": "partial",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
+          "testFiles": ["tests/tools/test_model_timeline_validator.py"],
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:standings-chrome-no-data-hidden", "tools/analysis/validate_model_timeline.py:standings-no-data-content-visible"],
           "assertions": [
             "enabled Standings header/footer chrome has an explicit stable policy when scoring rows are absent",
             "no-data state cannot flash between hidden and visible shells before accepted scoring source exists",
             "header/footer-only visibility is distinguished from all-content-disabled no-render"
+          ],
+          "gaps": [
+            "temporal model fixture proves the policy shape, but browser/localhost/native chrome-on telemetry-no-data screenshots are still missing"
           ]
         },
         {
@@ -569,8 +575,9 @@
           "tier": "tier2-capture-derived-replay",
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
-          "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/relative-practice-timing-real-data.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
+          "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/relative-practice-timing-real-data.json", "fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs", "tests/tools/test_model_timeline_validator.py"],
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:relative-practice-timing-meter-fallback"],
           "captureTargets": ["v1.1.0 practice capture with nearby cars, no official lap delta, and populated CarIdxEstTime"],
           "assertions": ["practice timing uses valid SDK timing evidence when iRacing shows seconds", "meter-only or -- fallback is explained by missing evidence", "race-only session-state gate does not block practice estimated rows"],
           "gaps": ["Windows native render replay from this compact snapshot is still missing"]
@@ -632,10 +639,14 @@
           "id": "fuel-compact-rendered-height",
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
-          "status": "missing",
+          "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
+          "testFiles": ["tests/tools/test_model_timeline_validator.py"],
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:fuel-compact-height-unused", "tools/analysis/validate_model_timeline.py:fuel-compact-height-too-tall"],
           "captureTargets": ["v1.1.0 race with two visible rows and larger persisted/default surface"],
-          "assertions": ["rendered section/row count drives recommended height unless user or OBS size is locked", "unusedHeightRatio is reported", "size reason is rendered-content, settings-content, custom-size, or persisted-window"]
+          "assertions": ["rendered section/row count drives recommended height unless user or OBS size is locked", "unusedHeightRatio is reported", "size reason is rendered-content, settings-content, custom-size, or persisted-window"],
+          "gaps": ["temporal model fixture proves the strict size policy, but compact real-data browser/localhost/Windows screenshot manifests are still missing"]
         },
         {
           "id": "fuel-measured-burn-and-refuel",
@@ -903,10 +914,14 @@
           "id": "radar-side-signal-placement-real-data",
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
-          "status": "missing",
+          "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
+          "testFiles": ["tests/tools/test_model_timeline_validator.py"],
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:radar-side-warning-without-actual-alongside"],
           "captureTargets": ["Race 2 sideSignalWithoutPlacementFrames", "v1.1.0 race sideSignalWithoutPlacementFrames"],
-          "assertions": ["CarLeftRight-only, placement-only, and both-source states are classified", "side warning without placement candidate follows explicit product policy"]
+          "assertions": ["CarLeftRight-only, placement-only, and both-source states are classified", "side warning must not render unless evidence says a car is actually alongside"],
+          "gaps": ["temporal model fixture proves the policy, but compact real-data side-signal/placement replay and rendered warning geometry are still missing"]
         },
         {
           "id": "radar-multiclass-timing-real-data",
@@ -985,9 +1000,13 @@
           "id": "gap-pit-and-long-tail-real-data",
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
-          "status": "missing",
+          "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
-          "assertions": ["pit entry/exit windows preserve selected series and scale mode", "far trailing selected line cannot flatten useful top-car range without explicit warning"]
+          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
+          "testFiles": ["tests/tools/test_model_timeline_validator.py"],
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:gap-long-tail-dominates-scale"],
+          "assertions": ["pit entry/exit windows preserve selected series and scale mode", "far trailing selected line cannot flatten useful top-car range without explicit warning", "initial long-tail rule hides or compresses the furthest behind car when its gap to the focused car is greater than the focused car's gap to the leader"],
+          "gaps": ["temporal model fixture proves the initial long-tail policy, but real pit entry/exit replay and graph rendering calibration are still missing"]
         },
         {
           "id": "gap-minimum-scale",
@@ -1047,8 +1066,9 @@
           "tier": "tier2-capture-derived-replay",
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
-          "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-focus-and-practice-marker-policy.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
+          "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-focus-and-practice-marker-policy.json", "fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs", "tests/tools/test_model_timeline_validator.py"],
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:track-map-focus-marker-mismatch", "tools/analysis/validate_model_timeline.py:track-map-focus-marker-radius"],
           "captureTargets": ["v1.1.0 practice focus switch CamCarIdx 0 -> 4 -> 5 -> 4"],
           "assertions": ["focused GT3 marker becomes isFocus=true with focus radius", "non-player focus uses correct marker tone", "stale LMP2 focus is rejected"],
           "gaps": ["Windows native rendered marker geometry from this compact snapshot is still missing"]

@@ -178,6 +178,8 @@ When Enhanced iRacing Telemetry Capture is enabled, the app creates an initial o
 
 That package indexes the explicit capture and related compact sidecars for follow-up replay analysis, including starter package status, OBS/localhost readiness, and evidence-gap files. Offline enrichment can add active production model samples, overlay semantic manifests, and renderer screenshots. Diagnostics bundles may reference this evidence, but raw telemetry and forensics artifacts stay outside the diagnostics bundle by default. The app will not create this package unless enhanced telemetry capture produced a raw capture.
 
+For local replay import checks, `tools/TmrOverlay.RawCaptureReplayExport` writes a compact `import-summary.json` and optional bounded `decoded-samples.jsonl` from an explicit raw capture. It is a developer/evidence tool only; it does not copy raw `telemetry.bin` or full private session YAML into the output.
+
 If the Settings UI is frozen and a bundle cannot be created, collect `%LOCALAPPDATA%\TmrOverlay\logs` and the latest `%LOCALAPPDATA%\TmrOverlay\captures` folder from the diagnostic patch build.
 
 Performance diagnostics are always on and write periodic JSONL snapshots under:
@@ -208,6 +210,6 @@ Near-term work is focused on validating the release channel and preparing V1.x f
 
 - validate installed Velopack updates from public GitHub Releases
 - use the diagnostics to measure overlay lifecycle, settings-driven form recreation, and timer efficiency before changing refresh behavior
-- add replay tooling for raw captures
+- harden replay tooling for raw captures, including semantic import validation, replay-window evidence, compact sample export, and native/browser/localhost screenshot provenance
 - continue hardening radar, relative, standings, track map, and gap behavior with large multiclass sessions
 - add future analysis and broadcast overlays such as a compact Timing Tower after the core app is stable

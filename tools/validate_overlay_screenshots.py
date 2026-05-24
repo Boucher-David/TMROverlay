@@ -13466,6 +13466,7 @@ def validate_forensics_screenshot_manifest(manifest_path: Path, min_unique_bytes
             manifest_path,
             label,
             index,
+            overlay_id,
             renderer,
             screenshot,
             min_unique_bytes,
@@ -13486,6 +13487,7 @@ def validate_forensics_screenshot_row(
     manifest_path: Path,
     manifest_label: str,
     index: int,
+    overlay_id: str,
     renderer: str,
     screenshot: dict[str, object],
     min_unique_bytes: int,
@@ -13498,9 +13500,10 @@ def validate_forensics_screenshot_row(
         failures.append(f"{row_label}: expected captured screenshot status, got {status!r}")
         return False
 
-    for field in ("frameIndex", "path", "modelHash", "imageHash", "shouldRender", "modelStatus", "bodyKind", "visibleText"):
+    for field in ("frameIndex", "path", "modelHash", "imageHash", "shouldRender", "modelStatus", "bodyKind", "visibleText", "replayProvenance"):
         if field not in screenshot:
             failures.append(f"{row_label}: missing {field}")
+    validate_forensics_replay_provenance(row_label, overlay_id, screenshot, failures)
 
     if status == "model-hidden-page-captured" and screenshot.get("shouldRender") is not False:
         failures.append(f"{row_label}: model-hidden-page-captured expected shouldRender=false")
@@ -13534,6 +13537,75 @@ def validate_forensics_screenshot_row(
     if expected_hash != actual_hash:
         failures.append(f"{row_label}: imageHash expected {actual_hash}, got {expected_hash!r}")
     return True
+
+
+def validate_forensics_replay_provenance(
+    row_label: str,
+    overlay_id: str,
+    screenshot: dict[str, object],
+    failures: list[str],
+) -> None:
+    provenance = screenshot.get("replayProvenance")
+    if not isinstance(provenance, dict):
+        failures.append(f"{row_label}: replayProvenance must be an object")
+        return
+
+    if provenance.get("schemaVersion") != 1:
+        failures.append(f"{row_label}: replayProvenance.schemaVersion expected 1, got {provenance.get('schemaVersion')!r}")
+    if provenance.get("sourceKind") != "production-model-replay":
+        failures.append(f"{row_label}: replayProvenance.sourceKind expected 'production-model-replay', got {provenance.get('sourceKind')!r}")
+    if provenance.get("overlayId") != overlay_id:
+        failures.append(f"{row_label}: replayProvenance.overlayId expected {overlay_id!r}, got {provenance.get('overlayId')!r}")
+    if provenance.get("frameIndex") != screenshot.get("frameIndex"):
+        failures.append(
+            f"{row_label}: replayProvenance.frameIndex expected {screenshot.get('frameIndex')!r}, got {provenance.get('frameIndex')!r}"
+        )
+
+    for field in ("captureId", "modelSource", "cadence", "samplePlanHash"):
+        if not isinstance(provenance.get(field), str) or not str(provenance.get(field)).strip():
+            failures.append(f"{row_label}: replayProvenance.{field} must be a non-empty string")
+    for field in (
+        "capturedAtUtc",
+        "capturedUnixMs",
+        "sessionTimeSeconds",
+        "sessionTick",
+        "sessionInfoUpdate",
+        "sessionInfoMatch",
+        "sourceFiles",
+    ):
+        if provenance.get(field) is None:
+            failures.append(f"{row_label}: replayProvenance.{field} is required")
+
+    if not isinstance(provenance.get("sessionInfoMatch"), dict):
+        failures.append(f"{row_label}: replayProvenance.sessionInfoMatch must be an object")
+    else:
+        session_info_match = provenance.get("sessionInfoMatch")
+        if not isinstance(session_info_match.get("source"), str) or not session_info_match.get("source").strip():
+            failures.append(f"{row_label}: replayProvenance.sessionInfoMatch.source must be a non-empty string")
+        if session_info_match.get("requestedUpdate") is None:
+            failures.append(f"{row_label}: replayProvenance.sessionInfoMatch.requestedUpdate is required")
+
+    if not isinstance(provenance.get("sourceFiles"), dict):
+        failures.append(f"{row_label}: replayProvenance.sourceFiles must be an object")
+    else:
+        source_files = provenance.get("sourceFiles")
+        for field in ("manifest", "schema", "telemetry", "latestSessionInfo", "sessionInfoDirectory"):
+            if not isinstance(source_files.get(field), str) or not source_files.get(field).strip():
+                failures.append(f"{row_label}: replayProvenance.sourceFiles.{field} must be a non-empty string")
+
+    if "focusCarIdx" not in provenance:
+        failures.append(f"{row_label}: replayProvenance.focusCarIdx is required")
+    if "rawCamCarIdx" not in provenance:
+        failures.append(f"{row_label}: replayProvenance.rawCamCarIdx is required")
+    if "sessionType" not in provenance and "sessionName" not in provenance:
+        failures.append(f"{row_label}: replayProvenance.sessionType or sessionName is required")
+
+    if not isinstance(provenance.get("sampleReasons"), list):
+        failures.append(f"{row_label}: replayProvenance.sampleReasons must be a list")
+    if not isinstance(provenance.get("sampleEventIds"), list):
+        failures.append(f"{row_label}: replayProvenance.sampleEventIds must be a list")
+    if not isinstance(provenance.get("sampleOverlayIds"), list):
+        failures.append(f"{row_label}: replayProvenance.sampleOverlayIds must be a list")
 
 
 def is_absolute_or_traversing_path(value: str) -> bool:

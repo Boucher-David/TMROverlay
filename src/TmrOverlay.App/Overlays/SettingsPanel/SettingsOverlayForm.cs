@@ -804,7 +804,8 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         SyncReleaseUpdateUi();
         if (snapshot.Status == ReleaseUpdateStatus.Applying)
         {
-            SetSupportStatus("Restarting to apply update...", isError: false);
+            RecordApplicationExitRequestedForUpdate("settings", snapshot);
+            SetSupportStatus("Restarting to apply update. Waiting for TmrOverlay to close...", isError: false);
             RequestApplicationExit();
             return;
         }
@@ -2238,7 +2239,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             ReleaseUpdateStatus.PendingRestart => string.IsNullOrWhiteSpace(snapshot.LatestVersion)
                 ? "Downloaded update is ready to apply after restart."
                 : $"Update v{snapshot.LatestVersion} is ready to apply after restart.",
-            ReleaseUpdateStatus.Applying => "Restarting to apply update.",
+            ReleaseUpdateStatus.Applying => $"Restarting to apply update. {ApplyingWaitText(snapshot)}",
             ReleaseUpdateStatus.Failed => string.IsNullOrWhiteSpace(snapshot.LastError)
                 ? "Update check failed."
                 : $"Update check failed: {snapshot.LastError}",
@@ -2263,7 +2264,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
                 ? $"Downloading v{snapshot.LatestVersion}: {progress}%."
                 : $"Downloading v{snapshot.LatestVersion}.",
             ReleaseUpdateStatus.PendingRestart => $"Downloaded update v{snapshot.LatestVersion} is pending restart.",
-            ReleaseUpdateStatus.Applying => $"Restarting to apply v{snapshot.LatestVersion}.",
+            ReleaseUpdateStatus.Applying => $"Restarting to apply v{snapshot.LatestVersion}. {ApplyingWaitText(snapshot)}",
             ReleaseUpdateStatus.Failed => string.IsNullOrWhiteSpace(snapshot.LastError)
                 ? "Check failed."
                 : $"Check failed: {snapshot.LastError}",
@@ -2284,7 +2285,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             ReleaseUpdateStatus.PendingRestart => string.IsNullOrWhiteSpace(snapshot.LatestVersion)
                 ? "Downloaded update is ready; restart to apply."
                 : $"Downloaded v{snapshot.LatestVersion}; restart to apply.",
-            ReleaseUpdateStatus.Applying => "Restarting to apply update.",
+            ReleaseUpdateStatus.Applying => $"Restarting to apply update. {ApplyingWaitText(snapshot)}",
             ReleaseUpdateStatus.UpToDate => "No update available.",
             ReleaseUpdateStatus.NotInstalled => "Install with Velopack to enable update checks.",
             ReleaseUpdateStatus.Disabled => "Update checks are disabled.",
@@ -2302,7 +2303,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             ReleaseUpdateStatus.PendingRestart => string.IsNullOrWhiteSpace(snapshot.LatestVersion)
                 ? "Update downloaded. Restart to apply it."
                 : $"Update v{snapshot.LatestVersion} downloaded. Restart to apply it.",
-            ReleaseUpdateStatus.Applying => "Restarting to apply update.",
+            ReleaseUpdateStatus.Applying => $"Restarting to apply update. {ApplyingWaitText(snapshot)}",
             ReleaseUpdateStatus.UpToDate => "No update available.",
             ReleaseUpdateStatus.Failed => string.IsNullOrWhiteSpace(snapshot.LastError)
                 ? "Update failed."
@@ -2321,6 +2322,31 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             ReleaseUpdateStatus.Applying => "Wait",
             _ => "Check"
         };
+    }
+
+    private void RecordApplicationExitRequestedForUpdate(string source, ReleaseUpdateSnapshot snapshot)
+    {
+        _events.Record("application_exit_requested_for_update", new Dictionary<string, string?>
+        {
+            ["source"] = source,
+            ["releaseUpdateStatus"] = snapshot.Status.ToString(),
+            ["latestVersion"] = snapshot.LatestVersion,
+            ["latestFileName"] = snapshot.LatestFileName,
+            ["lastApplyStartedAtUtc"] = snapshot.LastApplyStartedAtUtc?.ToString("O")
+        });
+    }
+
+    private static string ApplyingWaitText(ReleaseUpdateSnapshot snapshot)
+    {
+        if (snapshot.LastApplyStartedAtUtc is not { } startedAtUtc)
+        {
+            return "Waiting for app shutdown.";
+        }
+
+        var elapsedSeconds = Math.Max(0, (int)Math.Round((DateTimeOffset.UtcNow - startedAtUtc).TotalSeconds));
+        return elapsedSeconds < 15
+            ? "Waiting for app shutdown."
+            : $"Still waiting after {elapsedSeconds}s; relaunch TmrOverlay if it remains stuck.";
     }
 
     private static bool PrimaryUpdateActionEnabled(ReleaseUpdateSnapshot snapshot)

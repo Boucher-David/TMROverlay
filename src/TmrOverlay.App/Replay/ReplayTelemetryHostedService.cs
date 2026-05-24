@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TmrOverlay.App.Events;
@@ -75,59 +74,102 @@ internal sealed class ReplayTelemetryHostedService : IHostedService
 
     private async Task RunReplayAsync(CancellationToken cancellationToken)
     {
-        var manifest = ReadManifest(_options.CaptureDirectory!);
+        RawCaptureSemanticReplayReader replay;
+        try
+        {
+            replay = RawCaptureSemanticReplayReader.Open(_options.CaptureDirectory!);
+        }
+        catch (Exception exception)
+        {
+            _state.RecordError($"Replay capture could not be opened: {exception.Message}");
+            _events.Record("replay_failed", new Dictionary<string, string?>
+            {
+                ["captureDirectory"] = _options.CaptureDirectory,
+                ["reason"] = "open_failed",
+                ["error"] = exception.Message
+            });
+            _logger.LogError(exception, "Replay capture could not be opened from {CaptureDirectory}.", _options.CaptureDirectory);
+            return;
+        }
+
         _logger.LogInformation(
             "Replay mode started from {CaptureDirectory} with {FrameCount} frames.",
-            _options.CaptureDirectory,
-            manifest?.FrameCount);
+            replay.CaptureDirectory,
+            replay.Manifest.FrameCount);
         _events.Record("replay_started", new Dictionary<string, string?>
         {
-            ["captureDirectory"] = _options.CaptureDirectory,
-            ["frameCount"] = manifest?.FrameCount.ToString()
+            ["captureId"] = replay.Manifest.CaptureId,
+            ["captureDirectory"] = replay.CaptureDirectory,
+            ["frameCount"] = replay.Manifest.FrameCount.ToString()
         });
 
         try
         {
-            _state.SetCaptureRoot(Path.GetDirectoryName(_options.CaptureDirectory!) ?? _options.CaptureDirectory!);
+            _state.SetCaptureRoot(Path.GetDirectoryName(replay.CaptureDirectory) ?? replay.CaptureDirectory);
             _state.SetRawCaptureEnabled(true);
             _state.MarkConnected();
             _liveTelemetrySink.MarkConnected();
-            var startedAtUtc = DateTimeOffset.UtcNow;
-            var sourceId = Path.GetFileName(_options.CaptureDirectory!);
-            if (string.IsNullOrWhiteSpace(sourceId))
+            var replayStartedAtUtc = DateTimeOffset.UtcNow;
+
+            _state.MarkCaptureStarted(replay.CaptureDirectory, replayStartedAtUtc);
+            _liveTelemetrySink.MarkCollectionStarted(replay.Manifest.CaptureId, replayStartedAtUtc);
+
+            var speedMultiplier = PlaybackSpeedMultiplier(_options.SpeedMultiplier);
+            var frameIntervalMs = Math.Max(1, (int)Math.Round(1000d / Math.Max(1, replay.Manifest.TickRate) / speedMultiplier));
+            var telemetryFileBytes = ReadTelemetryFileBytes(replay.CaptureDirectory, replay.Manifest.TelemetryFile);
+            var replayedFrames = 0;
+            double? previousSessionTime = null;
+
+            var replayFilter = _options.ToSemanticFilter();
+            foreach (var semanticFrame in replay.ReadFrames(replayFilter, cancellationToken))
             {
-                sourceId = "replay";
-            }
+                var frame = semanticFrame.Frame;
+                await DelayForFrameAsync(frame, previousSessionTime, frameIntervalMs, speedMultiplier, cancellationToken).ConfigureAwait(false);
+                previousSessionTime = frame.SessionTime;
 
-            _state.MarkCaptureStarted(_options.CaptureDirectory!, startedAtUtc);
-            _liveTelemetrySink.MarkCollectionStarted(sourceId, startedAtUtc);
+                if (semanticFrame.SessionInfoChanged && !string.IsNullOrWhiteSpace(semanticFrame.SessionInfoYaml))
+                {
+                    _liveTelemetrySink.ApplySessionInfo(semanticFrame.SessionInfoYaml);
+                }
 
-            var frameCount = Math.Max(0, manifest?.FrameCount ?? 0);
-            var intervalMs = Math.Max(1, (int)Math.Round(1000d / Math.Max(1, manifest?.TickRate ?? 60) / _options.SpeedMultiplier));
-            var telemetryFileBytes = ReadTelemetryFileBytes(_options.CaptureDirectory!);
+                var replayedAtUtc = DateTimeOffset.UtcNow;
+                var sample = semanticFrame.Sample with
+                {
+                    CapturedAtUtc = replayedAtUtc
+                };
+                _liveTelemetrySink.RecordFrame(sample);
+                replayedFrames++;
 
-            for (var frame = 0; frame < frameCount && !cancellationToken.IsCancellationRequested; frame++)
-            {
-                var timestampUtc = DateTimeOffset.UtcNow;
-                _state.RecordFrame(timestampUtc);
-                _performance.RecordTelemetryFrame(timestampUtc);
+                _state.RecordFrame(replayedAtUtc);
+                _performance.RecordTelemetryFrame(replayedAtUtc);
                 var writeStatus = new TelemetryCaptureWriteStatus(
-                    TimestampUtc: timestampUtc,
-                    CaptureId: Path.GetFileName(_options.CaptureDirectory!),
-                    DirectoryPath: _options.CaptureDirectory!,
-                    FramesWritten: frame + 1,
-                    SessionInfoSnapshotCount: 0,
+                    TimestampUtc: replayedAtUtc,
+                    CaptureId: replay.Manifest.CaptureId,
+                    DirectoryPath: replay.CaptureDirectory,
+                    FramesWritten: replayedFrames,
+                    SessionInfoSnapshotCount: replay.Manifest.SessionInfoSnapshotCount,
                     PendingMessageCount: 0,
                     TelemetryFileBytes: telemetryFileBytes,
                     Exception: null);
                 _state.RecordCaptureWrite(writeStatus);
                 _performance.RecordCaptureWrite(writeStatus);
-                await Task.Delay(intervalMs, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Expected when the host stops while replay is active.
+        }
+        catch (Exception exception)
+        {
+            _state.RecordError($"Replay failed: {exception.Message}");
+            _events.Record("replay_failed", new Dictionary<string, string?>
+            {
+                ["captureId"] = replay.Manifest.CaptureId,
+                ["captureDirectory"] = replay.CaptureDirectory,
+                ["reason"] = "playback_failed",
+                ["error"] = exception.Message
+            });
+            _logger.LogError(exception, "Replay mode failed for {CaptureDirectory}.", replay.CaptureDirectory);
         }
         finally
         {
@@ -139,33 +181,37 @@ internal sealed class ReplayTelemetryHostedService : IHostedService
         }
     }
 
-    private static ReplayCaptureManifest? ReadManifest(string captureDirectory)
+    private async Task DelayForFrameAsync(
+        TelemetryFrameEnvelope frame,
+        double? previousSessionTime,
+        int frameIntervalMs,
+        double speedMultiplier,
+        CancellationToken cancellationToken)
     {
-        var manifestPath = Path.Combine(captureDirectory, "capture-manifest.json");
-        if (!File.Exists(manifestPath))
+        if (previousSessionTime is null)
         {
-            return null;
+            return;
         }
 
-        using var stream = File.OpenRead(manifestPath);
-        return JsonSerializer.Deserialize<ReplayCaptureManifest>(stream, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
+        var deltaSeconds = frame.SessionTime - previousSessionTime.Value;
+        var delayMilliseconds = deltaSeconds is > 0d and < 10d
+            ? Math.Max(1, (int)Math.Round(deltaSeconds * 1000d / speedMultiplier))
+            : frameIntervalMs;
+        await Task.Delay(delayMilliseconds, cancellationToken).ConfigureAwait(false);
     }
 
-    private static long? ReadTelemetryFileBytes(string captureDirectory)
+    private static double PlaybackSpeedMultiplier(double configuredValue)
     {
-        var telemetryPath = Path.Combine(captureDirectory, "telemetry.bin");
+        return double.IsFinite(configuredValue) && configuredValue > 0d
+            ? configuredValue
+            : 1d;
+    }
+
+    private static long? ReadTelemetryFileBytes(string captureDirectory, string telemetryFileName)
+    {
+        var telemetryPath = Path.Combine(captureDirectory, telemetryFileName);
         return File.Exists(telemetryPath)
             ? new FileInfo(telemetryPath).Length
             : null;
-    }
-
-    private sealed class ReplayCaptureManifest
-    {
-        public int TickRate { get; init; } = 60;
-
-        public int FrameCount { get; init; }
     }
 }

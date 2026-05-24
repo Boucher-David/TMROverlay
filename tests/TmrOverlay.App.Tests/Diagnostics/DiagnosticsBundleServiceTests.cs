@@ -66,6 +66,136 @@ public sealed class DiagnosticsBundleServiceTests
     }
 
     [Fact]
+    public void CreateBundle_ClassifiesIncompleteUpdateApplyShutdown()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            Directory.CreateDirectory(storage.EventsRoot);
+            Directory.CreateDirectory(Path.GetDirectoryName(storage.RuntimeStatePath)!);
+            File.WriteAllText(
+                storage.RuntimeStatePath,
+                """
+                {
+                  "runtimeStateVersion": 1,
+                  "startedAtUtc": "2026-05-24T19:28:50+00:00",
+                  "lastHeartbeatAtUtc": "2026-05-24T19:29:20+00:00",
+                  "shutdownStartedAtUtc": "2026-05-24T19:29:22+00:00",
+                  "shutdownPhase": "host_stop_started",
+                  "shutdownReason": "application_run_completed",
+                  "stoppedAtUtc": null,
+                  "stoppedCleanly": false
+                }
+                """);
+            File.WriteAllText(
+                Path.Combine(storage.EventsRoot, "events-20260524.jsonl"),
+                """
+                {"timestampUtc":"2026-05-24T19:28:00.0000000+00:00","name":"host_stop_completed","properties":{"previousRun":"true"}}
+                {"timestampUtc":"2026-05-24T19:28:00.1000000+00:00","name":"app_stopped","properties":{"previousRun":"true"}}
+                {"timestampUtc":"2026-05-24T19:29:22.6622809+00:00","name":"update_apply_started","properties":{"latestVersion":"1.2.0","latestFileName":"TMROverlay-1.2.0-win-x64-full.nupkg"}}
+                {"timestampUtc":"2026-05-24T19:29:22.6900000+00:00","name":"update_apply_handoff_requested","properties":{"latestVersion":"1.2.0","latestFileName":"TMROverlay-1.2.0-win-x64-full.nupkg","restart":"true"}}
+                {"timestampUtc":"2026-05-24T19:29:22.7000000+00:00","name":"update_apply_handoff_returned","properties":{"latestVersion":"1.2.0","latestFileName":"TMROverlay-1.2.0-win-x64-full.nupkg"}}
+                {"timestampUtc":"2026-05-24T19:29:22.7663143+00:00","name":"application_exit_requested_for_update","properties":{"source":"settings","releaseUpdateStatus":"Applying","latestVersion":"1.2.0"}}
+                {"timestampUtc":"2026-05-24T19:29:22.7680000+00:00","name":"host_stop_started","properties":{"reason":"application_run_completed"}}
+                """);
+
+            var state = new TelemetryCaptureState();
+            var liveTelemetry = new TestLiveTelemetrySource(LiveTelemetrySnapshot.Empty);
+            var (service, _) = CreateDiagnosticsBundleService(root, storage, state, liveTelemetry);
+
+            var bundlePath = service.CreateBundle();
+
+            using var archive = ZipFile.OpenRead(bundlePath);
+            var evidenceQualityJson = ReadJsonEntry(archive, "metadata/evidence-quality.json");
+            var warnings = Assert.IsType<JsonArray>(evidenceQualityJson?["warnings"]);
+            Assert.Contains(warnings, warning =>
+                string.Equals((string?)warning, "update_apply_shutdown_incomplete", StringComparison.Ordinal));
+            Assert.Equal(
+                "update_apply_shutdown_incomplete",
+                (string?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["classification"]);
+            Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["updateApplyStartedCount"]) ?? -1);
+            Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["updateApplyHandoffRequestedCount"]) ?? -1);
+            Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["updateApplyHandoffReturnedCount"]) ?? -1);
+            Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["applicationExitRequestedForUpdateCount"]) ?? -1);
+            Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["hostStopStartedCount"]) ?? -1);
+            Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["hostStopCompletedCount"]) ?? -1);
+            Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["appStoppedCount"]) ?? -1);
+            Assert.False(((bool?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["hostStopCompletedAfterApplyStart"]) ?? true);
+            Assert.False(((bool?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["appStoppedAfterApplyStart"]) ?? true);
+            Assert.False(((bool?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["runtimeStoppedCleanly"]) ?? true);
+            Assert.Equal("host_stop_started", (string?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["runtimeShutdownPhase"]);
+            Assert.Equal(
+                "2026-05-24T19:28:50+00:00",
+                (string?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["runtimeStartedAtUtc"]);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CreateBundle_IgnoresStaleUpdateApplyEventsBeforeCurrentRuntime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            Directory.CreateDirectory(storage.EventsRoot);
+            Directory.CreateDirectory(Path.GetDirectoryName(storage.RuntimeStatePath)!);
+            File.WriteAllText(
+                storage.RuntimeStatePath,
+                """
+                {
+                  "runtimeStateVersion": 1,
+                  "startedAtUtc": "2026-05-24T19:30:00+00:00",
+                  "lastHeartbeatAtUtc": "2026-05-24T19:31:00+00:00",
+                  "stoppedAtUtc": null,
+                  "stoppedCleanly": false
+                }
+                """);
+            File.WriteAllText(
+                Path.Combine(storage.EventsRoot, "events-20260524.jsonl"),
+                """
+                {"timestampUtc":"2026-05-24T19:29:22.6622809+00:00","name":"update_apply_started","properties":{"latestVersion":"1.2.0","latestFileName":"TMROverlay-1.2.0-win-x64-full.nupkg"}}
+                {"timestampUtc":"2026-05-24T19:29:22.7663143+00:00","name":"application_exit_requested_for_update","properties":{"source":"settings","releaseUpdateStatus":"Applying","latestVersion":"1.2.0"}}
+                {"timestampUtc":"2026-05-24T19:29:22.7680000+00:00","name":"host_stop_started","properties":{"reason":"application_run_completed"}}
+                """);
+
+            var state = new TelemetryCaptureState();
+            var liveTelemetry = new TestLiveTelemetrySource(LiveTelemetrySnapshot.Empty);
+            var (service, _) = CreateDiagnosticsBundleService(root, storage, state, liveTelemetry);
+
+            var bundlePath = service.CreateBundle();
+
+            using var archive = ZipFile.OpenRead(bundlePath);
+            var evidenceQualityJson = ReadJsonEntry(archive, "metadata/evidence-quality.json");
+            var warnings = Assert.IsType<JsonArray>(evidenceQualityJson?["warnings"]);
+            Assert.DoesNotContain(warnings, warning =>
+                string.Equals((string?)warning, "update_apply_shutdown_incomplete", StringComparison.Ordinal));
+            Assert.Equal(
+                "no_update_apply_signal",
+                (string?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["classification"]);
+            Assert.Equal(0, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["updateApplyStartedCount"]) ?? -1);
+            Assert.Equal(0, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["hostStopStartedCount"]) ?? -1);
+            Assert.Equal(
+                "2026-05-24T19:30:00+00:00",
+                (string?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["runtimeStartedAtUtc"]);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void LiveTelemetrySynthesisCoverage_TreatsZeroCarClassAsKnownValue()
     {
         var method = typeof(DiagnosticsBundleService).GetMethod(

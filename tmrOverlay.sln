@@ -16,6 +16,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TmrOverlay.TrackMapGenerato
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TmrOverlay.OverlayModelReplay", "tools\TmrOverlay.OverlayModelReplay\TmrOverlay.OverlayModelReplay.csproj", "{4F7854A6-55C4-4879-8B57-1A2118180B17}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TmrOverlay.RawCaptureReplayExport", "tools\TmrOverlay.RawCaptureReplayExport\TmrOverlay.RawCaptureReplayExport.csproj", "{9A5F32D2-DA8D-4F23-8F05-21E7DFB2C2C8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -50,6 +52,10 @@ Global
 		{4F7854A6-55C4-4879-8B57-1A2118180B17}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4F7854A6-55C4-4879-8B57-1A2118180B17}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4F7854A6-55C4-4879-8B57-1A2118180B17}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9A5F32D2-DA8D-4F23-8F05-21E7DFB2C2C8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9A5F32D2-DA8D-4F23-8F05-21E7DFB2C2C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9A5F32D2-DA8D-4F23-8F05-21E7DFB2C2C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9A5F32D2-DA8D-4F23-8F05-21E7DFB2C2C8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

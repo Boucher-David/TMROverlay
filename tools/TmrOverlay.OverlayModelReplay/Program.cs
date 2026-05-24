@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TmrOverlay.App.History;
@@ -39,17 +40,17 @@ internal static class Program
 
     private static void Run(OverlayModelReplayOptions options)
     {
-        var reader = RawCaptureReplayReader.Open(options.CaptureDirectory);
-        var sessionInfo = RawCaptureSessionInfoProvider.Open(reader.CaptureDirectory, reader.Manifest);
-        var sampleBuilder = new RawCaptureTelemetrySampleBuilder(reader.Schema);
+        var replay = RawCaptureSemanticReplayReader.Open(options.CaptureDirectory);
         var selectedSamples = SamplePlan.Load(options.SamplePlanPath);
         if (selectedSamples.Count == 0)
         {
             throw new InvalidOperationException("Sample plan did not select any frames.");
         }
 
+        var samplePlanHash = Sha256File(options.SamplePlanPath);
         var selectedFrameIndexes = selectedSamples.Keys.ToHashSet();
         var maxSelectedFrame = selectedFrameIndexes.Max();
+        var replayFilter = options.ToSemanticFilter(maxSelectedFrame);
         var overlays = options.Overlays.Count == 0
             ? BrowserOverlayCatalog.Pages.Select(page => page.Id).ToArray()
             : options.Overlays;
@@ -77,27 +78,20 @@ internal static class Program
             StringComparer.OrdinalIgnoreCase);
         var emitted = 0;
         var primed = 0;
-        var lastSessionInfoUpdate = int.MinValue;
 
         try
         {
             liveStore.MarkConnected();
-            liveStore.MarkCollectionStarted(reader.Manifest.CaptureId, reader.Manifest.StartedAtUtc);
-            foreach (var frame in reader.ReadFrames())
+            liveStore.MarkCollectionStarted(replay.Manifest.CaptureId, replay.Manifest.StartedAtUtc);
+            foreach (var semanticFrame in replay.ReadFrames(replayFilter))
             {
-                if (frame.SessionInfoUpdate != lastSessionInfoUpdate)
+                var frame = semanticFrame.Frame;
+                if (semanticFrame.SessionInfoChanged && !string.IsNullOrWhiteSpace(semanticFrame.SessionInfoYaml))
                 {
-                    var yaml = sessionInfo.FindForUpdate(frame.SessionInfoUpdate);
-                    if (!string.IsNullOrWhiteSpace(yaml))
-                    {
-                        liveStore.ApplySessionInfo(yaml);
-                    }
-
-                    lastSessionInfoUpdate = frame.SessionInfoUpdate;
+                    liveStore.ApplySessionInfo(semanticFrame.SessionInfoYaml);
                 }
 
-                var sample = sampleBuilder.Build(frame);
-                liveStore.RecordFrame(sample);
+                liveStore.RecordFrame(semanticFrame.Sample);
                 var snapshot = liveStore.Snapshot();
 
                 if (selectedFrameIndexes.Contains(frame.FrameIndex))
@@ -110,11 +104,13 @@ internal static class Program
                             modelFactory,
                             snapshot,
                             settings,
-                            reader.Manifest.CaptureId,
-                            frame,
+                            replay.Manifest.CaptureId,
+                            semanticFrame,
                             samplePlanEntry,
                             overlayId,
-                            options.CadenceLabel);
+                            options.CadenceLabel,
+                            samplePlanHash,
+                            ReplaySourceFiles.From(replay.Manifest));
                         emitted++;
                         nextPrimeAt[overlayId] = frame.SessionTime + refreshIntervals[overlayId];
                     }
@@ -143,9 +139,10 @@ internal static class Program
             schemaVersion = 1,
             tool = "tools/TmrOverlay.OverlayModelReplay",
             source = "production-live-store-browser-overlay-model-factory",
-            captureId = reader.Manifest.CaptureId,
-            samplePlan = options.SamplePlanPath,
+            captureId = replay.Manifest.CaptureId,
+            samplePlanHash,
             overlays,
+            replayFilter = ReplayFilterSummary.From(replayFilter),
             selectedFrameCount = selectedSamples.Count,
             emittedModelRows = emitted,
             primedModelBuilds = primed,
@@ -201,12 +198,40 @@ internal static class Program
         LiveTelemetrySnapshot snapshot,
         ApplicationSettings settings,
         string captureId,
-        TmrOverlay.App.Telemetry.TelemetryFrameEnvelope frame,
+        RawCaptureSemanticReplayFrame semanticFrame,
         SamplePlanEntry samplePlanEntry,
         string overlayId,
-        string cadenceLabel)
+        string cadenceLabel,
+        string samplePlanHash,
+        ReplaySourceFiles sourceFiles)
     {
+        var frame = semanticFrame.Frame;
         var built = modelFactory.TryBuild(overlayId, snapshot, settings, frame.CapturedAtUtc, out var response);
+        var replayProvenance = new
+        {
+            schemaVersion = 1,
+            sourceKind = "production-model-replay",
+            modelSource = "production-live-store-browser-overlay-model-factory",
+            captureId,
+            overlayId,
+            frameIndex = frame.FrameIndex,
+            capturedAtUtc = frame.CapturedAtUtc,
+            capturedUnixMs = frame.CapturedAtUtc.ToUnixTimeMilliseconds(),
+            sessionTimeSeconds = frame.SessionTime,
+            sessionTick = frame.SessionTick,
+            sessionInfoUpdate = frame.SessionInfoUpdate,
+            sessionInfoMatch = ReplaySessionInfoMatchSummary.From(semanticFrame.SessionInfoMatch),
+            sessionType = semanticFrame.Context.Session.SessionType,
+            sessionName = semanticFrame.Context.Session.SessionName,
+            focusCarIdx = semanticFrame.Sample.FocusCarIdx,
+            rawCamCarIdx = semanticFrame.Sample.RawCamCarIdx,
+            cadence = cadenceLabel,
+            samplePlanHash,
+            sampleReasons = samplePlanEntry.Reasons,
+            sampleEventIds = samplePlanEntry.EventIds,
+            sampleOverlayIds = samplePlanEntry.OverlayIds,
+            sourceFiles
+        };
         var row = new
         {
             schemaVersion = 1,
@@ -222,6 +247,7 @@ internal static class Program
             sessionTick = frame.SessionTick,
             sessionInfoUpdate = frame.SessionInfoUpdate,
             samplePlan = samplePlanEntry,
+            replayProvenance,
             buildStatus = built ? "built" : "not-found",
             shouldRender = built ? response.Model.ShouldRender : (bool?)null,
             status = built ? response.Model.Status : null,
@@ -238,6 +264,12 @@ internal static class Program
         return BrowserOverlayCatalog.TryGetPageByOverlayId(overlayId, out var page)
             ? Math.Max(1, page.RefreshIntervalMilliseconds) / 1000d
             : 0.25d;
+    }
+
+    private static string Sha256File(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
     private static void WriteRunSummary(string outputDirectory, object summary)
@@ -262,6 +294,18 @@ internal sealed class OverlayModelReplayOptions
     public IReadOnlyList<string> Overlays { get; init; } = [];
 
     public string CadenceLabel { get; init; } = "route-refresh-interval";
+
+    public int? StartFrameIndex { get; init; }
+
+    public int? EndFrameIndex { get; init; }
+
+    public double? StartSessionTimeSeconds { get; init; }
+
+    public double? EndSessionTimeSeconds { get; init; }
+
+    public IReadOnlySet<string> SessionTypes { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    public int? FocusCarIdx { get; init; }
 
     public static OverlayModelReplayOptions? Parse(string[] args)
     {
@@ -306,8 +350,30 @@ internal sealed class OverlayModelReplayOptions
                 : null,
             Overlays = values.TryGetValue("overlays", out var overlays)
                 ? SplitCsv(overlays)
-                : []
+                : [],
+            StartFrameIndex = ParseNullableInt(values, "start-frame", "start-frame-index"),
+            EndFrameIndex = ParseNullableInt(values, "end-frame", "end-frame-index"),
+            StartSessionTimeSeconds = ParseNullableDouble(values, "start-session-time", "start-session-time-seconds"),
+            EndSessionTimeSeconds = ParseNullableDouble(values, "end-session-time", "end-session-time-seconds"),
+            SessionTypes = values.TryGetValue("session-types", out var sessionTypes)
+                ? ParseSessionTypes(sessionTypes)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            FocusCarIdx = ParseNullableInt(values, "focus-car-idx", "focus-car-index")
         };
+    }
+
+    public RawCaptureSemanticReplayFilter ToSemanticFilter(int maxSelectedFrame)
+    {
+        var effectiveEndFrame = EndFrameIndex is null
+            ? maxSelectedFrame
+            : Math.Min(EndFrameIndex.Value, maxSelectedFrame);
+        return new RawCaptureSemanticReplayFilter(
+            StartFrameIndex: StartFrameIndex,
+            EndFrameIndex: effectiveEndFrame,
+            StartSessionTimeSeconds: StartSessionTimeSeconds,
+            EndSessionTimeSeconds: EndSessionTimeSeconds,
+            SessionTypes: SessionTypes,
+            FocusCarIdx: FocusCarIdx);
     }
 
     private static string[] SplitCsv(string value)
@@ -315,9 +381,98 @@ internal sealed class OverlayModelReplayOptions
         return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
+    private static int? ParseNullableInt(IReadOnlyDictionary<string, string> values, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (values.TryGetValue(key, out var value) && int.TryParse(value, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private static double? ParseNullableDouble(IReadOnlyDictionary<string, string> values, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (values.TryGetValue(key, out var value) && double.TryParse(value, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlySet<string> ParseSessionTypes(string value)
+    {
+        return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(NormalizeSessionType)
+            .Where(sessionType => !string.IsNullOrWhiteSpace(sessionType))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeSessionType(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized.Contains("race", StringComparison.Ordinal))
+        {
+            return "race";
+        }
+
+        if (normalized.Contains("qual", StringComparison.Ordinal))
+        {
+            return "qualifying";
+        }
+
+        if (normalized.Contains("practice", StringComparison.Ordinal)
+            || normalized.Contains("test", StringComparison.Ordinal))
+        {
+            return "practice";
+        }
+
+        return normalized;
+    }
+
     private static void PrintUsage()
     {
-        Console.Error.WriteLine("Usage: TmrOverlay.OverlayModelReplay --capture <capture-dir> --sample-plan <sample-plan.json> --output <forensics-output> [--overlays standings,relative] [--settings settings.json]");
+        Console.Error.WriteLine("Usage: TmrOverlay.OverlayModelReplay --capture <capture-dir> --sample-plan <sample-plan.json> --output <forensics-output> [--overlays standings,relative] [--settings settings.json] [--start-frame N] [--end-frame N] [--start-session-time seconds] [--end-session-time seconds] [--session-types race,qualifying,practice] [--focus-car-idx N]");
+    }
+}
+
+internal sealed record ReplayFilterSummary(
+    int? StartFrameIndex,
+    int? EndFrameIndex,
+    double? StartSessionTimeSeconds,
+    double? EndSessionTimeSeconds,
+    IReadOnlyList<string> SessionTypes,
+    int? FocusCarIdx)
+{
+    public static ReplayFilterSummary From(RawCaptureSemanticReplayFilter filter)
+    {
+        return new ReplayFilterSummary(
+            filter.StartFrameIndex,
+            filter.EndFrameIndex,
+            filter.StartSessionTimeSeconds,
+            filter.EndSessionTimeSeconds,
+            filter.SessionTypes.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+            filter.FocusCarIdx);
+    }
+}
+
+internal sealed record ReplaySessionInfoMatchSummary(
+    int RequestedUpdate,
+    int? MatchedUpdate,
+    string Source)
+{
+    public static ReplaySessionInfoMatchSummary? From(RawCaptureSessionInfoMatch? match)
+    {
+        return match is null
+            ? null
+            : new ReplaySessionInfoMatchSummary(match.RequestedUpdate, match.MatchedUpdate, match.Source);
     }
 }
 
@@ -349,3 +504,21 @@ internal sealed record SamplePlanEntry(
     IReadOnlyList<string> Reasons,
     IReadOnlyList<string> OverlayIds,
     IReadOnlyList<string> EventIds);
+
+internal sealed record ReplaySourceFiles(
+    string Manifest,
+    string Schema,
+    string Telemetry,
+    string LatestSessionInfo,
+    string SessionInfoDirectory)
+{
+    public static ReplaySourceFiles From(TmrOverlay.App.Telemetry.CaptureManifest manifest)
+    {
+        return new ReplaySourceFiles(
+            Manifest: "capture-manifest.json",
+            Schema: manifest.SchemaFile,
+            Telemetry: manifest.TelemetryFile,
+            LatestSessionInfo: manifest.LatestSessionInfoFile,
+            SessionInfoDirectory: manifest.SessionInfoDirectory);
+    }
+}

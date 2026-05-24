@@ -24,10 +24,17 @@ public sealed class RuntimeStateServiceTests
             var startedState = File.ReadAllText(storage.RuntimeStatePath);
             Assert.Contains("\"stoppedCleanly\": false", startedState);
 
+            service.MarkHostStopStarted("test_shutdown");
+            var stoppingState = File.ReadAllText(storage.RuntimeStatePath);
+            Assert.Contains("\"shutdownPhase\": \"host_stop_started\"", stoppingState);
+            Assert.Contains("\"shutdownReason\": \"test_shutdown\"", stoppingState);
+
             await service.StopAsync(CancellationToken.None);
             var stoppedState = File.ReadAllText(storage.RuntimeStatePath);
             Assert.Contains("\"stoppedCleanly\": true", stoppedState);
             Assert.Contains("\"stoppedAtUtc\"", stoppedState);
+            Assert.Contains("\"shutdownPhase\": \"host_stop_completed\"", stoppedState);
+            Assert.Contains("\"shutdownCompletedAtUtc\"", stoppedState);
         }
         finally
         {

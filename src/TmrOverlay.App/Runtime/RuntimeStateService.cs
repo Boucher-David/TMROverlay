@@ -42,7 +42,10 @@ internal sealed class RuntimeStateService : IHostedService, IDisposable
             _logger.LogWarning("Previous TmrOverlay run did not stop cleanly. Started at {StartedAtUtc}.", PreviousState.StartedAtUtc);
             _events.Record("previous_run_unclean", new Dictionary<string, string?>
             {
-                ["startedAtUtc"] = PreviousState.StartedAtUtc.ToString("O")
+                ["startedAtUtc"] = PreviousState.StartedAtUtc.ToString("O"),
+                ["shutdownPhase"] = PreviousState.ShutdownPhase,
+                ["shutdownReason"] = PreviousState.ShutdownReason,
+                ["shutdownStartedAtUtc"] = PreviousState.ShutdownStartedAtUtc?.ToString("O")
             });
         }
 
@@ -63,14 +66,39 @@ internal sealed class RuntimeStateService : IHostedService, IDisposable
         return Task.CompletedTask;
     }
 
+    public void MarkHostStopStarted(string reason)
+    {
+        var timestampUtc = DateTimeOffset.UtcNow;
+        lock (_sync)
+        {
+            if (_currentState is not null)
+            {
+                _currentState.LastHeartbeatAtUtc = timestampUtc;
+                _currentState.ShutdownStartedAtUtc ??= timestampUtc;
+                _currentState.ShutdownPhase = "host_stop_started";
+                _currentState.ShutdownReason = reason;
+                WriteState(_currentState);
+            }
+        }
+
+        _events.Record("host_stop_started", new Dictionary<string, string?>
+        {
+            ["reason"] = reason
+        });
+    }
+
     public Task StopAsync(CancellationToken cancellationToken)
     {
         lock (_sync)
         {
             if (_currentState is not null)
             {
-                _currentState.LastHeartbeatAtUtc = DateTimeOffset.UtcNow;
-                _currentState.StoppedAtUtc = DateTimeOffset.UtcNow;
+                var timestampUtc = DateTimeOffset.UtcNow;
+                _currentState.LastHeartbeatAtUtc = timestampUtc;
+                _currentState.ShutdownStartedAtUtc ??= timestampUtc;
+                _currentState.ShutdownCompletedAtUtc = timestampUtc;
+                _currentState.ShutdownPhase = "host_stop_completed";
+                _currentState.StoppedAtUtc = timestampUtc;
                 _currentState.StoppedCleanly = true;
                 WriteState(_currentState);
             }

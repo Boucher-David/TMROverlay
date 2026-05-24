@@ -837,7 +837,9 @@ internal sealed class DiagnosticsBundleService
         var liveSnapshot = _liveTelemetrySource.Snapshot();
         var lastActiveSnapshot = _liveTelemetrySource.LastActiveSnapshot();
         var localhost = _localhostOverlayState.Snapshot();
+        var releaseUpdateSnapshot = _releaseUpdates.Snapshot();
         var updateEvents = UpdateEventDiagnostics();
+        var updateApplyShutdown = UpdateApplyShutdownDiagnostics(releaseUpdateSnapshot);
         var latestCapture = LatestCaptureDirectory();
         var warnings = new List<string>();
 
@@ -869,6 +871,14 @@ internal sealed class DiagnosticsBundleService
         if (updateEvents.UpdateFailureSummary.TransientFailureCount > 0)
         {
             warnings.Add("transient_update_check_failures");
+        }
+
+        if (string.Equals(
+                updateApplyShutdown.Classification,
+                "update_apply_shutdown_incomplete",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            warnings.Add("update_apply_shutdown_incomplete");
         }
 
         var visibleWithoutPixelEvidence = liveOverlays.Overlays
@@ -938,6 +948,7 @@ internal sealed class DiagnosticsBundleService
                 LatestSuccessSource = updateEvents.LatestUpdateCheckSuccessSource,
                 LatestSuccessResult = updateEvents.LatestUpdateCheckSuccessResult,
                 Summary = updateEvents.UpdateFailureSummary,
+                ApplyShutdown = updateApplyShutdown,
                 Interpretation = updateEvents.UpdateFailureSummary.Interpretation
             },
             LatestCapture = new
@@ -1135,6 +1146,191 @@ internal sealed class DiagnosticsBundleService
         {
             return null;
         }
+    }
+
+    private UpdateApplyShutdownDiagnosticsSnapshot UpdateApplyShutdownDiagnostics(ReleaseUpdateSnapshot releaseSnapshot)
+    {
+        var events = ReadRecentAppEvents();
+        var runtimeState = TryReadJsonObject(_storageOptions.RuntimeStatePath);
+        var runtimeExists = runtimeState is not null;
+        var runtimeStartedAtUtc = ParseDateTimeOffset(runtimeState?["startedAtUtc"]);
+        var runtimeStoppedCleanly = (bool?)runtimeState?["stoppedCleanly"];
+        var runtimeStoppedAtUtc = ParseDateTimeOffset(runtimeState?["stoppedAtUtc"]);
+        var runtimeShutdownStartedAtUtc = ParseDateTimeOffset(runtimeState?["shutdownStartedAtUtc"]);
+        var runtimeShutdownCompletedAtUtc = ParseDateTimeOffset(runtimeState?["shutdownCompletedAtUtc"]);
+        var runtimeShutdownPhase = (string?)runtimeState?["shutdownPhase"];
+        var currentRunEvents = EventsAtOrAfter(events, runtimeStartedAtUtc);
+        var updateApplyStarted = EventsNamed(currentRunEvents, "update_apply_started");
+        var updateApplyHandoffRequested = EventsNamed(currentRunEvents, "update_apply_handoff_requested");
+        var updateApplyHandoffReturned = EventsNamed(currentRunEvents, "update_apply_handoff_returned");
+        var updateApplyFailed = EventsNamed(currentRunEvents, "update_apply_failed");
+        var applicationExitRequested = EventsNamed(currentRunEvents, "application_exit_requested_for_update");
+        var hostStopStarted = EventsNamed(currentRunEvents, "host_stop_started");
+        var hostStopCompleted = EventsNamed(currentRunEvents, "host_stop_completed");
+        var appStopped = EventsNamed(currentRunEvents, "app_stopped");
+        var latestApplyStarted = LatestAppEvent(updateApplyStarted);
+        var latestHandoffRequested = LatestAppEvent(updateApplyHandoffRequested);
+        var latestHandoffReturned = LatestAppEvent(updateApplyHandoffReturned);
+        var latestApplyFailed = LatestAppEvent(updateApplyFailed);
+        var latestHostStopCompleted = LatestAppEvent(hostStopCompleted);
+        var latestAppStopped = LatestAppEvent(appStopped);
+        var releaseApplyStartedInCurrentRuntime = TimestampAtOrAfter(
+            releaseSnapshot.LastApplyStartedAtUtc,
+            runtimeStartedAtUtc);
+        var releaseIndicatesApplying = releaseSnapshot.Status == ReleaseUpdateStatus.Applying
+            ? releaseSnapshot.LastApplyStartedAtUtc is null || releaseApplyStartedInCurrentRuntime
+            : releaseSnapshot.OperationInProgress && releaseApplyStartedInCurrentRuntime;
+        var applySignalPresent = updateApplyStarted.Count > 0 || releaseIndicatesApplying;
+        var applyStartedAtUtc = latestApplyStarted?.TimestampUtc
+            ?? (releaseApplyStartedInCurrentRuntime ? releaseSnapshot.LastApplyStartedAtUtc : null);
+        var applyFailedAfterStart = EventAtOrAfter(latestApplyFailed, applyStartedAtUtc);
+        var appStoppedAfterStart = EventAtOrAfter(latestAppStopped, applyStartedAtUtc);
+        var hostStopCompletedAfterStart = EventAtOrAfter(latestHostStopCompleted, applyStartedAtUtc);
+        var shutdownIncomplete = applySignalPresent
+            && runtimeStoppedCleanly == false
+            && !appStoppedAfterStart
+            && !hostStopCompletedAfterStart
+            && !applyFailedAfterStart;
+        var classification = !applySignalPresent
+            ? "no_update_apply_signal"
+            : applyFailedAfterStart
+                ? "update_apply_failed"
+                : shutdownIncomplete
+                    ? "update_apply_shutdown_incomplete"
+                    : appStoppedAfterStart || runtimeStoppedCleanly == true || hostStopCompletedAfterStart
+                        ? "update_apply_shutdown_completed"
+                        : "update_apply_shutdown_unproven";
+
+        return new UpdateApplyShutdownDiagnosticsSnapshot(
+            Classification: classification,
+            Interpretation: classification switch
+            {
+                "update_apply_shutdown_incomplete" => "Update apply started, but the bundle shows no clean app stop and runtime-state is still dirty. Treat this as update apply or shutdown handoff limbo, not as a telemetry freeze.",
+                "update_apply_failed" => "Update apply reported a failure after apply start.",
+                "update_apply_shutdown_completed" => "Update apply started and shutdown completion evidence was found.",
+                "update_apply_shutdown_unproven" => "Update apply evidence exists, but the bundle cannot prove whether shutdown completed.",
+                _ => "No update-apply shutdown signal was found in recent events."
+            },
+            ReleaseStatus: releaseSnapshot.Status.ToString(),
+            ReleaseOperationInProgress: releaseSnapshot.OperationInProgress,
+            ReleaseLastApplyStartedAtUtc: releaseSnapshot.LastApplyStartedAtUtc,
+            RuntimeStateExists: runtimeExists,
+            RuntimeStartedAtUtc: runtimeStartedAtUtc,
+            RuntimeStoppedCleanly: runtimeStoppedCleanly,
+            RuntimeStoppedAtUtc: runtimeStoppedAtUtc,
+            RuntimeShutdownStartedAtUtc: runtimeShutdownStartedAtUtc,
+            RuntimeShutdownCompletedAtUtc: runtimeShutdownCompletedAtUtc,
+            RuntimeShutdownPhase: runtimeShutdownPhase,
+            UpdateApplyStartedCount: updateApplyStarted.Count,
+            UpdateApplyHandoffRequestedCount: updateApplyHandoffRequested.Count,
+            UpdateApplyHandoffReturnedCount: updateApplyHandoffReturned.Count,
+            UpdateApplyFailedCount: updateApplyFailed.Count,
+            ApplicationExitRequestedForUpdateCount: applicationExitRequested.Count,
+            HostStopStartedCount: hostStopStarted.Count,
+            HostStopCompletedCount: hostStopCompleted.Count,
+            AppStoppedCount: appStopped.Count,
+            HostStopCompletedAfterApplyStart: hostStopCompletedAfterStart,
+            AppStoppedAfterApplyStart: appStoppedAfterStart,
+            LatestUpdateApplyStartedAtUtc: latestApplyStarted?.TimestampUtc,
+            LatestUpdateApplyHandoffRequestedAtUtc: latestHandoffRequested?.TimestampUtc,
+            LatestUpdateApplyHandoffReturnedAtUtc: latestHandoffReturned?.TimestampUtc,
+            LatestApplicationExitRequestedForUpdateAtUtc: LatestAppEvent(applicationExitRequested)?.TimestampUtc,
+            LatestHostStopStartedAtUtc: LatestAppEvent(hostStopStarted)?.TimestampUtc,
+            LatestHostStopCompletedAtUtc: latestHostStopCompleted?.TimestampUtc,
+            LatestAppStoppedAtUtc: latestAppStopped?.TimestampUtc);
+    }
+
+    private static IReadOnlyList<AppEventDiagnostics> EventsAtOrAfter(
+        IReadOnlyList<AppEventDiagnostics> events,
+        DateTimeOffset? timestampUtc)
+    {
+        if (timestampUtc is not { } timestamp)
+        {
+            return events;
+        }
+
+        return events
+            .Where(appEvent => appEvent.TimestampUtc is { } eventTimestamp && eventTimestamp >= timestamp)
+            .ToArray();
+    }
+
+    private static bool EventAtOrAfter(AppEventDiagnostics? appEvent, DateTimeOffset? timestampUtc)
+    {
+        return timestampUtc is { } timestamp
+            && appEvent?.TimestampUtc is { } eventTimestamp
+            && eventTimestamp >= timestamp;
+    }
+
+    private static bool TimestampAtOrAfter(DateTimeOffset? timestampUtc, DateTimeOffset? thresholdUtc)
+    {
+        return timestampUtc is { } timestamp
+            && (thresholdUtc is not { } threshold || timestamp >= threshold);
+    }
+
+    private IReadOnlyList<AppEventDiagnostics> ReadRecentAppEvents()
+    {
+        if (!Directory.Exists(_storageOptions.EventsRoot))
+        {
+            return [];
+        }
+
+        var events = new List<AppEventDiagnostics>();
+        foreach (var file in Directory
+                     .EnumerateFiles(_storageOptions.EventsRoot, "*.jsonl")
+                     .Select(path => new FileInfo(path))
+                     .OrderByDescending(file => file.LastWriteTimeUtc)
+                     .Take(MaxRecentEventFilesForDiagnostics))
+        {
+            try
+            {
+                foreach (var line in File.ReadLines(file.FullName))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    if (TryReadAppEvent(line, out var timestampUtc, out var name, out var properties)
+                        && !string.IsNullOrWhiteSpace(name))
+                    {
+                        events.Add(new AppEventDiagnostics(file.Name, timestampUtc, name, properties));
+                    }
+                }
+            }
+            catch
+            {
+                // Event diagnostics are best-effort; malformed files are counted by UpdateEventDiagnostics.
+            }
+        }
+
+        return events;
+    }
+
+    private static IReadOnlyList<AppEventDiagnostics> EventsNamed(
+        IReadOnlyList<AppEventDiagnostics> events,
+        string name)
+    {
+        return events
+            .Where(appEvent => string.Equals(appEvent.Name, name, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
+    private static AppEventDiagnostics? LatestAppEvent(IReadOnlyList<AppEventDiagnostics> events)
+    {
+        return events
+            .OrderByDescending(item => item.TimestampUtc ?? DateTimeOffset.MinValue)
+            .FirstOrDefault();
+    }
+
+    private static DateTimeOffset? ParseDateTimeOffset(JsonNode? node)
+    {
+        return DateTimeOffset.TryParse(
+            (string?)node,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var parsed)
+                ? parsed
+                : null;
     }
 
     private UpdateEventDiagnosticsSnapshot UpdateEventDiagnostics()
@@ -4627,6 +4823,43 @@ internal sealed record UpdateEventFileDiagnostics(
     int UpdateCheckSucceededCount,
     int UpdateCheckFailedCount,
     int MalformedEventLineCount);
+
+internal sealed record UpdateApplyShutdownDiagnosticsSnapshot(
+    string Classification,
+    string Interpretation,
+    string ReleaseStatus,
+    bool ReleaseOperationInProgress,
+    DateTimeOffset? ReleaseLastApplyStartedAtUtc,
+    bool RuntimeStateExists,
+    DateTimeOffset? RuntimeStartedAtUtc,
+    bool? RuntimeStoppedCleanly,
+    DateTimeOffset? RuntimeStoppedAtUtc,
+    DateTimeOffset? RuntimeShutdownStartedAtUtc,
+    DateTimeOffset? RuntimeShutdownCompletedAtUtc,
+    string? RuntimeShutdownPhase,
+    int UpdateApplyStartedCount,
+    int UpdateApplyHandoffRequestedCount,
+    int UpdateApplyHandoffReturnedCount,
+    int UpdateApplyFailedCount,
+    int ApplicationExitRequestedForUpdateCount,
+    int HostStopStartedCount,
+    int HostStopCompletedCount,
+    int AppStoppedCount,
+    bool HostStopCompletedAfterApplyStart,
+    bool AppStoppedAfterApplyStart,
+    DateTimeOffset? LatestUpdateApplyStartedAtUtc,
+    DateTimeOffset? LatestUpdateApplyHandoffRequestedAtUtc,
+    DateTimeOffset? LatestUpdateApplyHandoffReturnedAtUtc,
+    DateTimeOffset? LatestApplicationExitRequestedForUpdateAtUtc,
+    DateTimeOffset? LatestHostStopStartedAtUtc,
+    DateTimeOffset? LatestHostStopCompletedAtUtc,
+    DateTimeOffset? LatestAppStoppedAtUtc);
+
+internal sealed record AppEventDiagnostics(
+    string FileName,
+    DateTimeOffset? TimestampUtc,
+    string Name,
+    JsonObject? Properties);
 
 internal sealed record UpdateCheckEvent(
     string FileName,

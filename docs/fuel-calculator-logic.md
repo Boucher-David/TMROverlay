@@ -1,6 +1,8 @@
 # Fuel Calculator Logic
 
 This file explains how the fuel calculator derives strategy numbers and display rows.
+Fuel Calculator V2 planning lives in `docs/fuel-calculator-v2.md`; keep this
+file focused on current production behavior unless the production logic changes.
 
 Implementation files:
 

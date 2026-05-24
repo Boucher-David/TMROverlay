@@ -62,6 +62,25 @@ class ForensicsScreenshotManifestTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("no forensics screenshot manifests found", result.stderr)
 
+    def test_missing_replay_provenance_fields_fail(self):
+        with tempfile.TemporaryDirectory(prefix="tmr-forensics-manifests-") as temp_dir:
+            root = Path(temp_dir)
+            package = root / "capture-1"
+            write_produced_manifest(package, "standings", replay_provenance_overrides={
+                "samplePlanHash": None,
+                "sourceFiles": None,
+                "sessionInfoMatch": None,
+                "sampleReasons": "bad",
+            })
+
+            result = run_validator(root)
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("replayProvenance.samplePlanHash must be a non-empty string", result.stderr)
+        self.assertIn("replayProvenance.sourceFiles is required", result.stderr)
+        self.assertIn("replayProvenance.sessionInfoMatch is required", result.stderr)
+        self.assertIn("replayProvenance.sampleReasons must be a list", result.stderr)
+
 
 def write_not_rendered_manifest(package: Path, overlay_id: str, manifest_overlay_id: str | None = None) -> None:
     overlay_root = package / "overlays" / overlay_id
@@ -92,6 +111,7 @@ def write_produced_manifest(
     *,
     screenshot_path: str | None = None,
     image_hash: str | None = None,
+    replay_provenance_overrides: dict[str, object | None] | None = None,
 ) -> None:
     overlay_root = package / "overlays" / overlay_id
     renderer = "browser"
@@ -105,6 +125,43 @@ def write_produced_manifest(
     else:
         overlay_root.mkdir(parents=True, exist_ok=True)
         actual_hash = "unused"
+
+    replay_provenance = {
+        "schemaVersion": 1,
+        "sourceKind": "production-model-replay",
+        "captureId": "capture-1",
+        "overlayId": overlay_id,
+        "modelSource": "production-live-store-browser-overlay-model-factory",
+        "cadence": "route-refresh-interval",
+        "frameIndex": 1,
+        "capturedAtUtc": "2026-05-24T18:00:00Z",
+        "capturedUnixMs": 1779645600000,
+        "sessionTimeSeconds": 12.5,
+        "sessionTick": 750,
+        "sessionInfoUpdate": 1,
+        "sessionInfoMatch": {
+            "requestedUpdate": 1,
+            "matchedUpdate": 1,
+            "source": "exact",
+        },
+        "sessionType": "Race",
+        "sessionName": "Race",
+        "focusCarIdx": 17,
+        "rawCamCarIdx": 17,
+        "samplePlanHash": "sample-plan-hash",
+        "sampleReasons": ["unit-test"],
+        "sampleEventIds": [],
+        "sampleOverlayIds": [overlay_id],
+        "sourceFiles": {
+            "manifest": "capture-manifest.json",
+            "schema": "telemetry-schema.json",
+            "telemetry": "telemetry.bin",
+            "latestSessionInfo": "latest-session.yaml",
+            "sessionInfoDirectory": "session-info",
+        },
+    }
+    if replay_provenance_overrides:
+        replay_provenance.update(replay_provenance_overrides)
 
     (overlay_root / "screenshot-manifest.json").write_text(
         json.dumps(
@@ -125,6 +182,7 @@ def write_produced_manifest(
                         "modelStatus": "live",
                         "bodyKind": "table",
                         "visibleText": "sample",
+                        "replayProvenance": replay_provenance,
                     }
                 ],
             },

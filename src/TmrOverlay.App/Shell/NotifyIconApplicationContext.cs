@@ -287,6 +287,7 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
             RefreshUpdateMenu();
             if (snapshot.Status == ReleaseUpdateStatus.Applying)
             {
+                RecordApplicationExitRequestedForUpdate("tray", snapshot);
                 ExitApplication();
             }
         }
@@ -314,6 +315,18 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
         _notifyIcon.Visible = false;
         _applicationLifetime.StopApplication();
         ExitThread();
+    }
+
+    private void RecordApplicationExitRequestedForUpdate(string source, ReleaseUpdateSnapshot snapshot)
+    {
+        _events.Record("application_exit_requested_for_update", new Dictionary<string, string?>
+        {
+            ["source"] = source,
+            ["releaseUpdateStatus"] = snapshot.Status.ToString(),
+            ["latestVersion"] = snapshot.LatestVersion,
+            ["latestFileName"] = snapshot.LatestFileName,
+            ["lastApplyStartedAtUtc"] = snapshot.LastApplyStartedAtUtc?.ToString("O")
+        });
     }
 
     private void OnOverlayManagerApplicationExitRequested(object? sender, EventArgs e)

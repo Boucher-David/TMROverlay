@@ -48,6 +48,8 @@ Current evidence/tooling shape:
 - 2026-05-23: `v1.1.0` is the overlay forensics replay tooling milestone. It adds explicit-capture replay/indexing tools, app-owned forensics packages under `%LOCALAPPDATA%\TmrOverlay\forensics\<capture-id>`, and capture-sweep notes from the Dallara race evidence. Next work should deepen bare-capture semantic decoding, standalone IBT import, and model/pixel evidence generation rather than treating post-session diagnostics as enough live-render proof.
 - 2026-05-21: Local v1.1 replay-candidate review ranked three real-stream seeds: the GR86 Nordschleife Industriefahrten spotter-only race for race-start and spectator/local-role contracts, the April VLN four-hour endurance capture for local driving/fuel/input and multiclass long-run behavior, and the May 2 24h capture `capture-20260502-143722-571` for mid-session rejoin/no-history race behavior. The GR86 capture did not expose a new named `IsSpotting` SDK variable; spotting is proven through session-info identity, where `DriverInfo.DriverCarIdx` points at a driver row with `IsSpectator = 1`, while raw telemetry still reports `PlayerCarIdx` for that spectator row and `CamCarIdx` usually follows another race car. Do not use `IsReplayPlaying` alone to suppress live race overlays in spotting/watch contexts.
 - 2026-05-24: The `v1.1.1` hardening branch is promoted to `v1.2.0` because it now includes parseable overlay scenario contracts, app-owned behavior descriptors, real-data snapshot fixtures, broad forensics validators, screenshot/manifest CI lanes, native/browser/localhost evidence expansion, and multiple overlay product fixes. Keep the branch physically named `v1.1.1` until branch cleanup or an explicit rename, but treat its release target and build metadata as v1.2.0.
+- 2026-05-24: The `v1.2.1-replay-foundation-improvement` branch expands raw-capture replay from linear playback into controllable frame/session-time windows, session-type filtering, optional focus-car override, manifest/header/schema import inspection, production model replay provenance, and a standalone compact import/sample export tool. This is still raw-capture replay foundation work, not Fuel Calculator V2 product logic.
+- 2026-05-24: The teammate GR86 Road Atlanta support bundle timestamped 2026-05-24 19:29:23 UTC did not contain raw replay input, but diagnostics showed update apply/restart limbo rather than a telemetry freeze or TMR overlay input interception: Settings was visible, performance timers were still ticking, `release-updates.json` was `Applying`, and `runtime-state.json` had no clean stop. v1.2.1 moves update handoff to the post-UI shutdown path, adds update-apply shutdown breadcrumbs, and adds `metadata/evidence-quality.json` `updateFlow.applyShutdown` classification so future bundles can report `update_apply_shutdown_incomplete` directly.
 
 ## Current V1.2 Branch Focus
 
@@ -63,7 +65,7 @@ Current branch focus:
 - Keep the v0.19.0 data-contract snapshot as the previous durable-release baseline unless a durable schema change is deliberately introduced. Any schema change needs the workflow in `docs/data-contracts.md`.
 - If overlay/settings/renderer/browser/localhost behavior changes, update screenshot generators and validation profiles in the same pass so native Windows, browser review, and localhost coverage are represented.
 - Keep the deprecated mac harness out of the V1 parity/release gate.
-- Keep the v1.2.1 tool-hardening follow-up explicit in scope: bare raw-capture semantic decoding, standalone IBT import/replay, sampled production model evidence from full captures, native replay screenshots, and pixel/screenshot evidence only when enhanced capture has been intentionally enabled.
+- Keep the v1.2.1 tool-hardening follow-up explicit in scope: bare raw-capture semantic decoding, replay-window and focus controls, compact import/sample export, sampled production model evidence from full captures, native replay screenshots, and pixel/screenshot evidence only when enhanced capture has been intentionally enabled. Standalone IBT import/replay remains a later evidence path unless promoted deliberately.
 - Keep coverage thresholds disabled until the first baseline artifacts have been reviewed and noisy/generated paths are excluded deliberately.
 - Do not treat capture-only questions as ordinary overlay bugs until the replay evidence can show raw telemetry, production model output, route/OBS behavior, and pixels for the same sampled moment.
 - Keep `v1.2.md`, `docs/v1.1-data-tool-proposal.md`, `VERSION.md`, README/current-state docs, repo skills, replay tooling, and validation notes aligned before the next tag.
@@ -368,8 +370,31 @@ v1.2.1 follow-up scope:
 - Emit replay provenance in every artifact: capture id, frame index, session time, session type, focused car, local/player/reference context, source files, model sequence, and fixture privacy class.
 - Keep replay isolated from the production Windows collector and from arbitrary private capture directories. CI should use committed redacted/minimized fixtures or extracted replay slices, not scan local user data.
 - Use replay artifacts to decide model-v2 promotions, overlay simplifications, and edge-case UI behavior before adding heavier analysis or strategy products.
-- Add bare raw-capture semantic decoding and standalone IBT import/replay so long captures are useful even when no diagnostics bundle exists.
+- Add bare raw-capture semantic decoding and compact import/sample export so long captures are useful even when no diagnostics bundle exists. Standalone IBT import/replay remains a later evidence path unless the branch is explicitly widened.
 - Add sampled production model and pixel evidence only behind the intentional Enhanced iRacing Telemetry Capture boundary.
+
+Current branch implementation note:
+
+- App replay mode now routes explicit raw captures through the shared
+  semantic replay reader into `ILiveTelemetrySink`, with playback timestamps
+  remapped to wall clock so live overlays do not classify old capture frames as
+  stale during active replay.
+- Replay controls now cover bounded frame windows, bounded session-time windows,
+  session-type filters, playback speed, and optional focus-car override. Treat
+  the override as replay evidence shaping; it does not imply that local-only
+  overlays have teammate/spectator data.
+- The raw replay import gate now reports manifest/header/schema/frame-count
+  quality through `RawCaptureReplayInspection`. `TmrOverlay.RawCaptureReplayExport`
+  writes `import-summary.json` and optional bounded `decoded-samples.jsonl`
+  compact rows without copying raw telemetry payloads.
+- Production model replay now carries replay provenance into model rows and
+  screenshot manifests, including capture id, source files, frame/session time,
+  session-info match source, session label, focused car, sample-plan hash, and
+  selected-frame reasons.
+- Browser/localhost replay screenshot generation exists through production model
+  replay plus the manifest validator. Native replay screenshot coverage and CI
+  fixture promotion are still validation gaps until a Windows run produces the
+  artifacts.
 
 Initial capture seed set:
 
@@ -398,6 +423,8 @@ Success criteria:
 ### v1.3 - Fuel Calculator V2
 
 Goal: rebuild fuel strategy around team-stint evidence instead of stitched scalar estimates.
+Detailed design notes now live in `docs/fuel-calculator-v2.md`, starting with
+the Race Lap Budget Quality Gate for timed-race lap estimation.
 
 Likely scope:
 

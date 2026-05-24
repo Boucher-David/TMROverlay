@@ -21,12 +21,11 @@ internal sealed record GarageCoverViewModel(
     {
         var browserSettings = BrowserSettingsFrom(settings, now);
         var detection = DetectGarageState(snapshot, now);
-        var shouldCover = browserSettings.PreviewVisible
-            || !detection.IsFresh
-            || snapshot.Models.RaceEvents.IsGarageVisible;
+        var shouldCover = detection.IsFresh
+            && snapshot.Models.RaceEvents.IsGarageVisible;
         return new GarageCoverViewModel(
             Title: "Garage Cover",
-            Status: browserSettings.PreviewVisible ? "preview visible" : detection.DisplayText,
+            Status: detection.DisplayText,
             Source: "source: garage telemetry/settings",
             ShouldCover: shouldCover,
             BrowserSettings: browserSettings,
@@ -68,11 +67,14 @@ internal sealed record GarageCoverViewModel(
         LiveTelemetrySnapshot live)
     {
         var now = DateTimeOffset.UtcNow;
+        var overlay = GarageCoverOverlay(settings);
         var viewModel = From(settings, live, now);
         return new GarageCoverDiagnosticsSnapshot(
             RouteEnabled: localhost.Enabled,
             RouteStatus: localhost.Status,
             Route: "/overlays/garage-cover",
+            OverlayEnabled: overlay.Enabled,
+            ShouldCover: overlay.Enabled && viewModel.ShouldCover,
             ImageStatus: viewModel.BrowserSettings.ImageStatus,
             ImageFileName: viewModel.BrowserSettings.ImageFileName,
             ImageExtension: viewModel.BrowserSettings.ImageExtension,
@@ -129,6 +131,6 @@ internal sealed record GarageCoverViewModel(
             GarageCoverOverlayDefinition.Definition.Id,
             GarageCoverOverlayDefinition.Definition.DefaultWidth,
             GarageCoverOverlayDefinition.Definition.DefaultHeight,
-            defaultEnabled: true);
+            defaultEnabled: false);
     }
 }

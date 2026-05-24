@@ -410,6 +410,7 @@
         overlayId: page.id || 'unknown',
         clientId: browserSourceClientId.id,
         clientKind: browserSourceClientId.kind,
+        sourceUrl: `${window.location.pathname}${window.location.search}`,
         shouldRender: model ? model.shouldRender !== false : null,
         status: model?.status || null,
         error: error?.message || null
@@ -426,6 +427,7 @@
       updateOverlayRuntimeClasses(model);
       if (!model) {
         postBrowserSourceEvent('model-null');
+        contentEl.hidden = false;
         contentEl.innerHTML = '<div class="empty">Waiting for overlay model.</div>';
         renderHeaderItems(null, 'waiting for model');
         clearFooterSource();
@@ -436,6 +438,7 @@
         postBrowserSourceEvent('model-hidden', model);
         modelRootOpacity = rootOpacityFromModel(model);
         applyOverlayOpacity(0);
+        contentEl.hidden = false;
         contentEl.innerHTML = '';
         clearHeaderItems();
         clearFooterSource();
@@ -451,6 +454,7 @@
       const rows = Array.isArray(model.rows) ? model.rows : [];
       const metricSectionHtml = metricSections.map(metricSection).join('');
       const sectionHtml = gridSections.map(gridSection).join('');
+      contentEl.hidden = false;
       if (model.bodyKind === 'summary-table') {
         const summary = metrics.length
           ? `<div class="metric-list" style="margin-bottom: 10px;">${metrics.map(metricRow).join('')}</div>`
@@ -471,7 +475,13 @@
           ? `${metricsHtml}${metricSectionHtml}${sectionHtml}`
           : '';
       } else {
-        contentEl.innerHTML = rowsTable(displayModelHeaders(model), rows);
+        const headers = displayModelHeaders(model);
+        if (headers.length === 0 && rows.length === 0) {
+          contentEl.innerHTML = '';
+          contentEl.hidden = true;
+        } else {
+          contentEl.innerHTML = rowsTable(headers, rows);
+        }
       }
 
       renderHeaderItems(model, model.status || 'live');
@@ -812,6 +822,7 @@
       const scale = graph.scale || { isFocusRelative: false, maxGapSeconds: graph.maxGapSeconds };
       const maxGapSeconds = Math.max(1, numberOr(scale.maxGapSeconds, graph.maxGapSeconds, 1));
       drawGapWeatherBands(ctx, graph, plot);
+      drawGapPitWindows(ctx, graph, plot);
       drawGapLapIntervals(ctx, graph, plot);
       drawGapGrid(ctx, graph, scale, plot, maxGapSeconds);
       drawGapScaleLabels(ctx, graph, scale, plot, maxGapSeconds);
@@ -978,6 +989,36 @@
           ctx.fillRect(x, plot.top, Math.max(1, nextX - x), 4);
         }
       });
+    }
+
+    function drawGapPitWindows(ctx, graph, plot) {
+      const windows = Array.isArray(graph?.pitWindows) ? graph.pitWindows : [];
+      if (windows.length === 0) return;
+      const domain = graphDomain(graph);
+      ctx.save();
+      for (const window of windows) {
+        const start = Math.max(domain.start, numberOr(window?.entryAxisSeconds, domain.start));
+        const end = Math.min(domain.end, Number.isFinite(window?.exitAxisSeconds) ? window.exitAxisSeconds : domain.end);
+        if (end <= start) continue;
+        const x = axisToX(graph, plot, start);
+        const nextX = axisToX(graph, plot, end);
+        if (nextX <= x) continue;
+        ctx.fillStyle = window?.isActive === true
+          ? 'rgba(112, 224, 146, 0.19)'
+          : 'rgba(112, 224, 146, 0.13)';
+        ctx.fillRect(x, plot.top, Math.max(1, nextX - x), plot.height);
+        ctx.strokeStyle = window?.isActive === true
+          ? 'rgba(112, 224, 146, 0.52)'
+          : 'rgba(112, 224, 146, 0.36)';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, plot.top);
+        ctx.lineTo(x, plot.top + plot.height);
+        ctx.moveTo(nextX, plot.top);
+        ctx.lineTo(nextX, plot.top + plot.height);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
     function drawGapLapIntervals(ctx, graph, plot) {

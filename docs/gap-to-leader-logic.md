@@ -90,6 +90,8 @@ Data review note from the May 2026 capture analysis:
 
 Long-race feedback changed the reference behavior from "always leader" to "nearest eligible same-lap reference." The graph limits the +/- comparison field to cars on the same lap as the focused car. If P1/reference crosses more than one lap ahead, the graph switches to the next same-lap in-class car such as P2 or P3. If the focused car unlaps itself from P1, P1 becomes eligible again. Out-of-reach cars can still be named as `P<N> +N lap` reference context, but they do not draw the white same-lap reference line.
 
+The compact Dallara pit-window replay fixture `gap-to-leader-pit-window-real-data` proves the production browser model keeps the leader/ahead/focus series selected through pit entry, active pit road, exit, and post-exit stabilization while excluding far-behind outliers. It also proves the `Pit`/`PLap` metric state transitions from active duration to the completed pit duration/lap. Browser/localhost/native screenshot replay for that compact fixture is still pending.
+
 ## Same-Class Car List
 
 The graph list always attempts to include:

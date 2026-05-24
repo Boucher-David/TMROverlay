@@ -19,7 +19,7 @@ export {
   renderOverlayIndexHtml
 } from './browserOverlayAssets.js';
 
-export async function renderBrowserOverlay(name, { live, settings = {}, model = null, waitForSelector = 'table', query = '', userAgent = null }) {
+export async function renderBrowserOverlay(name, { live, settings = {}, model = null, failModelFetch = false, waitForSelector = 'table', query = '', userAgent = null }) {
   const fetchCalls = [];
   const browserSourceEvents = [];
   const page = browserOverlayPage(name);
@@ -45,6 +45,10 @@ export async function renderBrowserOverlay(name, { live, settings = {}, model = 
         }
 
         const currentModel = typeof model === 'function' ? model() : model;
+        if (failModelFetch && path === page.modelRoute) {
+          return { ok: false, status: 503, json: async () => ({}) };
+        }
+
         const payload = browserOverlayApiResponse(name, path, { live, settings, model: currentModel });
         if (payload) {
           return jsonResponse(payload);

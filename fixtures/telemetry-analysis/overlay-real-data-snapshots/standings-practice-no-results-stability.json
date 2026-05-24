@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "standings-practice-no-results-stability",
+  "overlayId": "standings",
+  "scenarioIds": ["standings-practice-no-results-stability"],
+  "source": {
+    "captureId": "v1.1.0-practice-observation",
+    "sourceCategory": "open-practice-before-results",
+    "redaction": "compact-summary",
+    "note": "Practice observation where Standings briefly flashed before a durable results/timing source existed."
+  },
+  "provenance": {
+    "sessionType": "Practice",
+    "sessionPhase": "green",
+    "focusRelation": "player",
+    "sampleWindowSeconds": 8.0
+  },
+  "rawEvidence": {
+    "sessionType": "Practice",
+    "sessionState": 4,
+    "scoringFramesWithData": 0,
+    "timingRowsWithPositiveGap": 0,
+    "sessionResultsRows": 0,
+    "acceptedScoringSource": false,
+    "validLapRows": 0,
+    "headerEnabled": true,
+    "footerEnabled": true
+  },
+  "expected": {
+    "stableVisibilityPolicy": "chrome-on-no-body-data",
+    "bodyRowCount": 0,
+    "shouldNotFlashRows": true,
+    "shouldNotUseRaceTiming": true,
+    "forbiddenTextPatterns": ["GAP", "INT", "Leader", "Best", "+0.0"],
+    "allowedChromeWithoutBodyRows": true,
+    "source": "waiting-for-practice-results"
+  }
+}

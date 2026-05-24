@@ -836,7 +836,7 @@ internal sealed class CarRadarForm : PersistentOverlayForm
         var centerX = bounds.X + bounds.Width / 2f;
         var centerY = bounds.Y + bounds.Height / 2f;
         var usableRadius = bounds.Width / 2f - UsableRadarRadiusInset;
-        if (_leftSideAlpha > MinimumVisibleAlpha)
+        if (_leftSideAlpha > MinimumVisibleAlpha && sideAttachments.Left is not null)
         {
             DrawWarningCar(
                 graphics,
@@ -847,7 +847,7 @@ internal sealed class CarRadarForm : PersistentOverlayForm
                 sideAttachments.Left?.Car.CarClassColorHex);
         }
 
-        if (_rightSideAlpha > MinimumVisibleAlpha)
+        if (_rightSideAlpha > MinimumVisibleAlpha && sideAttachments.Right is not null)
         {
             DrawWarningCar(
                 graphics,

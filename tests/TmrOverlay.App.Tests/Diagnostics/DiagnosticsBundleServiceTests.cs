@@ -477,6 +477,7 @@ public sealed class DiagnosticsBundleServiceTests
                     },
                     {
                       "id": "garage-cover",
+                      "enabled": true,
                       "options": {
                         "garage-cover.image-path": "{{escapedGarageCoverPath}}"
                       }
@@ -706,7 +707,8 @@ public sealed class DiagnosticsBundleServiceTests
                 "/api/overlay-model/standings",
                 200,
                 TimeSpan.FromMilliseconds(3),
-                "Mozilla/5.0 OBS Studio/32.1.2");
+                "Mozilla/5.0 OBS Studio/32.1.2",
+                sourceUrl: "/api/overlay-model/standings?clientKind=obs");
             localhostState.RecordPageEvent(new LocalhostOverlayPageEvent(
                 Event: "page-loaded",
                 OverlayId: "standings",
@@ -714,7 +716,8 @@ public sealed class DiagnosticsBundleServiceTests
                 ClientKind: "obs",
                 ShouldRender: null,
                 Status: null,
-                Error: null));
+                Error: null,
+                SourceUrl: "/overlays/standings?clientKind=obs"));
             localhostState.RecordPageEvent(new LocalhostOverlayPageEvent(
                 Event: "model-render",
                 OverlayId: "standings",
@@ -722,7 +725,8 @@ public sealed class DiagnosticsBundleServiceTests
                 ClientKind: "obs",
                 ShouldRender: true,
                 Status: "scoring | race",
-                Error: null));
+                Error: null,
+                SourceUrl: "/overlays/standings?clientKind=obs"));
             var performance = new AppPerformanceState();
             performance.RecordOperation("test.operation", TimeSpan.FromMilliseconds(3));
             var performanceRecorder = new AppPerformanceSnapshotRecorder(storage);
@@ -1484,6 +1488,7 @@ public sealed class DiagnosticsBundleServiceTests
                 var localhostJson = JsonNode.Parse(localhostReader.ReadToEnd());
                 Assert.True(((bool?)localhostJson?["enabled"]) == true);
                 Assert.Equal("listening", (string?)localhostJson?["status"]);
+                Assert.NotNull(localhostJson?["capturedAtUtc"]);
                 Assert.Equal(2L, ((long?)localhostJson?["totalRequests"]) ?? -1L);
                 Assert.Equal(1L, ((long?)localhostJson?["routeCounts"]?["track_map"]) ?? -1L);
                 Assert.Equal(1L, ((long?)localhostJson?["routeCounts"]?["overlay_model"]) ?? -1L);
@@ -1493,15 +1498,23 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(1L, ((long?)localhostJson?["clientCounts"]?["obs"]) ?? -1L);
                 Assert.Equal(1L, ((long?)localhostJson?["routeClientCounts"]?["overlay_model|obs"]) ?? -1L);
                 Assert.Equal(1L, ((long?)localhostJson?["pathClientCounts"]?["/api/overlay-model/standings|obs"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostJson?["sourceUrlCounts"]?["/api/overlay-model/standings?clientKind=obs"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostJson?["sourceUrlClientCounts"]?["/api/overlay-model/standings?clientKind=obs|obs"]) ?? -1L);
+                Assert.Equal("/api/overlay-model/standings?clientKind=obs", (string?)localhostJson?["lastRequestSourceUrl"]);
                 Assert.Equal("obs", (string?)localhostJson?["lastRequestClientKind"]);
                 Assert.NotEmpty(Assert.IsType<JsonArray>(localhostJson?["recentRequests"]));
                 Assert.Equal("model-render", (string?)localhostJson?["lastPageEventKind"]);
                 Assert.Equal("standings", (string?)localhostJson?["lastPageEventOverlayId"]);
                 Assert.Equal("obs-test", (string?)localhostJson?["lastPageEventClientId"]);
                 Assert.Equal("obs", (string?)localhostJson?["lastPageEventClientKind"]);
+                Assert.Equal("/overlays/standings?clientKind=obs", (string?)localhostJson?["lastPageEventSourceUrl"]);
                 Assert.True(((bool?)localhostJson?["lastPageEventShouldRender"]) == true);
                 Assert.Equal(1L, ((long?)localhostJson?["pageEventOverlayCounts"]?["standings|page-loaded"]) ?? -1L);
                 Assert.Equal(1L, ((long?)localhostJson?["pageEventOverlayCounts"]?["standings|model-render"]) ?? -1L);
+                Assert.Equal(2L, ((long?)localhostJson?["pageEventSourceUrlCounts"]?["/overlays/standings?clientKind=obs"]) ?? -1L);
+                Assert.Equal(2L, ((long?)localhostJson?["pageEventOverlayClientCounts"]?["standings|obs"]) ?? -1L);
+                Assert.Equal(2L, ((long?)localhostJson?["pageEventClientIdCounts"]?["standings|obs-test"]) ?? -1L);
+                Assert.Equal(2L, ((long?)localhostJson?["pageEventSourceUrlClientCounts"]?["/overlays/standings?clientKind=obs|obs"]) ?? -1L);
                 Assert.NotEmpty(Assert.IsType<JsonArray>(localhostJson?["recentPageEvents"]));
             }
 
@@ -1531,12 +1544,18 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(1L, ((long?)localhostModelsJson?["localhost"]?["overlayModelSuccessCount"]) ?? -1L);
                 Assert.True(((bool?)localhostModelsJson?["localhost"]?["anyOverlayModelRequestSucceeded"]) == true);
                 Assert.Equal("obs", (string?)localhostModelsJson?["localhost"]?["lastRequestClientKind"]);
+                Assert.Equal("/api/overlay-model/standings?clientKind=obs", (string?)localhostModelsJson?["localhost"]?["lastRequestSourceUrl"]);
                 Assert.Equal(1L, ((long?)localhostModelsJson?["localhost"]?["clientCounts"]?["obs"]) ?? -1L);
+                Assert.Equal(1L, ((long?)localhostModelsJson?["localhost"]?["sourceUrlCounts"]?["/api/overlay-model/standings?clientKind=obs"]) ?? -1L);
                 Assert.Equal("model-render", (string?)localhostModelsJson?["localhost"]?["lastPageEventKind"]);
                 Assert.Equal("standings", (string?)localhostModelsJson?["localhost"]?["lastPageEventOverlayId"]);
                 Assert.Equal("obs", (string?)localhostModelsJson?["localhost"]?["lastPageEventClientKind"]);
+                Assert.Equal("/overlays/standings?clientKind=obs", (string?)localhostModelsJson?["localhost"]?["lastPageEventSourceUrl"]);
                 Assert.True(((bool?)localhostModelsJson?["localhost"]?["lastPageEventShouldRender"]) == true);
                 Assert.Equal(1L, ((long?)localhostModelsJson?["localhost"]?["pageEventOverlayCounts"]?["standings|model-render"]) ?? -1L);
+                Assert.Equal(2L, ((long?)localhostModelsJson?["localhost"]?["pageEventOverlayClientCounts"]?["standings|obs"]) ?? -1L);
+                Assert.Equal(2L, ((long?)localhostModelsJson?["localhost"]?["pageEventClientIdCounts"]?["standings|obs-test"]) ?? -1L);
+                Assert.Equal(2L, ((long?)localhostModelsJson?["localhost"]?["pageEventSourceUrlClientCounts"]?["/overlays/standings?clientKind=obs|obs"]) ?? -1L);
                 Assert.True(((bool?)localhostModelsJson?["telemetry"]?["current"]?["isConnected"]) == true);
                 Assert.True(((bool?)localhostModelsJson?["telemetry"]?["current"]?["isCollecting"]) == true);
 
@@ -1549,6 +1568,13 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(1L, ((long?)standings["pageLoadedEventCount"]) ?? -1L);
                 Assert.Equal(1L, ((long?)standings["modelRenderEventCount"]) ?? -1L);
                 Assert.Equal(0L, ((long?)standings["modelHiddenEventCount"]) ?? -1L);
+                Assert.Equal(0L, ((long?)standings["modelNullEventCount"]) ?? -1L);
+                Assert.Equal(1L, ((long?)standings["sourceUrlCounts"]?["/api/overlay-model/standings?clientKind=obs"]) ?? -1L);
+                Assert.Equal(1L, ((long?)standings["sourceUrlClientCounts"]?["/api/overlay-model/standings?clientKind=obs|obs"]) ?? -1L);
+                Assert.Equal(2L, ((long?)standings["pageEventSourceUrlCounts"]?["/overlays/standings?clientKind=obs"]) ?? -1L);
+                Assert.Equal(2L, ((long?)standings["pageEventSourceUrlClientCounts"]?["/overlays/standings?clientKind=obs|obs"]) ?? -1L);
+                Assert.Equal(2L, ((long?)standings["pageEventClientCounts"]?["obs"]) ?? -1L);
+                Assert.Equal(2L, ((long?)standings["pageEventClientIdCounts"]?["obs-test"]) ?? -1L);
                 Assert.NotEmpty(Assert.IsType<JsonArray>(standings["recentPageEvents"]));
                 Assert.Equal("built", (string?)standings["current"]?["buildStatus"]);
                 Assert.Equal("current", (string?)standings["current"]?["snapshotSource"]);
@@ -1758,6 +1784,8 @@ public sealed class DiagnosticsBundleServiceTests
             using var garageCoverReader = new StreamReader(garageCoverEntry.Open());
             var garageCoverJson = JsonNode.Parse(garageCoverReader.ReadToEnd());
             Assert.Equal("/overlays/garage-cover", (string?)garageCoverJson?["route"]);
+            Assert.True((bool?)garageCoverJson?["overlayEnabled"]);
+            Assert.True((bool?)garageCoverJson?["shouldCover"]);
             Assert.Equal("ready", (string?)garageCoverJson?["imageStatus"]);
             Assert.Equal("cover.png", (string?)garageCoverJson?["imageFileName"]);
             Assert.True((bool?)garageCoverJson?["lastGarageVisible"]);

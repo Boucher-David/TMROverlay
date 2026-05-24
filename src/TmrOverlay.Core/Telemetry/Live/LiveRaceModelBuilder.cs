@@ -828,12 +828,25 @@ internal static class LiveRaceModelBuilder
         HistoricalSessionContext context,
         HistoricalTelemetrySample sample)
     {
-        if (!IsRaceOrPracticeSession(context))
+        if (ContainsPractice(context.Session.SessionType)
+            || ContainsPractice(context.Session.SessionName))
         {
-            return false;
+            return true;
         }
 
-        return sample.SessionState is 3 or >= 4 or null;
+        if (ContainsRace(context.Session.SessionType)
+            || ContainsRace(context.Session.SessionName))
+        {
+            return sample.SessionState is 3 or >= 4 or null;
+        }
+
+        if (ContainsPractice(context.Session.EventType))
+        {
+            return true;
+        }
+
+        return ContainsRace(context.Session.EventType)
+            && sample.SessionState is 3 or >= 4 or null;
     }
 
     private static LiveScoringRow ToScoringRow(
@@ -1471,7 +1484,7 @@ internal static class LiveRaceModelBuilder
                 if (row.LapDistPct is not { } rowLapDistPct
                     || RelativeLapsFromLapDistance(rowLapDistPct, referenceLapDistPct) is not { } relativeLaps
                     || Math.Abs(relativeLaps) <= 0.00001d
-                    || EstimatedRelativeSeconds(row, referenceEstimatedTimeSeconds, referenceLapDistPct, lapTimeSeconds) is not { } relativeSeconds)
+                    || EstimatedRelativeSecondsForRelative(row, referenceEstimatedTimeSeconds, referenceLapDistPct, lapTimeSeconds) is not { } relativeSeconds)
                 {
                     return null;
                 }
@@ -1498,6 +1511,42 @@ internal static class LiveRaceModelBuilder
             .Where(row => row is not null)
             .Select(row => row!)
             .ToArray();
+    }
+
+    private static double? EstimatedRelativeSecondsForRelative(
+        LiveTimingRow row,
+        double? referenceEstimatedTimeSeconds,
+        double? referenceLapDistPct,
+        double? lapTimeSeconds)
+    {
+        var rowEstimated = ValidPositive(row.EstimatedTimeSeconds);
+        var referenceEstimated = ValidPositive(referenceEstimatedTimeSeconds);
+        if (rowEstimated is null
+            || referenceEstimated is null
+            || row.LapDistPct is not { } rowLapDistPct
+            || RelativeLapsFromLapDistance(rowLapDistPct, referenceLapDistPct) is not { } relativeLaps
+            || Math.Abs(relativeLaps) <= 0.00001d)
+        {
+            return null;
+        }
+
+        var delta = rowEstimated.Value - referenceEstimated.Value;
+        if (lapTimeSeconds is { } lapSeconds && ValidPositive(lapSeconds) is not null)
+        {
+            if (delta > lapSeconds / 2d)
+            {
+                delta -= lapSeconds;
+            }
+            else if (delta < -lapSeconds / 2d)
+            {
+                delta += lapSeconds;
+            }
+        }
+
+        var signedSeconds = Math.Abs(delta) * Math.Sign(relativeLaps);
+        return IsPlausibleEstimatedTiming(signedSeconds, relativeLaps, lapTimeSeconds)
+            ? signedSeconds
+            : null;
     }
 
     private static double? RelativeLapsFromLapDistance(double carLapDistPct, double? referenceLapDistPct)
@@ -3073,7 +3122,7 @@ internal static class LiveRaceModelBuilder
             return LiveSignalEvidence.Unavailable("measured-local-fuel-baseline", "pit_or_service_context");
         }
 
-        if (Progress(sample.LapCompleted, sample.LapDistPct) is null)
+        if (LocalFuelProgress(sample) is null)
         {
             return LiveSignalEvidence.Unavailable("measured-local-fuel-baseline", "local_lap_progress_missing");
         }
@@ -3081,6 +3130,19 @@ internal static class LiveRaceModelBuilder
         return LiveSignalEvidence.Partial(
             "measured-local-fuel-baseline",
             "requires_previous_green_distance_sample");
+    }
+
+    private static double? LocalFuelProgress(HistoricalTelemetrySample sample)
+    {
+        var lapCompleted = sample.TeamLapCompleted is >= 0
+            ? sample.TeamLapCompleted
+            : sample.LapCompleted is >= 0
+                ? sample.LapCompleted
+                : null;
+        var lapDistPct = ValidLapDistPct(sample.TeamLapDistPct) is not null
+            ? sample.TeamLapDistPct
+            : sample.LapDistPct;
+        return Progress(lapCompleted, lapDistPct);
     }
 
     private static bool HasTimingSignal(

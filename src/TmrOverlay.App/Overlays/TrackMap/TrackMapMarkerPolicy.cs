@@ -1,16 +1,20 @@
 using TmrOverlay.Core.History;
+using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Telemetry.Live;
 
 namespace TmrOverlay.App.Overlays.TrackMap;
 
 internal static class TrackMapMarkerPolicy
 {
-    public static bool ShouldRenderTimingMarker(LiveTimingRow row, bool isFocus)
+    public static bool ShouldRenderTimingMarker(
+        LiveTimingRow row,
+        bool isFocus,
+        OverlaySessionKind? sessionKind)
     {
         return row.HasSpatialProgress
             && row.LapDistPct is { } lapDistPct
             && IsValidProgress(lapDistPct)
-            && (isFocus || row.HasTakenGrid);
+            && (isFocus || row.HasTakenGrid || AllowsNonGridTimingMarkers(sessionKind));
     }
 
     public static bool ShouldRenderFocusSampleMarker(HistoricalTelemetrySample? sample)
@@ -45,5 +49,11 @@ internal static class TrackMapMarkerPolicy
     private static bool IsPitRoadTrackSurface(int? trackSurface)
     {
         return trackSurface is 1 or 2;
+    }
+
+    private static bool AllowsNonGridTimingMarkers(OverlaySessionKind? sessionKind)
+    {
+        return OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind)
+            is OverlaySessionKind.Practice or OverlaySessionKind.Qualifying;
     }
 }

@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "id": "fuel-measured-burn-real-data",
+  "overlayId": "fuel-calculator",
+  "scenarioIds": ["fuel-measured-burn-and-refuel"],
+  "source": {
+    "captureId": "capture-20260522-204847-774",
+    "sourceCategory": "full-race-fuel-measured-burn-refuel",
+    "redaction": "compact-summary",
+    "note": "Race capture where post-race history found completed green-lap fuel burn and a real refuel, while live diagnostics reported measured burn unavailable and no pit-window fuel increase."
+  },
+  "provenance": {
+    "sessionType": "Race",
+    "sessionPhase": "green-and-pit-service",
+    "focusRelation": "player",
+    "sampleWindowSeconds": 3436.531
+  },
+  "rawEvidence": {
+    "sessionType": "Race",
+    "liveDiagnostics": {
+      "sampleFrameCount": 206109,
+      "framesWithFuelLevel": 202597,
+      "measuredBurnEvidenceCounts": {
+        "rolling-local-fuel-delta:Unavailable:requires_completed_green_lap_delta": 206109
+      },
+      "pitWindowCount": 3,
+      "pitWindowsWithFuelIncrease": 0,
+      "fuelIncreaseEventFrames": 0
+    },
+    "postRaceSummary": {
+      "completedValidLaps": 6,
+      "validDistanceLaps": 6.322686992574745,
+      "fuelUsedLiters": 86.13083577156067,
+      "fuelPerLapLiters": 13.622505095177294,
+      "fuelEvidenceQuality": "high",
+      "stints": [
+        {
+          "stintNumber": 1,
+          "distanceLaps": 3.9936605458970007,
+          "fuelStartLiters": 58.4181022644043,
+          "fuelEndLiters": 3.82265305519104,
+          "fuelUsedLiters": 54.59544920921326,
+          "fuelPerLapLiters": 13.670528223863048,
+          "driverRole": "local-driver-scalar",
+          "confidenceFlags": ["team_car_array_distance", "local_fuel_scalar"]
+        },
+        {
+          "stintNumber": 2,
+          "distanceLaps": 1.5333145828917623,
+          "fuelStartLiters": 33.45108413696289,
+          "fuelEndLiters": 12.206122398376465,
+          "fuelUsedLiters": 21.244961738586426,
+          "fuelPerLapLiters": 13.855579263140761,
+          "driverRole": "local-driver-scalar",
+          "confidenceFlags": ["team_car_array_distance", "local_fuel_scalar"]
+        }
+      ],
+      "refuelPitStop": {
+        "stopNumber": 4,
+        "entryRaceTimeSeconds": 2117.216666674952,
+        "exitRaceTimeSeconds": 2159.7833333421595,
+        "fuelBeforeLiters": 3.8224141597747803,
+        "fuelAfterLiters": 33.45108413696289,
+        "fuelAddedLiters": 29.62866997718811,
+        "fuelFillRateLitersPerSecond": 1.6979180502470843,
+        "confidenceFlags": ["team_car_array", "local_fuel_scalar", "pit_stall_signal", "service_active_signal"]
+      }
+    }
+  },
+  "expected": {
+    "currentSessionMeasuredBurn": {
+      "shouldBecomeAvailable": true,
+      "minimumCompletedValidLaps": 1,
+      "minimumFuelPerLapLiters": 1.0,
+      "source": "rolling-local-fuel-delta",
+      "actualLiveDiagnosticsMissedAvailability": true
+    },
+    "refuelDetection": {
+      "shouldDetectWhenNetFuelRises": true,
+      "minimumNetFuelIncreaseLiters": 25.0,
+      "actualLiveDiagnosticsMissedFuelIncrease": true
+    },
+    "mustNotRequirePostSessionHistoryForLiveFuelCalculator": true
+  }
+}

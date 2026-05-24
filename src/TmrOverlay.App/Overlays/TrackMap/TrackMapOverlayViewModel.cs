@@ -40,12 +40,13 @@ internal sealed record TrackMapOverlayViewModel(
         var sessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot);
         var models = snapshot.CompleteModels();
         var hasGeneratedTrackMap = HasGeneratedTrackMap(trackMap);
+        var markers = BuildMarkers(snapshot with { Models = models });
         return new TrackMapOverlayViewModel(
             Title: "Track Map",
-            Status: TrackMapStatus(availability, hasGeneratedTrackMap),
-            Source: TrackMapSource(availability, hasGeneratedTrackMap),
+            Status: TrackMapStatus(availability, hasGeneratedTrackMap, markers.Count > 0),
+            Source: TrackMapSource(availability, hasGeneratedTrackMap, markers.Count > 0),
             IsAvailable: availability.IsAvailable,
-            Markers: BuildMarkers(snapshot with { Models = models }),
+            Markers: markers,
             Sectors: models.TrackMap.Sectors,
             ShowSectorBoundaries: OverlayContentColumnSettings.ContentEnabledForSession(
                 settings,
@@ -61,26 +62,34 @@ internal sealed record TrackMapOverlayViewModel(
             TrackMap: trackMap);
     }
 
-    private static string TrackMapStatus(OverlayAvailabilitySnapshot availability, bool hasGeneratedTrackMap)
+    private static string TrackMapStatus(
+        OverlayAvailabilitySnapshot availability,
+        bool hasGeneratedTrackMap,
+        bool hasActiveMarkers)
     {
         if (!availability.IsAvailable)
         {
             return availability.StatusText;
         }
 
-        return hasGeneratedTrackMap ? "live" : "track map | circle fallback";
+        var status = hasGeneratedTrackMap ? "live" : "track map | circle fallback";
+        return hasActiveMarkers ? status : $"{status} | no active markers";
     }
 
-    private static string TrackMapSource(OverlayAvailabilitySnapshot availability, bool hasGeneratedTrackMap)
+    private static string TrackMapSource(
+        OverlayAvailabilitySnapshot availability,
+        bool hasGeneratedTrackMap,
+        bool hasActiveMarkers)
     {
         if (!availability.IsAvailable)
         {
             return "source: waiting";
         }
 
-        return hasGeneratedTrackMap
+        var source = hasGeneratedTrackMap
             ? "source: live position telemetry"
             : "source: live position telemetry | map fallback: no generated track map";
+        return hasActiveMarkers ? source : $"{source} | no active markers";
     }
 
     private static bool HasGeneratedTrackMap(TrackMapDocument? trackMap)
@@ -120,6 +129,7 @@ internal sealed record TrackMapOverlayViewModel(
     public static IReadOnlyList<TrackMapOverlayMarker> BuildMarkers(LiveTelemetrySnapshot snapshot)
     {
         var models = snapshot.CompleteModels();
+        var modelSnapshot = snapshot with { Models = models };
         var markers = new Dictionary<int, TrackMapOverlayMarker>();
         var scoringByCarIdx = models.Scoring.Rows
             .GroupBy(row => row.CarIdx)
@@ -128,14 +138,15 @@ internal sealed record TrackMapOverlayViewModel(
             ?? models.Scoring.ReferenceCarIdx
             ?? models.Timing.FocusCarIdx
             ?? models.Spatial.ReferenceCarIdx;
+        var sessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(modelSnapshot);
 
         foreach (var row in models.Timing.OverallRows.Concat(models.Timing.ClassRows))
         {
             scoringByCarIdx.TryGetValue(row.CarIdx, out var scoringRow);
-            var isFocus = row.IsFocus
-                || row.CarIdx == referenceCarIdx
-                || scoringRow?.IsFocus == true;
-            if (!TrackMapMarkerPolicy.ShouldRenderTimingMarker(row, isFocus)
+            var isFocus = referenceCarIdx is { } refCarIdx
+                ? row.CarIdx == refCarIdx
+                : row.IsFocus || scoringRow?.IsFocus == true;
+            if (!TrackMapMarkerPolicy.ShouldRenderTimingMarker(row, isFocus, sessionKind)
                 || row.LapDistPct is not { } lapDistPct)
             {
                 continue;
@@ -204,13 +215,17 @@ internal sealed record TrackMapOverlayViewModel(
         int focusCarIdx,
         TrackMapOverlayMarker? existing)
     {
+        var focusTimingRow = FocusTimingRow(models, focusCarIdx);
         if (scoringByCarIdx.TryGetValue(focusCarIdx, out var scoringRow))
         {
-            return Position(scoringRow) ?? existing?.Position;
+            return Position(scoringRow)
+                ?? existing?.Position
+                ?? Position(focusTimingRow)
+                ?? Position(models.Reference);
         }
 
         return existing?.Position
-            ?? Position(models.Timing.FocusRow)
+            ?? Position(focusTimingRow)
             ?? Position(models.Reference);
     }
 
@@ -231,9 +246,17 @@ internal sealed record TrackMapOverlayViewModel(
             return scoringRow.CarClassColorHex;
         }
 
-        return string.IsNullOrWhiteSpace(models.Timing.FocusRow?.CarClassColorHex)
+        var focusTimingRow = FocusTimingRow(models, focusCarIdx);
+        return string.IsNullOrWhiteSpace(focusTimingRow?.CarClassColorHex)
             ? null
-            : models.Timing.FocusRow.CarClassColorHex;
+            : focusTimingRow.CarClassColorHex;
+    }
+
+    private static LiveTimingRow? FocusTimingRow(LiveRaceModels models, int focusCarIdx)
+    {
+        return models.Timing.FocusRow?.CarIdx == focusCarIdx
+            ? models.Timing.FocusRow
+            : null;
     }
 
     private static bool IsPlayerFocus(

@@ -104,16 +104,24 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'standings', slug: 'focused-class-only', query: 'fixture=standings-focused-class-only' },
   { overlayId: 'standings', slug: 'starting-grid', query: 'fixture=standings-starting-grid' },
   { overlayId: 'standings', slug: 'no-content', query: 'fixture=standings-no-content' },
+  { overlayId: 'standings', slug: 'content-off-chrome-on', query: 'fixture=standings-content-off-chrome-on' },
+  { overlayId: 'standings', slug: 'no-results-chrome-on', query: 'fixture=standings-no-results-chrome-on' },
+  { overlayId: 'standings', slug: 'min-scale', query: 'fixture=standings-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'relative', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'relative', slug: 'rightmost-evidence', query: 'fixture=rightmost-evidence' },
   { overlayId: 'relative', slug: 'driver-only', query: 'fixture=relative-driver-only' },
   { overlayId: 'relative', slug: 'position-driver', query: 'fixture=relative-position-driver' },
   { overlayId: 'relative', slug: 'rows-2', query: 'fixture=relative-rows-2' },
   { overlayId: 'relative', slug: 'no-content', query: 'fixture=relative-no-content' },
+  { overlayId: 'relative', slug: 'min-scale', query: 'fixture=relative-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'fuel-calculator', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'fuel-calculator', slug: 'min-scale', query: 'fixture=fuel-calculator-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'gap-to-leader', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'gap-to-leader', slug: 'min-scale', query: 'fixture=gap-to-leader-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'session-weather', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'session-weather', slug: 'min-scale', query: 'fixture=session-weather-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'pit-service', slug: 'chrome-off', query: 'fixture=chrome-off' },
+  { overlayId: 'pit-service', slug: 'min-scale', query: 'fixture=pit-service-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'session-weather', slug: 'missing', query: 'fixture=session-weather-missing' },
   { overlayId: 'session-weather', slug: 'session-off', query: 'fixture=session-weather-session-off' },
   { overlayId: 'session-weather', slug: 'weather-off', query: 'fixture=session-weather-weather-off' },
@@ -135,16 +143,28 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'car-radar', slug: 'right', query: 'fixture=car-radar-right' },
   { overlayId: 'car-radar', slug: 'both-sides', query: 'fixture=car-radar-both-sides' },
   { overlayId: 'car-radar', slug: 'clear', query: 'fixture=car-radar-clear' },
+  { overlayId: 'car-radar', slug: 'side-no-placement', query: 'fixture=car-radar-side-no-placement' },
+  { overlayId: 'car-radar', slug: 'min-scale', query: 'fixture=car-radar-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'gap-to-leader', slug: 'no-cars', query: 'fixture=gap-no-cars' },
-  { overlayId: 'gap-to-leader', slug: 'trend-row-off', query: 'fixture=gap-trend-row-off' },
+  { overlayId: 'gap-to-leader', slug: 'long-tail-real-data', query: 'fixture=gap-long-tail-real-data' },
+  { overlayId: 'gap-to-leader', slug: 'pit-window-real-data', query: 'fixture=gap-pit-window-real-data' },
+  { overlayId: 'gap-to-leader', slug: 'threat-capture-shaped', query: 'fixture=gap-threat-capture-shaped' },
+  { overlayId: 'gap-to-leader', slug: 'endurance-domain-capture-shaped', query: 'fixture=gap-endurance-domain-capture-shaped' },
+  { overlayId: 'gap-to-leader', slug: 'tire-trend-off', query: 'fixture=gap-tire-trend-off' },
   { overlayId: 'gap-to-leader', slug: 'trend-off', query: 'fixture=gap-trend-off' },
   { overlayId: 'gap-to-leader', slug: 'graph-off', query: 'fixture=gap-graph-off' },
   { overlayId: 'track-map', slug: 'no-markers', query: 'fixture=track-map-no-markers' },
+  { overlayId: 'track-map', slug: 'focus-practice-real-data', query: 'fixture=track-map-focus-practice-real-data' },
+  { overlayId: 'track-map', slug: 'player-focus-class-color', query: 'fixture=track-map-player-focus-class-color' },
+  { overlayId: 'track-map', slug: 'min-scale', query: 'fixture=track-map-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'flags', slug: 'all-kinds', query: 'fixture=flags-all-kinds' },
+  { overlayId: 'flags', slug: 'min-scale', query: 'fixture=flags-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'garage-cover', slug: 'hidden', query: 'fixture=garage-hidden' },
   { overlayId: 'garage-cover', slug: 'garage-visible', query: 'fixture=garage-visible' },
   { overlayId: 'garage-cover', slug: 'stale', query: 'fixture=garage-stale' },
   { overlayId: 'garage-cover', slug: 'disconnected', query: 'fixture=garage-disconnected' },
+  { overlayId: 'garage-cover', slug: 'min-scale', query: 'fixture=garage-visible-min-scale', minScale: 0.6, scaleTransform: 0.6 },
+  { overlayId: 'stream-chat', slug: 'min-scale', query: 'fixture=stream-chat-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'stream-chat', slug: 'twitch-rich', query: 'fixture=stream-chat-twitch-rich' },
   { overlayId: 'stream-chat', slug: 'streamlabs-configured', query: 'fixture=stream-chat-streamlabs-configured' }
 ];
@@ -252,21 +272,21 @@ function screenshotRoutes(surface) {
   const routes = [];
   if (surface === 'browser-review' || surface === 'all') {
     routes.push(
-      settingsRoute('settings/general.png', '/review/app', { tab: 'general', region: 'general' }),
-      settingsRoute('settings/general-update-disabled.png', '/review/app?update=disabled', { tab: 'general', region: 'general', updateStatus: 'disabled' }),
-      settingsRoute('settings/general-update-not-installed.png', '/review/app?update=not-installed', { tab: 'general', region: 'general', updateStatus: 'not-installed' }),
-      settingsRoute('settings/general-update-idle.png', '/review/app?update=idle', { tab: 'general', region: 'general', updateStatus: 'idle' }),
-      settingsRoute('settings/general-update-up-to-date.png', '/review/app?update=up-to-date', { tab: 'general', region: 'general', updateStatus: 'up-to-date' }),
-      settingsRoute('settings/general-update-available.png', '/review/app?update=available', { tab: 'general', region: 'general', updateStatus: 'available' }),
-      settingsRoute('settings/general-update-checking.png', '/review/app?update=checking', { tab: 'general', region: 'general', updateStatus: 'checking' }),
-      settingsRoute('settings/general-update-downloading.png', '/review/app?update=downloading', { tab: 'general', region: 'general', updateStatus: 'downloading' }),
-      settingsRoute('settings/general-update-pending-restart.png', '/review/app?update=pending-restart', { tab: 'general', region: 'general', updateStatus: 'pending-restart' }),
-      settingsRoute('settings/general-update-applying.png', '/review/app?update=applying', { tab: 'general', region: 'general', updateStatus: 'applying' }),
-      settingsRoute('settings/general-update-failed.png', '/review/app?update=failed', { tab: 'general', region: 'general', updateStatus: 'failed' }),
-      settingsRoute('settings/diagnostics.png', '/review/app?tab=support', { tab: 'support', region: 'general' }),
-      settingsRoute('settings/support.png', '/review/app?tab=support', { tab: 'support', region: 'general', pathAlias: 'windows-settings-support' }),
-      settingsRoute('settings/inputs.png', '/review/app?tab=input-state', { tab: 'input-state', overlayId: 'input-state', region: 'general', pathAlias: 'windows-settings-inputs' }),
-      settingsRoute('settings/inputs-content.png', '/review/app?tab=input-state&region=content', { tab: 'input-state', overlayId: 'input-state', region: 'content', pathAlias: 'windows-settings-inputs-content' }),
+      settingsRoute(settingsAppScreenshotPath('general'), '/review/app', { tab: 'general', region: 'general' }),
+      settingsRoute(settingsAppScreenshotPath('update-disabled'), '/review/app?update=disabled', { tab: 'general', region: 'general', updateStatus: 'disabled' }),
+      settingsRoute(settingsAppScreenshotPath('update-not-installed'), '/review/app?update=not-installed', { tab: 'general', region: 'general', updateStatus: 'not-installed' }),
+      settingsRoute(settingsAppScreenshotPath('update-idle'), '/review/app?update=idle', { tab: 'general', region: 'general', updateStatus: 'idle' }),
+      settingsRoute(settingsAppScreenshotPath('update-up-to-date'), '/review/app?update=up-to-date', { tab: 'general', region: 'general', updateStatus: 'up-to-date' }),
+      settingsRoute(settingsAppScreenshotPath('update-available'), '/review/app?update=available', { tab: 'general', region: 'general', updateStatus: 'available' }),
+      settingsRoute(settingsAppScreenshotPath('update-checking'), '/review/app?update=checking', { tab: 'general', region: 'general', updateStatus: 'checking' }),
+      settingsRoute(settingsAppScreenshotPath('update-downloading'), '/review/app?update=downloading', { tab: 'general', region: 'general', updateStatus: 'downloading' }),
+      settingsRoute(settingsAppScreenshotPath('update-pending-restart'), '/review/app?update=pending-restart', { tab: 'general', region: 'general', updateStatus: 'pending-restart' }),
+      settingsRoute(settingsAppScreenshotPath('update-applying'), '/review/app?update=applying', { tab: 'general', region: 'general', updateStatus: 'applying' }),
+      settingsRoute(settingsAppScreenshotPath('update-failed'), '/review/app?update=failed', { tab: 'general', region: 'general', updateStatus: 'failed' }),
+      settingsRoute(settingsTabScreenshotPath('support', 'diagnostics'), '/review/app?tab=support', { tab: 'support', region: 'general' }),
+      settingsRoute(settingsTabScreenshotPath('support'), '/review/app?tab=support', { tab: 'support', region: 'general', pathAlias: 'windows-settings-support' }),
+      settingsRoute(settingsTabScreenshotPath('input-state'), '/review/app?tab=input-state', { tab: 'input-state', overlayId: 'input-state', region: 'general', pathAlias: 'windows-settings-inputs' }),
+      settingsRoute(settingsTabScreenshotPath('input-state', 'content'), '/review/app?tab=input-state&region=content', { tab: 'input-state', overlayId: 'input-state', region: 'content', pathAlias: 'windows-settings-inputs-content' }),
       ...settingsComponentRoutes(),
       installerReviewRoute('review-installer/welcome.png', '/review/installer?menu=welcome', { menuId: 'welcome' }),
       installerReviewRoute('review-installer/installer-page-02.png', '/review/installer?menu=installer-page-02', { menuId: 'installer-page-02' }),
@@ -274,7 +294,7 @@ function screenshotRoutes(surface) {
       installerReviewRoute('review-installer/cancel-confirm.png', '/review/installer?menu=cancel-confirm', { menuId: 'cancel-confirm' }),
       ...previewModes.map((mode) =>
         settingsRoute(
-          `settings/general-preview-${mode}.png`,
+          settingsAppScreenshotPath(`preview-${mode}`),
           `/review/app?preview=${encodeURIComponent(mode)}`,
           { tab: 'general', region: 'general', previewMode: mode }))
     );
@@ -283,7 +303,7 @@ function screenshotRoutes(surface) {
       for (const region of regionsForOverlay(overlayId)) {
         const suffix = region === 'general' ? '' : `-${region}`;
         routes.push(settingsRoute(
-          `settings/${overlayId}${suffix}.png`,
+          settingsTabScreenshotPath(overlayId, region),
           `/review/app?tab=${encodeURIComponent(overlayId)}${region === 'general' ? '' : `&region=${encodeURIComponent(region)}`}`,
           { tab: overlayId, overlayId, region }));
       }
@@ -293,42 +313,42 @@ function screenshotRoutes(surface) {
   for (const overlayId of overlayIds) {
     if (surface === 'browser-review' || surface === 'all') {
       routes.push(overlayRoute(
-        `browser-overlays/${overlayId}.png`,
+        webOverlayScreenshotPath('browser-overlays', overlayId, 'default'),
         withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, 'race'),
         { surface: 'browser-review-overlay', overlayId, previewMode: 'race' }));
       if (overlayId === 'track-map') {
         routes.push(overlayRoute(
-          'browser-overlays/track-map-fallback.png',
+          webOverlayScreenshotPath('browser-overlays', 'track-map', 'fallback'),
           `${withPreview('/review/overlays/track-map', 'race')}&trackMap=fallback`,
           { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: 'circle-fallback' }));
       }
       for (const variant of nonHappyPathOverlayVariants.filter((item) => item.overlayId === overlayId)) {
         routes.push(overlayRoute(
-          `browser-overlays/${overlayId}-${variant.slug}.png`,
+          webOverlayScreenshotPath('browser-overlays', overlayId, variant.slug),
           `${withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
-          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null }));
+          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null, scaleTransform: variant.scaleTransform || null, exactClip: variant.scaleTransform ? true : null }));
       }
     }
     if (surface === 'localhost' || surface === 'all') {
       routes.push(overlayRoute(
-        `localhost-overlays/${overlayId}.png`,
+        webOverlayScreenshotPath('localhost-overlays', overlayId, 'default'),
         withPreview(`/overlays/${encodeURIComponent(overlayId)}`, 'race'),
         { surface: 'localhost-overlay', overlayId, previewMode: 'race' }));
       if (overlayId === 'track-map') {
         routes.push(overlayRoute(
-          'localhost-overlays/track-map-fallback.png',
+          webOverlayScreenshotPath('localhost-overlays', 'track-map', 'fallback'),
           `${withPreview('/overlays/track-map', 'race')}&trackMap=fallback`,
           { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: 'circle-fallback' }));
       }
       for (const variant of nonHappyPathOverlayVariants.filter((item) => item.overlayId === overlayId)) {
         routes.push(overlayRoute(
-          `localhost-overlays/${overlayId}-${variant.slug}.png`,
+          webOverlayScreenshotPath('localhost-overlays', overlayId, variant.slug),
           `${withPreview(`/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
-          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null }));
+          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null, scaleTransform: variant.scaleTransform || null, exactClip: variant.scaleTransform ? true : null }));
       }
       for (const alias of localhostAliasesForOverlay(overlayId)) {
         routes.push(overlayRoute(
-          `localhost-overlays/${overlayId}-alias-${aliasSlug(alias)}.png`,
+          webOverlayAliasScreenshotPath('localhost-overlays', overlayId, aliasSlug(alias), 'default'),
           withPreview(alias, 'race'),
           { surface: 'localhost-overlay', overlayId, previewMode: 'race', routeAlias: alias }));
       }
@@ -336,18 +356,18 @@ function screenshotRoutes(surface) {
     for (const mode of previewModesForOverlay(overlayId)) {
       if (surface === 'browser-review' || surface === 'all') {
         routes.push(overlayRoute(
-          `browser-overlays/${overlayId}-${mode}.png`,
+          webOverlayScreenshotPath('browser-overlays', overlayId, mode),
           withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, mode),
           { surface: 'browser-review-overlay', overlayId, previewMode: mode, minBytes: previewMinBytes(overlayId, mode) }));
       }
       if (surface === 'localhost' || surface === 'all') {
         routes.push(overlayRoute(
-          `localhost-overlays/${overlayId}-${mode}.png`,
+          webOverlayScreenshotPath('localhost-overlays', overlayId, mode),
           withPreview(`/overlays/${encodeURIComponent(overlayId)}`, mode),
           { surface: 'localhost-overlay', overlayId, previewMode: mode, minBytes: previewMinBytes(overlayId, mode) }));
         for (const alias of localhostAliasesForOverlay(overlayId)) {
           routes.push(overlayRoute(
-            `localhost-overlays/${overlayId}-alias-${aliasSlug(alias)}-${mode}.png`,
+            webOverlayAliasScreenshotPath('localhost-overlays', overlayId, aliasSlug(alias), mode),
             withPreview(alias, mode),
             { surface: 'localhost-overlay', overlayId, previewMode: mode, routeAlias: alias, minBytes: previewMinBytes(overlayId, mode) }));
         }
@@ -356,6 +376,23 @@ function screenshotRoutes(surface) {
   }
 
   return routes;
+}
+
+function settingsAppScreenshotPath(name) {
+  return `settings/app/${name}.png`;
+}
+
+function settingsTabScreenshotPath(tab, region = 'general') {
+  const fileName = region === 'general' ? 'general' : region;
+  return `settings/${tab}/${fileName}.png`;
+}
+
+function webOverlayScreenshotPath(prefix, overlayId, slug) {
+  return `${prefix}/${overlayId}/${slug}.png`;
+}
+
+function webOverlayAliasScreenshotPath(prefix, overlayId, alias, slug) {
+  return `${prefix}/${overlayId}/alias-${alias}${slug === 'default' ? '' : `-${slug}`}.png`;
 }
 
 function withPreview(urlPath, mode) {
@@ -415,6 +452,7 @@ function variantMinBytes(variant) {
   if ([
     'input-state/waiting',
     'car-radar/clear',
+    'car-radar/side-no-placement',
     'track-map/no-markers'
   ].includes(key)) {
     return 500;
@@ -449,6 +487,8 @@ function settingsRoute(relativePath, urlPath, metadata = {}) {
 function settingsComponentRoutes() {
   const route = (fileName, urlPath, clip, metadata = {}) =>
     settingsComponentRoute(`components/settings/${fileName}.png`, urlPath, clip, metadata);
+  const futureRoute = (fileName, urlPath, clip, metadata = {}) =>
+    settingsFutureComponentRoute(`components/settings-future/${fileName}.png`, urlPath, clip, metadata);
   const value = (key, fallback) => {
     const number = Number(settingsGeometry[key]);
     return Number.isFinite(number) ? number : fallback;
@@ -475,6 +515,7 @@ function settingsComponentRoutes() {
     route('content-matrix', '/review/app?tab=relative&region=content', { x: panelX, y: panelWithRegionsY, width: value('contentMatrixWidth', 834), height: value('contentMatrixPreviewHeight', 222) }, { tab: 'relative', overlayId: 'relative', region: 'content' }),
     route('chat-inputs', '/review/app?tab=stream-chat&region=content', { x: panelX, y: panelWithRegionsY, width: value('chatInputsWidth', 650), height: value('chatInputsHeight', 204) }, { tab: 'stream-chat', overlayId: 'stream-chat', region: 'content' }),
     route('support-buttons', '/review/app?tab=support', { x: panelX, y: panelNoRegionsY, width: panelWideWidth, height: value('supportPanelHeight', 278) }, { tab: 'support', region: 'general' }),
+    futureRoute('visibility-context', '/review/app?component=visibility-context', { x: panelX, y: panelNoRegionsY, width: panelSmallWidth, height: value('overlayControlsPanelHeight', 266) }, { tab: 'general', region: 'general', reviewComponent: 'visibility-context' }),
     route('browser-source', '/review/app?tab=relative', { x: panelX + panelSmallWidth + gridGap, y: panelWithRegionsY, width: value('browserSourcePanelWidth', 414), height: value('browserSourcePanelHeight', 132) }, { tab: 'relative', overlayId: 'relative', region: 'general' })
   ];
 }
@@ -491,9 +532,27 @@ function settingsComponentRoute(relativePath, urlPath, clip, metadata = {}) {
   });
 }
 
+function settingsFutureComponentRoute(relativePath, urlPath, clip, metadata = {}) {
+  return settingsRoute(relativePath, urlPath, {
+    ...metadata,
+    clip,
+    minBytes: 1_000,
+    captureMode: 'settings-future-component-crop',
+    surface: 'browser-review-settings-future-component',
+    comparisonMode: 'browser-review-only-future-settings-component',
+    comparisonLimit: 'review-only-unwired-preview'
+  });
+}
+
+function isSettingsComponentRoute(route) {
+  return route.surface === 'browser-review-settings-component'
+    || route.surface === 'browser-review-settings-future-component';
+}
+
 function overlayRoute(relativePath, urlPath, metadata = {}) {
   const { viewport, ...metadataWithoutViewport } = metadata;
   const configuredCanvasSize = metadata.overlayId ? configuredCanvasOverlaySizes.get(metadata.overlayId) : null;
+  const garageCoverRoute = metadata.overlayId === 'garage-cover';
   return {
     relativePath,
     urlPath,
@@ -507,8 +566,9 @@ function overlayRoute(relativePath, urlPath, metadata = {}) {
     configuredOverlaySize: configuredCanvasSize || null,
     comparisonMode: configuredCanvasSize ? 'browser-localhost-configured-canvas-vs-native-overlay-window' : null,
     comparisonLimit: null,
-    compositingMode: configuredCanvasSize ? 'solid-review-backdrop' : null,
-    captureBackdrop: configuredCanvasSize ? configuredCanvasCaptureBackdrop : null,
+    compositingMode: garageCoverRoute ? 'transparent-browser-source' : configuredCanvasSize ? 'solid-review-backdrop' : null,
+    captureBackdrop: garageCoverRoute ? null : configuredCanvasSize ? configuredCanvasCaptureBackdrop : null,
+    omitBackground: garageCoverRoute ? true : null,
     minScale: metadata.minScale || null,
     ...metadataWithoutViewport
   };
@@ -537,6 +597,7 @@ async function captureRoute(page, route, manifest) {
   const element = page.locator(route.selector).first();
   await element.waitFor({ state: 'visible', timeout: 5_000 });
   await page.waitForTimeout(settleMilliseconds);
+  await injectCaptureTransform(page, route);
   const model = await readOverlayModel(route);
   const dom = await readDomDiagnostics(element);
   const runtimeAssets = await readRuntimeAssetEvidence(page, route);
@@ -586,6 +647,7 @@ async function captureRoute(page, route, manifest) {
     comparisonLimit: route.comparisonLimit || null,
     compositingMode: route.compositingMode || null,
     captureBackdrop: route.captureBackdrop || null,
+    scaleTransform: route.scaleTransform || null,
     overlayId: route.overlayId || null,
     title: stringOrNull(model?.title),
     tab: route.tab || null,
@@ -612,13 +674,30 @@ async function captureRoute(page, route, manifest) {
     contentBounds: dom.contentBounds,
     layout: dom.layout,
     uiEvidence: uiEvidence(route, dom),
-    modelEvidence: modelLayoutEvidence(model, dom.layout),
+    modelEvidence: modelLayoutEvidence(model, dom.layout, route),
     v102Evidence: v102EvidenceForRoute(route),
     runtimeAssets,
     scenarioEvidence: scenarioEvidence(route, model, dom.layout),
     width: artifact.width,
     height: artifact.height,
     bytes: artifact.bytes
+  });
+}
+
+async function injectCaptureTransform(page, route) {
+  const scale = Number(route.scaleTransform);
+  if (!Number.isFinite(scale) || scale <= 0 || scale === 1) {
+    return;
+  }
+
+  const selector = String(route.selector || '.overlay');
+  await page.addStyleTag({
+    content: `
+      ${selector} {
+        transform: scale(${scale});
+        transform-origin: top left;
+      }
+    `
   });
 }
 
@@ -1237,7 +1316,7 @@ function uiEvidence(route, dom) {
 
 function settingsEvidenceDom(route, dom) {
   const elements = Array.isArray(dom?.layout?.elements) ? dom.layout.elements : [];
-  if (route.surface !== 'browser-review-settings-component' || !route.clip) {
+  if (!isSettingsComponentRoute(route) || !route.clip) {
     return dom;
   }
 
@@ -1545,7 +1624,7 @@ function settingsLayoutHealthEvidence(route, dom, elements, navigation) {
   const shell = elements.find((element) => element.role === 'settings-shell');
   const content = elements.find((element) => element.role === 'settings-content');
   const contentBody = elements.find((element) => element.role === 'settings-content-body');
-  const isComponentCrop = route.surface === 'browser-review-settings-component';
+  const isComponentCrop = isSettingsComponentRoute(route);
   const expectsRegion = route.region
     && route.region !== 'general'
     && route.tab
@@ -1849,11 +1928,12 @@ function settingsPreviewEvidence(elements) {
   };
 }
 
-function modelLayoutEvidence(model, layout) {
+function modelLayoutEvidence(model, layout, route = null) {
   if (!model || typeof model !== 'object') {
     return null;
   }
 
+  const scaleContext = modelEvidenceScaleContext(model, route);
   const tableRendering = tableRenderedEvidence(layout);
   const metricRendering = metricRenderedEvidence(layout);
   let gridRowCursor = 0;
@@ -1861,6 +1941,7 @@ function modelLayoutEvidence(model, layout) {
     contract: 'overlay-model-layout-evidence/v1',
     bodyKind: stringOrNull(model.bodyKind),
     unitSystem: screenshotUnitSystem,
+    scale: scaleContext,
     columns: (Array.isArray(model.columns) ? model.columns : []).map((column, index) => {
       const rendered = tableRendering.headers[index] || null;
       return {
@@ -1911,8 +1992,8 @@ function modelLayoutEvidence(model, layout) {
         })
       };
     }),
-    graph: graphModelEvidence(model, layout),
-    inputs: model.inputs ? inputEvidence(model.inputs, layout) : null,
+    graph: graphModelEvidence(model, layout, scaleContext),
+    inputs: model.inputs ? inputEvidence(model.inputs, layout, scaleContext) : null,
     flags: model.flags ? {
       count: arrayLength(model.flags?.flags),
       kinds: (Array.isArray(model.flags?.flags) ? model.flags.flags : []).map((flag) => stringOrNull(flag?.kind)),
@@ -1923,12 +2004,29 @@ function modelLayoutEvidence(model, layout) {
         columns: flagGrid(arrayLength(model.flags?.flags)).columns,
         rows: flagGrid(arrayLength(model.flags?.flags)).rows
       },
-      cells: flagCellEvidence(model.flags, layout)
+      cells: flagCellEvidence(model.flags, layout, scaleContext)
     } : null,
     carRadar: carRadarVectorEvidence(model.carRadar?.renderModel, layout),
     trackMap: trackMapVectorEvidence(model.trackMap?.renderModel || model.trackMap, layout),
     garageCover: model.garageCover ? garageCoverEvidence(model.garageCover, layout) : null,
     streamChat: model.streamChat ? streamChatEvidence(model.streamChat, layout) : null
+  };
+}
+
+function modelEvidenceScaleContext(model, route = null) {
+  const routeScaleTransform = positiveScaleOrNull(route?.scaleTransform);
+  const routeMinScale = positiveScaleOrNull(route?.minScale);
+  const modelRenderScale = positiveScaleOrNull(graphEvidenceRenderScale(model)) || null;
+  const effectiveRenderScale = routeScaleTransform
+    || (modelRenderScale && modelRenderScale !== 1 ? modelRenderScale : null)
+    || routeMinScale
+    || modelRenderScale
+    || 1;
+  return {
+    routeScaleTransform,
+    routeMinScale,
+    modelRenderScale,
+    effectiveRenderScale: roundNumber(effectiveRenderScale)
   };
 }
 
@@ -2206,13 +2304,27 @@ function renderedGridCellBounds(renderedCells, cellIndex, value) {
   return renderedCells.find((cell) => cell.text === text)?.bounds || null;
 }
 
-function flagCellEvidence(flags, layout) {
+function flagCellEvidence(flags, layout, scaleContext = null) {
   const renderedFlags = Array.isArray(flags?.flags) ? flags.flags : [];
   const grid = flagGrid(renderedFlags.length);
   const svgBounds = findElementBounds(layout, 'flags', 'flags-v2') || findElementBounds(layout, 'content');
-  const cells = svgBounds ? computedFlagCells(svgBounds, grid, renderedFlags.length) : elementsForRole(layout, 'flag-cell').map((element) => element.bounds);
+  const renderScale = effectiveRenderScale(scaleContext);
+  const unscaledSvgBounds = svgBounds ? inverseScaleRect(svgBounds, renderScale) : null;
+  const unscaledCells = unscaledSvgBounds
+    ? computedFlagCells(unscaledSvgBounds, grid, renderedFlags.length)
+    : null;
+  const cells = unscaledCells
+    ? unscaledCells.map((cell) => scaleRectEvidence(cell, renderScale))
+    : elementsForRole(layout, 'flag-cell').map((element) => element.bounds);
   return renderedFlags.map((flag, index) => {
+    const unscaledCellBounds = unscaledCells?.[index] || null;
     const cellBounds = cells[index] || null;
+    const clothBounds = unscaledCellBounds
+      ? scaleRectEvidence(flagClothBounds(unscaledCellBounds), renderScale)
+      : cellBounds ? flagClothBounds(cellBounds) : null;
+    const labelBounds = unscaledCellBounds
+      ? scaleRectEvidence(flagLabelBounds(unscaledCellBounds), renderScale)
+      : cellBounds ? flagLabelBounds(cellBounds) : null;
     return {
       index,
       row: Math.floor(index / Math.max(1, grid.columns)),
@@ -2223,8 +2335,8 @@ function flagCellEvidence(flags, layout) {
       detail: stringOrNull(flag?.detail),
       fill: flagColor(flagVisualKind(flag)),
       bounds: cellBounds,
-      clothBounds: cellBounds ? flagClothBounds(cellBounds) : null,
-      labelBounds: cellBounds ? flagLabelBounds(cellBounds) : null
+      clothBounds,
+      labelBounds
     };
   });
 }
@@ -2326,6 +2438,7 @@ function carRadarVectorEvidence(renderModel, layout) {
     || findElementBounds(layout, 'car-radar', 'radar-v2')
     || findElementBounds(layout, 'content');
   const scale = vectorScale(target, sourceWidth, sourceHeight);
+  const strokeScale = vectorStrokeScale(scale);
   const shouldRender = renderModel.shouldRender === true;
   const primitives = shouldRender ? [
     vectorShapePrimitive('background', 'ellipse', renderModel.background, scale),
@@ -2338,16 +2451,17 @@ function carRadarVectorEvidence(renderModel, layout) {
   const items = shouldRender ? (Array.isArray(renderModel.cars) ? renderModel.cars : []).map((car, index) => ({
     kind: stringOrNull(car?.kind) || 'car',
     id: stringOrNull(car?.id) || index,
+    carIdx: numberOrNull(car?.carIdx),
     bounds: scaleRect(scale, car),
     fill: colorToCss(car?.fill),
     stroke: colorToCss(car?.stroke),
-    strokeWidth: numberOrNull(car?.strokeWidth),
+    strokeWidth: scaleScalarEvidence(car?.strokeWidth, strokeScale),
     label: stringOrNull(car?.label)
   })) : [];
   const labels = shouldRender ? (Array.isArray(renderModel.labels) ? renderModel.labels : []).map((label) => ({
     text: stringOrNull(label?.text),
     bounds: scaleRect(scale, label),
-    fontSize: numberOrNull(label?.fontSize),
+    fontSize: scaleScalarEvidence(label?.fontSize, strokeScale),
     bold: Boolean(label?.bold),
     alignment: stringOrNull(label?.alignment),
     color: colorToCss(label?.color)
@@ -2360,6 +2474,7 @@ function carRadarVectorEvidence(renderModel, layout) {
     targetBounds: target || null,
     scaleX: scale?.scaleX || null,
     scaleY: scale?.scaleY || null,
+    strokeScale,
     carCount: arrayLength(renderModel.cars),
     itemCount: items.length,
     primitiveCount: primitives.length,
@@ -2383,6 +2498,7 @@ function trackMapVectorEvidence(renderModel, layout) {
     || findElementBounds(layout, 'track-map', 'track')
     || findElementBounds(layout, 'content');
   const scale = vectorScale(target, sourceWidth, sourceHeight);
+  const strokeScale = vectorStrokeScale(scale);
   const primitives = (Array.isArray(renderModel.primitives) ? renderModel.primitives : [])
     .map((primitive, index) => vectorPrimitiveEvidence(primitive, index, scale));
   const items = (Array.isArray(renderModel.markers) ? renderModel.markers : [])
@@ -2403,6 +2519,7 @@ function trackMapVectorEvidence(renderModel, layout) {
     targetBounds: target || null,
     scaleX: scale?.scaleX || null,
     scaleY: scale?.scaleY || null,
+    strokeScale,
     shouldRender: renderModel.isAvailable === false ? false : true,
     items,
     primitives,
@@ -2415,6 +2532,7 @@ function vectorShapePrimitive(id, kind, shape, scale) {
     return null;
   }
 
+  const strokeScale = vectorStrokeScale(scale);
   return {
     kind,
     id,
@@ -2425,11 +2543,12 @@ function vectorShapePrimitive(id, kind, shape, scale) {
     sweepDegrees: numberOrNull(shape?.sweepDegrees),
     fill: colorToCss(shape?.fill),
     stroke: colorToCss(shape?.stroke),
-    strokeWidth: numberOrNull(shape?.strokeWidth)
+    strokeWidth: scaleScalarEvidence(shape?.strokeWidth, strokeScale)
   };
 }
 
 function vectorPrimitiveEvidence(primitive, index, scale) {
+  const strokeScale = vectorStrokeScale(scale);
   const points = (Array.isArray(primitive?.points) ? primitive.points : [])
     .map((point) => scalePoint(scale, point))
     .filter(Boolean);
@@ -2444,11 +2563,12 @@ function vectorPrimitiveEvidence(primitive, index, scale) {
     sweepDegrees: numberOrNull(primitive?.sweepDegrees),
     fill: colorToCss(primitive?.fill),
     stroke: colorToCss(primitive?.stroke),
-    strokeWidth: numberOrNull(primitive?.strokeWidth)
+    strokeWidth: scaleScalarEvidence(primitive?.strokeWidth, strokeScale)
   };
 }
 
 function trackMapMarkerEvidence(marker, index, scale) {
+  const strokeScale = vectorStrokeScale(scale);
   const markerRadius = numberOr(marker?.radius, 0);
   const alertRingRadius = numberOr(marker?.alertRingRadius, 0);
   const radius = Math.max(markerRadius, alertRingRadius);
@@ -2466,7 +2586,7 @@ function trackMapMarkerEvidence(marker, index, scale) {
     }) : null,
     fill: colorToCss(marker?.fill),
     stroke: colorToCss(marker?.stroke),
-    strokeWidth: numberOrNull(marker?.strokeWidth),
+    strokeWidth: scaleScalarEvidence(marker?.strokeWidth, strokeScale),
     label: stringOrNull(marker?.label),
     labelColor: colorToCss(marker?.labelColor),
     alertKind: stringOrNull(marker?.alertKind),
@@ -2479,11 +2599,12 @@ function trackMapMarkerEvidence(marker, index, scale) {
       })
       : null,
     alertRingStroke: colorToCss(marker?.alertRingStroke),
-    alertRingStrokeWidth: numberOrNull(marker?.alertRingStrokeWidth)
+    alertRingStrokeWidth: scaleScalarEvidence(marker?.alertRingStrokeWidth, strokeScale)
   };
 }
 
 function trackMapMarkerLabelEvidence(marker, scale) {
+  const strokeScale = vectorStrokeScale(scale);
   const center = scalePoint(scale, { x: marker?.x, y: marker?.y });
   const fontSize = numberOr(marker?.labelFontSize, 7.6) * numberOr(scale?.scaleY, 1);
   const radius = numberOr(marker?.radius, 5.7) * numberOr(scale?.scaleX, 1);
@@ -2495,7 +2616,7 @@ function trackMapMarkerLabelEvidence(marker, scale) {
       width: radius * 2,
       height: fontSize * 1.4
     }) : null,
-    fontSize: numberOrNull(marker?.labelFontSize),
+    fontSize: scaleScalarEvidence(marker?.labelFontSize, strokeScale),
     bold: true,
     alignment: 'center',
     color: colorToCss(marker?.labelColor)
@@ -2679,6 +2800,8 @@ function scenarioEvidence(route, model, layout = null) {
     captureMode: route.captureMode || null,
     cropBounds: route.clip || null,
     configuredOverlaySize: route.configuredOverlaySize || null,
+    minScale: route.minScale || null,
+    scaleTransform: route.scaleTransform || null,
     comparisonMode: route.comparisonMode || null,
     comparisonLimit: route.comparisonLimit || null,
     compositingMode: route.compositingMode || null,
@@ -2767,9 +2890,9 @@ function stableJson(value) {
     .join(',')}}`;
 }
 
-function graphModelEvidence(model, layout) {
+function graphModelEvidence(model, layout, scaleContext = null) {
   if (model?.graph) {
-    return graphEvidence(model.graph, layout);
+    return graphEvidence(model.graph, layout, model, scaleContext);
   }
 
   if (model?.bodyKind === 'graph' && Array.isArray(model?.points)) {
@@ -2779,15 +2902,21 @@ function graphModelEvidence(model, layout) {
       endSeconds: Math.max(1, model.points.length - 1),
       maxGapSeconds: Math.max(1, ...model.points.map(Number).filter(Number.isFinite)),
       comparisonLabel: stringOrNull(model?.status) || '--'
-    }, layout);
+    }, layout, model, scaleContext);
   }
 
   return null;
 }
 
-function graphEvidence(graph, layout) {
+function graphEvidence(graph, layout, model = null, scaleContext = null) {
   const canvasBounds = findElementBounds(layout, 'graph-canvas', 'model-graph');
-  const geometry = canvasBounds ? browserGraphGeometry(graph, canvasBounds) : null;
+  const renderScale = scaleContext ? effectiveRenderScale(scaleContext) : graphEvidenceRenderScale(model);
+  const geometryBounds = canvasBounds && renderScale !== 1
+    ? inverseScaleRect(canvasBounds, renderScale)
+    : canvasBounds;
+  const geometry = geometryBounds
+    ? scaleGraphGeometry(browserGraphGeometry(graph, geometryBounds), renderScale)
+    : null;
   const geometrySeries = Array.isArray(geometry?.series) ? geometry.series : [];
   return {
     startSeconds: numberOrNull(graph?.startSeconds),
@@ -2830,6 +2959,13 @@ function graphEvidence(graph, layout) {
       state: stringOrNull(metric?.state),
       stateLabel: stringOrNull(metric?.stateLabel),
       completedReferenceLaps: numberOrNull(metric?.completedReferenceLaps),
+      primaryPitSeconds: numberOrNull(metric?.primaryPit?.seconds),
+      primaryPitLap: numberOrNull(metric?.primaryPit?.lap),
+      primaryPitActive: booleanOrNull(metric?.primaryPit?.isActive),
+      comparisonPitSeconds: numberOrNull(metric?.comparisonPit?.seconds),
+      comparisonPitLap: numberOrNull(metric?.comparisonPit?.lap),
+      threatPitSeconds: numberOrNull(metric?.threatPit?.seconds),
+      threatPitLap: numberOrNull(metric?.threatPit?.lap),
       valueText: graphMetricValueText(metric),
       chaserText: graphMetricChaserText(metric),
       primaryText: stringOrNull(metric?.primaryText),
@@ -2837,8 +2973,161 @@ function graphEvidence(graph, layout) {
       comparisonText: stringOrNull(metric?.comparisonText)
     })),
     weatherCount: arrayLength(graph?.weather),
+    pitWindowCount: arrayLength(graph?.pitWindows),
     leaderChangeCount: arrayLength(graph?.leaderChanges),
     driverChangeCount: arrayLength(graph?.driverChanges)
+  };
+}
+
+function graphEvidenceRenderScale(model) {
+  const browserSource = model?.effectiveSettings?.rendered?.browserSource || {};
+  const explicitScale = Number(browserSource.scale);
+  if (Number.isFinite(explicitScale) && explicitScale > 0) {
+    return roundNumber(explicitScale);
+  }
+
+  const width = Number(browserSource.width);
+  const baseWidth = Number(browserSource.baseWidth);
+  if (Number.isFinite(width) && Number.isFinite(baseWidth) && width > 0 && baseWidth > 0) {
+    return roundNumber(width / baseWidth);
+  }
+
+  return 1;
+}
+
+function positiveScaleOrNull(value) {
+  const scale = Number(value);
+  return Number.isFinite(scale) && scale > 0 ? roundNumber(scale) : null;
+}
+
+function effectiveRenderScale(scaleContext = null) {
+  return positiveScaleOrNull(scaleContext?.effectiveRenderScale) || 1;
+}
+
+function vectorStrokeScale(scale) {
+  if (!scale) {
+    return 1;
+  }
+
+  const scaleX = Number(scale.scaleX);
+  const scaleY = Number(scale.scaleY);
+  if (!Number.isFinite(scaleX) || scaleX <= 0 || !Number.isFinite(scaleY) || scaleY <= 0) {
+    return 1;
+  }
+
+  return roundNumber(Math.min(scaleX, scaleY));
+}
+
+function scaleScalarEvidence(value, scale) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return null;
+  }
+
+  return roundNumber(number * (positiveScaleOrNull(scale) || 1));
+}
+
+function inverseScaleRect(rect, scale) {
+  if (!rect || !Number.isFinite(scale) || scale <= 0 || scale === 1) {
+    return rect;
+  }
+
+  return {
+    x: roundNumber(numberOr(rect.x, 0) / scale),
+    y: roundNumber(numberOr(rect.y, 0) / scale),
+    width: roundNumber(numberOr(rect.width, 0) / scale),
+    height: roundNumber(numberOr(rect.height, 0) / scale)
+  };
+}
+
+function scaleGraphGeometry(geometry, scale) {
+  if (!geometry || !Number.isFinite(scale) || scale <= 0 || scale === 1) {
+    return geometry;
+  }
+
+  return {
+    ...geometry,
+    frame: scaleRectEvidence(geometry.frame, scale),
+    plot: scaleRectEvidence(geometry.plot, scale),
+    axis: scaleRectEvidence(geometry.axis, scale),
+    labelLane: scaleRectEvidence(geometry.labelLane, scale),
+    metricsTable: scaleRectEvidence(geometry.metricsTable, scale),
+    gridLines: (geometry.gridLines || []).map((line) => scaleLineEvidence(line, scale)),
+    weatherBands: (geometry.weatherBands || []).map((band) => ({
+      ...band,
+      bounds: scaleRectEvidence(band.bounds, scale)
+    })),
+    pitWindows: (geometry.pitWindows || []).map((band) => ({
+      ...band,
+      bounds: scaleRectEvidence(band.bounds, scale)
+    })),
+    markers: (geometry.markers || []).map((marker) => ({
+      ...marker,
+      start: scalePointEvidence(marker.start, scale),
+      end: scalePointEvidence(marker.end, scale)
+    })),
+    metricRows: (geometry.metricRows || []).map((row) => ({
+      ...row,
+      bounds: scaleRectEvidence(row.bounds, scale),
+      cells: (row.cells || []).map((cell) => ({
+        ...cell,
+        bounds: scaleRectEvidence(cell.bounds, scale),
+        textMetrics: scaleCanvasTextMetrics(cell.textMetrics, scale)
+      }))
+    })),
+    series: (geometry.series || []).map((series) => ({
+      ...series,
+      strokeWidth: numberOrNull(Number(series.strokeWidth) * scale),
+      latestPoint: scalePointEvidence(series.latestPoint, scale),
+      points: (series.points || []).map((point) => ({
+        ...point,
+        point: scalePointEvidence(point.point, scale)
+      }))
+    }))
+  };
+}
+
+function scaleLineEvidence(line, scale) {
+  return {
+    ...line,
+    strokeWidth: numberOrNull(Number(line?.strokeWidth) * scale),
+    start: scalePointEvidence(line?.start, scale),
+    end: scalePointEvidence(line?.end, scale)
+  };
+}
+
+function scaleRectEvidence(rect, scale) {
+  if (!rect) return rect;
+  return {
+    ...rect,
+    x: roundNumber(numberOr(rect.x, 0) * scale),
+    y: roundNumber(numberOr(rect.y, 0) * scale),
+    width: roundNumber(numberOr(rect.width, 0) * scale),
+    height: roundNumber(numberOr(rect.height, 0) * scale)
+  };
+}
+
+function scalePointEvidence(point, scale) {
+  if (!point) return point;
+  return {
+    ...point,
+    x: roundNumber(numberOr(point.x, 0) * scale),
+    y: roundNumber(numberOr(point.y, 0) * scale)
+  };
+}
+
+function scaleCanvasTextMetrics(metrics, scale) {
+  if (!metrics) return metrics;
+  return {
+    ...metrics,
+    availableWidth: roundNumber(numberOr(metrics.availableWidth, 0) * scale),
+    availableHeight: roundNumber(numberOr(metrics.availableHeight, 0) * scale),
+    measuredWidth: roundNumber(numberOr(metrics.measuredWidth, 0) * scale),
+    measuredHeight: roundNumber(numberOr(metrics.measuredHeight, 0) * scale)
   };
 }
 
@@ -2860,6 +3149,7 @@ function browserGraphGeometry(graph, canvasBounds) {
       latestReferenceGapSeconds: scale?.isFocusRelative === true ? numberOrNull(scale?.latestReferenceGapSeconds) : null,
       gridLines: [],
       weatherBands: [],
+      pitWindows: [],
       markers: [],
       metricRows: graphMetricRows(local.metricsRect, graph, canvasBounds),
       series: []
@@ -2887,6 +3177,7 @@ function browserGraphGeometry(graph, canvasBounds) {
     latestReferenceGapSeconds: scale?.isFocusRelative === true ? numberOrNull(scale?.latestReferenceGapSeconds) : null,
     gridLines: graphGridLines(graph, scale, local.plot, maxGapSeconds, canvasBounds),
     weatherBands: graphWeatherBands(graph, local.plot, canvasBounds),
+    pitWindows: graphPitWindows(graph, local.plot, canvasBounds),
     markers: graphMarkers(graph, scale, local.plot, maxGapSeconds, canvasBounds),
     metricRows: graphMetricRows(local.metricsRect, graph, canvasBounds),
     series: orderedSeries.map(({ series, sourceIndex }, drawIndex) =>
@@ -2922,6 +3213,7 @@ function browserFallbackGraphGeometry(graph, canvasBounds, local) {
     latestReferenceGapSeconds: null,
     gridLines: graphGridLines(graph, { isFocusRelative: false, maxGapSeconds: max }, local.plot, max, canvasBounds),
     weatherBands: [],
+    pitWindows: [],
     markers: [],
     metricRows: [],
     series: [{
@@ -3002,6 +3294,34 @@ function graphWeatherBands(graph, plot, canvasBounds) {
         endAxisSeconds: round(end),
         bounds: offsetRect(canvasBounds, { x, y: plot.y, width: Math.max(1, nextX - x), height: plot.height }),
         color
+      };
+    })
+    .filter(Boolean);
+}
+
+function graphPitWindows(graph, plot, canvasBounds) {
+  const windows = Array.isArray(graph?.pitWindows) ? graph.pitWindows : [];
+  const domain = graphDomain(graph);
+  return windows
+    .map((window) => {
+      const start = Math.max(domain.start, numberOr(window?.entryAxisSeconds, domain.start));
+      const end = Math.min(domain.end, Number.isFinite(window?.exitAxisSeconds) ? window.exitAxisSeconds : domain.end);
+      if (end <= start) return null;
+      const x = axisToX(graph, plot, start);
+      const nextX = axisToX(graph, plot, end);
+      if (nextX <= x) return null;
+      return {
+        kind: 'pit-window',
+        startAxisSeconds: round(start),
+        endAxisSeconds: round(end),
+        carIdx: numberOrNull(window?.carIdx),
+        classPosition: numberOrNull(window?.classPosition),
+        isReference: Boolean(window?.isReference),
+        isActive: Boolean(window?.isActive),
+        durationSeconds: numberOrNull(window?.durationSeconds),
+        lap: numberOrNull(window?.lap),
+        bounds: offsetRect(canvasBounds, { x, y: plot.y, width: Math.max(1, nextX - x), height: plot.height }),
+        color: window?.isActive === true ? 'rgba(112, 224, 146, 0.19)' : 'rgba(112, 224, 146, 0.13)'
       };
     })
     .filter(Boolean);
@@ -3154,12 +3474,12 @@ function graphThreatEvidence(metric) {
   };
 }
 
-function inputEvidence(inputs, layout) {
+function inputEvidence(inputs, layout, scaleContext = null) {
   const canvasBounds = findElementBounds(layout, 'input-graph', 'input-graph')
     || findElementBounds(layout, 'graph-canvas', 'input-graph');
   const railBounds = findElementBounds(layout, 'input-rail', 'input-rail');
   const gridLines = canvasBounds ? inputGridLines(canvasBounds) : [];
-  const series = canvasBounds ? inputTraceSeries(inputs, canvasBounds) : [];
+  const series = canvasBounds ? inputTraceSeries(inputs, canvasBounds, scaleContext) : [];
   return {
     hasContent: booleanOrNull(inputs?.hasContent),
     hasGraph: booleanOrNull(inputs?.hasGraph),
@@ -3308,9 +3628,10 @@ function inputGridLines(bounds) {
   });
 }
 
-function inputTraceSeries(inputs, bounds) {
+function inputTraceSeries(inputs, bounds, scaleContext = null) {
   const trace = Array.isArray(inputs?.trace) ? inputs.trace : [];
   const series = [];
+  const renderScale = effectiveRenderScale(scaleContext);
   addTrace(Boolean(inputs?.showThrottleTrace), 'throttle', '#62ff9f', 'throttle', 2);
   addTrace(Boolean(inputs?.showBrakeTrace), 'brake', '#ff6274', 'brake', 2);
   addTrace(Boolean(inputs?.showClutchTrace), 'clutch', '#00e8ff', 'clutch', 2);
@@ -3323,7 +3644,7 @@ function inputTraceSeries(inputs, bounds) {
       curves.push({ start, control1: start, control2: end, end });
     }
     if (curves.length) {
-      series.push({ kind: 'brake-abs', color: '#ffd15b', strokeWidth: 3, pointCount: 0, curveCount: curves.length, points: [], curves });
+      series.push({ kind: 'brake-abs', color: '#ffd15b', strokeWidth: scaleScalarEvidence(3, renderScale), pointCount: 0, curveCount: curves.length, points: [], curves });
     }
   }
   return series;
@@ -3335,12 +3656,12 @@ function inputTraceSeries(inputs, bounds) {
       const start = { x: round(bounds.x + 8), y: round(y) };
       const end = { x: round(bounds.x + bounds.width - 8), y: round(y) };
       const curves = [{ start, control1: start, control2: end, end }];
-      series.push({ kind, color: colorWithAlpha(color, 0.24), strokeWidth, pointCount: 0, curveCount: curves.length, points: [], curves });
+      series.push({ kind, color: colorWithAlpha(color, 0.24), strokeWidth: scaleScalarEvidence(strokeWidth, renderScale), pointCount: 0, curveCount: curves.length, points: [], curves });
       return;
     }
     const points = trace.map((point, index) => inputTracePoint(point?.[key], index, trace.length, bounds));
     const curves = smoothTraceCurves(points);
-    series.push({ kind, color, strokeWidth, pointCount: points.length, curveCount: curves.length, points, curves });
+    series.push({ kind, color, strokeWidth: scaleScalarEvidence(strokeWidth, renderScale), pointCount: points.length, curveCount: curves.length, points, curves });
   }
 }
 

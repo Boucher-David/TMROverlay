@@ -141,7 +141,8 @@ public sealed class SimpleTelemetryOverlayViewModelTests
                 Quality = LiveModelQuality.Reliable,
                 SessionState = 4,
                 SessionFlags = 0x00100000 | 0x00010000 | 0x00000020 | 0x00000002
-            }
+            },
+            IncidentPressure = IncidentPressureWithPlayerFlags(10, 0x00100000 | 0x00010000)
         });
 
         var viewModel = FlagsOverlayViewModel.ForDisplay(snapshot, now);
@@ -620,7 +621,7 @@ public sealed class SimpleTelemetryOverlayViewModelTests
         Assert.Contains(input.Rows, row => row.Label == "Gear / RPM" && row.Value.Contains("4", StringComparison.Ordinal));
         Assert.Contains(weather.Rows, row => row.Label == "Temps" && row.Value.Contains("30", StringComparison.Ordinal));
         Assert.True(radar.IsAvailable);
-        Assert.True(radar.HasCarLeft);
+        Assert.False(radar.HasCarLeft);
         Assert.Contains(pit.Rows, row => row.Label == "Fuel request" && row.Value.Contains("45.5 L", StringComparison.Ordinal));
     }
 
@@ -1283,6 +1284,43 @@ public sealed class SimpleTelemetryOverlayViewModelTests
             Models = normalizedModels
         };
     }
+
+    private static LiveIncidentPressureModel IncidentPressureWithPlayerFlags(int playerCarIdx, int? sessionFlags)
+    {
+        return LiveIncidentPressureModel.Empty with
+        {
+            HasData = true,
+            Quality = LiveModelQuality.Reliable,
+            Evidence = LiveSignalEvidence.Reliable("CarIdxSessionFlags"),
+            PlayerCarIdx = playerCarIdx,
+            FocusCarIdx = playerCarIdx,
+            Cars =
+            [
+                new LiveIncidentPressureCar(
+                    CarIdx: playerCarIdx,
+                    DriverName: null,
+                    TeamName: null,
+                    CarNumber: null,
+                    CarClass: null,
+                    IsPlayer: true,
+                    IsFocus: true,
+                    SessionFlags: sessionFlags,
+                    TrackSurface: 3,
+                    OnPitRoad: false,
+                    HasBlackFlag: HasFlag(sessionFlags, 0x00010000),
+                    HasDisqualifyFlag: HasFlag(sessionFlags, 0x00020000),
+                    HasRepairFlag: HasFlag(sessionFlags, 0x00100000),
+                    HasFurledFlag: HasFlag(sessionFlags, 0x00080000),
+                    IsCurrentlyOffTrack: false,
+                    ObservedOffTrackTransitions: 0,
+                    PressureScore: 0d,
+                    PressureLevel: "normal",
+                    Evidence: LiveSignalEvidence.Reliable("CarIdxSessionFlags"))
+            ]
+        };
+    }
+
+    private static bool HasFlag(int? flags, int mask) => (flags.GetValueOrDefault() & mask) == mask;
 
     private static HistoricalSessionContext RaceContext(string sessionTime, string sessionLaps)
     {

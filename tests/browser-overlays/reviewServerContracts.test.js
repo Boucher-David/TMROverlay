@@ -1,7 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startReviewServer } from './reviewServerTestHost.js';
 
 let reviewServer;
+const overlayGeometry = JSON.parse(fs.readFileSync(
+  path.join(process.cwd(), 'src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json'),
+  'utf8'
+));
 
 beforeAll(async () => {
   reviewServer = await startReviewServer();
@@ -87,25 +93,41 @@ describe('browser review server validation contracts', () => {
     const calculating = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-calculating')).model;
     expect.soft(calculating.status).toBe('calculating strategy');
     expect.soft(metricSectionTitles(calculating)).toEqual(['Race Information']);
+    expect.soft(metricRowLabels(calculating, 'Race Information')).toEqual(['Plan', 'Fuel']);
     expect.soft(allMetricText(calculating)).toMatch(/\bCalculating\b/);
     expect.soft(allMetricText(calculating)).not.toMatch(/\bCovered\b|\bNone\b/);
     expect.soft(calculating.effectiveSettings.rendered.fuelStrategy).toMatchObject({
       additionalFuelNeedState: 'unavailable',
       successCopyRequiresMeasuredNeed: true
     });
-    expect.soft(calculating.effectiveSettings.rendered.browserSource.baseHeight).toBeLessThan(298);
+    expect.soft(fuelRenderedRowCount(calculating)).toBe(2);
+    expect.soft(calculating.effectiveSettings.rendered.layout).toMatchObject({
+      contentRowCount: 4,
+      unusedHeightRatio: 0
+    });
+    expect.soft(calculating.effectiveSettings.rendered.browserSource).toMatchObject({
+      baseWidth: 503,
+      baseHeight: expectedFuelContentHeight(2, 1),
+      width: 503,
+      height: expectedFuelContentHeight(2, 1),
+      scalePercent: 100
+    });
 
     const stintsOff = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-stint-targets-off')).model;
     expect.soft(metricSectionTitles(stintsOff)).toEqual(['Race Information']);
     expect.soft(metricRowLabels(stintsOff, 'Race Information')).toEqual(['Plan', 'Fuel']);
     expect.soft(allMetricText(stintsOff)).not.toMatch(/\bStint Targets\b|\bStint 1\b/);
-    expect.soft(stintsOff.effectiveSettings.rendered.browserSource.baseHeight).toBeLessThan(298);
+    expect.soft(fuelRenderedRowCount(stintsOff)).toBe(2);
+    expect.soft(stintsOff.effectiveSettings.rendered.browserSource.baseHeight).toBe(expectedFuelContentHeight(2, 1));
+    expect.soft(stintsOff.effectiveSettings.rendered.browserSource.height).toBe(expectedFuelContentHeight(2, 1));
 
     const raceInfoOff = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-race-information-off')).model;
     expect.soft(metricSectionTitles(raceInfoOff)).toEqual(['Stint Targets']);
     expect.soft(metricRowLabels(raceInfoOff, 'Stint Targets')).toEqual(['Stint 1', 'Stint 2', 'Stint 3']);
     expect.soft(allMetricText(raceInfoOff)).not.toMatch(/\bRace Information\b|\bPlan\b|\bFuel\b/);
-    expect.soft(raceInfoOff.effectiveSettings.rendered.browserSource.baseHeight).toBeLessThan(298);
+    expect.soft(fuelRenderedRowCount(raceInfoOff)).toBe(3);
+    expect.soft(raceInfoOff.effectiveSettings.rendered.browserSource.baseHeight).toBe(expectedFuelContentHeight(3, 1));
+    expect.soft(raceInfoOff.effectiveSettings.rendered.browserSource.height).toBe(expectedFuelContentHeight(3, 1));
   });
 
   it('proves v1.0.2 non-race display contracts in practice and qualifying previews', async () => {
@@ -221,6 +243,125 @@ describe('browser review server validation contracts', () => {
       (relative.rows || []).filter((row) => row.isReference),
       'V102-014/V102-016 Relative must expose exactly one reference row across browser and localhost contracts'
     ).toHaveLength(1);
+  });
+
+  it('exposes deterministic minimum-scale fixtures for wide table and input overlays', async () => {
+    const standings = (await reviewServer.getJson('/api/overlay-model/standings?preview=race&fixture=standings-min-scale')).model;
+    expect.soft(columnLabels(standings)).toEqual(['Pos', 'CAR', 'Driver', 'GAP', 'INT', 'FAST', 'LAST', 'PIT']);
+    expect.soft(standings.rows || []).toHaveLength(6);
+    expect.soft(tableText(standings)).toContain('Tech Mates Racing');
+    expect.soft(tableText(standings)).toContain('IN');
+    expect.soft(standings.effectiveSettings.rendered.browserSource).toMatchObject({
+      baseWidth: 677,
+      baseHeight: 313,
+      width: 406,
+      height: 188,
+      scale: 0.6,
+      scalePercent: 60
+    });
+    expect.soft(standings.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'scalePercent',
+      value: 60
+    }));
+
+    const input = (await reviewServer.getJson('/api/overlay-model/input-state?preview=race&fixture=input-min-scale')).model;
+    expect.soft(input.bodyKind).toBe('inputs');
+    expect.soft(input.inputs).toMatchObject({ hasGraph: true, hasRail: true, hasContent: true });
+    expect.soft(input.effectiveSettings.rendered.browserSource).toMatchObject({
+      baseWidth: 520,
+      baseHeight: 260,
+      width: 312,
+      height: 156,
+      scale: 0.6,
+      scalePercent: 60
+    });
+  });
+
+  it('distinguishes standings all-chrome-off no-content from chrome-only no-content', async () => {
+    const hidden = (await reviewServer.getJson('/api/overlay-model/standings?preview=race&fixture=standings-no-content')).model;
+    expect.soft(hidden.shouldRender).toBe(false);
+    expect.soft(hidden.status).toBe('hidden | no enabled content');
+    expect.soft(hidden.columns || []).toEqual([]);
+    expect.soft(hidden.rows || []).toEqual([]);
+    expect.soft(hidden.headerItems || []).toEqual([]);
+    expect.soft(hidden.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'chrome.header.time-remaining.race',
+      value: false
+    }));
+
+    const chromeOnly = (await reviewServer.getJson('/api/overlay-model/standings?preview=race&fixture=standings-content-off-chrome-on')).model;
+    expect.soft(chromeOnly.shouldRender).toBe(true);
+    expect.soft(chromeOnly.status).toBe('chrome only | content disabled');
+    expect.soft(chromeOnly.columns || []).toEqual([]);
+    expect.soft(chromeOnly.rows || []).toEqual([]);
+    expect.soft(chromeOnly.headerItems || []).toEqual([
+      expect.objectContaining({ key: 'timeRemaining', value: '06:37:08' })
+    ]);
+    expect.soft(chromeOnly.effectiveSettings.rendered).toMatchObject({
+      shouldRender: true,
+      rowCount: 0,
+      browserSource: expect.objectContaining({
+        baseHeight: 40,
+        height: 40
+      })
+    });
+    expect.soft(chromeOnly.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'chrome.header.time-remaining.race',
+      value: true
+    }));
+
+    const noResultsChrome = (await reviewServer.getJson('/api/overlay-model/standings?preview=race&fixture=standings-no-results-chrome-on')).model;
+    expect.soft(noResultsChrome.shouldRender).toBe(true);
+    expect.soft(noResultsChrome.status).toBe('waiting for standings');
+    expect.soft(noResultsChrome.columns || []).toEqual([]);
+    expect.soft(noResultsChrome.rows || []).toEqual([]);
+    expect.soft(noResultsChrome.headerItems || []).toEqual([
+      expect.objectContaining({ key: 'timeRemaining', value: '06:37:08' })
+    ]);
+    expect.soft(noResultsChrome.effectiveSettings.rendered).toMatchObject({
+      shouldRender: true,
+      rowCount: 0,
+      browserSource: expect.objectContaining({
+        baseHeight: 40,
+        height: 40
+      }),
+      unavailableContentPolicy: 'chrome-only-placeholder'
+    });
+  });
+
+  it('keeps Session Weather missing data distinct from user-disabled weather content', async () => {
+    const missing = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-missing')).model;
+    const weatherOff = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-weather-off')).model;
+
+    expect.soft(missing.status).toBe('weather unavailable');
+    expect.soft(metricSectionTitles(missing)).toEqual(['Session', 'Weather']);
+    expect.soft(metricRowLabels(missing, 'Session')).toEqual(['Session', 'Clock', 'Event', 'Track', 'Laps']);
+    expect.soft(metricRowLabels(missing, 'Weather')).toEqual(['Surface', 'Sky', 'Wind', 'Temps', 'Atmosphere']);
+    expect.soft(missing.source).toMatch(/weather source unavailable/i);
+    expect.soft(missing.effectiveSettings.rendered.unavailableContentPolicy).toBe('section-aware-placeholders');
+    expect.soft(missing.effectiveSettings.rendered.browserSource.baseHeight).toBe(496);
+
+    const weatherRows = (missing.metricSections || []).find((section) => section.title === 'Weather')?.rows || [];
+    expect.soft(weatherRows).toHaveLength(5);
+    for (const row of weatherRows) {
+      expect.soft(row.segments?.map((segment) => segment.value), `${row.label}: missing weather placeholders`).toEqual(
+        row.segments?.map(() => '--')
+      );
+      expect.soft(['waiting', 'unavailable'], `${row.label}: missing weather tone`).toContain(row.tone);
+    }
+
+    expect.soft(missing.effectiveSettings.settings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'session-weather.surface.wetness.enabled', value: true }),
+      expect.objectContaining({ key: 'session-weather.sky.weather.enabled', value: true }),
+      expect.objectContaining({ key: 'session-weather.wind.speed.enabled', value: true }),
+      expect.objectContaining({ key: 'session-weather.temps.track.enabled', value: true }),
+      expect.objectContaining({ key: 'session-weather.atmosphere.pressure.enabled', value: true })
+    ]));
+
+    expect.soft(metricSectionTitles(weatherOff)).toEqual(['Session']);
+    expect.soft(weatherOff.effectiveSettings.settings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'session-weather.sky.weather.enabled', value: false })
+    ]));
   });
 
   it('proves v1.0.2 Gap To Leader trend, threat, color, and focus-window evidence', async () => {
@@ -392,6 +533,11 @@ describe('browser review server validation contracts', () => {
     expect.soft(noContent.columns || []).toEqual([]);
     expect.soft(noContent.rows || []).toEqual([]);
     expect.soft(noContent.headerItems || []).toEqual([]);
+    expect.soft(noContent.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'chrome.header.time-remaining.race',
+      session: 'race',
+      value: false
+    }));
     for (const key of [
       'relative.content.relative.position.enabled',
       'relative.content.relative.driver.enabled',
@@ -580,9 +726,19 @@ describe('browser review server validation contracts', () => {
 
       const model = (await reviewServer.getJson(`/api/overlay-model/${overlayId}?preview=race`)).model;
 
-      expectHiddenOverlayModel(model, overlayId);
-      expect.soft(model.status, `${overlayId}: no-content hidden status`).toMatch(/no enabled content/i);
-      expect.soft(model.effectiveSettings.rendered.shouldRender, `${overlayId}: effective rendered hidden`).toBe(false);
+      if (overlayId === 'standings') {
+        expect.soft(model.shouldRender, 'standings: chrome-only no-content should render chrome').toBe(true);
+        expect.soft(model.status, 'standings: chrome-only status').toBe('chrome only | content disabled');
+        expect.soft(model.rows ?? [], 'standings: chrome-only rows').toEqual([]);
+        expect.soft(model.headerItems ?? [], 'standings: chrome-only header').toEqual([
+          expect.objectContaining({ key: 'timeRemaining', value: '06:37:08' })
+        ]);
+        expect.soft(model.effectiveSettings.rendered.shouldRender, 'standings: effective rendered chrome-only').toBe(true);
+      } else {
+        expectHiddenOverlayModel(model, overlayId);
+        expect.soft(model.status, `${overlayId}: no-content hidden status`).toMatch(/no enabled content/i);
+        expect.soft(model.effectiveSettings.rendered.shouldRender, `${overlayId}: effective rendered hidden`).toBe(false);
+      }
     }
   });
 });
@@ -643,6 +799,30 @@ function metricRowLabels(model, sectionTitle) {
     .filter((section) => section.title === sectionTitle)
     .flatMap((section) => section.rows || [])
     .map((row) => row.label);
+}
+
+function fuelRenderedRowCount(model) {
+  return (model.metricSections || [])
+    .filter((section) => (section.rows || []).length > 0)
+    .reduce((total, section) => total + (section.rows || []).length, 0);
+}
+
+function expectedFuelContentHeight(rowCount, sectionCount) {
+  const metricRows = overlayGeometry.metricRows;
+  if (rowCount <= 0 || sectionCount <= 0) {
+    return metricRows.minimumFuelCalculatorHeight;
+  }
+
+  const rowGaps = Math.round(Math.max(0, rowCount - sectionCount) * metricRows.rowGap);
+  const sectionGaps = Math.round(Math.max(0, sectionCount - 1) * metricRows.sectionGap);
+  const height = metricRows.headerChromeHeight
+    + metricRows.fuelContentVerticalPadding
+    + sectionCount * metricRows.fuelSectionTitleReserveHeight
+    + Math.round(rowCount * metricRows.segmentedRowHeight)
+    + rowGaps
+    + sectionGaps
+    + metricRows.collapsedFooterReserveHeight;
+  return Math.max(metricRows.minimumFuelCalculatorHeight, Math.min(height, 298));
 }
 
 function allMetricText(model) {

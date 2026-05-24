@@ -386,6 +386,63 @@ public sealed class RelativeOverlayViewModelTests
         Assert.Equal(-2, models.Relative.Rows.Single(row => row.CarIdx == 12).LapDeltaToReference);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LiveModelBuilder_UsesEstimatedPracticeTimingWhenEstTimeSignDiffersFromLapDistance(bool localPitContext)
+    {
+        var context = RelativeBuilderContext("Practice");
+        var sample = RelativeBuilderSample(
+            nearbyCars:
+            [
+                new HistoricalCarProximity(21, 5, 0.490d, F2TimeSeconds: null, EstimatedTimeSeconds: 123.18d, Position: 5, ClassPosition: 5, CarClass: 4098, TrackSurface: 3, OnPitRoad: false),
+                new HistoricalCarProximity(32, 5, 0.474d, F2TimeSeconds: null, EstimatedTimeSeconds: 129.44d, Position: 7, ClassPosition: 7, CarClass: 4098, TrackSurface: 3, OnPitRoad: false)
+            ]) with
+        {
+            IsOnTrack = !localPitContext,
+            OnPitRoad = localPitContext,
+            PlayerCarInPitStall = localPitContext,
+            Lap = 5,
+            LapCompleted = 5,
+            LapDistPct = 0.482d,
+            SessionState = 4,
+            FocusLapCompleted = 5,
+            FocusLapDistPct = 0.482d,
+            FocusEstimatedTimeSeconds = 126.40d,
+            FocusLastLapTimeSeconds = 90d,
+            FocusBestLapTimeSeconds = 88d,
+            FocusPosition = 6,
+            FocusClassPosition = 6,
+            FocusCarClass = 4098,
+            FocusOnPitRoad = localPitContext,
+            TeamLapCompleted = 5,
+            TeamLapDistPct = 0.482d,
+            TeamEstimatedTimeSeconds = 126.40d,
+            TeamPosition = 6,
+            TeamClassPosition = 6,
+            TeamCarClass = 4098,
+            TeamOnPitRoad = localPitContext
+        };
+
+        var models = LiveRaceModelBuilder.From(
+            context,
+            sample,
+            LiveFuelSnapshot.From(context, sample),
+            LiveProximitySnapshot.Unavailable,
+            LiveLeaderGapSnapshot.Unavailable);
+
+        var ahead = models.Relative.Rows.Single(row => row.CarIdx == 21);
+        var behind = models.Relative.Rows.Single(row => row.CarIdx == 32);
+        Assert.Equal("estimated-relative", ahead.Source);
+        Assert.Equal("estimated-relative", behind.Source);
+        Assert.True(ahead.IsAhead);
+        Assert.True(behind.IsBehind);
+        Assert.True(ahead.RelativeSeconds > 0d);
+        Assert.True(behind.RelativeSeconds < 0d);
+        Assert.InRange(Math.Abs(ahead.RelativeSeconds!.Value), 3.21d, 3.23d);
+        Assert.InRange(Math.Abs(behind.RelativeSeconds!.Value), 3.03d, 3.05d);
+    }
+
     [Fact]
     public void From_SuppressesTimingFallbackRowsWhenSessionDoesNotUseRelativeTiming()
     {

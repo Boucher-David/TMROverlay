@@ -72,6 +72,25 @@ describe('standings browser rendering', () => {
     expect(currentOverlay.document.querySelector('style').textContent).toContain('tr.partial:not(.focus) td');
   });
 
+  it('renders rowless chrome-only standings without a table body placeholder', async () => {
+    currentOverlay = await renderBrowserOverlay('standings', {
+      live: freshLiveSnapshot({}),
+      model: {
+        ...standingsDisplayModel(),
+        status: 'waiting for standings',
+        columns: [],
+        rows: [],
+        shouldRender: true
+      },
+      waitForSelector: null
+    });
+
+    expect(currentOverlay.document.querySelector('.overlay').style.opacity).toBe('1');
+    expect(currentOverlay.document.querySelector('.header-items').textContent).toBe('06:37:08');
+    expect(currentOverlay.document.querySelector('table')).toBeNull();
+    expect(currentOverlay.document.getElementById('content').hidden).toBe(true);
+    expect(contentText(currentOverlay.document)).not.toContain('Waiting for live rows.');
+  });
 });
 
 function standingsDisplayModel() {

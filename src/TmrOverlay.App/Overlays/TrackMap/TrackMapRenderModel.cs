@@ -177,11 +177,9 @@ internal sealed record TrackMapRenderModel(
     private const double StartFinishMainWidth = 3.2d;
     private const double StartFinishHighlightWidth = 1.2d;
     private const double PitLineWidth = 2.2d;
-    private const double MarkerRadius = 3.6d;
-    private const double MarkerLabelRadius = 4.8d;
+    private const double NonFocusMarkerRadius = 4.8d;
     private const double FocusMarkerRadius = 5.7d;
     private const double NonFocusMarkerLabelRadius = 5.7d;
-    private const double NonFocusMarkerRadiusReduction = 2d;
     private const double MarkerTextSize = 5.4d;
     private const double FocusMarkerTextSize = 7.6d;
     private const double OffTrackAlertRingMinimumGap = 3.2d;
@@ -392,7 +390,7 @@ internal sealed record TrackMapRenderModel(
             : null;
         var radius = label is { Length: > 0 }
             ? MarkerRadiusForLabel(label, marker.IsFocus)
-            : marker.IsFocus ? FocusMarkerRadius : Math.Max(1.2d, MarkerRadius - NonFocusMarkerRadiusReduction);
+            : marker.IsFocus ? FocusMarkerRadius : NonFocusMarkerRadius;
         var labelFontSize = marker.IsFocus ? FocusMarkerTextSize : MarkerTextSize;
         var alertActive = marker.AlertKind == TrackMapMarkerAlertKind.OffTrack;
         var alertPulseProgress = alertActive
@@ -650,13 +648,8 @@ internal sealed record TrackMapRenderModel(
             return ColorOf(OffTrackAlertMarkerColor);
         }
 
-        if (isFocus && isPlayerFocus)
-        {
-            return ColorOf(OverlayTheme.DesignV2.Cyan);
-        }
-
         var color = OverlayClassColor.TryParseWithAlpha(classColorHex, 245)
-            ?? Color.FromArgb(245, 237, 245, 250);
+            ?? Color.FromArgb(245, 255, 255, 255);
         return ColorOf(color);
     }
 

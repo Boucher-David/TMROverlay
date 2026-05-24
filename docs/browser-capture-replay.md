@@ -56,11 +56,11 @@ frame contains:
   deltas, captured-time deltas, and whether the selection is dense enough for
   Gap To Leader graph validation
 
-## Local v1.1 Candidate Streams
+## Local V1.2 Candidate Streams
 
 Keep raw captures local or external; committed replay evidence should be
 redacted/minimized slices or normalized replay windows with explicit provenance.
-The current local ranking for v1.1 replay work is:
+The current local ranking for V1.2 replay work is:
 
 - `capture-20260520-180306-881`: Toyota GR86 Nordschleife Industriefahrten
   race-start stream collected while the local user was spotting. Use this first

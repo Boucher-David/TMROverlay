@@ -242,6 +242,18 @@ internal sealed record LiveProximitySnapshot(
         double? liveLapTimeSeconds,
         double relativeLaps)
     {
+        if (carF2TimeSeconds is { } carF2
+            && focusF2TimeSeconds is { } focusF2
+            && IsNonNegativeFinite(carF2)
+            && IsNonNegativeFinite(focusF2))
+        {
+            var delta = focusF2 - carF2;
+            if (IsPlausibleRelativeTiming(delta, relativeLaps, liveLapTimeSeconds))
+            {
+                return delta;
+            }
+        }
+
         if (carEstimatedTimeSeconds is { } carEst
             && focusEstimatedTimeSeconds is { } focusEst
             && IsPositiveFinite(carEst)
@@ -260,18 +272,6 @@ internal sealed record LiveProximitySnapshot(
                 }
             }
 
-            if (IsPlausibleRelativeTiming(delta, relativeLaps, liveLapTimeSeconds))
-            {
-                return delta;
-            }
-        }
-
-        if (carF2TimeSeconds is { } carF2
-            && focusF2TimeSeconds is { } focusF2
-            && IsNonNegativeFinite(carF2)
-            && IsNonNegativeFinite(focusF2))
-        {
-            var delta = focusF2 - carF2;
             if (IsPlausibleRelativeTiming(delta, relativeLaps, liveLapTimeSeconds))
             {
                 return delta;

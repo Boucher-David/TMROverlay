@@ -25,8 +25,7 @@ internal sealed class TrackMapForm : PersistentOverlayForm
     private static readonly Color BestLapSectorColor = Color.FromArgb(255, 182, 92, 255);
     private static readonly Color PitLineColor = Color.FromArgb(190, 98, 199, 255);
     private static readonly Color MarkerBorderColor = Color.FromArgb(230, 8, 14, 18);
-    private static readonly Color FocusMarkerColor = Color.FromArgb(255, 98, 199, 255);
-    private static readonly Color DefaultMarkerColor = Color.FromArgb(245, 236, 244, 248);
+    private static readonly Color DefaultMarkerColor = Color.FromArgb(245, 255, 255, 255);
     private const int TrackInteriorMaximumAlpha = 150;
     private const int RefreshIntervalMilliseconds = 50;
     private const float MapPadding = 20f;
@@ -818,11 +817,6 @@ internal sealed class TrackMapForm : PersistentOverlayForm
 
     private static Color MarkerColor(string? classColorHex, bool isFocus, bool isPlayerFocus)
     {
-        if (isFocus && isPlayerFocus)
-        {
-            return FocusMarkerColor;
-        }
-
         return OverlayClassColor.TryParseWithAlpha(classColorHex, 245) ?? DefaultMarkerColor;
     }
 

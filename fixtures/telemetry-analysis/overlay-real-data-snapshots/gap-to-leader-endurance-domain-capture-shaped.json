@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "id": "gap-to-leader-endurance-domain-capture-shaped",
+  "overlayId": "gap-to-leader",
+  "scenarioIds": ["gap-pit-and-long-tail-real-data"],
+  "source": {
+    "captureId": "capture-shaped-endurance-gap-domain",
+    "sourceCategory": "capture-shaped-synthetic",
+    "redaction": "synthetic-from-4h-24h-pattern",
+    "note": "Synthetic four-hour Gap To Leader graph shaped from endurance capture evidence. It proves long-domain rendering, leader retention, multiple nearby lines, weather bands, and existing graph-marker rendering without committing raw telemetry."
+  },
+  "provenance": {
+    "sessionType": "Race",
+    "sessionPhase": "green-to-pit-window",
+    "trackKey": "nurburgring-combinedlong",
+    "focusRelation": "player",
+    "durationHours": 4.0,
+    "candidateCaptureIds": ["capture-20260426-130334-932", "capture-20260502-143722-571", "capture-20260522-204847-774"]
+  },
+  "rawEvidence": {
+    "sessionType": "Race",
+    "focusCar": {
+      "carIdx": 15,
+      "classPosition": 10
+    },
+    "classLeader": {
+      "carIdx": 14,
+      "classPosition": 1
+    },
+    "selectedClassPositions": [1, 8, 9, 10, 11, 12, 13],
+    "domain": {
+      "startSeconds": 0.0,
+      "endSeconds": 14400.0,
+      "durationHours": 4.0
+    },
+    "weatherPeriods": [
+      { "axisSeconds": 0.0, "condition": "dry" },
+      { "axisSeconds": 3600.0, "condition": "damp" },
+      { "axisSeconds": 7200.0, "condition": "wet" },
+      { "axisSeconds": 10800.0, "condition": "declaredWet" }
+    ],
+    "graphMarkers": [
+      { "kind": "leader-change", "axisSeconds": 5400.0, "label": "leader" },
+      { "kind": "leader-change", "axisSeconds": 9900.0, "label": "leader" },
+      { "kind": "driver-change", "axisSeconds": 8100.0, "carIdx": 15, "classPosition": 10, "label": "DR" }
+    ],
+    "pitWindows": [
+      {
+        "entryAxisSeconds": 7140.0,
+        "exitAxisSeconds": 7286.0,
+        "carIdx": 15,
+        "classPosition": 10,
+        "isReference": true,
+        "isActive": false,
+        "durationSeconds": 146.0,
+        "lap": 17,
+        "source": "capture-shaped endurance pit window"
+      }
+    ]
+  },
+  "expected": {
+    "graph": {
+      "minimumDurationHours": 4.0,
+      "minimumVisibleSeriesCount": 6,
+      "selectedClassPositions": [1, 8, 9, 10, 11, 12, 13],
+      "mustIncludeClassLeader": true,
+      "focusClassPosition": 10,
+      "minimumWeatherBandCount": 3,
+      "minimumGraphMarkerCount": 3,
+      "minimumPitWindowBandCount": 1,
+      "comparisonLabel": "P9",
+      "pitWindowGraphMarkerStatus": "covered-by-graph-pit-window-band"
+    },
+    "screenshots": [
+      "browser-overlays/gap-to-leader/endurance-domain-capture-shaped.png",
+      "localhost-overlays/gap-to-leader/endurance-domain-capture-shaped.png"
+    ]
+  }
+}

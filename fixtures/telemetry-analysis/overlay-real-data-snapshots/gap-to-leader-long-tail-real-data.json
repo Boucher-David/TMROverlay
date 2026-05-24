@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "id": "gap-to-leader-long-tail-real-data",
+  "overlayId": "gap-to-leader",
+  "scenarioIds": ["gap-pit-and-long-tail-real-data"],
+  "source": {
+    "captureId": "capture-20260522-204847-774",
+    "sourceCategory": "full-race-gap-long-tail",
+    "redaction": "compact-summary",
+    "note": "Race capture frame where the focused LMP2 was close to the class leader, but the existing selection also kept a far-behind line that would flatten the useful top-car graph range."
+  },
+  "provenance": {
+    "sessionType": "Race",
+    "sessionPhase": "pit-window-adjacent-green",
+    "trackKey": "nurburgring-combinedlong",
+    "focusRelation": "player",
+    "sampleSessionTimeSeconds": 2095.8
+  },
+  "rawEvidence": {
+    "sessionType": "Race",
+    "focusCar": {
+      "carIdx": 19,
+      "classPosition": 5,
+      "gapToClassLeaderSeconds": 1.3749
+    },
+    "classLeader": {
+      "carIdx": 13,
+      "classPosition": 1,
+      "gapToClassLeaderSeconds": 0.0
+    },
+    "existingSelection": {
+      "selectedSeriesCount": 9,
+      "furthestBehind": {
+        "carIdx": 24,
+        "classPosition": 9,
+        "gapToClassLeaderSeconds": 71.891,
+        "gapToFocusSeconds": 70.516
+      },
+      "graphMaxGapSeconds": 71.891,
+      "focusGapToLeaderSeconds": 1.3749,
+      "readabilityViolation": true,
+      "violationReason": "furthest behind gap to focus is greater than focused gap to leader"
+    },
+    "pitWindowEvidence": {
+      "nearestPitWindowStartSessionTimeSeconds": 2117.2,
+      "nearestPitWindowEndSessionTimeSeconds": 2159.8,
+      "currentSelectionMaxGapDuringPitWindowSeconds": 71.9,
+      "policySelectionMaxGapDuringPitWindowSeconds": 34.5
+    }
+  },
+  "expected": {
+    "policy": {
+      "id": "focus-relative-behind-cap",
+      "description": "When the focused car is behind the class leader by a meaningful positive gap, selected behind cars must not be farther from the focused car than the focused car is from the class leader.",
+      "behindCapSeconds": 1.3749,
+      "keepClassLeader": true,
+      "keepFocusCar": true,
+      "keepAheadCars": true,
+      "excludeBehindBeyondFocusGapToLeader": true
+    },
+    "excludedCandidates": [
+      {
+        "carIdx": 24,
+        "classPosition": 9,
+        "gapToFocusSeconds": 70.516,
+        "reason": "behind candidate exceeds focus gap to leader"
+      },
+      {
+        "carIdx": 22,
+        "classPosition": 6,
+        "gapToFocusSeconds": 13.769,
+        "reason": "behind candidate exceeds focus gap to leader"
+      }
+    ],
+    "graph": {
+      "scaleMode": "focus-relative",
+      "maxIncludedGapToFocusSeconds": 1.3749,
+      "selectedClassPositions": [1, 4, 5],
+      "forbiddenClassPositions": [6, 9],
+      "minimumVisibleSeriesCount": 3,
+      "comparisonLabel": "P4",
+      "axisBehindSecondsMaximum": 2.0
+    },
+    "screenshots": [
+      "browser-overlays/gap-to-leader/long-tail-real-data.png",
+      "localhost-overlays/gap-to-leader/long-tail-real-data.png"
+    ]
+  }
+}

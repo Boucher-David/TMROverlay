@@ -184,6 +184,7 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
         var route = "unknown";
         var requestMethod = SafeRequestMethod(context.Request);
         var requestPath = SafeRequestPath(context.Request);
+        var requestSourceUrl = SafeRequestSourceUrl(context.Request);
         var requestUserAgent = SafeRequestUserAgent(context.Request);
         var statusCode = (int)HttpStatusCode.InternalServerError;
         Exception? requestException = null;
@@ -490,7 +491,8 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
                 statusCode,
                 elapsed,
                 userAgent: requestUserAgent,
-                exception: requestException);
+                exception: requestException,
+                sourceUrl: requestSourceUrl);
             _performanceState.RecordOperation(AppPerformanceMetricIds.LocalhostRequest, elapsed, requestException is null && statusCode < 500);
             _performanceState.RecordLocalhostRequest(route, statusCode, elapsed, requestException is null && statusCode < 500);
         }
@@ -513,6 +515,18 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
         try
         {
             return request.Url?.AbsolutePath ?? string.Empty;
+        }
+        catch (Exception exception) when (exception is ObjectDisposedException or HttpListenerException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeRequestSourceUrl(HttpListenerRequest request)
+    {
+        try
+        {
+            return request.RawUrl ?? request.Url?.PathAndQuery ?? string.Empty;
         }
         catch (Exception exception) when (exception is ObjectDisposedException or HttpListenerException)
         {

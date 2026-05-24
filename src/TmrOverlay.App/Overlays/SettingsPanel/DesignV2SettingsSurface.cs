@@ -590,22 +590,18 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private void BuildOverlayGeneralControls(OverlayDefinition definition, OverlaySettings settings)
     {
-        var isGarageCover = string.Equals(definition.Id, "garage-cover", StringComparison.OrdinalIgnoreCase);
         var panelBounds = DesignV2SettingsLayout.OverlayControlsPanelBounds(OverlayControlsPanelHeight(definition, settings));
         var rowIndex = 0;
-        if (!isGarageCover)
-        {
-            var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
-            AddDynamic(new V2ToggleControl(
-                DesignV2SettingsLayout.RightAlignedControlBounds(row, ToggleWidth, ToggleHeight),
-                settings.Enabled,
-                isOn =>
-                {
-                    settings.Enabled = isOn;
-                    _callbacks.SaveAndApply();
-                    Invalidate();
-                }));
-        }
+        var visibleRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+        AddDynamic(new V2ToggleControl(
+            DesignV2SettingsLayout.RightAlignedControlBounds(visibleRow, ToggleWidth, ToggleHeight),
+            settings.Enabled,
+            isOn =>
+            {
+                settings.Enabled = isOn;
+                _callbacks.SaveAndApply();
+                Invalidate();
+            }));
 
         if (definition.ShowScaleControl)
         {
@@ -627,7 +623,7 @@ internal sealed class DesignV2SettingsSurface : Control
                 }));
         }
 
-        if (isGarageCover)
+        if (string.Equals(definition.Id, "garage-cover", StringComparison.OrdinalIgnoreCase))
         {
             var row = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
             var importBounds = DesignV2SettingsLayout.InlineControlBounds(row, SettingsGeometry.GarageImportButtonWidth, CopyButtonHeight);
@@ -1349,37 +1345,33 @@ internal sealed class DesignV2SettingsSurface : Control
 
     private void DrawOverlayGeneralPage(Graphics graphics, OverlayDefinition definition, OverlaySettings settings)
     {
-        var isGarageCover = string.Equals(definition.Id, "garage-cover", StringComparison.OrdinalIgnoreCase);
         var panelBounds = DesignV2SettingsLayout.OverlayControlsPanelBounds(OverlayControlsPanelHeight(definition, settings));
         var rowIndex = 0;
         DrawPanel(graphics, panelBounds, "Overlay Controls");
-        if (isGarageCover)
+        var visibleRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
+        DrawText(graphics, "Visible", DesignV2SettingsLayout.FieldLabelBounds(visibleRow), 13f, FontStyle.Regular, TextSecondary);
+
+        if (definition.ShowScaleControl)
         {
             var scaleRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
             DrawText(graphics, "Scale", DesignV2SettingsLayout.FieldLabelBounds(scaleRow), 13f, FontStyle.Regular, TextSecondary);
             DrawText(graphics, $"{(int)Math.Round(settings.Scale * 100d)}%", DesignV2SettingsLayout.FieldValueBounds(scaleRow, 40), 12f, FontStyle.Bold, TextPrimary, alignment: StringAlignment.Far);
+        }
+
+        if (definition.ShowOpacityControl)
+        {
+            var opacityRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
+            DrawText(graphics, string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) ? "Map fill" : "Opacity", DesignV2SettingsLayout.FieldLabelBounds(opacityRow), 13f, FontStyle.Regular, TextSecondary);
+            DrawText(graphics, $"{(int)Math.Round(settings.Opacity * 100d)}%", DesignV2SettingsLayout.FieldValueBounds(opacityRow, 40), 12f, FontStyle.Bold, TextPrimary, alignment: StringAlignment.Far);
+        }
+
+        if (string.Equals(definition.Id, "garage-cover", StringComparison.OrdinalIgnoreCase))
+        {
             var coverRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.StepperRowWidth);
             DrawText(graphics, "Cover image", DesignV2SettingsLayout.FieldLabelBounds(coverRow), 13f, FontStyle.Regular, TextSecondary);
         }
         else
         {
-            var visibleRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.ToggleRowWidth);
-            DrawText(graphics, "Visible", DesignV2SettingsLayout.FieldLabelBounds(visibleRow), 13f, FontStyle.Regular, TextSecondary);
-
-            if (definition.ShowScaleControl)
-            {
-                var scaleRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
-                DrawText(graphics, "Scale", DesignV2SettingsLayout.FieldLabelBounds(scaleRow), 13f, FontStyle.Regular, TextSecondary);
-                DrawText(graphics, $"{(int)Math.Round(settings.Scale * 100d)}%", DesignV2SettingsLayout.FieldValueBounds(scaleRow, 40), 12f, FontStyle.Bold, TextPrimary, alignment: StringAlignment.Far);
-            }
-
-            if (definition.ShowOpacityControl)
-            {
-                var opacityRow = DesignV2SettingsLayout.FieldRowBounds(panelBounds, rowIndex++, SettingsGeometry.SliderRowWidth);
-                DrawText(graphics, string.Equals(definition.Id, TrackMapOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) ? "Map fill" : "Opacity", DesignV2SettingsLayout.FieldLabelBounds(opacityRow), 13f, FontStyle.Regular, TextSecondary);
-                DrawText(graphics, $"{(int)Math.Round(settings.Opacity * 100d)}%", DesignV2SettingsLayout.FieldValueBounds(opacityRow, 40), 12f, FontStyle.Bold, TextPrimary, alignment: StringAlignment.Far);
-            }
-
             DrawOverlaySpecificGeneralRows(graphics, definition, settings, panelBounds, ref rowIndex);
         }
 

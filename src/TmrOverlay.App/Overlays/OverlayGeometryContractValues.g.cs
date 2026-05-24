@@ -840,7 +840,7 @@ internal static class OverlayGeometryContractValues
         internal const int PreviewPanelMarginTop = 28;
         internal const int SupportPanelHeight = 278;
         internal const int OverlayControlsPanelHeight = 266;
-        internal const int GarageOverlayControlsPanelHeight = 166;
+        internal const int GarageOverlayControlsPanelHeight = 200;
         internal const int BrowserSourcePanelWidth = 414;
         internal const int BrowserSourcePanelHeight = 132;
         internal const int BrowserSourceUrlHeight = 32;

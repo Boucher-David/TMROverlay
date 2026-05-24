@@ -30,8 +30,15 @@
       const state = {
         selectedTab: initialTab(),
         selectedRegion: initialRegion(),
+        reviewComponent: config.reviewComponent || null,
         previewMode: config.previewMode || 'off',
         unitSystem: config.unitSystem || 'Metric',
+        visibilityContext: {
+          inPit: true,
+          spotting: true,
+          outOfCar: false,
+          garage: true
+        },
         support: {
           rawCaptureEnabled: config.support?.rawCaptureEnabled === true,
           latestBundlePath: config.support?.latestBundlePath || '',
@@ -100,6 +107,7 @@
 
       function setTab(tabId) {
         if (!knownTab(tabId)) return;
+        state.reviewComponent = null;
         state.selectedTab = tabId;
         const overlay = currentOverlay();
         const regions = regionsFor(overlay);
@@ -131,6 +139,7 @@
         if (state.selectedTab !== 'general') params.set('tab', state.selectedTab);
         if (currentOverlay() && state.selectedRegion !== 'general') params.set('region', state.selectedRegion);
         if (state.previewMode !== 'off') params.set('preview', state.previewMode);
+        if (state.reviewComponent) params.set('component', state.reviewComponent);
         const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`;
         window.history.replaceState(null, '', next);
       }
@@ -187,6 +196,9 @@
       }
 
       function renderContent() {
+        if (state.reviewComponent === 'visibility-context') {
+          return renderContentShell('Visibility', 'Overlay availability contexts.', null, renderVisibilityContextPreview());
+        }
         if (state.selectedTab === 'general') {
           return renderContentShell('General', 'Shared units.', null, renderGeneralPage());
         }
@@ -274,6 +286,22 @@
         ];
       }
 
+      function renderVisibilityContextPreview() {
+        const contextRows = [
+          ['In pit', 'inPit'],
+          ['Spotting', 'spotting'],
+          ['Out of car', 'outOfCar'],
+          ['Garage', 'garage']
+        ];
+        return [
+          panel('Visibility Contexts', 'visibility-context-panel', contextRows.map(([label, key]) =>
+            row(label, toggle(state.visibilityContext[key], (isOn) => {
+              state.visibilityContext[key] = isOn;
+              render();
+            }, label), `future.visibility-context.${slugEvidenceKey(label)}`)))
+        ];
+      }
+
       function renderSupportPage() {
         const support = state.support;
         const trackMapBuildEnabled = trackMapBuildFromTelemetryEnabled();
@@ -338,13 +366,11 @@
 
       function renderOverlayGeneral(overlay) {
         const controls = [];
-        if (overlay.id !== 'garage-cover') {
-          controls.push(row('Visible', toggle(overlay.enabled, (isOn) => {
-            overlay.enabled = isOn;
-            persistSettings({ kind: 'overlayEnabled', overlayId: overlay.id, enabled: isOn });
-            render();
-          }), `${overlay.id}.general.visible`));
-        }
+        controls.push(row('Visible', toggle(overlay.enabled, (isOn) => {
+          overlay.enabled = isOn;
+          persistSettings({ kind: 'overlayEnabled', overlayId: overlay.id, enabled: isOn });
+          render();
+        }), `${overlay.id}.general.visible`));
         if (overlay.showScale) controls.push(row('Scale', percentSlider('Scale', overlay.scalePercent, 60, 200, 'cyan', (percent) => {
           overlay.scalePercent = percent;
           persistSettings({ kind: 'number', overlayId: overlay.id, key: 'scalePercent', value: percent });
@@ -1203,6 +1229,7 @@
 
       function browserSize(overlay) {
         const base = browserBaseSize(overlay?.id);
+        let heightIncludesChromeSelection = false;
         if (overlay?.id === 'input-state') {
           base[0] = inputStateBaseWidth(overlay, base[0]);
         } else if (overlay?.id === 'gap-to-leader') {
@@ -1213,7 +1240,10 @@
           base[1] = fuelCalculatorBaseHeight(overlay, base[1]);
         } else if (overlay?.id === 'standings' || overlay?.id === 'relative') {
           base[0] = tableBaseWidth(overlay, base[0]);
-          if (overlay.id === 'relative') {
+          if (overlay.id === 'standings') {
+            base[1] = standingsBaseHeight(overlay, base[1]);
+            heightIncludesChromeSelection = true;
+          } else if (overlay.id === 'relative') {
             base[1] = relativeBaseHeight(overlay, base[1]);
           }
         } else if (overlay?.id === 'session-weather' || overlay?.id === 'pit-service') {
@@ -1221,7 +1251,9 @@
           base[0] = simpleSize[0];
           base[1] = simpleSize[1];
         }
-        base[1] = chromeAdjustedBaseHeight(overlay, base[1]);
+        if (!heightIncludesChromeSelection) {
+          base[1] = chromeAdjustedBaseHeight(overlay, base[1]);
+        }
         const scale = Math.max(0.6, Math.min(2, Number(overlay?.scalePercent || 100) / 100));
         return `${Math.round(base[0] * scale)} x ${Math.round(base[1] * scale)}`;
       }
@@ -1358,6 +1390,51 @@
             'Pit status': tableGeometryNumber('relativePitStatusWidth', 48)
           }
         }[overlayId] || {};
+      }
+
+      function standingsBaseHeight(overlay, fullHeight) {
+        const rows = standingsRecommendedRows(overlay);
+        return standingsHeightForRows(rows, fullHeight, headerChromeEnabledForSizing(overlay), false);
+      }
+
+      function standingsRecommendedRows(overlay) {
+        const carsInClass = Math.max(1, Math.min(24, Number(overlay?.carsInClass ?? 14)));
+        const classSeparatorsEnabled = overlay?.classSeparatorsEnabled !== false
+          && contentEnabledForSession(
+            overlay,
+            { key: 'standings.class-separators.enabled', label: 'Multiclass sections', defaultEnabled: true },
+            sizingSession(overlay));
+        if (!classSeparatorsEnabled) return carsInClass;
+
+        const otherRows = Math.max(0, Math.min(6, Number(overlay?.otherClassRows ?? 2)));
+        const classCount = otherRows > 0 ? 3 : 1;
+        return Math.max(1, Math.min(24, carsInClass + classCount + Math.max(0, classCount - 1) * otherRows));
+      }
+
+      function standingsHeightForRows(rowCount, persistedHeight, showHeader, showFooter) {
+        const rows = Math.max(1, Math.min(24, Number(rowCount || 0)));
+        const persistedRows = standingsVisibleRowsForHeight(persistedHeight, showHeader, showFooter);
+        if (rows <= persistedRows) return persistedHeight;
+
+        return Math.max(
+          persistedHeight,
+          standingsHeaderReserveHeight(showHeader)
+            + (showFooter ? 32 : 8)
+            + 1
+            + 30
+            + rows * (30 + 5));
+      }
+
+      function standingsVisibleRowsForHeight(height, showHeader, showFooter) {
+        const bodyHeight = Number(height || 0)
+          - standingsHeaderReserveHeight(showHeader)
+          - (showFooter ? 32 : 8)
+          - 1;
+        return Math.max(1, Math.floor((bodyHeight - 30) / (30 + 5)));
+      }
+
+      function standingsHeaderReserveHeight(showHeader) {
+        return showHeader ? 38 + 12 : 16;
       }
 
       function relativeBaseHeight(overlay, fullHeight) {

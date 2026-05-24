@@ -187,13 +187,15 @@ describe('browser overlay shell', () => {
         event: 'page-loaded',
         overlayId: 'standings',
         clientId: 'obs-test',
-        clientKind: 'obs'
+        clientKind: 'obs',
+        sourceUrl: '/overlays/standings?client=obs-test&clientKind=obs'
       }),
       expect.objectContaining({
         event: 'model-hidden',
         overlayId: 'standings',
         clientId: 'obs-test',
         clientKind: 'obs',
+        sourceUrl: '/overlays/standings?client=obs-test&clientKind=obs',
         shouldRender: false,
         status: 'hidden | telemetry unavailable'
       })
@@ -416,6 +418,27 @@ describe('browser overlay shell', () => {
     expect(currentOverlay.document.querySelector('.overlay').style.opacity).toBe('0');
     expect(currentOverlay.document.querySelector('.header-items')?.textContent ?? '').toBe('');
     expect(currentOverlay.document.getElementById('source').hidden).toBe(true);
+  });
+
+  it('keeps Garage Cover hidden when the model fetch fails', async () => {
+    currentOverlay = await renderBrowserOverlay('garage-cover', {
+      live: freshLiveSnapshot({
+        raceEvents: { hasData: true, isGarageVisible: true, isInGarage: true, isOnTrack: false }
+      }),
+      failModelFetch: true,
+      waitForSelector: null
+    });
+
+    await waitFor(() => currentOverlay.document.querySelector('.overlay').style.opacity === '0');
+
+    expect(currentOverlay.fetchCalls).toContain('/api/overlay-model/garage-cover');
+    expect(currentOverlay.document.querySelector('.garage-cover')).toBeNull();
+    expect(currentOverlay.document.getElementById('content').textContent).toBe('');
+    expect(currentOverlay.document.querySelector('.overlay').style.opacity).toBe('0');
+    expect(currentOverlay.browserSourceEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: 'model-error', overlayId: 'garage-cover' }),
+      expect.objectContaining({ event: 'model-hidden', overlayId: 'garage-cover', shouldRender: null })
+    ]));
   });
 });
 

@@ -152,12 +152,13 @@ export function renderSettingsGeneralReviewHtml({ previewMode = 'off', reviewSta
   });
 }
 
-export function renderAppValidatorReviewHtml({ previewMode = 'off', selectedTab = 'general', selectedRegion = 'general', reviewState = null } = {}) {
+export function renderAppValidatorReviewHtml({ previewMode = 'off', selectedTab = 'general', selectedRegion = 'general', reviewState = null, reviewComponent = null } = {}) {
   return renderSettingsReviewHtml({
     previewMode,
     selectedTab,
     selectedRegion,
-    reviewState
+    reviewState,
+    reviewComponent
   });
 }
 
@@ -338,7 +339,8 @@ function renderSettingsReviewHtml({
   previewMode = 'off',
   selectedTab = 'general',
   selectedRegion = 'general',
-  reviewState = null
+  reviewState = null,
+  reviewComponent = null
 }) {
   const settingsCss = assetText('styles/settings-general.css')
     .replace('{{THEME_CSS_VARIABLES}}', themeCssVariables())
@@ -347,7 +349,8 @@ function renderSettingsReviewHtml({
     previewMode,
     selectedTab,
     selectedRegion,
-    reviewState
+    reviewState,
+    reviewComponent
   });
 
   return assetText('templates/settings-general.html')
@@ -576,12 +579,13 @@ export function browserOverlayApiResponse(name, path, { live, settings = {}, mod
   return null;
 }
 
-function settingsAppConfig({ previewMode = 'off', selectedTab = 'general', selectedRegion = 'general', reviewState = null } = {}) {
+function settingsAppConfig({ previewMode = 'off', selectedTab = 'general', selectedRegion = 'general', reviewState = null, reviewComponent = null } = {}) {
   const normalizedPreviewMode = normalizePreviewMode(previewMode);
   return {
     previewMode: normalizedPreviewMode,
     selectedTab,
     selectedRegion,
+    reviewComponent: normalizeReviewComponent(reviewComponent),
     unitSystem: normalizeUnitSystem(reviewState?.unitSystem || 'Metric'),
     support: {
       rawCaptureEnabled: reviewState?.support?.rawCaptureEnabled === true,
@@ -597,6 +601,10 @@ function settingsAppConfig({ previewMode = 'off', selectedTab = 'general', selec
     sessionLabels: ['Practice', 'Qualifying', 'Race'],
     overlays: settingsAppOverlays(reviewState, normalizedPreviewMode)
   };
+}
+
+function normalizeReviewComponent(value) {
+  return value === 'visibility-context' ? value : null;
 }
 
 function settingsAppOverlays(reviewState = null, previewMode = 'off') {
@@ -703,6 +711,7 @@ function settingsOverlaySubtitle(id) {
 
 export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = 'off') {
   const base = browserBaseSize(id);
+  let heightIncludesChromeSelection = false;
   if (id === 'input-state') {
     base[0] = inputStateBaseWidth(overlayState, base[0], previewMode);
   } else if (id === 'gap-to-leader') {
@@ -713,7 +722,10 @@ export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = '
     base[1] = fuelCalculatorBaseHeight(overlayState, previewMode, base[1]);
   } else if (id === 'standings' || id === 'relative') {
     base[0] = tableBaseWidth(id, overlayState, base[0], previewMode);
-    if (id === 'relative') {
+    if (id === 'standings') {
+      base[1] = standingsBaseHeight(overlayState, base[1], previewMode);
+      heightIncludesChromeSelection = true;
+    } else if (id === 'relative') {
       base[1] = relativeBaseHeight(overlayState, base[1]);
     }
   } else if (id === 'session-weather' || id === 'pit-service') {
@@ -721,7 +733,9 @@ export function settingsBrowserSourceSize(id, overlayState = {}, previewMode = '
     base[0] = simpleSize[0];
     base[1] = simpleSize[1];
   }
-  base[1] = settingsChromeAdjustedBaseHeight(id, overlayState, base[1], previewMode);
+  if (!heightIncludesChromeSelection) {
+    base[1] = settingsChromeAdjustedBaseHeight(id, overlayState, base[1], previewMode);
+  }
   const scale = Math.max(0.6, Math.min(2, Number(overlayState.scalePercent || 100) / 100));
   return {
     baseWidth: Math.round(base[0]),
@@ -751,6 +765,58 @@ function browserBaseSize(id) {
     'session-weather': [overlaySizeNumber('sessionWeatherWidth', 464), overlaySizeNumber('sessionWeatherHeight', 496)],
     'pit-service': [overlaySizeNumber('pitServiceWidth', 530), overlaySizeNumber('pitServiceHeight', 707)]
   }[id] || [400, 300];
+}
+
+function standingsBaseHeight(overlayState, fullHeight, previewMode = 'off') {
+  const rows = standingsRecommendedRows(overlayState, previewMode);
+  return standingsHeightForRows(
+    rows,
+    fullHeight,
+    headerChromeEnabledForSizing('standings', overlayState, previewMode),
+    false);
+}
+
+function standingsRecommendedRows(overlayState, previewMode = 'off') {
+  const carsInClass = clampInteger(overlayState.carsInClass, 14, 1, 24);
+  const classSeparatorsEnabled = contentStateValueForSession(
+    overlayState,
+    'standings.class-separators.enabled',
+    'Multiclass sections',
+    true,
+    sizingSession('standings', previewMode));
+  if (!classSeparatorsEnabled) {
+    return carsInClass;
+  }
+
+  const otherRows = clampInteger(overlayState.otherClassRows, 2, 0, 6);
+  const classCount = otherRows > 0 ? 3 : 1;
+  return Math.max(1, Math.min(24, carsInClass + classCount + Math.max(0, classCount - 1) * otherRows));
+}
+
+function standingsHeightForRows(rowCount, persistedHeight, showHeader, showFooter) {
+  const rows = Math.max(1, Math.min(24, Number(rowCount || 0)));
+  const persistedRows = standingsVisibleRowsForHeight(persistedHeight, showHeader, showFooter);
+  if (rows <= persistedRows) return persistedHeight;
+
+  return Math.max(
+    persistedHeight,
+    standingsHeaderReserveHeight(showHeader)
+      + (showFooter ? 32 : 8)
+      + 1
+      + 30
+      + rows * (30 + 5));
+}
+
+function standingsVisibleRowsForHeight(height, showHeader, showFooter) {
+  const bodyHeight = Number(height || 0)
+    - standingsHeaderReserveHeight(showHeader)
+    - (showFooter ? 32 : 8)
+    - 1;
+  return Math.max(1, Math.floor((bodyHeight - 30) / (30 + 5)));
+}
+
+function standingsHeaderReserveHeight(showHeader) {
+  return showHeader ? 38 + 12 : 16;
 }
 
 function overlaySizeNumber(key, fallback) {
@@ -1364,7 +1430,7 @@ function pageDefinition(id, title, route, options = {}) {
       renderWhenTelemetryUnavailable: options.renderWhenTelemetryUnavailable ?? false,
       fadeWhenTelemetryUnavailable: options.fadeWhenTelemetryUnavailable ?? false,
       refreshIntervalMilliseconds: options.refreshIntervalMilliseconds ?? 250,
-      forwardQueryParameters: options.forwardQueryParameters ?? ['preview', 'frame', 'rel', 'spoofFocus', 'focus', 'pitService', 'trackMap', 'fixture', 'streamChatFixture', 'sourceStart', 'sourceEnd', 'frameStart', 'frameEnd', 'replaySpeed']
+      forwardQueryParameters: options.forwardQueryParameters ?? ['preview', 'frame', 'rel', 'spoofFocus', 'focus', 'pitService', 'trackMap', 'fixture', 'garageImageMode', 'streamChatFixture', 'sourceStart', 'sourceEnd', 'frameStart', 'frameEnd', 'replaySpeed']
     }
   };
 }
@@ -2183,24 +2249,6 @@ function carRadarDisplayModel(page, live, settings = {}) {
   const multiclassWarningSeconds = clampInteger(settings?.multiclassWarningSeconds, 5, 3, 10);
   const radarVisibilitySeconds = clampInteger(settings?.radarVisibilitySeconds, 2, 2, 5);
   const strongestMulticlassApproach = carRadarMulticlassApproach(spatial, multiclassWarningSeconds);
-  const hasCurrentSignal = Boolean(
-    spatial.hasCarLeft
-    || spatial.hasCarRight
-    || (showMulticlassWarning && strongestMulticlassApproach)
-    || spatial.cars?.some((car) => isInRadarRange(car, radarVisibilitySeconds)));
-  const status = !inCar
-    ? 'waiting for player in car'
-    : spatial.hasData === false
-      ? 'waiting for radar'
-      : spatial.hasCarLeft && spatial.hasCarRight
-        ? 'cars both sides'
-        : spatial.hasCarLeft
-        ? 'car left'
-        : spatial.hasCarRight
-          ? 'car right'
-            : showMulticlassWarning && strongestMulticlassApproach
-              ? 'faster class'
-              : 'clear';
   const renderModel = carRadarRenderModelFromState({
     isAvailable: inCar,
     hasCarLeft: spatial.hasCarLeft === true,
@@ -2211,9 +2259,29 @@ function carRadarDisplayModel(page, live, settings = {}) {
     multiclassWarningSeconds,
     radarVisibilitySeconds,
     previewVisible: false,
-    hasCurrentSignal,
+    hasCurrentSignal: true,
     referenceCarClassColorHex: spatial.referenceCarClassColorHex
   });
+  const hasEffectiveLeft = renderModel.cars?.some((car) => car.kind === 'side-left') === true;
+  const hasEffectiveRight = renderModel.cars?.some((car) => car.kind === 'side-right') === true;
+  const hasCurrentSignal = Boolean(
+    hasEffectiveLeft
+    || hasEffectiveRight
+    || (showMulticlassWarning && strongestMulticlassApproach)
+    || spatial.cars?.some((car) => isInRadarRange(car, radarVisibilitySeconds)));
+  const status = !inCar
+    ? 'waiting for player in car'
+    : spatial.hasData === false
+      ? 'waiting for radar'
+      : hasEffectiveLeft && hasEffectiveRight
+        ? 'cars both sides'
+        : hasEffectiveLeft
+        ? 'car left'
+        : hasEffectiveRight
+          ? 'car right'
+            : showMulticlassWarning && strongestMulticlassApproach
+              ? 'faster class'
+              : 'clear';
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
@@ -2223,8 +2291,8 @@ function carRadarDisplayModel(page, live, settings = {}) {
     shouldRender: renderModel.shouldRender,
     carRadar: {
       isAvailable: inCar,
-      hasCarLeft: spatial.hasCarLeft === true,
-      hasCarRight: spatial.hasCarRight === true,
+      hasCarLeft: hasEffectiveLeft,
+      hasCarRight: hasEffectiveRight,
       cars: spatial.cars || [],
       strongestMulticlassApproach: showMulticlassWarning ? strongestMulticlassApproach : null,
       showMulticlassWarning,
@@ -2270,7 +2338,6 @@ export function carRadarRenderModelFromState({
   hasCurrentSignal = false,
   referenceCarClassColorHex = null
 } = {}) {
-  const shouldRender = (isAvailable && hasCurrentSignal) || previewVisible;
   const empty = () => ({
     shouldRender: false,
     width: 300,
@@ -2284,23 +2351,31 @@ export function carRadarRenderModelFromState({
     labels: [],
     multiclassArc: null
   });
-  if (!shouldRender) return empty();
 
   const currentCars = uniqueRadarCars(
     (Array.isArray(cars) ? cars : []).filter((car) => isInRadarRange(car, radarVisibilitySeconds)),
     radarVisibilitySeconds);
   const sideAttachments = sideWarningAttachments(hasCarLeft, hasCarRight, currentCars, radarVisibilitySeconds);
-  const renderCars = [
-    ...radarCarPlacements(currentCars, sideAttachments, radarVisibilitySeconds).map((placement) => nearbyCarRectangle(placement, radarVisibilitySeconds)),
-    ...sideWarningRectangles(hasCarLeft, hasCarRight, sideAttachments, radarVisibilitySeconds),
-    playerCarRectangle(referenceCarClassColorHex)
-  ];
-  const rings = [distanceRing(1), distanceRing(2)];
-  const labels = rings.map((ring) => ring.label).filter(Boolean);
+  const effectiveHasCarLeft = hasCarLeft && Boolean(sideAttachments.left);
+  const effectiveHasCarRight = hasCarRight && Boolean(sideAttachments.right);
   const multiclassArc = showMulticlassWarning && strongestMulticlassApproach
     && isInCarRadarMulticlassWarningRange(strongestMulticlassApproach, multiclassWarningSeconds)
     ? multiclassApproachArc(strongestMulticlassApproach)
     : null;
+  const hasRenderableSignal = currentCars.length > 0
+    || effectiveHasCarLeft
+    || effectiveHasCarRight
+    || Boolean(multiclassArc);
+  const shouldRender = previewVisible || (isAvailable && hasRenderableSignal);
+  if (!shouldRender) return empty();
+
+  const renderCars = [
+    ...radarCarPlacements(currentCars, sideAttachments, radarVisibilitySeconds).map((placement) => nearbyCarRectangle(placement, radarVisibilitySeconds)),
+    ...sideWarningRectangles(effectiveHasCarLeft, effectiveHasCarRight, sideAttachments, radarVisibilitySeconds),
+    playerCarRectangle(referenceCarClassColorHex)
+  ];
+  const rings = [distanceRing(1), distanceRing(2)];
+  const labels = rings.map((ring) => ring.label).filter(Boolean);
   if (multiclassArc?.label) labels.push(multiclassArc.label);
 
   return {
@@ -2775,15 +2850,24 @@ function trackMapDisplayModel(page, live, settings) {
   const hasGeneratedTrackMap = hasGeneratedTrackMapAsset(settings?.trackMap);
   const renderModel = trackMapRenderModel(live, settings);
   const markers = trackMapMarkers(live);
+  const telemetryAvailable = telemetryIsAvailable(live);
+  const hasMarkers = renderModel.markers.length > 0;
+  const shouldRender = telemetryAvailable && renderModel.primitives.length > 0;
   return {
     ...emptyDisplayModel(page.page.id, page.title),
-    status: hasGeneratedTrackMap ? 'live' : 'track map | circle fallback',
+    status: telemetryAvailable
+      ? hasGeneratedTrackMap
+        ? hasMarkers ? 'live' : 'live | no active markers'
+        : hasMarkers ? 'track map | circle fallback' : 'track map | circle fallback | no active markers'
+      : 'waiting for telemetry',
     headerItems: [],
-    source: hasGeneratedTrackMap
-      ? 'source: IBT-derived Nurburgring 24h track map | live position telemetry'
-      : 'source: live position telemetry | map fallback: no generated track map',
+    source: telemetryAvailable
+      ? hasGeneratedTrackMap
+        ? `source: IBT-derived Nurburgring 24h track map | live position telemetry${hasMarkers ? '' : ' | no active markers'}`
+        : `source: live position telemetry | map fallback: no generated track map${hasMarkers ? '' : ' | no active markers'}`
+      : 'source: waiting',
     bodyKind: 'track-map',
-    shouldRender: telemetryIsAvailable(live) && renderModel.markers.length > 0,
+    shouldRender,
     trackMap: {
       markers,
       sectors: live?.models?.trackMap?.sectors || [],
@@ -2811,10 +2895,9 @@ function telemetryIsAvailable(live) {
 function garageCoverDisplayModel(page, live, settings) {
   const garageVisible = live?.models?.raceEvents?.isGarageVisible === true;
   const browserSettings = settings?.garageCover || settings || {};
-  const previewVisible = browserSettings.previewVisible === true;
   const detection = garageCoverDetection(live, garageVisible);
-  const shouldCover = previewVisible || !detection.isFresh || garageVisible;
-  const status = previewVisible ? 'preview visible' : detection.displayText;
+  const shouldCover = detection.isFresh === true && garageVisible;
+  const status = detection.displayText;
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
@@ -3006,12 +3089,13 @@ function trackMapMarkers(live) {
   const referenceCarIdx = live?.models?.reference?.focusCarIdx
     ?? live?.models?.timing?.focusCarIdx
     ?? live?.models?.driverDirectory?.focusCarIdx;
+  const allowNonGridTimingMarkers = trackMapAllowsNonGridTimingMarkers(live);
   const markers = new Map();
   for (const row of rows) {
     if (row.hasSpatialProgress === false || !Number.isFinite(row.lapDistPct) || row.lapDistPct < 0) continue;
     const scoringRow = scoringByCarIdx.get(row.carIdx) || null;
     const isFocus = row.isFocus === true || row.carIdx === referenceCarIdx || scoringRow?.isFocus === true;
-    if (!isFocus && row.hasTakenGrid !== true) continue;
+    if (!isFocus && row.hasTakenGrid !== true && !allowNonGridTimingMarkers) continue;
     markers.set(row.carIdx, {
       carIdx: row.carIdx,
       lapDistPct: normalizeProgress(row.lapDistPct),
@@ -3071,6 +3155,16 @@ function trackMapMarkers(live) {
   }
 
   return [...markers.values()].sort((left, right) => Number(left.isFocus) - Number(right.isFocus) || left.carIdx - right.carIdx);
+}
+
+function trackMapAllowsNonGridTimingMarkers(live) {
+  const sessionType = String(live?.models?.session?.sessionType
+    || live?.models?.session?.eventType
+    || live?.models?.session?.sessionName
+    || '').toLowerCase();
+  return sessionType.includes('practice')
+    || sessionType.includes('qualif')
+    || sessionType.includes('offline testing');
 }
 
 function trackMapIsPlayerFocus(reference, carIdx, isFocus, fallback) {
@@ -3193,7 +3287,7 @@ function trackMapRenderMarker(marker, trackMap) {
     ? marker.isFocus
       ? Math.max(5.7, 5.1 + label.length * 2.9)
       : Math.max(5.7, 3.9 + Math.max(0, label.length - 2) * 1.9)
-    : marker.isFocus ? 5.7 : Math.max(1.2, 3.6 - 2);
+    : marker.isFocus ? 5.7 : 4.8;
   const alertPulseProgress = marker.alertKind === 'off-track'
     ? Math.max(0, Math.min(1, finiteNumberOr(marker.alertPulseProgress, 0.25)))
     : 0;
@@ -3209,7 +3303,7 @@ function trackMapRenderMarker(marker, trackMap) {
     isPlayerFocus: marker.isPlayerFocus === true,
     fill: marker.alertKind === 'off-track'
       ? rgba(255, 218, 89, 255)
-      : marker.isFocus && marker.isPlayerFocus === true ? rgba(0, 232, 255, 255) : classBorderColor(marker.classColorHex, 1),
+      : classBorderColor(marker.classColorHex, 1),
     stroke: rgba(8, 14, 18, 230),
     strokeWidth: marker.isFocus ? 2 : 1.4,
     label,

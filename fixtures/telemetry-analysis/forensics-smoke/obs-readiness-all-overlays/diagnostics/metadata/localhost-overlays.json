@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "clientCounts": {
+    "obs": 64
+  },
+  "pathCounts": {
+    "/overlays/relative": 1,
+    "/overlays/garage-cover": 1,
+    "/overlays/fuel-calculator": 1,
+    "/api/overlay-model/fuel-calculator": 7,
+    "/api/overlay-model/session-weather": 5,
+    "/overlays/pit-service": 1,
+    "/api/overlay-model/pit-service": 8,
+    "/overlays/flags": 1,
+    "/api/overlay-model/flags": 6,
+    "/overlays/track-map": 1,
+    "/api/overlay-model/track-map": 3,
+    "/overlays/car-radar": 1,
+    "/api/overlay-model/car-radar": 6,
+    "/overlays/gap-to-leader": 1,
+    "/api/overlay-model/gap-to-leader": 6,
+    "/overlays/stream-chat": 1,
+    "/api/overlay-model/stream-chat": 4
+  },
+  "pathClientCounts": {
+    "/overlays/relative|obs": 1,
+    "/overlays/garage-cover|obs": 1,
+    "/overlays/fuel-calculator|obs": 1,
+    "/api/overlay-model/fuel-calculator|obs": 7,
+    "/api/overlay-model/session-weather|obs": 5,
+    "/overlays/pit-service|obs": 1,
+    "/api/overlay-model/pit-service|obs": 8,
+    "/overlays/flags|obs": 1,
+    "/api/overlay-model/flags|obs": 6,
+    "/overlays/track-map|obs": 1,
+    "/api/overlay-model/track-map|obs": 3,
+    "/overlays/car-radar|obs": 1,
+    "/api/overlay-model/car-radar|obs": 6,
+    "/overlays/gap-to-leader|obs": 1,
+    "/api/overlay-model/gap-to-leader|obs": 6,
+    "/overlays/stream-chat|obs": 1,
+    "/api/overlay-model/stream-chat|obs": 4
+  },
+  "sourceUrlCounts": {
+    "/overlays/relative?clientKind=obs": 1,
+    "/overlays/garage-cover?clientKind=obs": 1,
+    "/overlays/fuel-calculator?clientKind=obs": 1,
+    "/api/overlay-model/fuel-calculator?clientKind=obs": 7,
+    "/api/overlay-model/session-weather?clientKind=obs": 5,
+    "/overlays/pit-service?clientKind=obs": 1,
+    "/api/overlay-model/pit-service?clientKind=obs": 8,
+    "/overlays/flags?clientKind=obs": 1,
+    "/api/overlay-model/flags?clientKind=obs": 6,
+    "/overlays/track-map?clientKind=obs": 1,
+    "/api/overlay-model/track-map?clientKind=obs": 3,
+    "/overlays/car-radar?clientKind=obs": 1,
+    "/api/overlay-model/car-radar?clientKind=obs": 6,
+    "/overlays/gap-to-leader?clientKind=obs": 1,
+    "/api/overlay-model/gap-to-leader?clientKind=obs": 6,
+    "/overlays/stream-chat?clientKind=obs": 1,
+    "/api/overlay-model/stream-chat?clientKind=obs": 4
+  },
+  "sourceUrlClientCounts": {
+    "/overlays/relative?clientKind=obs|obs": 1,
+    "/overlays/garage-cover?clientKind=obs|obs": 1,
+    "/overlays/fuel-calculator?clientKind=obs|obs": 1,
+    "/api/overlay-model/fuel-calculator?clientKind=obs|obs": 7,
+    "/api/overlay-model/session-weather?clientKind=obs|obs": 5,
+    "/overlays/pit-service?clientKind=obs|obs": 1,
+    "/api/overlay-model/pit-service?clientKind=obs|obs": 8,
+    "/overlays/flags?clientKind=obs|obs": 1,
+    "/api/overlay-model/flags?clientKind=obs|obs": 6,
+    "/overlays/track-map?clientKind=obs|obs": 1,
+    "/api/overlay-model/track-map?clientKind=obs|obs": 3,
+    "/overlays/car-radar?clientKind=obs|obs": 1,
+    "/api/overlay-model/car-radar?clientKind=obs|obs": 6,
+    "/overlays/gap-to-leader?clientKind=obs|obs": 1,
+    "/api/overlay-model/gap-to-leader?clientKind=obs|obs": 6,
+    "/overlays/stream-chat?clientKind=obs|obs": 1,
+    "/api/overlay-model/stream-chat?clientKind=obs|obs": 4
+  },
+  "pageEventOverlayCounts": {
+    "relative|page-loaded": 1,
+    "garage-cover|page-loaded": 1,
+    "fuel-calculator|page-loaded": 1,
+    "pit-service|page-loaded": 1,
+    "pit-service|model-hidden": 3,
+    "flags|page-loaded": 1,
+    "flags|model-render": 2,
+    "track-map|page-loaded": 1,
+    "track-map|model-error": 1,
+    "car-radar|page-loaded": 1,
+    "car-radar|model-render": 2,
+    "gap-to-leader|page-loaded": 1,
+    "gap-to-leader|model-render": 2,
+    "stream-chat|page-loaded": 1,
+    "stream-chat|model-render": 1
+  },
+  "recentRequests": [
+    {
+      "path": "/overlays/fuel-calculator",
+      "sourceUrl": "/overlays/fuel-calculator?clientKind=obs",
+      "clientKind": "obs"
+    },
+    {
+      "path": "/api/overlay-model/fuel-calculator",
+      "sourceUrl": "/api/overlay-model/fuel-calculator?clientKind=obs",
+      "clientKind": "obs"
+    },
+    {
+      "path": "/api/overlay-model/session-weather",
+      "sourceUrl": "/api/overlay-model/session-weather?clientKind=obs",
+      "clientKind": "obs"
+    },
+    {
+      "path": "/api/overlay-model/track-map",
+      "sourceUrl": "/api/overlay-model/track-map?clientKind=obs",
+      "clientKind": "obs"
+    }
+  ],
+  "recentPageEvents": [
+    {
+      "overlayId": "relative",
+      "event": "page-loaded",
+      "clientKind": "obs",
+      "sourceUrl": "/overlays/relative?clientKind=obs"
+    },
+    {
+      "overlayId": "fuel-calculator",
+      "event": "page-loaded",
+      "clientKind": "obs",
+      "sourceUrl": "/overlays/fuel-calculator?clientKind=obs"
+    },
+    {
+      "overlayId": "pit-service",
+      "event": "model-hidden",
+      "clientKind": "obs",
+      "sourceUrl": "/overlays/pit-service?clientKind=obs",
+      "shouldRender": false,
+      "status": "hidden | no pit service commands"
+    },
+    {
+      "overlayId": "flags",
+      "event": "model-render",
+      "clientKind": "obs",
+      "sourceUrl": "/overlays/flags?clientKind=obs",
+      "shouldRender": true,
+      "status": "live | flags"
+    },
+    {
+      "overlayId": "track-map",
+      "event": "model-error",
+      "clientKind": "obs",
+      "sourceUrl": "/overlays/track-map?clientKind=obs",
+      "error": "render failed"
+    }
+  ]
+}

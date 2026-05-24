@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import re
 import struct
 import subprocess
 import sys
 import zlib
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Callable, Optional
 
 
@@ -209,7 +210,18 @@ def settings_component_png_sizes() -> dict[str, tuple[int, int]]:
     }
 
 
+def future_settings_component_png_sizes() -> dict[str, tuple[int, int]]:
+    settings_geometry = settings_geometry_contract_for_constants()
+    return {
+        "components/settings-future/visibility-context.png": (
+            settings_geometry_int(settings_geometry, "panelSmallWidth", 392),
+            settings_geometry_int(settings_geometry, "overlayControlsPanelHeight", 266),
+        ),
+    }
+
+
 SETTINGS_COMPONENT_PNG_SIZES = settings_component_png_sizes()
+FUTURE_SETTINGS_COMPONENT_PNG_SIZES = future_settings_component_png_sizes()
 
 WINDOWS_MINIMUM_PNGS = {
     "states/settings-general.png": SETTINGS_CAPTURE_SIZE,
@@ -365,6 +377,26 @@ BROWSER_ONLY_OVERLAY_IDS = {
 
 BROWSER_FULL_CANVAS_COMPARISON_OVERLAYS: set[str] = set()
 
+MIN_SCALE_EXPECTED_SIZES = {
+    ("standings", "min-scale"): (406, 188),
+    ("fuel-calculator", "min-scale"): (302, 179),
+    ("relative", "min-scale"): (235, 185),
+    ("track-map", "min-scale"): (216, 216),
+    ("stream-chat", "min-scale"): (228, 312),
+    ("flags", "min-scale"): (216, 102),
+    ("session-weather", "min-scale"): (278, 298),
+    ("pit-service", "min-scale"): (318, 424),
+    ("input-state", "min-scale"): (312, 156),
+    ("car-radar", "min-scale"): (180, 180),
+    ("gap-to-leader", "min-scale"): (392, 202),
+    ("garage-cover", "min-scale"): (864, 540),
+}
+
+MIN_SCALE_EFFECTIVE_BROWSER_SOURCE_SIZES = {
+    **MIN_SCALE_EXPECTED_SIZES,
+    ("garage-cover", "min-scale"): (768, 432),
+}
+
 OVERLAY_VARIANT_SPECS = (
     ("fuel-calculator", "waiting", "fixture=fuel-waiting", True, None),
     ("fuel-calculator", "calculating", "fixture=fuel-calculating", True, None),
@@ -383,16 +415,24 @@ OVERLAY_VARIANT_SPECS = (
     ("standings", "focused-class-only", "fixture=standings-focused-class-only", True, None),
     ("standings", "starting-grid", "fixture=standings-starting-grid", True, None),
     ("standings", "no-content", "fixture=standings-no-content", True, None),
+    ("standings", "content-off-chrome-on", "fixture=standings-content-off-chrome-on", True, None),
+    ("standings", "no-results-chrome-on", "fixture=standings-no-results-chrome-on", True, None),
+    ("standings", "min-scale", "fixture=standings-min-scale", True, None),
     ("relative", "chrome-off", "fixture=chrome-off", True, None),
     ("relative", "rightmost-evidence", "fixture=rightmost-evidence", True, None),
     ("relative", "driver-only", "fixture=relative-driver-only", True, None),
     ("relative", "position-driver", "fixture=relative-position-driver", True, None),
     ("relative", "rows-2", "fixture=relative-rows-2", True, None),
     ("relative", "no-content", "fixture=relative-no-content", True, None),
+    ("relative", "min-scale", "fixture=relative-min-scale", True, None),
     ("fuel-calculator", "chrome-off", "fixture=chrome-off", True, None),
+    ("fuel-calculator", "min-scale", "fixture=fuel-calculator-min-scale", True, None),
     ("gap-to-leader", "chrome-off", "fixture=chrome-off", True, None),
+    ("gap-to-leader", "min-scale", "fixture=gap-to-leader-min-scale", True, None),
     ("session-weather", "chrome-off", "fixture=chrome-off", True, None),
+    ("session-weather", "min-scale", "fixture=session-weather-min-scale", True, None),
     ("pit-service", "chrome-off", "fixture=chrome-off", True, None),
+    ("pit-service", "min-scale", "fixture=pit-service-min-scale", True, None),
     ("session-weather", "missing", "fixture=session-weather-missing", True, None),
     ("session-weather", "session-off", "fixture=session-weather-session-off", True, None),
     ("session-weather", "weather-off", "fixture=session-weather-weather-off", True, None),
@@ -414,17 +454,29 @@ OVERLAY_VARIANT_SPECS = (
     ("car-radar", "right", "fixture=car-radar-right", True, None),
     ("car-radar", "both-sides", "fixture=car-radar-both-sides", True, None),
     ("car-radar", "clear", "fixture=car-radar-clear", True, None),
+    ("car-radar", "side-no-placement", "fixture=car-radar-side-no-placement", True, None),
+    ("car-radar", "min-scale", "fixture=car-radar-min-scale", True, None),
     ("gap-to-leader", "no-cars", "fixture=gap-no-cars", True, None),
-    ("gap-to-leader", "trend-row-off", "fixture=gap-trend-row-off", True, None),
+    ("gap-to-leader", "long-tail-real-data", "fixture=gap-long-tail-real-data", False, None),
+    ("gap-to-leader", "pit-window-real-data", "fixture=gap-pit-window-real-data", False, None),
+    ("gap-to-leader", "threat-capture-shaped", "fixture=gap-threat-capture-shaped", False, None),
+    ("gap-to-leader", "endurance-domain-capture-shaped", "fixture=gap-endurance-domain-capture-shaped", False, None),
+    ("gap-to-leader", "tire-trend-off", "fixture=gap-tire-trend-off", True, None),
     ("gap-to-leader", "trend-off", "fixture=gap-trend-off", True, None),
     ("gap-to-leader", "graph-off", "fixture=gap-graph-off", True, None),
     ("track-map", "circle-fallback", "trackMap=fallback", True, "track-map-fallback"),
     ("track-map", "no-markers", "fixture=track-map-no-markers", True, None),
+    ("track-map", "focus-practice-real-data", "fixture=track-map-focus-practice-real-data", False, None),
+    ("track-map", "player-focus-class-color", "fixture=track-map-player-focus-class-color", True, None),
+    ("track-map", "min-scale", "fixture=track-map-min-scale", True, None),
     ("flags", "all-kinds", "fixture=flags-all-kinds", True, None),
+    ("flags", "min-scale", "fixture=flags-min-scale", True, None),
     ("garage-cover", "hidden", "fixture=garage-hidden", False, None),
     ("garage-cover", "garage-visible", "fixture=garage-visible", False, None),
     ("garage-cover", "stale", "fixture=garage-stale", False, None),
     ("garage-cover", "disconnected", "fixture=garage-disconnected", False, None),
+    ("garage-cover", "min-scale", "fixture=garage-visible-min-scale", False, None),
+    ("stream-chat", "min-scale", "fixture=stream-chat-min-scale", True, None),
     ("stream-chat", "twitch-rich", "fixture=stream-chat-twitch-rich", True, None),
     ("stream-chat", "streamlabs-configured", "fixture=stream-chat-streamlabs-configured", True, None),
 )
@@ -459,8 +511,8 @@ OVERLAY_VARIANTS_ALLOW_EMPTY_TEXT_SAMPLE = {
     ("car-radar", "right"),
     ("car-radar", "both-sides"),
     ("car-radar", "clear"),
+    ("car-radar", "side-no-placement"),
     ("gap-to-leader", "no-cars"),
-    ("track-map", "no-markers"),
     ("flags", "all-kinds"),
 }
 
@@ -476,8 +528,9 @@ OVERLAY_VARIANTS_ALLOW_LOW_PIXEL_ENTROPY = {
     ("pit-service", "no-data"),
     ("car-radar", "clear"),
     ("gap-to-leader", "no-cars"),
-    ("track-map", "no-markers"),
     ("garage-cover", "hidden"),
+    ("garage-cover", "stale"),
+    ("garage-cover", "disconnected"),
 }
 
 OVERLAY_VARIANT_MIN_UNIQUE_BYTES = {
@@ -492,8 +545,9 @@ OVERLAY_VARIANT_MIN_UNIQUE_BYTES = {
     ("pit-service", "no-data"): 1,
     ("car-radar", "clear"): 1,
     ("gap-to-leader", "no-cars"): 1,
-    ("track-map", "no-markers"): 1,
     ("garage-cover", "hidden"): 1,
+    ("garage-cover", "stale"): 1,
+    ("garage-cover", "disconnected"): 1,
 }
 
 OVERLAY_VARIANT_MIN_BYTE_RANGE = {
@@ -508,8 +562,47 @@ OVERLAY_VARIANT_MIN_BYTE_RANGE = {
     ("pit-service", "no-data"): 0,
     ("car-radar", "clear"): 0,
     ("gap-to-leader", "no-cars"): 0,
-    ("track-map", "no-markers"): 0,
     ("garage-cover", "hidden"): 0,
+    ("garage-cover", "stale"): 0,
+    ("garage-cover", "disconnected"): 0,
+}
+
+HIDDEN_NO_RENDER_VARIANT_REASON_TOKENS = {
+    ("fuel-calculator", "waiting"): ("waiting", "local fuel context"),
+    ("fuel-calculator", "no-data"): ("waiting", "fuel telemetry"),
+    ("session-weather", "no-data"): ("waiting", "session telemetry"),
+    ("pit-service", "no-data"): ("waiting", "pit telemetry"),
+    ("input-state", "waiting"): ("waiting", "car telemetry"),
+    ("input-state", "no-data"): ("waiting", "car telemetry"),
+    ("input-state", "no-content"): ("hidden", "no enabled content"),
+    ("gap-to-leader", "no-cars"): ("hidden", "race gap", "no cars", "no gap"),
+}
+
+HIDDEN_NO_RENDER_FORBIDDEN_LAYOUT_ROLES = {
+    "flag-cell",
+    "gap-graph",
+    "gap-metric-row",
+    "gap-series",
+    "graph",
+    "grid-row",
+    "grid-section",
+    "header-item",
+    "header-items",
+    "input-bar",
+    "input-graph",
+    "input-item",
+    "input-rail",
+    "input-readout",
+    "input-wheel",
+    "metric",
+    "metric-row",
+    "metric-section",
+    "metric-segment",
+    "source",
+    "table-cell",
+    "table-row",
+    "track-map-canvas",
+    "track-map-marker",
 }
 
 WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS = {
@@ -522,6 +615,7 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS = {
     ("standings", "class-separators-off"),
     ("standings", "focused-class-only"),
     ("standings", "no-content"),
+    ("standings", "content-off-chrome-on"),
     ("session-weather", "missing"),
     ("session-weather", "session-off"),
     ("session-weather", "weather-off"),
@@ -552,14 +646,21 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("standings", "focused-class-only"): (677, 240),
     ("standings", "starting-grid"): (677, 313),
     ("standings", "no-content"): (284, 28),
+    ("standings", "content-off-chrome-on"): (284, 40),
+    ("standings", "no-results-chrome-on"): (677, 40),
+    ("standings", "min-scale"): (406, 188),
     ("relative", "chrome-off"): (392, 274),
     ("relative", "rightmost-evidence"): (440, 308),
     ("relative", "driver-only"): (274, 308),
     ("relative", "position-driver"): (322, 308),
     ("relative", "rows-2"): (392, 246),
-    ("relative", "no-content"): (360, 308),
+    ("relative", "no-content"): (360, 274),
     ("gap-to-leader", "chrome-off"): (654, 298),
-    ("gap-to-leader", "trend-row-off"): (654, 336),
+    ("gap-to-leader", "long-tail-real-data"): (654, 336),
+    ("gap-to-leader", "pit-window-real-data"): (654, 336),
+    ("gap-to-leader", "threat-capture-shaped"): (654, 336),
+    ("gap-to-leader", "endurance-domain-capture-shaped"): (654, 336),
+    ("gap-to-leader", "tire-trend-off"): (654, 336),
     ("gap-to-leader", "trend-off"): (444, 336),
     ("gap-to-leader", "graph-off"): (360, 336),
     ("session-weather", "chrome-off"): (464, 458),
@@ -567,6 +668,11 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("input-state", "graph-only"): (380, 260),
     ("input-state", "rail-only"): (276, 260),
 }
+WEB_OVERLAY_VARIANT_EXPECTED_SIZES.update({
+    key: size
+    for key, size in MIN_SCALE_EXPECTED_SIZES.items()
+    if key != ("input-state", "min-scale")
+})
 
 WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZES = {
     # Native chrome-off screenshots prove the chrome height actually collapses.
@@ -587,17 +693,24 @@ WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("standings", "class-separators-off"): (677, 313),
     ("standings", "focused-class-only"): (677, 313),
     ("standings", "starting-grid"): (677, 313),
-    ("standings", "no-content"): (284, 313),
+    ("standings", "no-content"): (284, 28),
+    ("standings", "content-off-chrome-on"): (284, 40),
+    ("standings", "no-results-chrome-on"): (677, 40),
     ("relative", "chrome-off"): (392, 274),
     ("relative", "rightmost-evidence"): (440, 308),
     ("relative", "driver-only"): (274, 308),
     ("relative", "position-driver"): (322, 308),
     ("relative", "rows-2"): (392, 246),
-    ("relative", "no-content"): (360, 308),
+    ("relative", "no-content"): (360, 274),
     ("input-state", "graph-only"): (380, 260),
     ("input-state", "rail-only"): (276, 260),
     ("input-state", "no-content"): (276, 260),
 }
+WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZES.update({
+    key: size
+    for key, size in MIN_SCALE_EXPECTED_SIZES.items()
+    if key[0] != "garage-cover"
+})
 
 WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZE_EXEMPTIONS = {
     ("session-weather", "missing"),
@@ -651,6 +764,8 @@ WEB_OVERLAY_PRIMARY_MIN_UNIQUE_BYTES = {
 WEB_OVERLAY_PRIMARY_MIN_BYTE_RANGE = {
     "garage-cover": 0,
 }
+
+GARAGE_COVER_TRANSPARENT_COMPOSITING_MODE = "transparent-browser-source"
 
 WINDOWS_NATIVE_OVERLAY_BODIES = {
     "standings": "table",
@@ -725,71 +840,91 @@ WAITING_STATUS_TOKENS = (
     "waiting for radar",
 )
 
-BROWSER_REVIEW_SETTINGS_PNGS = [
-    "settings/general.png",
-    "settings/general-update-available.png",
-    "settings/general-update-disabled.png",
-    "settings/general-update-not-installed.png",
-    "settings/general-update-idle.png",
-    "settings/general-update-up-to-date.png",
-    "settings/general-update-checking.png",
-    "settings/general-update-downloading.png",
-    "settings/general-update-pending-restart.png",
-    "settings/general-update-applying.png",
-    "settings/general-update-failed.png",
-    "settings/diagnostics.png",
-    "settings/support.png",
-    "settings/inputs.png",
-    "settings/inputs-content.png",
-    "settings/general-preview-practice.png",
-    "settings/general-preview-qualifying.png",
-    "settings/general-preview-race.png",
-    "settings/standings.png",
-    "settings/standings-content.png",
-    "settings/standings-header.png",
-    "settings/relative.png",
-    "settings/relative-content.png",
-    "settings/relative-header.png",
-    "settings/gap-to-leader.png",
-    "settings/gap-to-leader-content.png",
-    "settings/gap-to-leader-header.png",
-    "settings/track-map.png",
-    "settings/track-map-content.png",
-    "settings/stream-chat.png",
-    "settings/stream-chat-content.png",
-    "settings/stream-chat-twitch.png",
-    "settings/garage-cover.png",
-    "settings/garage-cover-preview.png",
-    "settings/fuel-calculator.png",
-    "settings/fuel-calculator-content.png",
-    "settings/fuel-calculator-header.png",
-    "settings/input-state.png",
-    "settings/input-state-content.png",
-    "settings/car-radar.png",
-    "settings/flags.png",
-    "settings/flags-content.png",
-    "settings/session-weather.png",
-    "settings/session-weather-content.png",
-    "settings/session-weather-header.png",
-    "settings/pit-service.png",
-    "settings/pit-service-content.png",
-    "settings/pit-service-header.png",
-]
+SETTINGS_UPDATE_STATUSES = (
+    "disabled",
+    "not-installed",
+    "idle",
+    "up-to-date",
+    "available",
+    "checking",
+    "downloading",
+    "pending-restart",
+    "applying",
+    "failed",
+)
+
+SETTINGS_UPDATE_STATUS_TEXT_BY_STATUS = {
+    "disabled": "Disabled.",
+    "not-installed": "Dev run.",
+    "idle": "Ready.",
+    "up-to-date": "Current v1.0.3.",
+    "available": "v1.0.4 available.",
+    "checking": "Checking...",
+    "downloading": "Downloading v1.0.4: 42%.",
+    "pending-restart": "v1.0.4 pending restart.",
+    "applying": "Restarting for v1.0.4.",
+    "failed": "Check failed.",
+}
+
+SETTINGS_REGIONS_BY_OVERLAY = {
+    "garage-cover": ("general", "preview"),
+    "stream-chat": ("general", "content", "twitch"),
+    "car-radar": ("general",),
+    "standings": ("general", "content", "header"),
+    "relative": ("general", "content", "header"),
+    "fuel-calculator": ("general", "content", "header"),
+    "gap-to-leader": ("general", "content", "header"),
+    "session-weather": ("general", "content", "header"),
+    "pit-service": ("general", "content", "header"),
+}
+
+
+def settings_regions_for_overlay(overlay_id: str) -> tuple[str, ...]:
+    return SETTINGS_REGIONS_BY_OVERLAY.get(overlay_id, ("general", "content"))
+
+
+def settings_app_screenshot_path(name: str) -> str:
+    return f"settings/app/{name}.png"
+
+
+def settings_update_screenshot_path(status: str) -> str:
+    return settings_app_screenshot_path(f"update-{status}")
+
+
+def settings_preview_screenshot_path(mode: str) -> str:
+    return settings_app_screenshot_path(f"preview-{mode}")
+
+
+def settings_tab_screenshot_path(tab: str, region: str = "general") -> str:
+    file_name = "general" if region == "general" else region
+    return f"settings/{tab}/{file_name}.png"
+
+
+def browser_review_settings_pngs_for_overlay_ids(overlay_ids: list[str]) -> list[str]:
+    paths = [
+        settings_app_screenshot_path("general"),
+        *(settings_update_screenshot_path(status) for status in SETTINGS_UPDATE_STATUSES),
+        settings_tab_screenshot_path("support", "diagnostics"),
+        settings_tab_screenshot_path("support"),
+        settings_tab_screenshot_path("input-state"),
+        settings_tab_screenshot_path("input-state", "content"),
+        *(settings_preview_screenshot_path(mode) for mode in PREVIEW_MODES),
+    ]
+    for overlay_id in overlay_ids:
+        for region in settings_regions_for_overlay(overlay_id):
+            paths.append(settings_tab_screenshot_path(overlay_id, region))
+    return list(dict.fromkeys(paths))
+
+
+BROWSER_REVIEW_SETTINGS_PNGS = browser_review_settings_pngs_for_overlay_ids(BROWSER_REVIEW_OVERLAY_IDS)
 
 BROWSER_REVIEW_UPDATE_STATUS_TEXT = {
-    "settings/general-update-disabled.png": "Disabled.",
-    "settings/general-update-not-installed.png": "Dev run.",
-    "settings/general-update-idle.png": "Ready.",
-    "settings/general-update-up-to-date.png": "Current v1.0.3.",
-    "settings/general-update-available.png": "v1.0.4 available.",
-    "settings/general-update-checking.png": "Checking...",
-    "settings/general-update-downloading.png": "Downloading v1.0.4: 42%.",
-    "settings/general-update-pending-restart.png": "v1.0.4 pending restart.",
-    "settings/general-update-applying.png": "Restarting for v1.0.4.",
-    "settings/general-update-failed.png": "Check failed.",
+    settings_update_screenshot_path(status): SETTINGS_UPDATE_STATUS_TEXT_BY_STATUS[status]
+    for status in SETTINGS_UPDATE_STATUSES
 }
 
 BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS = SETTINGS_COMPONENT_PNG_SIZES
+BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS = FUTURE_SETTINGS_COMPONENT_PNG_SIZES
 
 BROWSER_REVIEW_INSTALLER_PNGS = [
     "review-installer/welcome.png",
@@ -849,6 +984,7 @@ def main() -> int:
             "validator-mutations",
             "legacy-contact-sheets",
             "release-tutorial",
+            "forensics-screenshot-manifests",
         ),
         default="app-static",
         help="Screenshot artifact profile to validate.",
@@ -895,6 +1031,9 @@ def main() -> int:
         return finish(failures)
     if args.profile == "release-tutorial":
         validate_release_tutorial(root, args.min_unique_bytes, failures)
+        return finish(failures)
+    if args.profile == "forensics-screenshot-manifests":
+        validate_forensics_screenshot_manifests(root, args.min_unique_bytes, failures)
         return finish(failures)
 
     # "tracked" is retained as a compatibility alias for the old default.
@@ -1518,7 +1657,7 @@ def compare_browser_localhost_overlay_parity(
             failures,
         )
 
-    alias_paths = {path for path in localhost if path.startswith("localhost-overlays/") and "-alias-" in path}
+    alias_paths = {path for path in localhost if web_overlay_alias_parts(path, "localhost-overlays") is not None}
     expected_aliases = localhost_alias_manifest_paths()
     compare_sets("Localhost alias screenshot manifest parity", alias_paths, expected_aliases, failures)
 
@@ -1739,17 +1878,93 @@ def primary_web_overlay_screenshots(
     screenshots: dict[str, dict[str, object]],
     prefix: str,
 ) -> dict[str, dict[str, object]]:
+    indexed: dict[str, dict[str, object]] = {}
+    for path, screenshot in screenshots.items():
+        parts = web_overlay_path_parts(path, prefix)
+        if parts is None or web_overlay_alias_parts(path, prefix) is not None:
+            continue
+        overlay_id, slug = parts
+        indexed[f"{overlay_id}/{slug}.png"] = screenshot
+    return indexed
+
+
+def web_overlay_screenshot_path(prefix: str, overlay_id: str, slug: str) -> str:
+    return f"{prefix}/{overlay_id}/{slug}.png"
+
+
+def web_overlay_alias_screenshot_path(prefix: str, overlay_id: str, alias: str, slug: str = "default") -> str:
+    suffix = "" if slug == "default" else f"-{slug}"
+    return f"{prefix}/{overlay_id}/alias-{alias}{suffix}.png"
+
+
+def web_overlay_variant_screenshot_slug(overlay_id: str, slug: str, web_stem: object = None) -> str:
+    if (overlay_id, slug) == ("track-map", "circle-fallback"):
+        return "fallback"
+    return slug
+
+
+def web_overlay_variant_screenshot_path(
+    prefix: str,
+    overlay_id: str,
+    slug: str,
+    web_stem: object = None,
+) -> str:
+    return web_overlay_screenshot_path(prefix, overlay_id, web_overlay_variant_screenshot_slug(overlay_id, slug, web_stem))
+
+
+def web_overlay_path_parts(path: str, prefix: str) -> tuple[str, str] | None:
     prefix_with_slash = f"{prefix}/"
-    return {
-        path.removeprefix(prefix_with_slash): screenshot
-        for path, screenshot in screenshots.items()
-        if path.startswith(prefix_with_slash) and "-alias-" not in path
-    }
+    if not path.startswith(prefix_with_slash) or not path.endswith(".png"):
+        return None
+
+    stem = path.removeprefix(prefix_with_slash).removesuffix(".png")
+    parts = stem.split("/")
+    if len(parts) == 2 and parts[0] and parts[1]:
+        return parts[0], parts[1]
+    if len(parts) != 1:
+        return None
+
+    return flat_web_overlay_path_parts(parts[0])
+
+
+def flat_web_overlay_path_parts(stem: str) -> tuple[str, str] | None:
+    for overlay_id in sorted(BROWSER_REVIEW_OVERLAY_IDS, key=len, reverse=True):
+        if stem == overlay_id:
+            return overlay_id, "default"
+        prefix = f"{overlay_id}-"
+        if stem.startswith(prefix):
+            return overlay_id, stem.removeprefix(prefix)
+    return None
+
+
+def web_overlay_variant_key_from_screenshot_slug(overlay_id: str, screenshot_slug: str) -> tuple[str, str] | None:
+    for variant_overlay_id, slug, _query, _windows_enabled, web_stem in OVERLAY_VARIANT_SPECS:
+        if variant_overlay_id != overlay_id:
+            continue
+        if web_overlay_variant_screenshot_slug(variant_overlay_id, slug, web_stem) == screenshot_slug:
+            return variant_overlay_id, slug
+    return None
+
+
+def web_overlay_alias_parts(path: str, prefix: str) -> tuple[str, str, str] | None:
+    parts = web_overlay_path_parts(path, prefix)
+    if parts is None:
+        return None
+    overlay_id, slug = parts
+    if not slug.startswith("alias-"):
+        return None
+
+    alias_and_mode = slug.removeprefix("alias-")
+    for mode in PREVIEW_MODES:
+        suffix = f"-{mode}"
+        if alias_and_mode.endswith(suffix):
+            return overlay_id, alias_and_mode.removesuffix(suffix), mode
+    return overlay_id, alias_and_mode, "race"
 
 
 def web_overlay_variant_manifest_path_map(prefix: str) -> dict[str, tuple[str, str]]:
     return {
-        f"{prefix}/{web_variant_stem(overlay_id, slug, web_stem)}.png": (overlay_id, slug)
+        web_overlay_variant_screenshot_path(prefix, overlay_id, slug, web_stem): (overlay_id, slug)
         for overlay_id, slug, _query, _windows_enabled, web_stem in OVERLAY_VARIANT_SPECS
     }
 
@@ -1763,12 +1978,13 @@ def windows_native_variant_manifest_path_map() -> dict[str, tuple[str, str]]:
 
 
 def web_variant_stem(overlay_id: str, slug: str, web_stem: object = None) -> str:
-    return str(web_stem) if isinstance(web_stem, str) and web_stem else f"{overlay_id}-{slug}"
+    return web_overlay_variant_screenshot_slug(overlay_id, slug, web_stem)
 
 
 def screenshot_variant_key(path: str) -> tuple[str, str] | None:
     for prefix in ("browser-overlays", "localhost-overlays"):
-        match = web_overlay_variant_manifest_path_map(prefix).get(path)
+        parts = web_overlay_path_parts(path, prefix)
+        match = web_overlay_variant_key_from_screenshot_slug(*parts) if parts is not None else None
         if match is not None:
             return match
     return windows_native_variant_manifest_path_map().get(path)
@@ -1784,11 +2000,20 @@ def is_expected_hidden_relative_state(path: str, values: Optional[dict[str, obje
         if overlay_id == "relative" and preview_mode == "qualifying":
             return True
 
+    for prefix in ("browser-overlays", "localhost-overlays"):
+        parts = web_overlay_path_parts(path, prefix)
+        if parts == ("relative", "qualifying"):
+            return True
+
     return path.endswith("/relative-qualifying.png")
 
 
 def allows_empty_table_evidence(path: str) -> bool:
-    return is_expected_hidden_relative_state(path) or screenshot_variant_key(path) == ("standings", "no-content")
+    return is_expected_hidden_relative_state(path) or screenshot_variant_key(path) in {
+        ("standings", "no-content"),
+        ("standings", "content-off-chrome-on"),
+        ("standings", "no-results-chrome-on"),
+    }
 
 
 def overlay_variant_index(
@@ -1798,7 +2023,9 @@ def overlay_variant_index(
     indexed: dict[tuple[str, str], dict[str, object]] = {}
     prefix_with_slash = f"{prefix}/"
     for path, screenshot in screenshots.items():
-        if not path.startswith(prefix_with_slash) or "-alias-" in path:
+        if not path.startswith(prefix_with_slash):
+            continue
+        if prefix in {"browser-overlays", "localhost-overlays"} and web_overlay_alias_parts(path, prefix) is not None:
             continue
         overlay_id = screenshot.get("overlayId")
         fixture_variant = screenshot.get("fixtureVariant")
@@ -1815,7 +2042,9 @@ def overlay_preview_index(
     indexed: dict[tuple[str, str], dict[str, object]] = {}
     prefix_with_slash = f"{prefix}/"
     for path, screenshot in screenshots.items():
-        if not path.startswith(prefix_with_slash) or "-alias-" in path:
+        if not path.startswith(prefix_with_slash):
+            continue
+        if prefix in {"browser-overlays", "localhost-overlays"} and web_overlay_alias_parts(path, prefix) is not None:
             continue
         if isinstance(screenshot.get("fixtureVariant"), str) and screenshot.get("fixtureVariant"):
             continue
@@ -1828,17 +2057,94 @@ def overlay_preview_index(
 
 
 def browser_settings_windows_path(path: str) -> str | None:
-    if path == "settings/diagnostics.png":
-        return "states/settings-support.png"
+    if path in BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS:
+        return None
     if path.startswith("components/settings/"):
         return path
-    if not path.startswith("settings/"):
+
+    parsed = browser_settings_path_parts(path)
+    if parsed is None:
+        return None
+
+    kind, name, region = parsed
+    if kind == "app":
+        if name == "general":
+            return "states/settings-general.png"
+        if name.startswith(("update-", "preview-")):
+            return f"states/settings-general-{name}.png"
+        return None
+
+    if name == "support":
+        return "states/settings-support.png"
+
+    stem = "inputs" if name == "input-state" else name
+    suffix = "" if region == "general" else f"-{region}"
+    return f"states/settings-{stem}{suffix}.png"
+
+
+def browser_settings_path_parts(path: str) -> tuple[str, str, str] | None:
+    if not path.startswith("settings/") or not path.endswith(".png"):
         return None
 
     stem = path.removeprefix("settings/").removesuffix(".png")
-    if stem.startswith("input-state"):
-        stem = f"inputs{stem.removeprefix('input-state')}"
-    return f"states/settings-{stem}.png"
+    parts = stem.split("/")
+    if len(parts) == 2:
+        first, second = parts
+        if first == "app":
+            return "app", second, "general"
+        return "tab", first, "general" if second == "general" else second
+
+    if len(parts) == 1:
+        nested_path = legacy_settings_screenshot_path(parts[0])
+        if nested_path is not None and nested_path != path:
+            return browser_settings_path_parts(nested_path)
+
+    return None
+
+
+def legacy_settings_screenshot_path(stem: str) -> str | None:
+    if stem == "general":
+        return settings_app_screenshot_path("general")
+    if stem.startswith("general-update-"):
+        return settings_update_screenshot_path(stem.removeprefix("general-update-"))
+    if stem.startswith("general-preview-"):
+        return settings_preview_screenshot_path(stem.removeprefix("general-preview-"))
+    if stem == "diagnostics":
+        return settings_tab_screenshot_path("support", "diagnostics")
+    if stem == "support":
+        return settings_tab_screenshot_path("support")
+    if stem.startswith("inputs"):
+        suffix = stem.removeprefix("inputs")
+        return settings_tab_screenshot_path("input-state", suffix.removeprefix("-") if suffix else "general")
+
+    for overlay_id in sorted(BROWSER_REVIEW_OVERLAY_IDS, key=len, reverse=True):
+        if stem == overlay_id:
+            return settings_tab_screenshot_path(overlay_id)
+        prefix = f"{overlay_id}-"
+        if stem.startswith(prefix):
+            return settings_tab_screenshot_path(overlay_id, stem.removeprefix(prefix))
+
+    return None
+
+
+def windows_settings_browser_path(path: str) -> str | None:
+    if not path.startswith("states/settings-") or not path.endswith(".png"):
+        return None
+
+    stem = path.removeprefix("states/settings-").removesuffix(".png")
+    if stem == "general":
+        return settings_app_screenshot_path("general")
+    if stem.startswith("general-update-"):
+        return settings_update_screenshot_path(stem.removeprefix("general-update-"))
+    if stem.startswith("general-preview-"):
+        return settings_preview_screenshot_path(stem.removeprefix("general-preview-"))
+    if stem == "support":
+        return settings_tab_screenshot_path("support")
+    if stem.startswith("inputs"):
+        suffix = stem.removeprefix("inputs")
+        return settings_tab_screenshot_path("input-state", suffix.removeprefix("-") if suffix else "general")
+
+    return legacy_settings_screenshot_path(stem)
 
 
 def installer_menu_index(
@@ -1896,7 +2202,7 @@ def validate_web_overlay_pngs(root: Path, prefix: str, min_unique_bytes: int, fa
         overlay_min_byte_range = WEB_OVERLAY_PRIMARY_MIN_BYTE_RANGE.get(overlay_id, 24)
         validate_png(
             root=root,
-            relative_path=f"{prefix}/{overlay_id}.png",
+            relative_path=web_overlay_screenshot_path(prefix, overlay_id, "default"),
             expected_size=expected_size,
             min_unique_bytes=overlay_min_unique_bytes,
             failures=failures,
@@ -1904,7 +2210,7 @@ def validate_web_overlay_pngs(root: Path, prefix: str, min_unique_bytes: int, fa
             minimum_size=None if expected_size is not None else (200, 120),
         )
         for mode in preview_modes_for_overlay(overlay_id):
-            preview_path = f"{prefix}/{overlay_id}-{mode}.png"
+            preview_path = web_overlay_screenshot_path(prefix, overlay_id, mode)
             preview_expected_size = expected_overlay_preview_size(overlay_id, mode, expected_size)
             preview_min_unique_bytes = overlay_min_unique_bytes
             preview_min_byte_range = overlay_min_byte_range
@@ -1951,7 +2257,9 @@ def validate_browser_review_installer_pngs(root: Path, min_unique_bytes: int, fa
 
 
 def validate_browser_review_settings_component_pngs(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
-    for relative_path, expected_size in BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS.items():
+    component_pngs = dict(BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS)
+    component_pngs.update(BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS)
+    for relative_path, expected_size in component_pngs.items():
         validate_png(
             root=root,
             relative_path=relative_path,
@@ -1963,10 +2271,14 @@ def validate_browser_review_settings_component_pngs(root: Path, min_unique_bytes
 
 def validate_localhost_alias_pngs(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
     for relative_path in localhost_alias_manifest_paths():
-        overlay_id = relative_path.removeprefix("localhost-overlays/").split("-alias-", 1)[0]
+        alias_parts = web_overlay_alias_parts(relative_path, "localhost-overlays")
+        if alias_parts is None:
+            failures.append(f"{relative_path}: unable to parse localhost alias screenshot path")
+            continue
+        overlay_id, _alias_slug, preview_mode = alias_parts
         expected_size = expected_overlay_preview_size(
             overlay_id,
-            preview_mode_from_overlay_path(relative_path),
+            preview_mode,
             WINDOWS_NATIVE_OVERLAY_SIZES.get(overlay_id))
         validate_png(
             root=root,
@@ -2002,7 +2314,12 @@ def EXPECTED_WINDOWS_COMPONENT_FILES() -> tuple[str, ...]:
 
 
 def browser_review_manifest_paths() -> set[str]:
-    paths = set(BROWSER_REVIEW_SETTINGS_PNGS) | set(BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS) | set(BROWSER_REVIEW_INSTALLER_PNGS)
+    paths = (
+        set(BROWSER_REVIEW_SETTINGS_PNGS)
+        | set(BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS)
+        | set(BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS)
+        | set(BROWSER_REVIEW_INSTALLER_PNGS)
+    )
     paths.update(web_overlay_manifest_paths("browser-overlays"))
     return paths
 
@@ -2018,11 +2335,11 @@ def browser_localhost_manifest_paths() -> set[str]:
 def web_overlay_manifest_paths(prefix: str) -> set[str]:
     paths = set()
     for overlay_id in BROWSER_REVIEW_OVERLAY_IDS:
-        paths.add(f"{prefix}/{overlay_id}.png")
+        paths.add(web_overlay_screenshot_path(prefix, overlay_id, "default"))
         for mode in preview_modes_for_overlay(overlay_id):
-            paths.add(f"{prefix}/{overlay_id}-{mode}.png")
+            paths.add(web_overlay_screenshot_path(prefix, overlay_id, mode))
         if overlay_id == "track-map":
-            paths.add(f"{prefix}/track-map-fallback.png")
+            paths.add(web_overlay_screenshot_path(prefix, "track-map", "fallback"))
     paths.update(web_overlay_variant_manifest_path_map(prefix))
     return paths
 
@@ -2031,10 +2348,9 @@ def localhost_alias_manifest_paths() -> set[str]:
     paths = set()
     for overlay_id, aliases in LOCALHOST_OVERLAY_ALIASES.items():
         for alias_slug, _alias_route in aliases:
-            stem = f"localhost-overlays/{overlay_id}-alias-{alias_slug}"
-            paths.add(f"{stem}.png")
+            paths.add(web_overlay_alias_screenshot_path("localhost-overlays", overlay_id, alias_slug))
             for mode in preview_modes_for_overlay(overlay_id):
-                paths.add(f"{stem}-{mode}.png")
+                paths.add(web_overlay_alias_screenshot_path("localhost-overlays", overlay_id, alias_slug, mode))
     return paths
 
 
@@ -2085,6 +2401,7 @@ def validate_windows_manifest(root: Path, expected_paths: set[str], failures: li
             require_layout_evidence(path, metadata.get("layout"), failures)
             require_model_evidence(path, screenshot.get("modelEvidence"), failures)
             validate_overlay_manifest_semantic_evidence(path, screenshot, failures)
+            validate_hidden_no_render_png_evidence(root, path, screenshot, failures)
             validate_overlay_chrome_contract(path, screenshot, failures)
             if metadata.get("surface") != "windows-native-overlay":
                 failures.append(f"{path}: expected windows-native-overlay surface, got {metadata.get('surface')!r}")
@@ -2137,6 +2454,8 @@ def validate_browser_review_manifest(
             validate_effective_settings_contract(path, screenshot, failures)
             require_model_evidence(path, screenshot.get("modelEvidence"), failures)
             validate_overlay_manifest_semantic_evidence(path, screenshot, failures)
+            validate_hidden_no_render_png_evidence(root, path, screenshot, failures)
+            validate_garage_cover_compositor_safety(root, path, screenshot, failures)
             require_browser_full_canvas_exception_evidence(path, screenshot, failures)
             validate_localhost_alias_manifest(path, screenshot, failures)
             validate_overlay_chrome_contract(path, screenshot, failures)
@@ -2152,13 +2471,13 @@ def validate_browser_review_manifest(
         if path.startswith("review-installer/"):
             require_manifest_fields(path, screenshot, ["menuId", "moduleAsset", "uiEvidence"], failures)
             require_installer_ui_evidence(path, screenshot.get("uiEvidence"), failures)
-        if path.startswith(("settings/", "components/settings/")):
+        if path.startswith(("settings/", "components/settings/", "components/settings-future/")):
             require_manifest_fields(path, screenshot, ["tab", "region", "uiEvidence"], failures)
             require_settings_ui_evidence(path, screenshot.get("uiEvidence"), failures)
             validate_settings_region_manifest(path, screenshot, failures)
             if path.startswith("settings/"):
                 validate_settings_shell_transparency(root / path, path, failures)
-            if path.startswith("components/settings/"):
+            if path.startswith(("components/settings/", "components/settings-future/")):
                 validate_browser_settings_component_manifest(path, screenshot, failures)
 
 
@@ -2308,6 +2627,7 @@ def validate_overlay_manifest_semantic_evidence(path: str, values: dict[str, obj
 
     validate_no_redundant_overlay_title(path, values, failures)
     validate_hidden_product_model_contract(path, values, failures)
+    validate_hidden_no_render_manifest_contract(path, values, failures)
     validate_v103_forensic_overlay_contracts(path, values, scenario, failures)
 
 
@@ -2553,6 +2873,7 @@ def validate_v102_manifest_evidence(
         "settings/",
         "states/settings-",
         "components/settings/",
+        "components/settings-future/",
     )):
         return
 
@@ -2663,6 +2984,275 @@ def validate_hidden_product_model_contract(path: str, values: dict[str, object],
     stream = typed_dict(model.get("streamChat"))
     if stream and evidence_list(stream, "rows"):
         failures.append(f"{path}: hidden-product stream-chat expected empty rows")
+
+
+def validate_hidden_no_render_manifest_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
+    variant_key = screenshot_variant_key(path)
+    reason_tokens = HIDDEN_NO_RENDER_VARIANT_REASON_TOKENS.get(variant_key)
+    if reason_tokens is None:
+        return
+
+    status = str(values.get("status") or "").strip().lower()
+    if not status or not any(token in status for token in reason_tokens):
+        failures.append(
+            f"{path}: hidden/no-render status must explain {variant_key[0]}/{variant_key[1]} "
+            f"with one of {reason_tokens!r}, got {values.get('status')!r}"
+        )
+
+    if values.get("shouldRender") is not False:
+        failures.append(f"{path}: hidden/no-render expected shouldRender=false, got {values.get('shouldRender')!r}")
+    if normalize_optional_manifest_value(values.get("textSample")) is not None:
+        failures.append(f"{path}: hidden/no-render expected empty visible text, got {values.get('textSample')!r}")
+    if visible_header_items(values):
+        failures.append(f"{path}: hidden/no-render should not expose visible header items")
+
+    scenario = typed_dict(values.get("scenarioEvidence"))
+    provenance = typed_dict(get_manifest_value(scenario, "provenance"))
+    if text_value(provenance, "evidenceClass") != "unavailable":
+        failures.append(
+            f"{path}: hidden/no-render scenario provenance evidenceClass expected 'unavailable', "
+            f"got {provenance.get('evidenceClass')!r}"
+        )
+    if not text_value(provenance, "sourceContract"):
+        failures.append(f"{path}: hidden/no-render scenario provenance missing sourceContract")
+
+    rendered = typed_dict(typed_dict(values.get("effectiveSettings")).get("rendered"))
+    if rendered.get("shouldRender") is not False:
+        failures.append(
+            f"{path}: hidden/no-render effectiveSettings rendered shouldRender expected false, "
+            f"got {rendered.get('shouldRender')!r}"
+        )
+    if rendered.get("unavailableContentPolicy") != "suppress-rendered-content":
+        failures.append(
+            f"{path}: hidden/no-render unavailableContentPolicy expected 'suppress-rendered-content', "
+            f"got {rendered.get('unavailableContentPolicy')!r}"
+        )
+    rendered_provenance = typed_dict(rendered.get("provenance"))
+    if text_value(rendered_provenance, "evidenceClass") != "unavailable":
+        failures.append(
+            f"{path}: hidden/no-render effectiveSettings rendered provenance evidenceClass expected 'unavailable', "
+            f"got {rendered_provenance.get('evidenceClass')!r}"
+        )
+    if not text_value(rendered_provenance, "sourceContract"):
+        failures.append(f"{path}: hidden/no-render effectiveSettings rendered provenance missing sourceContract")
+    if not text_value(rendered_provenance, "syntheticStateKind"):
+        failures.append(f"{path}: hidden/no-render effectiveSettings rendered provenance missing syntheticStateKind")
+    if evidence_list(rendered, "headerItems"):
+        failures.append(f"{path}: hidden/no-render effectiveSettings rendered headerItems expected empty")
+    for key in ("columnKeys", "rowIdentities"):
+        if evidence_list(rendered, key):
+            failures.append(f"{path}: hidden/no-render effectiveSettings rendered {key} expected empty")
+    for key in ("rowCount", "placeholderRowCount"):
+        if rendered.get(key) not in (None, 0):
+            failures.append(f"{path}: hidden/no-render effectiveSettings rendered {key} expected 0, got {rendered.get(key)!r}")
+
+    validate_hidden_no_render_model_is_empty(path, values, failures)
+    validate_hidden_no_render_layout_is_empty(path, values, failures)
+
+
+def validate_hidden_no_render_model_is_empty(path: str, values: dict[str, object], failures: list[str]) -> None:
+    model = model_evidence(values)
+    for key in ("columns", "rows", "metrics", "metricSections", "gridSections", "points"):
+        if evidence_list(model, key):
+            failures.append(f"{path}: hidden/no-render model expected empty {key}")
+
+    graph = typed_dict(model.get("graph"))
+    if graph:
+        for key in ("series", "trendMetrics"):
+            if evidence_list(graph, key):
+                failures.append(f"{path}: hidden/no-render graph expected empty {key}")
+        geometry = typed_dict(graph.get("geometry"))
+        for key in ("series", "metricRows"):
+            if evidence_list(geometry, key):
+                failures.append(f"{path}: hidden/no-render graph geometry expected empty {key}")
+        for key in ("selectedSeriesCount",):
+            if graph.get(key) not in (None, 0):
+                failures.append(f"{path}: hidden/no-render graph {key} expected 0, got {graph.get(key)!r}")
+
+    inputs = typed_dict(model.get("inputs"))
+    if inputs:
+        for key in ("hasContent", "hasGraph", "hasRail", "isAvailable"):
+            if key != "isAvailable" and inputs.get(key) is not False:
+                failures.append(f"{path}: hidden/no-render inputs expected {key}=false, got {inputs.get(key)!r}")
+        for key in ("series", "grid"):
+            if evidence_list(inputs, key):
+                failures.append(f"{path}: hidden/no-render inputs expected empty {key}")
+        if inputs.get("graph") not in (None, {}):
+            failures.append(f"{path}: hidden/no-render inputs should not expose graph geometry")
+        if inputs.get("rail") not in (None, {}):
+            failures.append(f"{path}: hidden/no-render inputs should not expose rail geometry")
+
+    for vector_key in ("trackMap", "carRadar"):
+        vector = typed_dict(model.get(vector_key))
+        if not vector:
+            continue
+        for key in ("itemCount", "markerCount", "count"):
+            value = vector.get(key)
+            if value not in (None, 0):
+                failures.append(f"{path}: hidden/no-render {vector_key} expected {key}=0, got {value!r}")
+        for key in ("items", "markers", "primitives", "labels"):
+            if evidence_list(vector, key):
+                failures.append(f"{path}: hidden/no-render {vector_key} expected empty {key}")
+
+    stream = typed_dict(model.get("streamChat"))
+    if stream and evidence_list(stream, "rows"):
+        failures.append(f"{path}: hidden/no-render stream-chat expected empty rows")
+
+
+def validate_hidden_no_render_layout_is_empty(path: str, values: dict[str, object], failures: list[str]) -> None:
+    for index, element in enumerate(layout_elements(values.get("layout"))):
+        role = element_role(element)
+        text = element_text(element)
+        if text:
+            failures.append(f"{path}: hidden/no-render layout element {index} rendered text {text!r}")
+        if role in HIDDEN_NO_RENDER_FORBIDDEN_LAYOUT_ROLES:
+            failures.append(f"{path}: hidden/no-render layout leaks active {role} DOM evidence")
+
+
+def validate_hidden_no_render_png_evidence(
+    root: Path,
+    relative_path: str,
+    values: dict[str, object],
+    failures: list[str],
+) -> None:
+    variant_key = screenshot_variant_key(relative_path)
+    if variant_key not in HIDDEN_NO_RENDER_VARIANT_REASON_TOKENS:
+        return
+
+    path = root / relative_path
+    try:
+        blankness = inspect_png_blankness(path)
+    except Exception as exc:  # noqa: BLE001 - CLI validation boundary.
+        failures.append(f"{relative_path}: unable to inspect hidden/no-render PNG blankness: {exc}")
+        return
+
+    if blankness["sampleSource"] != "decoded-pixels":
+        failures.append(
+            f"{relative_path}: hidden/no-render PNG blankness sampled {blankness['sampleSource']}; "
+            "active screenshot profiles must inspect decoded pixels"
+        )
+    if not blankness["isBlank"]:
+        failures.append(
+            f"{relative_path}: hidden/no-render PNG expected blank single-color or transparent pixels, "
+            f"got {blankness['uniquePixelCount']} unique pixels, "
+            f"{blankness['opaquePixelCount']} opaque pixels, alpha range {blankness['alphaRange']!r}"
+        )
+
+
+def validate_garage_cover_compositor_safety(
+    root: Path,
+    relative_path: str,
+    values: dict[str, object],
+    failures: list[str],
+) -> None:
+    if values.get("overlayId") != "garage-cover":
+        return
+    if not relative_path.startswith(("browser-overlays/", "localhost-overlays/")):
+        return
+
+    if values.get("compositingMode") != GARAGE_COVER_TRANSPARENT_COMPOSITING_MODE:
+        failures.append(
+            f"{relative_path}: garage-cover compositor evidence expected "
+            f"{GARAGE_COVER_TRANSPARENT_COMPOSITING_MODE!r}, got {values.get('compositingMode')!r}"
+        )
+
+    if values.get("shouldRender") is True:
+        validate_garage_cover_visible_eligibility_evidence(relative_path, values, failures)
+        return
+    if values.get("shouldRender") is not False:
+        return
+
+    if values.get("captureBackdrop") not in (None, {}):
+        failures.append(f"{relative_path}: hidden garage-cover must not use a solid captureBackdrop")
+
+    validate_garage_cover_hidden_layout(relative_path, values, failures)
+
+    path = root / relative_path
+    try:
+        transparency = inspect_png_transparency(path)
+    except Exception as exc:  # noqa: BLE001 - CLI validation boundary.
+        failures.append(f"{relative_path}: unable to inspect garage-cover hidden compositor pixels: {exc}")
+        return
+
+    if transparency["sampleSource"] != "decoded-pixels":
+        failures.append(
+            f"{relative_path}: garage-cover hidden compositor sampled {transparency['sampleSource']}; "
+            "active screenshot profiles must inspect decoded pixels"
+        )
+    if not transparency["hasAlpha"]:
+        failures.append(f"{relative_path}: hidden garage-cover PNG must preserve alpha, got color type {transparency['colorType']!r}")
+    if transparency["opaquePixelCount"] != 0:
+        failures.append(
+            f"{relative_path}: hidden garage-cover expected fully transparent pixels, "
+            f"got {transparency['opaquePixelCount']} opaque pixels and alpha range {transparency['alphaRange']!r}"
+        )
+
+
+def validate_garage_cover_hidden_layout(path: str, values: dict[str, object], failures: list[str]) -> None:
+    garage = typed_dict(model_evidence(values).get("garageCover"))
+    if garage.get("shouldCover") is not False:
+        failures.append(f"{path}: hidden garage-cover expected shouldCover=false, got {garage.get('shouldCover')!r}")
+    if garage.get("bounds") is not None:
+        failures.append(f"{path}: hidden garage-cover should not mount cover bounds when shouldCover=false")
+    if garage.get("imageBounds") is not None:
+        failures.append(f"{path}: hidden garage-cover should not mount cover image bounds when shouldCover=false")
+
+    for index, element in enumerate(layout_elements(values.get("layout"))):
+        role = element_role(element)
+        if role in {"garage-cover", "garage-cover-image"}:
+            failures.append(f"{path}: hidden garage-cover layout leaks active {role} DOM evidence")
+        if role != "overlay":
+            continue
+        styles = typed_dict(element.get("styles"))
+        opacity = parse_float(styles.get("opacity"))
+        if opacity is None or opacity > 0.01:
+            failures.append(f"{path}: hidden garage-cover overlay opacity expected 0, got {styles.get('opacity')!r}")
+
+
+def validate_garage_cover_visible_eligibility_evidence(path: str, values: dict[str, object], failures: list[str]) -> None:
+    settings = evidence_list(typed_dict(values.get("effectiveSettings")), "settings")
+    overlay_enabled = effective_setting_bool(settings, "overlayEnabled")
+    if overlay_enabled is True:
+        return
+    if has_forced_preview_evidence(values):
+        return
+    failures.append(
+        f"{path}: visible garage-cover expected overlayEnabled=true or explicit forced-preview evidence, "
+        f"got overlayEnabled={overlay_enabled!r}"
+    )
+
+
+def effective_setting_bool(settings: list[object], key: str) -> bool | None:
+    for setting in settings:
+        if isinstance(setting, dict) and setting.get("key") == key:
+            value = setting.get("value")
+            return value if isinstance(value, bool) else None
+    return None
+
+
+def parse_float(value: object) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def has_forced_preview_evidence(values: dict[str, object]) -> bool:
+    scenario = typed_dict(values.get("scenarioEvidence"))
+    provenance = typed_dict(get_manifest_value(scenario, "provenance"))
+    candidates = [
+        values.get("status"),
+        values.get("source"),
+        values.get("comparisonLimit"),
+        values.get("compositingMode"),
+        get_manifest_value(scenario, "comparisonLimit"),
+        get_manifest_value(scenario, "compositingMode"),
+        get_manifest_value(provenance, "evidenceClass"),
+        get_manifest_value(provenance, "syntheticStateKind"),
+    ]
+    return any("forced-preview" in str(candidate or "").lower() for candidate in candidates)
 
 
 def validate_effective_settings_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -2777,7 +3367,7 @@ def validate_effective_settings_contract(path: str, values: dict[str, object], f
             expected_class_separators = False
         elif variant_key == ("standings", "focused-class-only"):
             expected_other_class_rows = 0
-        elif variant_key == ("standings", "no-content"):
+        elif variant_key in {("standings", "no-content"), ("standings", "content-off-chrome-on")}:
             expected_standings_content = {key: False for key in expected_standings_content}
         for key, expected in expected_standings_content.items():
             require_effective_setting_value(path, settings, key, expected, failures)
@@ -3293,7 +3883,7 @@ def require_settings_ui_evidence(path: str, value: object, failures: list[str]) 
     require_rect(path, value.get("root"), "settings UI root", failures)
     require_rect(path, value.get("contentBounds"), "settings UI content bounds", failures)
 
-    is_component_crop = path.startswith("components/settings/")
+    is_component_crop = path.startswith(("components/settings/", "components/settings-future/"))
     require_settings_app_shell_evidence(path, value.get("appShell"), is_component_crop, failures)
     require_settings_navigation_evidence(path, value.get("navigation"), is_component_crop, failures)
     require_settings_section_evidence(path, value.get("sections"), is_component_crop, failures)
@@ -3608,15 +4198,12 @@ def require_ui_geometry_matrix(
 
 
 def settings_surface_path(path: str) -> str:
-    if not path.startswith("states/settings-"):
-        return path
-
-    stem = path.removeprefix("states/settings-").removesuffix(".png")
-    if stem == "support":
-        return "settings/support.png"
-    if stem.startswith("inputs"):
-        stem = f"input-state{stem.removeprefix('inputs')}"
-    return f"settings/{stem}.png"
+    if path.startswith("states/settings-"):
+        return windows_settings_browser_path(path) or path
+    if path.startswith("settings/") and path.count("/") == 1:
+        stem = path.removeprefix("settings/").removesuffix(".png")
+        return legacy_settings_screenshot_path(stem) or path
+    return path
 
 
 def settings_geometry_required_roles(path: str, is_component_crop: bool) -> set[str]:
@@ -3632,10 +4219,11 @@ def settings_geometry_required_roles(path: str, is_component_crop: bool) -> set[
             "components/settings/chat-inputs.png": {"settings-panel", "settings-field-row", "settings-field-label", "settings-textbox", "settings-segmented"},
             "components/settings/support-buttons.png": {"settings-panel", "settings-field-row", "settings-field-label", "settings-button", "settings-toggle"},
             "components/settings/browser-source.png": {"settings-panel", "settings-field-value", "settings-button"},
+            "components/settings-future/visibility-context.png": {"settings-panel", "settings-field-row", "settings-field-label", "settings-toggle"},
         }
         return required_roles | component_roles.get(path, set())
 
-    if surface_path.startswith("settings/general"):
+    if surface_path.startswith("settings/app/"):
         required_roles.update({
             "settings-field-row",
             "settings-field-label",
@@ -3645,34 +4233,34 @@ def settings_geometry_required_roles(path: str, is_component_crop: bool) -> set[
             "settings-segment-choice",
             "settings-preview-summary",
         })
-    if surface_path in {"settings/support.png", "settings/diagnostics.png"}:
+    if surface_path in {settings_tab_screenshot_path("support"), settings_tab_screenshot_path("support", "diagnostics")}:
         required_roles.update({"settings-field-row", "settings-field-label", "settings-field-value", "settings-button", "settings-toggle"})
-    if surface_path.startswith("settings/stream-chat-content"):
+    if surface_path == settings_tab_screenshot_path("stream-chat", "content"):
         required_roles.update({"settings-field-row", "settings-field-label", "settings-textbox", "settings-segmented", "settings-segment-choice", "settings-button"})
-    if surface_path.startswith("settings/garage-cover-preview"):
+    if surface_path == settings_tab_screenshot_path("garage-cover", "preview"):
         required_roles.update({"settings-preview-stage", "settings-preview-image"})
-    if surface_path.startswith("settings/car-radar"):
+    if surface_path == settings_tab_screenshot_path("car-radar"):
         required_roles.update({"settings-field-row", "settings-field-label", "settings-toggle", "settings-stepper", "settings-button"})
-    is_region_matrix_page = any(suffix in surface_path for suffix in ("-content.png", "-header.png", "-footer.png", "-twitch.png"))
+    is_region_matrix_page = any(surface_path.endswith(f"/{region}.png") for region in ("content", "header", "footer", "twitch"))
     if (
         surface_path.startswith("settings/")
-        and not surface_path.startswith("settings/general")
-        and surface_path not in {"settings/support.png", "settings/diagnostics.png"}
-        and not surface_path.startswith("settings/garage-cover-preview")
+        and not surface_path.startswith("settings/app/")
+        and surface_path not in {settings_tab_screenshot_path("support"), settings_tab_screenshot_path("support", "diagnostics")}
+        and surface_path != settings_tab_screenshot_path("garage-cover", "preview")
         and not is_region_matrix_page
     ):
         required_roles.update({"settings-field-row", "settings-field-label"})
     if (
-        ("-content.png" in surface_path and not surface_path.startswith("settings/stream-chat-content"))
-        or "-header.png" in surface_path
-        or "-footer.png" in surface_path
-        or "-twitch.png" in surface_path
+        (surface_path.endswith("/content.png") and surface_path != settings_tab_screenshot_path("stream-chat", "content"))
+        or surface_path.endswith("/header.png")
+        or surface_path.endswith("/footer.png")
+        or surface_path.endswith("/twitch.png")
     ):
         required_roles.update({"settings-matrix", "settings-matrix-row", "settings-check"})
         if not (
-            surface_path.startswith("settings/session-weather-content")
-            or surface_path.startswith("settings/pit-service-content")
-            or surface_path.startswith("settings/stream-chat-twitch")
+            surface_path == settings_tab_screenshot_path("session-weather", "content")
+            or surface_path == settings_tab_screenshot_path("pit-service", "content")
+            or surface_path == settings_tab_screenshot_path("stream-chat", "twitch")
         ):
             required_roles.add("settings-matrix-cell")
     return required_roles
@@ -3909,12 +4497,8 @@ def require_settings_critical_text_fields(
 
 
 def expected_update_status_text(path: str) -> str | None:
-    if path in BROWSER_REVIEW_UPDATE_STATUS_TEXT:
-        return BROWSER_REVIEW_UPDATE_STATUS_TEXT[path]
-    if path.startswith("states/settings-general-update-"):
-        browser_path = path.replace("states/settings-", "settings/", 1)
-        return BROWSER_REVIEW_UPDATE_STATUS_TEXT.get(browser_path)
-    return None
+    surface_path = settings_surface_path(path)
+    return BROWSER_REVIEW_UPDATE_STATUS_TEXT.get(surface_path)
 
 
 def require_removed_chrome_settings_absent(path: str, value: dict[str, object], failures: list[str]) -> None:
@@ -4661,18 +5245,21 @@ def require_rendered_text_fit(
     cell: dict[str, object],
     label: str,
     failures: list[str],
+    *,
+    require_metrics: bool = False,
 ) -> None:
     text = str(cell.get("text") or cell.get("value") or "").strip()
     if not text:
         return
 
+    expects_metrics = require_metrics or path.startswith(("browser-overlays/", "localhost-overlays/"))
     metrics = typed_dict(get_manifest_value(cell, "textMetrics"))
     if not metrics:
-        if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        if expects_metrics:
             failures.append(f"{path}: {label} missing text fit metrics")
         return
 
-    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+    if expects_metrics:
         for key in ("availableWidth", "availableHeight", "measuredWidth", "measuredHeight"):
             if not isinstance(get_manifest_value(metrics, key), (int, float)):
                 failures.append(f"{path}: {label} text fit metrics missing numeric {key}")
@@ -4957,14 +5544,15 @@ def validate_localhost_alias_manifest(path: str, values: dict[str, object], fail
 
 
 def expected_localhost_alias_route(path: str) -> str | None:
-    for overlay_id, aliases in LOCALHOST_OVERLAY_ALIASES.items():
-        for alias_slug, alias_route in aliases:
-            stem = f"localhost-overlays/{overlay_id}-alias-{alias_slug}"
-            if path == f"{stem}.png":
+    alias_parts = web_overlay_alias_parts(path, "localhost-overlays")
+    if alias_parts is None:
+        return None
+
+    overlay_id, alias_slug, _preview_mode = alias_parts
+    for expected_overlay_id, aliases in LOCALHOST_OVERLAY_ALIASES.items():
+        for expected_alias_slug, alias_route in aliases:
+            if overlay_id == expected_overlay_id and alias_slug == expected_alias_slug:
                 return alias_route
-            for mode in preview_modes_for_overlay(overlay_id):
-                if path == f"{stem}-{mode}.png":
-                    return alias_route
     return None
 
 
@@ -4983,18 +5571,28 @@ def validate_settings_region_manifest(path: str, values: dict[str, object], fail
 
 
 def validate_browser_settings_component_manifest(path: str, values: dict[str, object], failures: list[str]) -> None:
-    expected_size = BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS.get(path)
+    is_future_component = path.startswith("components/settings-future/")
+    expected_size = (
+        BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS.get(path)
+        if is_future_component
+        else BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS.get(path)
+    )
     if expected_size is None:
         failures.append(f"{path}: unknown browser settings component crop")
         return
 
-    if values.get("surface") != "browser-review-settings-component":
-        failures.append(f"{path}: expected browser-review-settings-component surface, got {values.get('surface')!r}")
-    if values.get("captureMode") != "settings-component-crop":
-        failures.append(f"{path}: expected settings-component-crop captureMode, got {values.get('captureMode')!r}")
-    if values.get("comparisonMode") != "browser-review-settings-component-vs-windows-settings-component":
+    expected_surface = "browser-review-settings-future-component" if is_future_component else "browser-review-settings-component"
+    expected_capture_mode = "settings-future-component-crop" if is_future_component else "settings-component-crop"
+    expected_comparison_mode = "browser-review-only-future-settings-component" if is_future_component else "browser-review-settings-component-vs-windows-settings-component"
+    expected_comparison_limit = "review-only-unwired-preview" if is_future_component else "same-design-coordinate-crop"
+
+    if values.get("surface") != expected_surface:
+        failures.append(f"{path}: expected {expected_surface} surface, got {values.get('surface')!r}")
+    if values.get("captureMode") != expected_capture_mode:
+        failures.append(f"{path}: expected {expected_capture_mode} captureMode, got {values.get('captureMode')!r}")
+    if values.get("comparisonMode") != expected_comparison_mode:
         failures.append(f"{path}: missing settings component comparison mode")
-    if values.get("comparisonLimit") != "same-design-coordinate-crop":
+    if values.get("comparisonLimit") != expected_comparison_limit:
         failures.append(f"{path}: missing settings component comparison limit")
 
     crop_bounds = values.get("cropBounds")
@@ -5012,12 +5610,40 @@ def validate_browser_settings_component_manifest(path: str, values: dict[str, ob
     if isinstance(scenario, dict):
         scenario_crop = scenario.get("cropBounds")
         require_rect(path, scenario_crop, "settings component scenario crop bounds", failures)
-        if scenario.get("captureMode") != "settings-component-crop":
-            failures.append(f"{path}: scenario evidence missing settings-component-crop captureMode")
-        if scenario.get("comparisonMode") != "browser-review-settings-component-vs-windows-settings-component":
+        if scenario.get("captureMode") != expected_capture_mode:
+            failures.append(f"{path}: scenario evidence missing {expected_capture_mode} captureMode")
+        if scenario.get("comparisonMode") != expected_comparison_mode:
             failures.append(f"{path}: scenario evidence missing settings component comparison mode")
     else:
         failures.append(f"{path}: missing scenario evidence for settings component crop")
+
+    if is_future_component:
+        require_future_visibility_context_evidence(path, values.get("uiEvidence"), failures)
+
+
+def require_future_visibility_context_evidence(path: str, value: object, failures: list[str]) -> None:
+    if path != "components/settings-future/visibility-context.png":
+        return
+
+    ui = typed_dict(value)
+    geometry = typed_dict(ui.get("geometryMatrix"))
+    elements = evidence_list(geometry, "elements")
+    evidence_keys = {
+        str(get_manifest_value(typed_dict(element), "evidenceKey") or "")
+        for element in elements
+    }
+    ids = {
+        str(get_manifest_value(typed_dict(element), "id") or "")
+        for element in elements
+    }
+    for key in (
+        "future.visibility-context.in-pit",
+        "future.visibility-context.spotting",
+        "future.visibility-context.out-of-car",
+        "future.visibility-context.garage",
+    ):
+        if key not in evidence_keys and not any(key in item for item in ids):
+            failures.append(f"{path}: missing visibility-context evidence key {key!r}")
 
 
 def normalize_manifest_region(value: object) -> str:
@@ -5121,6 +5747,18 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
 
     validate_overlay_variant_scenario(path, values, overlay_id, slug, failures)
 
+    if slug == "min-scale":
+        validate_min_scale_variant(path, values, overlay_id, failures)
+        if overlay_id == "standings":
+            validate_standings_variant(path, values, slug, failures)
+        elif overlay_id == "input-state":
+            validate_input_min_scale_variant(path, values, failures)
+        elif overlay_id == "gap-to-leader":
+            validate_gap_min_scale_variant(path, values, failures)
+        elif overlay_id == "garage-cover":
+            validate_garage_cover_variant(path, values, slug, failures)
+        return
+
     if slug == "chrome-off":
         validate_chrome_off_variant(path, values, failures)
         if overlay_id == "standings":
@@ -5172,6 +5810,14 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
     elif overlay_id == "gap-to-leader":
         if slug == "no-cars":
             validate_gap_no_cars_variant(path, values, failures)
+        elif slug == "long-tail-real-data":
+            validate_gap_long_tail_real_data_variant(path, values, failures)
+        elif slug == "pit-window-real-data":
+            validate_gap_pit_window_real_data_variant(path, values, failures)
+        elif slug == "threat-capture-shaped":
+            validate_gap_threat_capture_shaped_variant(path, values, failures)
+        elif slug == "endurance-domain-capture-shaped":
+            validate_gap_endurance_domain_capture_shaped_variant(path, values, failures)
         else:
             validate_gap_to_leader_contract(path, values, failures)
     elif overlay_id == "track-map":
@@ -5301,6 +5947,13 @@ def validate_fuel_calculating_variant(path: str, values: dict[str, object], fail
     sections = section_map(model_evidence(values))
     require_sequence(path, "fuel calculating sections", list(sections), ["Race Information"], failures)
     require_section_rows(path, sections, "Race Information", ["Plan", "Fuel"], failures)
+    require_fuel_rendered_content_height(
+        path,
+        values,
+        row_count=2,
+        section_count=1,
+        label="fuel calculating compact height",
+        failures=failures)
     require_segments(
         path,
         sections,
@@ -5346,6 +5999,20 @@ def validate_fuel_content_off_variant(path: str, values: dict[str, object], slug
     elif slug == "race-information-off":
         require_section_rows(path, sections, "Stint Targets", ["Stint 1", "Stint 2", "Stint 3"], failures)
 
+    compact_expectations = {
+        "stint-targets-off": (2, 1),
+        "race-information-off": (3, 1),
+    }
+    if slug in compact_expectations:
+        row_count, section_count = compact_expectations[slug]
+        require_fuel_rendered_content_height(
+            path,
+            values,
+            row_count=row_count,
+            section_count=section_count,
+            label=f"fuel {slug} compact height",
+            failures=failures)
+
     labels = metric_row_labels(model_evidence(values))
     hidden_labels = {
         "plan-off": ["Plan"],
@@ -5369,6 +6036,8 @@ def validate_relative_rightmost_variant(path: str, values: dict[str, object], fa
 def validate_relative_no_content_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
     require_equal(path, "relative no-content bodyKind", values.get("bodyKind"), "table", failures)
     validate_hidden_relative_contract(path, values, "no enabled content", failures)
+    settings = evidence_list(typed_dict(values.get("effectiveSettings")), "settings")
+    require_effective_setting_value(path, settings, "chrome.header.time-remaining.race", False, failures)
 
 
 def validate_session_weather_missing_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -5376,32 +6045,50 @@ def validate_session_weather_missing_variant(path: str, values: dict[str, object
     require_equal(path, "session weather missing status", values.get("status"), "weather unavailable", failures)
     rendered = typed_dict(typed_dict(values.get("effectiveSettings")).get("rendered"))
     require_equal(path, "session weather missing unavailable policy", rendered.get("unavailableContentPolicy"), "section-aware-placeholders", failures)
+    settings = evidence_list(typed_dict(values.get("effectiveSettings")), "settings")
+    for key in (
+        "session-weather.surface.wetness.enabled",
+        "session-weather.surface.declared.enabled",
+        "session-weather.surface.rubber.enabled",
+        "session-weather.sky.skies.enabled",
+        "session-weather.sky.weather.enabled",
+        "session-weather.sky.rain.enabled",
+        "session-weather.wind.direction.enabled",
+        "session-weather.wind.speed.enabled",
+        "session-weather.wind.facing.enabled",
+        "session-weather.temps.air.enabled",
+        "session-weather.temps.track.enabled",
+        "session-weather.atmosphere.humidity.enabled",
+        "session-weather.atmosphere.fog.enabled",
+        "session-weather.atmosphere.pressure.enabled",
+    ):
+        require_effective_setting_value(path, settings, key, True, failures)
     sections = section_map(model_evidence(values))
-    require_sequence(path, "session weather missing sections", list(sections), ["Session"], failures)
+    require_sequence(path, "session weather missing sections", list(sections), ["Session", "Weather"], failures)
     require_section_rows(path, sections, "Session", ["Session", "Clock", "Event", "Track", "Laps"], failures)
-    require_segments(path, sections, "Session", "Clock", [("Elapsed", "--"), ("Left", "--"), ("Total", "--")], failures)
-    require_segments(path, sections, "Session", "Laps", [("Remaining", "--"), ("Total", "--")], failures)
-    reject_labels(
-        path,
-        "session weather missing all-placeholder weather rows",
-        metric_row_labels(model_evidence(values)),
-        ["Surface", "Sky", "Wind", "Temps", "Atmosphere"],
-        failures)
+    require_section_rows(path, sections, "Weather", ["Surface", "Sky", "Wind", "Temps", "Atmosphere"], failures)
+    require_segments(path, sections, "Session", "Clock", [("Elapsed", "17:22:51"), ("Left", "6:37:09"), ("Total", "24:00:00")], failures)
+    require_segments(path, sections, "Session", "Laps", [("Remaining", "49.6 est"), ("Total", "170 est")], failures)
+    require_segments(path, sections, "Weather", "Surface", [("Wetness", "--"), ("Declared", "--"), ("Rubber", "--")], failures)
+    require_segments(path, sections, "Weather", "Sky", [("Skies", "--"), ("Weather", "--"), ("Rain", "--")], failures)
+    require_segments(path, sections, "Weather", "Wind", [("Dir", "--"), ("Speed", "--"), ("Facing", "--")], failures)
+    require_segments(path, sections, "Weather", "Temps", [("Air", "--"), ("Track", "--")], failures)
+    require_segments(path, sections, "Weather", "Atmosphere", [("Hum", "--"), ("Fog", "--"), ("Pressure", "--")], failures)
     for section_title, row_label in (
-        ("Session", "Clock"),
-        ("Session", "Laps"),
+        ("Weather", "Surface"),
+        ("Weather", "Sky"),
+        ("Weather", "Wind"),
+        ("Weather", "Temps"),
+        ("Weather", "Atmosphere"),
     ):
         row = find_metric_row(sections, section_title, row_label)
         tone = text_value(row, "tone").lower() if isinstance(row, dict) else ""
         if tone not in ("waiting", "unavailable"):
             failures.append(f"{path}: expected {section_title}/{row_label} unavailable tone, got {tone!r}")
-    require_shrunk_overlay_height(
-        path,
-        values,
-        full_height=496,
-        label="session weather missing",
-        failures=failures,
-        require_browser_source=False)
+    require_equal(path, "session weather missing screenshot height", values.get("height"), 496, failures)
+    browser_source = typed_dict(rendered.get("browserSource"))
+    require_equal(path, "session weather missing browser source baseHeight", browser_source.get("baseHeight"), 496, failures)
+    require_equal(path, "session weather missing browser source height", browser_source.get("height"), 496, failures)
 
 
 def validate_session_weather_section_off_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
@@ -5568,7 +6255,8 @@ def validate_input_mock_data_variant(path: str, values: dict[str, object], failu
             failures.append(
                 f"{path}: input mock-data expected syntheticStateKind='input-state-mock-data', got {provenance.get('syntheticStateKind')!r}"
             )
-    if "input-state-mock-data" not in str(values.get("path") or path):
+    path_text = str(values.get("path") or path)
+    if "input-state-mock-data" not in path_text and not path_text.endswith("/mock-data.png"):
         failures.append(f"{path}: input mock-data screenshot filename should carry the mock-data signal")
 
 
@@ -5690,9 +6378,157 @@ def validate_input_min_scale_variant(path: str, values: dict[str, object], failu
     if path.startswith(("browser-overlays/", "localhost-overlays/")):
         require_equal(path, "input min-scale manifest scale", values.get("minScale"), 0.6, failures)
         require_size_object(path, "input min-scale configured/min viewport", {"width": values.get("width"), "height": values.get("height")}, 312, 156, failures, required=False)
+        validate_min_scale_effective_settings(path, values, "input min-scale", 312, 156, failures)
     else:
         require_size_object(path, "input min-scale native configured size", {"width": values.get("width"), "height": values.get("height")}, 312, 156, failures, required=False)
     require_input_min_scale_bounds(path, values, failures)
+
+
+def validate_min_scale_variant(path: str, values: dict[str, object], overlay_id: str, failures: list[str]) -> None:
+    expected_size = MIN_SCALE_EXPECTED_SIZES.get((overlay_id, "min-scale"))
+    if expected_size is None:
+        failures.append(f"{path}: min-scale variant has no expected size for {overlay_id}")
+        return
+
+    expected_width, expected_height = expected_size
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        require_equal(path, f"{overlay_id} min-scale manifest scale", values.get("minScale"), 0.6, failures)
+        if values.get("scaleTransform") is not None:
+            require_equal(path, f"{overlay_id} min-scale capture transform", values.get("scaleTransform"), 0.6, failures)
+            require_size_object(
+                path,
+                f"{overlay_id} min-scale scaled screenshot size",
+                {"width": values.get("width"), "height": values.get("height")},
+                expected_width,
+                expected_height,
+                failures,
+                required=False)
+        effective_width, effective_height = MIN_SCALE_EFFECTIVE_BROWSER_SOURCE_SIZES.get((overlay_id, "min-scale"), expected_size)
+        validate_min_scale_effective_settings(path, values, f"{overlay_id} min-scale", effective_width, effective_height, failures)
+    else:
+        require_equal(path, f"{overlay_id} min-scale manifest scale", values.get("minScale"), 0.6, failures)
+        require_equal(path, f"{overlay_id} min-scale native render transform", values.get("scaleTransform"), 0.6, failures)
+        require_size_object(
+            path,
+            f"{overlay_id} min-scale native configured size",
+            {"width": values.get("width"), "height": values.get("height")},
+            expected_width,
+            expected_height,
+            failures,
+            required=False)
+        validate_min_scale_effective_settings(path, values, f"{overlay_id} min-scale", expected_width, expected_height, failures)
+        validate_native_min_scale_render_evidence(path, values, f"{overlay_id} min-scale", failures)
+
+
+def validate_min_scale_effective_settings(
+    path: str,
+    values: dict[str, object],
+    label: str,
+    expected_width: int,
+    expected_height: int,
+    failures: list[str],
+) -> None:
+    effective = typed_dict(values.get("effectiveSettings"))
+    rendered = typed_dict(effective.get("rendered"))
+    browser_source = typed_dict(rendered.get("browserSource"))
+    if not browser_source:
+        failures.append(f"{path}: {label} missing effectiveSettings rendered browserSource evidence")
+        return
+
+    require_equal(path, f"{label} effective scalePercent", browser_source.get("scalePercent"), 60, failures)
+    require_equal(path, f"{label} effective scale", browser_source.get("scale"), 0.6, failures)
+    require_size_object(
+        path,
+        f"{label} effective browserSource size",
+        {"width": browser_source.get("width"), "height": browser_source.get("height")},
+        expected_width,
+        expected_height,
+        failures,
+        required=True)
+    settings = evidence_list(effective, "settings")
+    require_effective_setting_value(path, settings, "scalePercent", 60, failures)
+
+
+def validate_native_min_scale_render_evidence(
+    path: str,
+    values: dict[str, object],
+    label: str,
+    failures: list[str],
+) -> None:
+    if not path.startswith("native-overlays/"):
+        return
+
+    layout = typed_dict(values.get("layout"))
+    root = typed_dict(layout.get("root"))
+    unscaled_root = typed_dict(layout.get("unscaledRoot"))
+    render_scale = layout.get("renderScale")
+    require_equal(path, f"{label} layout renderScale", render_scale, 0.6, failures)
+    require_size_object(
+        path,
+        f"{label} rendered layout root",
+        root,
+        int(values.get("width") or 0),
+        int(values.get("height") or 0),
+        failures)
+    validate_native_min_scale_layout_elements_fit(path, layout, root, label, failures)
+
+    effective = typed_dict(values.get("effectiveSettings"))
+    rendered = typed_dict(effective.get("rendered"))
+    browser_source = typed_dict(rendered.get("browserSource"))
+    base_width = browser_source.get("baseWidth")
+    base_height = browser_source.get("baseHeight")
+    rendered_width = browser_source.get("width")
+    rendered_height = browser_source.get("height")
+    if not isinstance(base_width, int) or not isinstance(base_height, int):
+        failures.append(f"{path}: {label} missing native unscaled browserSource base size evidence")
+        return
+    if isinstance(rendered_width, int) and round(base_width * 0.6) != rendered_width:
+        failures.append(
+            f"{path}: {label} expected native browserSource width to equal baseWidth * 0.6, "
+            f"got {base_width} -> {rendered_width}"
+        )
+    if isinstance(rendered_height, int) and round(base_height * 0.6) != rendered_height:
+        failures.append(
+            f"{path}: {label} expected native browserSource height to equal baseHeight * 0.6, "
+            f"got {base_height} -> {rendered_height}"
+        )
+    require_size_object(
+        path,
+        f"{label} unscaled layout root",
+        unscaled_root,
+        base_width,
+        base_height,
+        failures)
+    if base_width <= int(values.get("width") or 0) or base_height <= int(values.get("height") or 0):
+        failures.append(
+            f"{path}: {label} native min-scale expected unscaled base larger than rendered screenshot, "
+            f"got base {base_width}x{base_height} and rendered {values.get('width')}x{values.get('height')}"
+        )
+
+
+def validate_native_min_scale_layout_elements_fit(
+    path: str,
+    layout: dict[str, object],
+    root: dict[str, object],
+    label: str,
+    failures: list[str],
+) -> None:
+    elements = layout_elements(layout)
+    if not elements:
+        failures.append(f"{path}: {label} missing native scaled layout element evidence")
+        return
+
+    for index, element in enumerate(elements):
+        bounds = typed_dict(get_manifest_value(element, "bounds"))
+        role = element_role(element) or "element"
+        require_rect_within(
+            path,
+            f"{label} layout element {index} {role} bounds",
+            bounds,
+            root,
+            f"{label} rendered layout root",
+            failures,
+            tolerance=1.0)
 
 
 def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
@@ -5702,6 +6538,7 @@ def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, 
         "right": "car right",
         "both-sides": "cars both sides",
         "clear": "clear",
+        "side-no-placement": "clear",
     }.get(slug)
     if expected_status is None:
         failures.append(f"{path}: unknown car-radar fixture variant {slug!r}")
@@ -5713,25 +6550,81 @@ def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, 
         failures.append(f"{path}: car-radar {slug} expected shouldRender={expected_should_render}, got {radar.get('shouldRender')!r}")
     if values.get("radarShouldRender") != expected_should_render:
         failures.append(f"{path}: car-radar {slug} expected radarShouldRender={expected_should_render}, got {values.get('radarShouldRender')!r}")
-    item_kinds = [text_value(item, "kind") for item in evidence_list(radar, "items")]
+    items = evidence_list(radar, "items")
+    item_kinds = [text_value(item, "kind") for item in items]
     expected_items = {
         "left": ["side-left"],
         "right": ["side-right"],
         "both-sides": ["side-left", "side-right"],
         "clear": [],
+        "side-no-placement": ["nearby", "focus"],
     }[slug]
     for kind in expected_items:
         if kind not in item_kinds:
             failures.append(f"{path}: car-radar {slug} missing {kind} item in {item_kinds!r}")
+    if expected_should_render:
+        focus_item = first_evidence_item_by_kind(items, "focus")
+        if not focus_item:
+            failures.append(f"{path}: car-radar {slug} missing focus item in {item_kinds!r}")
+        validate_car_radar_rendered_item_geometry(path, radar, items, focus_item, failures)
     if slug == "clear" and any(kind.startswith("side-") or kind == "focus" for kind in item_kinds):
         failures.append(f"{path}: car-radar clear should not expose side/focus items, got {item_kinds!r}")
     if slug == "clear":
         if visible_header_items(values):
             failures.append(f"{path}: car-radar clear should not expose visible header items")
         reject_hidden_overlay_text(path, values.get("textSample"), "car-radar clear textSample", failures)
+    if slug == "side-no-placement" and any(kind.startswith("side-") for kind in item_kinds):
+        failures.append(f"{path}: car-radar side-no-placement should not expose side items, got {item_kinds!r}")
     primitive_kinds = [text_value(item, "kind") for item in evidence_list(radar, "primitives")]
     if "arc" in primitive_kinds:
         failures.append(f"{path}: car-radar {slug} should not expose multiclass arc primitive")
+
+
+def validate_car_radar_rendered_item_geometry(
+    path: str,
+    radar: dict[str, object],
+    items: list[object],
+    focus_item: object,
+    failures: list[str],
+) -> None:
+    target_bounds = typed_dict(radar.get("targetBounds"))
+    if not target_bounds:
+        failures.append(f"{path}: car-radar rendered item evidence missing targetBounds")
+
+    for index, item in enumerate(items):
+        item_dict = typed_dict(item)
+        kind = text_value(item_dict, "kind") or f"item-{index}"
+        bounds = get_manifest_value(item_dict, "bounds")
+        if target_bounds:
+            require_rect_within(path, f"car-radar {kind} item bounds", bounds, target_bounds, "car-radar targetBounds", failures, tolerance=1.0)
+        else:
+            require_rect(path, bounds, f"car-radar {kind} item bounds", failures)
+
+        if kind.startswith("side-"):
+            validate_car_radar_side_item_geometry(path, item_dict, focus_item, kind, failures)
+
+
+def validate_car_radar_side_item_geometry(
+    path: str,
+    side_item: dict[str, object],
+    focus_item: object,
+    kind: str,
+    failures: list[str],
+) -> None:
+    if get_manifest_value(side_item, "carIdx") is None:
+        failures.append(f"{path}: car-radar {kind} warning missing attached carIdx evidence")
+
+    focus_bounds = get_manifest_value(typed_dict(focus_item), "bounds")
+    side_bounds = get_manifest_value(side_item, "bounds")
+    focus_x = rect_center_x(focus_bounds)
+    side_x = rect_center_x(side_bounds)
+    if focus_x is None or side_x is None:
+        return
+
+    if kind == "side-left" and side_x >= focus_x:
+        failures.append(f"{path}: car-radar side-left warning must render left of focus car")
+    if kind == "side-right" and side_x <= focus_x:
+        failures.append(f"{path}: car-radar side-right warning must render right of focus car")
 
 
 def validate_gap_no_cars_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -5750,6 +6643,251 @@ def validate_gap_no_cars_variant(path: str, values: dict[str, object], failures:
         failures.append(f"{path}: gap no-cars expected selectedSeriesCount=0, got {graph.get('selectedSeriesCount')!r}")
 
 
+def validate_gap_long_tail_real_data_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    validate_gap_to_leader_contract(path, values, failures)
+    require_equal(path, "gap long-tail bodyKind", values.get("bodyKind"), "graph", failures)
+    require_equal(path, "gap long-tail shouldRender", values.get("shouldRender"), True, failures)
+
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    if geometry.get("scale") != "focus-relative":
+        failures.append(f"{path}: gap long-tail expected focus-relative scale, got {geometry.get('scale')!r}")
+
+    behind_seconds = geometry.get("behindSeconds")
+    if not isinstance(behind_seconds, (int, float)) or behind_seconds > 2.0:
+        failures.append(f"{path}: gap long-tail expected behindSeconds <= 2.0, got {behind_seconds!r}")
+
+    latest_reference_gap = geometry.get("latestReferenceGapSeconds")
+    if not isinstance(latest_reference_gap, (int, float)) or latest_reference_gap <= 0:
+        failures.append(f"{path}: gap long-tail expected positive latest reference gap, got {latest_reference_gap!r}")
+
+    class_positions = [
+        item.get("classPosition")
+        for item in evidence_list(graph, "series")
+        if isinstance(item, dict)
+    ]
+    require_sequence(
+        path,
+        "gap long-tail selected class positions",
+        class_positions,
+        [1, 4, 5],
+        failures,
+    )
+    for forbidden in (6, 9):
+        if forbidden in class_positions:
+            failures.append(f"{path}: gap long-tail still includes far-behind class position P{forbidden}")
+
+    if graph.get("selectedSeriesCount") != 3:
+        failures.append(f"{path}: gap long-tail expected selectedSeriesCount=3, got {graph.get('selectedSeriesCount')!r}")
+    if graph.get("comparisonLabel") != "P4":
+        failures.append(f"{path}: gap long-tail expected comparisonLabel='P4', got {graph.get('comparisonLabel')!r}")
+
+
+def validate_gap_pit_window_real_data_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    validate_gap_to_leader_contract(path, values, failures)
+    require_equal(path, "gap pit-window bodyKind", values.get("bodyKind"), "graph", failures)
+    require_equal(path, "gap pit-window shouldRender", values.get("shouldRender"), True, failures)
+
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    if geometry.get("scale") != "focus-relative":
+        failures.append(f"{path}: gap pit-window expected focus-relative scale, got {geometry.get('scale')!r}")
+
+    class_positions = [
+        item.get("classPosition")
+        for item in evidence_list(graph, "series")
+        if isinstance(item, dict)
+    ]
+    require_sequence(
+        path,
+        "gap pit-window selected class positions",
+        class_positions,
+        [1, 4, 5],
+        failures,
+    )
+    for forbidden in (6, 9):
+        if forbidden in class_positions:
+            failures.append(f"{path}: gap pit-window still includes far-behind class position P{forbidden}")
+
+    if graph.get("comparisonLabel") != "P4":
+        failures.append(f"{path}: gap pit-window expected comparisonLabel='P4', got {graph.get('comparisonLabel')!r}")
+    if graph.get("activeThreat") is not None:
+        failures.append(f"{path}: gap pit-window should not label the P4 comparison-ahead car as activeThreat")
+    if graph.get("threatCarIdx") is not None:
+        failures.append(f"{path}: gap pit-window expected threatCarIdx=null when no behind threat is selected, got {graph.get('threatCarIdx')!r}")
+
+    pit_windows = evidence_list(geometry, "pitWindows")
+    if len(pit_windows) < 1:
+        failures.append(f"{path}: gap pit-window expected a rendered focus-car pit-window band")
+    for window in pit_windows:
+        if not isinstance(window, dict):
+            continue
+        if window.get("kind") != "pit-window":
+            failures.append(f"{path}: gap pit-window band has unexpected kind {window.get('kind')!r}")
+        if window.get("carIdx") != 19 or window.get("classPosition") != 5:
+            failures.append(f"{path}: gap pit-window band expected focus car P5/carIdx 19, got P{window.get('classPosition')}/carIdx {window.get('carIdx')}")
+        require_rect(path, typed_dict(window.get("bounds")), "gap pit-window band bounds", failures)
+
+    for series in evidence_list(geometry, "series"):
+        if not isinstance(series, dict):
+            continue
+        if series.get("classPosition") in (1, 4, 5):
+            for color_field in ("renderedColor", "baseColor"):
+                color = str(series.get(color_field) or "")
+                if is_gap_threat_red(color):
+                    failures.append(
+                        f"{path}: gap pit-window class position P{series.get('classPosition')} must not use active-threat red"
+                    )
+
+
+def validate_gap_threat_capture_shaped_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    validate_gap_to_leader_contract(path, values, failures)
+    require_equal(path, "gap threat bodyKind", values.get("bodyKind"), "graph", failures)
+    require_equal(path, "gap threat shouldRender", values.get("shouldRender"), True, failures)
+
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    class_positions = [
+        item.get("classPosition")
+        for item in evidence_list(graph, "series")
+        if isinstance(item, dict)
+    ]
+    require_sequence(
+        path,
+        "gap threat selected class positions",
+        class_positions,
+        [1, 4, 5, 6],
+        failures,
+    )
+    if graph.get("comparisonLabel") != "P4":
+        failures.append(f"{path}: gap threat expected comparisonLabel='P4', got {graph.get('comparisonLabel')!r}")
+
+    threat_car_idx = graph.get("threatCarIdx")
+    active_threat = typed_dict(graph.get("activeThreat"))
+    chaser = typed_dict(active_threat.get("chaser"))
+    if not active_threat:
+        failures.append(f"{path}: gap threat expected activeThreat evidence")
+    if chaser.get("label") != "P6":
+        failures.append(f"{path}: gap threat expected active threat label P6, got {chaser.get('label')!r}")
+    if chaser.get("carIdx") != threat_car_idx:
+        failures.append(f"{path}: gap threat chaser carIdx {chaser.get('carIdx')!r} does not match threatCarIdx {threat_car_idx!r}")
+    if chaser.get("gainSeconds") is None or not isinstance(chaser.get("gainSeconds"), (int, float)) or chaser.get("gainSeconds") <= 0:
+        failures.append(f"{path}: gap threat expected positive chaser gainSeconds, got {chaser.get('gainSeconds')!r}")
+
+    threat_series_count = 0
+    for series in evidence_list(geometry, "series"):
+        if not isinstance(series, dict):
+            continue
+        class_position = series.get("classPosition")
+        car_idx = series.get("carIdx")
+        red_fields = [
+            color_field
+            for color_field in ("renderedColor", "baseColor")
+            if is_gap_threat_red(str(series.get(color_field) or ""))
+        ]
+        if car_idx == threat_car_idx:
+            threat_series_count += 1
+            if class_position != 6:
+                failures.append(f"{path}: gap threat expected threat series class position P6, got P{class_position}")
+            if not red_fields:
+                failures.append(f"{path}: gap threat expected threat series car {car_idx!r} to use active-threat red")
+        elif red_fields:
+            failures.append(f"{path}: gap threat non-threat class position P{class_position} uses active-threat red")
+
+    if threat_series_count != 1:
+        failures.append(f"{path}: gap threat expected exactly one threat series, got {threat_series_count}")
+
+
+def validate_gap_endurance_domain_capture_shaped_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    validate_gap_to_leader_contract(path, values, failures)
+    require_equal(path, "gap endurance bodyKind", values.get("bodyKind"), "graph", failures)
+    require_equal(path, "gap endurance shouldRender", values.get("shouldRender"), True, failures)
+
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    start_seconds = graph.get("startSeconds")
+    end_seconds = graph.get("endSeconds")
+    if not isinstance(start_seconds, (int, float)) or not isinstance(end_seconds, (int, float)):
+        failures.append(f"{path}: gap endurance expected numeric start/end seconds, got {start_seconds!r}/{end_seconds!r}")
+    elif end_seconds - start_seconds < 4 * 60 * 60:
+        failures.append(f"{path}: gap endurance expected at least a 4h graph domain, got {end_seconds - start_seconds:g}s")
+
+    class_positions = [
+        item.get("classPosition")
+        for item in evidence_list(graph, "series")
+        if isinstance(item, dict)
+    ]
+    require_sequence(
+        path,
+        "gap endurance selected class positions",
+        class_positions,
+        [1, 8, 9, 10, 11, 12, 13],
+        failures,
+    )
+    if graph.get("selectedSeriesCount") != 7:
+        failures.append(f"{path}: gap endurance expected selectedSeriesCount=7, got {graph.get('selectedSeriesCount')!r}")
+    if graph.get("comparisonLabel") != "P9":
+        failures.append(f"{path}: gap endurance expected comparisonLabel='P9', got {graph.get('comparisonLabel')!r}")
+
+    weather_bands = evidence_list(geometry, "weatherBands")
+    if len(weather_bands) < 3:
+        failures.append(f"{path}: gap endurance expected at least three rendered weather bands, got {len(weather_bands)}")
+    weather_kinds = {
+        str(band.get("kind") or "").lower()
+        for band in weather_bands
+        if isinstance(band, dict)
+    }
+    for expected in ("damp", "wet", "declaredwet"):
+        if expected not in weather_kinds and expected.replace("wet", "-wet") not in weather_kinds:
+            failures.append(f"{path}: gap endurance missing weather band kind {expected!r}; got {sorted(weather_kinds)!r}")
+
+    markers = evidence_list(geometry, "markers")
+    if len(markers) < 3:
+        failures.append(f"{path}: gap endurance expected leader/driver graph markers, got {len(markers)}")
+    marker_kinds = [
+        marker.get("kind")
+        for marker in markers
+        if isinstance(marker, dict)
+    ]
+    if marker_kinds.count("leader-change") < 2:
+        failures.append(f"{path}: gap endurance expected at least two leader-change markers, got {marker_kinds!r}")
+    if "driver-change" not in marker_kinds:
+        failures.append(f"{path}: gap endurance expected a driver-change marker, got {marker_kinds!r}")
+
+    pit_windows = evidence_list(geometry, "pitWindows")
+    if len(pit_windows) < 1:
+        failures.append(f"{path}: gap endurance expected a rendered pit-window band, got {len(pit_windows)}")
+    for window in pit_windows:
+        if not isinstance(window, dict):
+            continue
+        if window.get("kind") != "pit-window":
+            failures.append(f"{path}: gap endurance pit-window band has unexpected kind {window.get('kind')!r}")
+        if window.get("classPosition") != 10:
+            failures.append(f"{path}: gap endurance pit-window band expected focus class position P10, got P{window.get('classPosition')}")
+        require_rect(path, typed_dict(window.get("bounds")), "gap endurance pit-window band bounds", failures)
+
+    if graph.get("activeThreat") is not None or graph.get("threatCarIdx") is not None:
+        failures.append(f"{path}: gap endurance should not imply active threat; it is a long-domain/marker fixture")
+
+
+def validate_gap_min_scale_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    validate_gap_to_leader_contract(path, values, failures)
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    if graph.get("showTrendMetrics") is False:
+        return
+
+    trend_metrics = evidence_list(graph, "trendMetrics")
+    metric_rows = evidence_list(geometry, "metricRows")
+    if not metric_rows:
+        failures.append(f"{path}: Gap To Leader min-scale missing rendered metric row evidence")
+        return
+    if len(metric_rows) != len(trend_metrics):
+        failures.append(
+            f"{path}: Gap To Leader min-scale expected {len(trend_metrics)} rendered metric rows, got {len(metric_rows)}"
+        )
+
+
 def validate_track_map_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
     track_map = typed_dict(model_evidence(values).get("trackMap"))
     if slug == "circle-fallback":
@@ -5760,16 +6898,68 @@ def validate_track_map_variant(path: str, values: dict[str, object], slug: str, 
         if primitive_kinds.count("ellipse") < 3 or "arc" not in primitive_kinds:
             failures.append(f"{path}: track-map circle fallback expected ellipse/arc primitives, got {primitive_kinds!r}")
     elif slug == "no-markers":
-        require_equal(path, "track-map no-markers shouldRender", values.get("shouldRender"), False, failures)
+        require_equal(path, "track-map no-markers shouldRender", values.get("shouldRender"), True, failures)
         require_equal(path, "track-map no-markers mapKind", track_map.get("mapKind"), "generated", failures)
         require_equal(path, "track-map no-markers markerCount", track_map.get("markerCount"), 0, failures)
         require_equal(path, "track-map no-markers itemCount", track_map.get("itemCount"), 0, failures)
         primitive_kinds = [text_value(item, "kind") for item in evidence_list(track_map, "primitives")]
-        if primitive_kinds:
-            failures.append(f"{path}: track-map no-markers expected hidden overlay with no rendered primitives, got {primitive_kinds!r}")
-        if visible_header_items(values):
-            failures.append(f"{path}: track-map no-markers should not expose visible header items")
-        reject_hidden_overlay_text(path, values.get("textSample"), "track-map no-markers textSample", failures)
+        if primitive_kinds.count("path") < 4:
+            failures.append(f"{path}: track-map no-markers expected generated map path primitives, got {primitive_kinds!r}")
+        labels = [text_value(item, "text") for item in evidence_list(track_map, "labels")]
+        if labels:
+            failures.append(f"{path}: track-map no-markers expected zero marker labels, got {labels!r}")
+    elif slug == "focus-practice-real-data":
+        require_equal(path, "track-map focus-practice real-data shouldRender", values.get("shouldRender"), True, failures)
+        require_equal(path, "track-map focus-practice real-data markerCount", track_map.get("markerCount"), 3, failures)
+        markers = [typed_dict(marker) for marker in evidence_list(track_map, "items")]
+        markers_by_id = {marker.get("id"): marker for marker in markers}
+        for car_idx in (10, 22, 33):
+            if car_idx not in markers_by_id:
+                failures.append(f"{path}: track-map focus-practice real-data missing marker carIdx {car_idx}")
+        focus = markers_by_id.get(22)
+        player = markers_by_id.get(10)
+        opponent = markers_by_id.get(33)
+        if focus:
+            require_equal(path, "track-map focus-practice marker 22 kind", focus.get("kind"), "focus-marker", failures)
+            if not color_matches_rgb_alpha(focus.get("fill"), (255, 218, 89), 245 / 255):
+                failures.append(f"{path}: track-map focus-practice marker 22 expected GT3 yellow fill, got {focus.get('fill')!r}")
+            if focus.get("label") is not None:
+                failures.append(f"{path}: track-map focus-practice marker 22 should not invent a position label, got {focus.get('label')!r}")
+        for car_idx, marker, expected_rgb in (
+            (10, player, (0, 174, 239)),
+            (33, opponent, (255, 218, 89)),
+        ):
+            if not marker:
+                continue
+            require_equal(path, f"track-map focus-practice marker {car_idx} kind", marker.get("kind"), "car-marker", failures)
+            if not color_matches_rgb_alpha(marker.get("fill"), expected_rgb, 245 / 255):
+                failures.append(
+                    f"{path}: track-map focus-practice marker {car_idx} expected class fill {expected_rgb!r}, got {marker.get('fill')!r}"
+                )
+            if marker.get("label") is not None:
+                failures.append(f"{path}: track-map focus-practice marker {car_idx} should not invent a position label, got {marker.get('label')!r}")
+        if focus and player:
+            focus_width = numeric(typed_dict(focus.get("bounds")).get("width"))
+            player_width = numeric(typed_dict(player.get("bounds")).get("width"))
+            if focus_width <= player_width:
+                failures.append(
+                    f"{path}: track-map focus-practice focus marker radius evidence not larger than player marker ({focus_width:g} <= {player_width:g})"
+                )
+    elif slug == "player-focus-class-color":
+        require_equal(path, "track-map player-focus class color shouldRender", values.get("shouldRender"), True, failures)
+        require_equal(path, "track-map player-focus class color markerCount", track_map.get("markerCount"), 1, failures)
+        markers = evidence_list(track_map, "items")
+        focus_markers = [typed_dict(marker) for marker in markers if marker.get("kind") == "focus-marker"]
+        if len(focus_markers) != 1:
+            failures.append(f"{path}: track-map player-focus class color expected one focus marker, got {len(focus_markers)}")
+        else:
+            marker = focus_markers[0]
+            if not color_matches_rgb_alpha(marker.get("fill"), (255, 255, 255), 245 / 255):
+                failures.append(f"{path}: track-map player-focus marker expected white fill, got {marker.get('fill')!r}")
+            if color_matches_rgb_alpha(marker.get("fill"), (0, 232, 255), None):
+                failures.append(f"{path}: track-map player-focus marker must not use focus cyan fill")
+            if text_value(marker, "label") != "1":
+                failures.append(f"{path}: track-map player-focus marker expected position label '1', got {marker.get('label')!r}")
     else:
         failures.append(f"{path}: unknown track-map fixture variant {slug!r}")
     require_size_fields(path, "track-map", track_map, 360, 360, failures)
@@ -5817,8 +7007,9 @@ def validate_garage_cover_variant(path: str, values: dict[str, object], slug: st
     expected = {
         "hidden": ("garage_hidden", False, True),
         "garage-visible": ("garage_visible", True, True),
-        "stale": ("telemetry_stale", True, False),
-        "disconnected": ("iracing_disconnected", True, False),
+        "stale": ("telemetry_stale", False, False),
+        "disconnected": ("iracing_disconnected", False, False),
+        "min-scale": ("garage_visible", True, True),
     }.get(slug)
     if expected is None:
         failures.append(f"{path}: unknown garage-cover fixture variant {slug!r}")
@@ -5833,13 +7024,21 @@ def validate_garage_cover_variant(path: str, values: dict[str, object], slug: st
         failures.append(f"{path}: garage-cover {slug} expected shouldRender={expected_should_cover}, got {values.get('shouldRender')!r}")
     if garage.get("detectionIsFresh") != expected_fresh:
         failures.append(f"{path}: garage-cover {slug} expected detectionIsFresh={expected_fresh}, got {garage.get('detectionIsFresh')!r}")
+    require_garage_cover_fixture_product_enabled(path, values, failures)
     if expected_should_cover:
         require_rect(path, garage.get("bounds"), "garage-cover variant bounds", failures)
+        validate_garage_cover_visible_eligibility_evidence(path, values, failures)
     elif garage.get("bounds") is not None:
         failures.append(f"{path}: garage-cover {slug} should not mount cover bounds when shouldCover=false")
     if not expected_should_cover and garage.get("imageBounds") is not None:
         failures.append(f"{path}: garage-cover {slug} should not mount cover image bounds when shouldCover=false")
     require_size_object(path, "garage-cover configuredOverlaySize", values.get("configuredOverlaySize"), 1280, 720, failures, required=False)
+
+
+def require_garage_cover_fixture_product_enabled(path: str, values: dict[str, object], failures: list[str]) -> None:
+    settings = evidence_list(typed_dict(values.get("effectiveSettings")), "settings")
+    if effective_setting_bool(settings, "overlayEnabled") is not True:
+        failures.append(f"{path}: garage-cover fixture expected overlayEnabled=true to prove product-enabled eligibility")
 
 
 def validate_stream_chat_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
@@ -5892,6 +7091,12 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
     if slug == "no-content":
         validate_standings_no_content_variant(path, values, failures)
         return
+    if slug == "content-off-chrome-on":
+        validate_standings_content_off_chrome_on_variant(path, values, failures)
+        return
+    if slug == "no-results-chrome-on":
+        validate_standings_no_results_chrome_on_variant(path, values, failures)
+        return
 
     expected_labels, expected_widths, expected_alignments = expected_standings_columns(mode, slug)
     require_sequence(path, "standings column labels", [text_value(column, "label") for column in columns], expected_labels, failures)
@@ -5918,9 +7123,10 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
         if not pit_rows or "#60" not in combined_row_text(pit_rows[0]):
             failures.append(f"{path}: standings expected #60 pit row with IN marker")
     validate_rows_monotonic(path, rows, failures)
-    validate_standings_row_geometry(path, rows, failures)
+    scale = standings_validation_scale(path, values)
+    validate_standings_row_geometry(path, rows, failures, scale=scale)
     validate_standings_bounded_height(path, values, rows, failures)
-    validate_standings_column_fit_evidence(path, columns, rows, expected_labels, expected_widths, failures)
+    validate_standings_column_fit_evidence(path, columns, rows, expected_labels, expected_widths, failures, scale=scale)
     if slug not in {"driver-only", "starting-grid"} and mode == "race":
         if slug not in {"focused-class-only", "one-class"}:
             assert_cell_foreground(path, rows, "#8", "FAST", ("182, 92, 255", "#B65CFF"), failures)
@@ -5980,10 +7186,15 @@ def validate_standings_variant(path: str, values: dict[str, object], slug: str, 
         "focused-class-only",
         "starting-grid",
         "no-content",
+        "content-off-chrome-on",
+        "no-results-chrome-on",
+        "min-scale",
     }:
         failures.append(f"{path}: unknown standings fixture variant {slug!r}")
         return
     validate_standings_contract(path, values, failures)
+    if slug == "min-scale":
+        validate_standings_min_scale_variant(path, values, failures)
 
 
 def validate_standings_session_timing_semantics(
@@ -6233,17 +7444,118 @@ def validate_standings_no_content_variant(path: str, values: dict[str, object], 
         require_effective_standings_setting(path, values, key, False, failures)
 
 
-def validate_standings_row_geometry(path: str, rows: list[object], failures: list[str]) -> None:
+def validate_standings_content_off_chrome_on_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "standings content-off chrome-on bodyKind", values.get("bodyKind"), "table", failures)
+    require_equal(path, "standings content-off chrome-on status", values.get("status"), "chrome only | content disabled", failures)
+    require_equal(path, "standings content-off chrome-on shouldRender", values.get("shouldRender"), True, failures)
+    require_equal(path, "standings content-off chrome-on rowCount", values.get("rowCount"), 0, failures)
+    model = model_evidence(values)
+    if evidence_list(model, "columns"):
+        failures.append(f"{path}: standings content-off chrome-on expected no rendered columns")
+    if evidence_list(model, "rows"):
+        failures.append(f"{path}: standings content-off chrome-on expected no rendered rows")
+    header_items = visible_header_items(values)
+    if not header_items:
+        failures.append(f"{path}: standings content-off chrome-on expected visible headerItems")
+    elif not any(str(item.get("key") or "").lower() == "timeremaining" for item in header_items):
+        failures.append(f"{path}: standings content-off chrome-on expected timeRemaining header item, got {header_items!r}")
+    text = str(values.get("textSample") or "")
+    if "06:37:08" not in text and not path.startswith("native-overlays/"):
+        failures.append(f"{path}: standings content-off chrome-on textSample should include time remaining header, got {text!r}")
+    for stale in ("Kousuke", "Kauan", "Tech Mates Racing", "Tommie Wittens", "Leader", "1:54.228"):
+        if stale.lower() in text.lower():
+            failures.append(f"{path}: standings content-off chrome-on leaked stale standings content {text!r}")
+            break
+    for key in (
+        "standings.content.standings.class-position.enabled",
+        "standings.content.standings.car-number.enabled",
+        "standings.content.standings.driver.enabled",
+        "standings.content.standings.gap.enabled",
+        "standings.content.standings.interval.enabled",
+        "standings.content.standings.fastest-lap.enabled",
+        "standings.content.standings.last-lap.enabled",
+        "standings.content.standings.pit.enabled",
+    ):
+        require_effective_standings_setting(path, values, key, False, failures)
+    if not path.startswith("native-overlays/"):
+        settings = evidence_list(typed_dict(values.get("effectiveSettings")), "settings")
+        require_effective_setting_value(path, settings, "chrome.header.time-remaining.race", True, failures)
+
+
+def validate_standings_no_results_chrome_on_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "standings no-results chrome-on bodyKind", values.get("bodyKind"), "table", failures)
+    require_equal(path, "standings no-results chrome-on status", values.get("status"), "waiting for standings", failures)
+    require_equal(path, "standings no-results chrome-on shouldRender", values.get("shouldRender"), True, failures)
+    require_equal(path, "standings no-results chrome-on rowCount", values.get("rowCount"), 0, failures)
+    model = model_evidence(values)
+    if evidence_list(model, "columns"):
+        failures.append(f"{path}: standings no-results chrome-on expected hidden table columns")
+    if evidence_list(model, "rows"):
+        failures.append(f"{path}: standings no-results chrome-on expected hidden table rows")
+    header_items = visible_header_items(values)
+    if not header_items:
+        failures.append(f"{path}: standings no-results chrome-on expected visible headerItems")
+    elif not any(str(item.get("key") or "").lower() == "timeremaining" for item in header_items):
+        failures.append(f"{path}: standings no-results chrome-on expected timeRemaining header item, got {header_items!r}")
+    rendered = typed_dict(typed_dict(values.get("effectiveSettings")).get("rendered"))
+    require_equal(
+        path,
+        "standings no-results chrome-on unavailable policy",
+        rendered.get("unavailableContentPolicy"),
+        "chrome-only-placeholder",
+        failures)
+    text = str(values.get("textSample") or "")
+    for stale in ("Kousuke", "Kauan", "Tech Mates Racing", "Tommie Wittens", "Leader", "Waiting for live rows."):
+        if stale.lower() in text.lower():
+            failures.append(f"{path}: standings no-results chrome-on leaked stale/body placeholder text {text!r}")
+            break
+    if not path.startswith("native-overlays/"):
+        settings = evidence_list(typed_dict(values.get("effectiveSettings")), "settings")
+        require_effective_setting_value(path, settings, "chrome.header.time-remaining.race", True, failures)
+
+
+def validate_standings_min_scale_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "standings min-scale bodyKind", values.get("bodyKind"), "table", failures)
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        require_equal(path, "standings min-scale manifest scale", values.get("minScale"), 0.6, failures)
+        require_equal(path, "standings min-scale capture transform", values.get("scaleTransform"), 0.6, failures)
+        require_size_object(
+            path,
+            "standings min-scale scaled screenshot size",
+            {"width": values.get("width"), "height": values.get("height")},
+            406,
+            188,
+            failures,
+            required=False)
+        validate_min_scale_effective_settings(path, values, "standings min-scale", 406, 188, failures)
+
+
+def standings_validation_scale(path: str, values: dict[str, object]) -> float:
+    if screenshot_variant_key(path) == ("standings", "min-scale"):
+        scale = numeric(values.get("scaleTransform")) or numeric(values.get("minScale"))
+        if scale > 0:
+            return scale
+    return 1.0
+
+
+def validate_standings_row_geometry(path: str, rows: list[object], failures: list[str], *, scale: float = 1.0) -> None:
+    data_min, data_max = scaled_bounds(22, 34, scale)
+    header_min, header_max = scaled_bounds(24, 46, scale)
     for index, row in enumerate(rows):
         height = rect_number(get_manifest_value(row, "bounds"), "height")
         if height is None:
             failures.append(f"{path}: standings row {index} missing row bounds height")
             continue
         if normalize_row_kind(row) == "class-header":
-            if not (24 <= height <= 46):
-                failures.append(f"{path}: standings class header row {index} expected 24..46px height, got {height!r}")
-        elif not (22 <= height <= 34):
-            failures.append(f"{path}: standings data row {index} expected 22..34px height, got {height!r}")
+            if not (header_min <= height <= header_max):
+                failures.append(f"{path}: standings class header row {index} expected {header_min:g}..{header_max:g}px height, got {height!r}")
+        elif not (data_min <= height <= data_max):
+            failures.append(f"{path}: standings data row {index} expected {data_min:g}..{data_max:g}px height, got {height!r}")
+
+
+def scaled_bounds(minimum: float, maximum: float, scale: float) -> tuple[float, float]:
+    normalized_scale = scale if scale > 0 else 1.0
+    return minimum * normalized_scale - 0.75, maximum * normalized_scale + 0.75
 
 
 def validate_standings_column_fit_evidence(
@@ -6253,6 +7565,8 @@ def validate_standings_column_fit_evidence(
     expected_labels: list[str],
     expected_widths: list[int],
     failures: list[str],
+    *,
+    scale: float = 1.0,
 ) -> None:
     for index, column in enumerate(columns):
         if not isinstance(column, dict):
@@ -6263,7 +7577,7 @@ def validate_standings_column_fit_evidence(
         if path.startswith(("browser-overlays/", "localhost-overlays/", "native-overlays/")):
             if not isinstance(rendered_width, (int, float)) or rendered_width <= 0:
                 failures.append(f"{path}: standings column {label!r} missing positive renderedWidth evidence")
-            elif isinstance(configured_width, (int, float)) and rendered_width < min(30, configured_width):
+            elif isinstance(configured_width, (int, float)) and rendered_width < min(30 * scale, configured_width * scale):
                 failures.append(f"{path}: standings column {label!r} renderedWidth {rendered_width!r} is too small for configured width {configured_width!r}")
             require_rect(path, get_manifest_value(column, "bounds"), f"standings column {label!r} bounds", failures)
 
@@ -6283,7 +7597,12 @@ def validate_standings_column_fit_evidence(
             require_rect(path, cell.get("bounds"), f"standings data row {row_index} {label!r} cell bounds", failures)
             if isinstance(cell.get("bounds"), dict) and isinstance(row.get("bounds"), dict):
                 require_rect_within(path, f"standings data row {row_index} {label!r} cell bounds", cell.get("bounds"), row.get("bounds"), "standings row bounds", failures, tolerance=1.0)
-            require_rendered_text_fit(path, cell, f"standings data row {row_index} {label!r} cell", failures)
+            require_rendered_text_fit(
+                path,
+                cell,
+                f"standings data row {row_index} {label!r} cell",
+                failures,
+                require_metrics=path.startswith("native-overlays/"))
 
 
 def require_effective_standings_setting(
@@ -6464,6 +7783,27 @@ def validate_relative_contract(path: str, values: dict[str, object], failures: l
         actual = row_cells(rows[index])
         if actual != expected:
             failures.append(f"{path}: relative row {index} expected cells {expected!r}, got {actual!r}")
+        row = rows[index]
+        rendered_cells = evidence_list(row, "renderedCells") if isinstance(row, dict) else []
+        if len(rendered_cells) != len(expected_labels):
+            failures.append(f"{path}: relative row {index} expected {len(expected_labels)} rendered cells, got {len(rendered_cells)}")
+            continue
+        for cell_index, cell in enumerate(rendered_cells):
+            if not isinstance(cell, dict):
+                continue
+            label = expected_labels[cell_index]
+            column_name = text_value(cell, "column")
+            if column_name and column_name.lower() != label.lower():
+                failures.append(f"{path}: relative row {index} cell {cell_index} expected column {label!r}, got {column_name!r}")
+            require_rect(path, cell.get("bounds"), f"relative row {index} {label!r} cell bounds", failures)
+            if isinstance(cell.get("bounds"), dict) and isinstance(row.get("bounds"), dict):
+                require_rect_within(path, f"relative row {index} {label!r} cell bounds", cell.get("bounds"), row.get("bounds"), "relative row bounds", failures, tolerance=1.0)
+            require_rendered_text_fit(
+                path,
+                cell,
+                f"relative row {index} {label!r} cell",
+                failures,
+                require_metrics=path.startswith("native-overlays/"))
     expected_deltas = (
         {
             expected_reference_index - 1: 1,
@@ -6898,7 +8238,7 @@ def validate_gap_to_leader_contract(path: str, values: dict[str, object], failur
             if len(rendered_points) >= 6 and starts_segment_count >= len(rendered_points):
                 failures.append(f"{path}: gap graph {label} series marks every point as a new segment; line continuity is unproven")
     expected_metric_labels = ["Last", "5L", "10L", "Pit", "PLap", "Stint", "Tire", "Status"]
-    if variant_key == ("gap-to-leader", "trend-row-off"):
+    if variant_key == ("gap-to-leader", "tire-trend-off"):
         expected_metric_labels = ["Last", "5L", "10L", "Pit", "PLap", "Stint", "Status"]
     elif variant_key == ("gap-to-leader", "trend-off"):
         expected_metric_labels = []
@@ -6908,14 +8248,20 @@ def validate_gap_to_leader_contract(path: str, values: dict[str, object], failur
     if metric_rows:
         labels = [text_value(row, "text") for row in metric_rows]
         require_sequence(path, "gap rendered metric row labels", labels, expected_metric_labels, failures)
-        validate_gap_rendered_trend_cells(path, metric_rows, failures)
+        active_threat_present = bool(typed_dict(graph.get("activeThreat")))
+        validate_gap_rendered_trend_cells(path, metric_rows, failures, active_threat_present)
         validate_gap_rendered_trend_layout(path, geometry, metric_rows, failures)
     elif show_trend and path.startswith(("browser-overlays/", "localhost-overlays/")):
         failures.append(f"{path}: Gap To Leader trend section missing rendered metric row evidence")
     validate_gap_v102_feedback_contract(path, graph, geometry, failures)
 
 
-def validate_gap_rendered_trend_cells(path: str, metric_rows: list[object], failures: list[str]) -> None:
+def validate_gap_rendered_trend_cells(
+    path: str,
+    metric_rows: list[object],
+    failures: list[str],
+    active_threat_present: bool,
+) -> None:
     for row_index, row in enumerate(metric_rows):
         if not isinstance(row, dict):
             continue
@@ -6924,6 +8270,8 @@ def validate_gap_rendered_trend_cells(path: str, metric_rows: list[object], fail
                 continue
             column = text_value(cell, "column")
             if column.lower() in {"metric", ""}:
+                continue
+            if column.lower() == "threat" and not active_threat_present:
                 continue
             text = text_value(cell, "text")
             if not text or text == "--":
@@ -7029,9 +8377,13 @@ def validate_gap_v102_feedback_contract(
             failures.append(f"{path}: V102-018 Gap {label.upper()} ready value lacks completed-reference-lap evidence >= {expected_laps}, got {completed_laps!r}")
 
     active_threat = typed_dict(graph.get("activeThreat"))
-    if not active_threat:
+    if not active_threat and variant_key not in {
+        ("gap-to-leader", "long-tail-real-data"),
+        ("gap-to-leader", "pit-window-real-data"),
+        ("gap-to-leader", "endurance-domain-capture-shaped"),
+    }:
         failures.append(f"{path}: V102-025/V102-026 Gap validation fixture does not expose an active same-lap threat to prove label and red-line semantics")
-    else:
+    elif active_threat:
         chaser = typed_dict(active_threat.get("chaser"))
         label = text_value(chaser, "label")
         if label.startswith("#"):
@@ -7046,7 +8398,12 @@ def validate_gap_v102_feedback_contract(
 
     scale = text_value(geometry, "scale").lower()
     max_gap_seconds = numeric(graph.get("maxGapSeconds"))
-    if reference_position is not None and reference_position > 8 and scale != "focus-relative":
+    if (
+        reference_position is not None
+        and reference_position > 8
+        and scale != "focus-relative"
+        and variant_key != ("gap-to-leader", "endurance-domain-capture-shaped")
+    ):
         failures.append(f"{path}: V102-021 Gap graph uses {scale or 'unknown'} scale for reference P{reference_position}, so far-behind clipping/focus-window behaviour is unproven")
     if max_gap_seconds >= 180 and scale != "focus-relative":
         failures.append(f"{path}: V102-017/V102-021 Gap graph max scale {max_gap_seconds:g}s is too wide for the focused V2 trend validation fixture")
@@ -7101,9 +8458,11 @@ def is_gap_threat_red(color: str) -> bool:
 
 def parse_css_color_rgb(color: str) -> tuple[Optional[int], Optional[int], Optional[int]]:
     normalized = color.strip()
-    hex_match = re.fullmatch(r"#([0-9a-fA-F]{6})(?:[0-9a-fA-F]{2})?", normalized)
+    hex_match = re.fullmatch(r"#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})", normalized)
     if hex_match:
         token = hex_match.group(1)
+        if len(token) == 8:
+            token = token[2:]
         return int(token[0:2], 16), int(token[2:4], 16), int(token[4:6], 16)
 
     rgb_match = re.search(r"rgba?\((\d+),\s*(\d+),\s*(\d+)", normalized)
@@ -7128,9 +8487,25 @@ def parse_css_color_alpha(color: str) -> Optional[float]:
     hex_match = re.fullmatch(r"#([0-9a-fA-F]{8})", normalized)
     if hex_match:
         token = hex_match.group(1)
-        return int(token[6:8], 16) / 255.0
+        return int(token[0:2], 16) / 255.0
 
     return None
+
+
+def color_matches_rgb_alpha(
+    actual: object,
+    expected_rgb: tuple[int, int, int],
+    expected_alpha: Optional[float],
+) -> bool:
+    if not isinstance(actual, str):
+        return False
+    red, green, blue = parse_css_color_rgb(actual)
+    if (red, green, blue) != expected_rgb:
+        return False
+    if expected_alpha is None:
+        return True
+    alpha = parse_css_color_alpha(actual)
+    return alpha is not None and abs(alpha - expected_alpha) <= 0.004
 
 
 def validate_track_map_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -7145,7 +8520,11 @@ def validate_track_map_contract(path: str, values: dict[str, object], failures: 
     if path.startswith(("browser-overlays/", "localhost-overlays/")):
         require_configured_canvas_backing_contract(path, values, "track-map", 360, 360, failures)
     marker_count = track_map.get("markerCount")
-    if marker_count != 4:
+    is_no_markers = "no-markers" in path
+    if is_no_markers:
+        if marker_count != 0:
+            failures.append(f"{path}: track-map no-markers expected 0 markers, got {marker_count!r}")
+    elif marker_count != 4:
         failures.append(f"{path}: track-map expected 4 markers, got {marker_count!r}")
     primitive_kinds = [text_value(item, "kind") for item in evidence_list(track_map, "primitives")]
     if expected_kind == "generated":
@@ -7164,9 +8543,13 @@ def validate_track_map_contract(path: str, values: dict[str, object], failures: 
         if primitive_kinds.count("ellipse") < 3 or "arc" not in primitive_kinds:
             failures.append(f"{path}: circle track-map expected ellipse/arc fallback primitives, got {primitive_kinds!r}")
     labels = [text_value(item, "text") for item in evidence_list(track_map, "labels")]
-    for label in ("1", "2", "24"):
-        if label not in labels:
-            failures.append(f"{path}: track-map missing marker label {label!r}")
+    if is_no_markers:
+        if labels:
+            failures.append(f"{path}: track-map no-markers should not expose marker labels, got {labels!r}")
+    else:
+        for label in ("1", "2", "24"):
+            if label not in labels:
+                failures.append(f"{path}: track-map missing marker label {label!r}")
 
 
 def validate_flags_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -7295,6 +8678,14 @@ def evidence_list(values: dict[str, object], key: str) -> list[object]:
     return value if isinstance(value, list) else []
 
 
+def first_evidence_item_by_kind(items: list[object], kind: str) -> dict[str, object]:
+    for item in items:
+        item_dict = typed_dict(item)
+        if text_value(item_dict, "kind") == kind:
+            return item_dict
+    return {}
+
+
 def text_value(values: object, key: str) -> str:
     if not isinstance(values, dict):
         return ""
@@ -7391,6 +8782,61 @@ def require_shrunk_overlay_height(
     source_height = browser_source.get("height")
     if isinstance(source_height, int) and source_height >= full_height:
         failures.append(f"{path}: {label} browser source height expected below {full_height}, got {source_height}")
+
+
+def expected_fuel_content_height(row_count: int, section_count: int, failures: list[str]) -> Optional[int]:
+    geometry = typed_dict(overlay_geometry_contract_for_constants().get("metricRows"))
+    required_keys = [
+        "minimumFuelCalculatorHeight",
+        "headerChromeHeight",
+        "fuelContentVerticalPadding",
+        "fuelSectionTitleReserveHeight",
+        "segmentedRowHeight",
+        "rowGap",
+        "sectionGap",
+        "collapsedFooterReserveHeight",
+    ]
+    missing = [key for key in required_keys if not is_numeric_value(geometry.get(key))]
+    if missing:
+        failures.append(f"overlay-geometry.json: missing fuel height contract keys {missing}")
+        return None
+
+    if row_count <= 0 or section_count <= 0:
+        return round(numeric(geometry["minimumFuelCalculatorHeight"]))
+
+    row_gaps = round(max(0, row_count - section_count) * numeric(geometry["rowGap"]))
+    section_gaps = round(max(0, section_count - 1) * numeric(geometry["sectionGap"]))
+    height = (
+        numeric(geometry["headerChromeHeight"])
+        + numeric(geometry["fuelContentVerticalPadding"])
+        + section_count * numeric(geometry["fuelSectionTitleReserveHeight"])
+        + round(row_count * numeric(geometry["segmentedRowHeight"]))
+        + row_gaps
+        + section_gaps
+        + numeric(geometry["collapsedFooterReserveHeight"])
+    )
+    return round(max(numeric(geometry["minimumFuelCalculatorHeight"]), min(height, 298)))
+
+
+def require_fuel_rendered_content_height(
+    path: str,
+    values: dict[str, object],
+    row_count: int,
+    section_count: int,
+    label: str,
+    failures: list[str],
+) -> None:
+    expected_height = expected_fuel_content_height(row_count, section_count, failures)
+    if expected_height is None:
+        return
+
+    require_equal(path, f"{label} screenshot height", values.get("height"), expected_height, failures)
+    rendered = typed_dict(typed_dict(values.get("effectiveSettings")).get("rendered"))
+    browser_source = typed_dict(rendered.get("browserSource"))
+    require_equal(path, f"{label} browserSource baseHeight", browser_source.get("baseHeight"), expected_height, failures)
+    require_equal(path, f"{label} browserSource height", browser_source.get("height"), expected_height, failures)
+    layout = typed_dict(rendered.get("layout"))
+    require_equal(path, f"{label} unusedHeightRatio", layout.get("unusedHeightRatio"), 0, failures)
 
 
 def require_section_rows(path: str, sections: dict[str, dict[str, object]], title: str, expected_labels: list[str], failures: list[str]) -> None:
@@ -7650,6 +9096,14 @@ def rect_number(rect: object, key: str) -> float | None:
         return None
     value = get_manifest_value(rect, key)
     return float(value) if isinstance(value, (int, float)) else None
+
+
+def rect_center_x(rect: object) -> float | None:
+    x = rect_number(rect, "x")
+    width = rect_number(rect, "width")
+    if x is None or width is None:
+        return None
+    return x + width / 2
 
 
 def rects_intersect(first: dict[str, object], second: dict[str, object]) -> bool:
@@ -8221,8 +9675,8 @@ def read_browser_review_variant_specs(repo_root: Path, failures: list[str]) -> d
         variants[key] = match.group(3)
 
     track_map_fallback_markers = (
-        "browser-overlays/track-map-fallback.png",
-        "localhost-overlays/track-map-fallback.png",
+        "webOverlayScreenshotPath('browser-overlays', 'track-map', 'fallback')",
+        "webOverlayScreenshotPath('localhost-overlays', 'track-map', 'fallback')",
         "trackMap=fallback",
         "fixtureVariant: 'circle-fallback'",
     )
@@ -8807,6 +10261,33 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="standings min-scale rightmost column clips out of scaled content",
+        path="browser-overlays/standings-min-scale.png",
+        base=mutation_standings_min_scale_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 5, "renderedCells", 7, "bounds", "x"), 410),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("V102-020 standings rightmost column rendered cell bounds must fit within V102-020 standings rightmost column content bounds",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="native standings min-scale loses render transform evidence",
+        path="native-overlays/standings-min-scale.png",
+        base=mutation_native_standings_min_scale_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("layout", "renderScale"), 1),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("standings min-scale layout renderScale",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="native standings min-scale clips scaled layout element",
+        path="native-overlays/standings-min-scale.png",
+        base=mutation_native_standings_min_scale_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("layout", "elements", 2, "bounds", "x"), 410),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("standings min-scale layout element 2 cell bounds must fit within standings min-scale rendered layout root",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="session weather metric units switch to imperial",
         path="browser-overlays/session-weather-race.png",
         base=mutation_session_weather_screenshot(),
@@ -8914,6 +10395,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="gap min-scale loses rendered trend metric evidence",
+        path="browser-overlays/gap-to-leader/min-scale.png",
+        base=mutation_gap_min_scale_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "graph", "geometry", "metricRows"), []),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("Gap To Leader min-scale missing rendered metric row evidence",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="input waiting rail leaks stale live values",
         path="browser-overlays/input-state-waiting.png",
         base=mutation_input_waiting_screenshot(),
@@ -8995,12 +10485,69 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="hidden no-render fixture loses reason status",
+        path="browser-overlays/fuel-calculator/no-data.png",
+        base=mutation_hidden_no_render_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("status",), "live"),
+        validate=validate_hidden_no_render_manifest_contract,
+        expected_tokens=("hidden/no-render status must explain",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="hidden no-render fixture loses unavailable provenance",
+        path="browser-overlays/fuel-calculator/no-data.png",
+        base=mutation_hidden_no_render_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("effectiveSettings", "rendered", "provenance", "evidenceClass"), "synthetic-preview"),
+        validate=validate_hidden_no_render_manifest_contract,
+        expected_tokens=("effectiveSettings rendered provenance evidenceClass expected 'unavailable'",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="hidden no-render fixture leaks stale metric rows",
+        path="browser-overlays/fuel-calculator/no-data.png",
+        base=mutation_hidden_no_render_screenshot(),
+        mutate=lambda screenshot: set_nested_value(
+            screenshot,
+            ("modelEvidence", "metricSections"),
+            [{"title": "Race Information", "rows": [{"label": "Fuel"}]}]),
+        validate=validate_hidden_no_render_manifest_contract,
+        expected_tokens=("hidden/no-render model expected empty metricSections",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="hidden no-render fixture leaks stale DOM text",
+        path="browser-overlays/fuel-calculator/no-data.png",
+        base=mutation_hidden_no_render_screenshot(),
+        mutate=lambda screenshot: screenshot["layout"]["elements"].append({"role": "metric-row", "text": "Fuel 74.0 L"}),
+        validate=validate_hidden_no_render_manifest_contract,
+        expected_tokens=("hidden/no-render layout element", "hidden/no-render layout leaks active metric-row DOM evidence"),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="rightmost populated cell loses numeric text-fit evidence",
         path="browser-overlays/relative-rightmost-evidence.png",
         base=mutation_relative_rightmost_screenshot(),
         mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 4, "renderedCells", 3, "textMetrics"), {"fitsWidth": True, "fitsHeight": True}),
         validate=validate_overlay_variant_contract,
         expected_tokens=("text fit metrics missing numeric availableWidth",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="native relative Delta cell loses numeric text-fit evidence",
+        path="native-overlays/relative-rightmost-evidence.png",
+        base=mutation_relative_rightmost_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 4, "renderedCells", 2, "textMetrics"), {"fitsWidth": True, "fitsHeight": True}),
+        validate=validate_relative_contract,
+        expected_tokens=("relative row 4 'Delta' cell text fit metrics missing numeric availableWidth",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="native standings data cell loses numeric text-fit evidence",
+        path="native-overlays/standings-race.png",
+        base=mutation_standings_screenshot(),
+        mutate=lambda screenshot: set_nested_value(screenshot, ("modelEvidence", "rows", 1, "renderedCells", 5, "textMetrics"), {"fitsWidth": True, "fitsHeight": True}),
+        validate=validate_standings_contract,
+        expected_tokens=("standings data row 0 'FAST' cell text fit metrics missing numeric availableWidth",),
         failures=failures,
     )
     expect_mutation_failure(
@@ -9022,6 +10569,21 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="car radar side-no-placement renders side warning geometry",
+        path="browser-overlays/car-radar/side-no-placement.png",
+        base=mutation_car_radar_side_no_placement_screenshot(),
+        mutate=lambda screenshot: typed_dict(typed_dict(screenshot["modelEvidence"])["carRadar"])["items"].append(
+            {
+                "kind": "side-left",
+                "carIdx": 44,
+                "bounds": {"x": 98, "y": 132, "width": 20, "height": 36},
+            }
+        ),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("side-no-placement should not expose side items",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="overlay manifest drops effective settings evidence",
         path="browser-overlays/fuel-calculator-race.png",
         base=mutation_effective_settings_screenshot(),
@@ -9040,6 +10602,15 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
+        name="fuel calculating compact fixture keeps full height",
+        path="browser-overlays/fuel-calculator/calculating.png",
+        base=mutation_fuel_calculating_screenshot(),
+        mutate=mutate_fuel_calculating_full_height,
+        validate=validate_fuel_calculating_variant,
+        expected_tokens=("fuel calculating compact height screenshot height",),
+        failures=failures,
+    )
+    expect_mutation_failure(
         name="effective settings native pixel evidence loses explicit reason",
         path="browser-overlays/fuel-calculator-race.png",
         base=mutation_effective_settings_screenshot(),
@@ -9049,7 +10620,7 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         failures=failures,
     )
     expect_mutation_failure(
-        name="garage-cover global preview forces preview cover visible",
+        name="garage-cover global preview stays settings-only",
         path="browser-overlays/garage-cover-race.png",
         base=mutation_effective_settings_screenshot(overlay_id="garage-cover", body_kind="garage-cover"),
         mutate=lambda screenshot: set_nested_value(screenshot, ("effectiveSettings", "settings", 3, "value"), True),
@@ -10135,6 +11706,78 @@ def mutation_standings_screenshot() -> dict[str, object]:
     }
 
 
+def mutation_standings_min_scale_screenshot() -> dict[str, object]:
+    screenshot = copy.deepcopy(mutation_standings_screenshot())
+    scale = 0.6
+    screenshot["fixtureVariant"] = "min-scale"
+    screenshot["minScale"] = scale
+    screenshot["scaleTransform"] = scale
+    screenshot["width"] = 406
+    screenshot["height"] = 188
+    screenshot["status"] = "scoring | forced-preview-state"
+    screenshot["source"] = "source: preview fixture minimum-scale layout"
+    screenshot["contentBounds"] = {"x": 0, "y": 0, "width": 406, "height": 188}
+    screenshot["layout"] = {
+        "root": {"x": 0, "y": 0, "width": 406, "height": 188},
+        "contentBounds": {"x": 0, "y": 0, "width": 406, "height": 188},
+    }
+    scale_bounds_in_place(screenshot["modelEvidence"], scale)
+    effective = typed_dict(screenshot.get("effectiveSettings"))
+    effective["sources"]["browserReview"]["fixtureVariant"] = "standings-min-scale"
+    effective["sources"]["localhostObs"]["fixtureVariant"] = "standings-min-scale"
+    effective["sources"]["windowsNative"]["fixtureVariant"] = "standings-min-scale"
+    effective["rendered"]["browserSource"] = {
+        "baseWidth": 677,
+        "baseHeight": 313,
+        "width": 406,
+        "height": 188,
+        "scale": 0.6,
+        "scalePercent": 60,
+        "opacity": 1,
+        "opacityPercent": 100,
+    }
+    effective["settings"].append({"key": "scalePercent", "value": 60})
+    screenshot["scenarioEvidence"] = mutation_scenario_evidence(
+        slug="min-scale",
+        query="fixture=standings-min-scale",
+        body_kind="table",
+        status="scoring | forced-preview-state",
+        source="source: preview fixture minimum-scale layout",
+        should_render=True,
+        row_count=6)
+    return screenshot
+
+
+def mutation_native_standings_min_scale_screenshot() -> dict[str, object]:
+    screenshot = mutation_standings_min_scale_screenshot()
+    screenshot["layout"]["unscaledRoot"] = {"x": 0, "y": 0, "width": 677, "height": 313}
+    screenshot["layout"]["renderScale"] = 0.6
+    screenshot["layout"]["elements"] = [
+        {"role": "content", "bounds": {"x": 10, "y": 32, "width": 386, "height": 146}},
+        {"role": "row", "bounds": {"x": 10, "y": 68, "width": 386, "height": 20}},
+        {"role": "cell", "bounds": {"x": 360, "y": 70, "width": 38, "height": 16}},
+    ]
+    screenshot["effectiveSettings"]["sources"]["windowsNative"]["routePath"] = "native://standings"
+    scenario = typed_dict(screenshot.get("scenarioEvidence"))
+    scenario.pop("urlPath", None)
+    scenario["fixture"] = "browser-review/static-overlay-model/min-scale"
+    return screenshot
+
+
+def scale_bounds_in_place(value: object, scale: float) -> None:
+    if isinstance(value, dict):
+        bounds = value.get("bounds")
+        if isinstance(bounds, dict):
+            for key in ("x", "y", "width", "height"):
+                if isinstance(bounds.get(key), (int, float)):
+                    bounds[key] = round(float(bounds[key]) * scale, 3)
+        for child in value.values():
+            scale_bounds_in_place(child, scale)
+    elif isinstance(value, list):
+        for child in value:
+            scale_bounds_in_place(child, scale)
+
+
 def mutation_table_row(
     index: int,
     kind: str,
@@ -10489,6 +12132,7 @@ def mutation_input_min_scale_screenshot() -> dict[str, object]:
             status="trace live | ABS active",
             should_render=True,
         ),
+        "effectiveSettings": mutation_min_scale_effective_settings("input-state", "inputs", 520, 260, 312, 156),
         "modelEvidence": {
             "inputs": {
                 "hasContent": True,
@@ -10524,6 +12168,156 @@ def mutation_input_min_scale_screenshot() -> dict[str, object]:
                 ],
             },
         },
+    }
+
+
+def mutation_min_scale_effective_settings(
+    overlay_id: str,
+    body_kind: str,
+    base_width: int,
+    base_height: int,
+    width: int,
+    height: int,
+) -> dict[str, object]:
+    effective = mutation_effective_settings(
+        overlay_id,
+        "race",
+        body_kind,
+        should_render=True,
+        row_count=0,
+        extra_settings=[{"key": "scalePercent", "value": 60}],
+        fixture_variant="min-scale")
+    effective["rendered"]["browserSource"] = {
+        "baseWidth": base_width,
+        "baseHeight": base_height,
+        "width": width,
+        "height": height,
+        "scale": 0.6,
+        "scalePercent": 60,
+        "opacity": 1,
+        "opacityPercent": 100,
+    }
+    return effective
+
+
+def mutation_gap_min_scale_screenshot() -> dict[str, object]:
+    trend_labels = ["Last", "5L", "10L", "Pit", "PLap", "Stint", "Tire", "Status"]
+    trend_values = ["+0.4", "+1.8s", "+3.4s", "Track", "23", "17L", "3L", "Track"]
+    trend_threats = ["-0.7", "-1.2s", "-2.1s", "Track", "22", "16L", "2L", "Track"]
+    geometry = {
+        "frame": {"x": 17.1, "y": 38.1, "width": 358.2, "height": 150},
+        "plot": {"x": 75.1, "y": 38.1, "width": 258.2, "height": 92},
+        "axis": {"x": 17.1, "y": 38.1, "width": 50, "height": 92},
+        "labelLane": {"x": 333.3, "y": 38.1, "width": 38, "height": 92},
+        "scale": "focus-relative",
+        "metricsTable": {"x": 17.1, "y": 134, "width": 358.2, "height": 62},
+        "series": [
+            mutation_gap_series(0, 11, 1, True, False, "#62FF9F"),
+            mutation_gap_series(1, 42, 5, False, True, "#7DD3FC"),
+            mutation_gap_series(2, 47, 4, False, False, "#F87171"),
+            mutation_gap_series(3, 51, 6, False, False, "#A3A3A3"),
+        ],
+        "metricRows": [
+            mutation_gap_metric_row(index, label, trend_values[index], trend_threats[index])
+            for index, label in enumerate(trend_labels)
+        ],
+    }
+    return {
+        "overlayId": "gap-to-leader",
+        "fixtureVariant": "min-scale",
+        "previewMode": "race",
+        "bodyKind": "graph",
+        "status": "live | race gap",
+        "source": "source: live gap telemetry | cars 3/3",
+        "shouldRender": True,
+        "minScale": 0.6,
+        "scaleTransform": 0.6,
+        "width": 392,
+        "height": 202,
+        "scenarioEvidence": mutation_scenario_evidence(
+            slug="min-scale",
+            query="fixture=gap-to-leader-min-scale",
+            body_kind="graph",
+            status="live | race gap",
+            source="source: live gap telemetry | cars 3/3",
+            should_render=True,
+        ),
+        "effectiveSettings": mutation_min_scale_effective_settings("gap-to-leader", "graph", 654, 336, 392, 202),
+        "modelEvidence": {
+            "graph": {
+                "showGraph": True,
+                "showTrendMetrics": True,
+                "maxGapSeconds": 16,
+                "comparisonLabel": "P4",
+                "threatCarIdx": 47,
+                "activeThreat": {"chaser": {"label": "P4", "carIdx": 47}},
+                "trendMetrics": [
+                    {
+                        "label": label,
+                        "state": "ready" if label in {"5L", "10L"} else label.lower(),
+                        "stateLabel": "Ready" if label in {"5L", "10L"} else None,
+                        "valueText": trend_values[index],
+                        "chaserText": trend_threats[index],
+                        "completedReferenceLaps": 10 if label in {"5L", "10L"} else None,
+                    }
+                    for index, label in enumerate(trend_labels)
+                ],
+                "geometry": geometry,
+            },
+        },
+    }
+
+
+def mutation_gap_series(
+    source_index: int,
+    car_idx: int,
+    class_position: int,
+    is_class_leader: bool,
+    is_reference: bool,
+    color: str,
+) -> dict[str, object]:
+    return {
+        "sourceIndex": source_index,
+        "drawIndex": source_index,
+        "carIdx": car_idx,
+        "classPosition": class_position,
+        "isClassLeader": is_class_leader,
+        "isReference": is_reference,
+        "pointCount": 6,
+        "baseColor": color,
+        "renderedColor": color,
+        "points": [
+            {
+                "axisSeconds": index * 30,
+                "gapSeconds": 3 + index * 0.4 + source_index,
+                "startsSegment": index == 0,
+                "point": {"x": 75.1 + index * 42, "y": 55 + source_index * 12 + index},
+            }
+            for index in range(6)
+        ],
+    }
+
+
+def mutation_gap_metric_row(index: int, label: str, value: str, threat: str) -> dict[str, object]:
+    y = 137 + index * 7
+    row = {"x": 20, "y": y, "width": 352, "height": 6}
+    cells = [
+        ("metric", label, 22, 82),
+        ("value", value, 110, 104),
+        ("threat", threat, 224, 104),
+    ]
+    return {
+        "text": label,
+        "bounds": row,
+        "cells": [
+            {
+                "column": column,
+                "text": text,
+                "bounds": {"x": x, "y": y, "width": width, "height": 6},
+                "textMetrics": mutation_text_metrics(text, width, 6),
+            }
+            for column, text, x, width in cells
+        ],
     }
 
 
@@ -10607,6 +12401,48 @@ def mutate_overlay_chrome_radius_flat(screenshot: dict[str, object]) -> None:
 def mutate_overlay_chrome_backing_transparent(screenshot: dict[str, object]) -> None:
     styles = typed_dict(typed_dict(evidence_list(typed_dict(screenshot.get("layout")), "elements")[5]).get("styles"))
     styles["backgroundColor"] = "rgba(0, 0, 0, 0)"
+
+
+def mutation_car_radar_side_no_placement_screenshot() -> dict[str, object]:
+    return {
+        "overlayId": "car-radar",
+        "fixtureVariant": "side-no-placement",
+        "previewMode": "race",
+        "bodyKind": "car-radar",
+        "status": "clear",
+        "shouldRender": True,
+        "radarShouldRender": True,
+        "scenarioEvidence": mutation_scenario_evidence(
+            slug="side-no-placement",
+            query="fixture=car-radar-side-no-placement",
+            body_kind="car-radar",
+            status="clear",
+            should_render=True,
+        ),
+        "modelEvidence": {
+            "carRadar": {
+                "shouldRender": True,
+                "targetBounds": {"x": 0, "y": 0, "width": 300, "height": 300},
+                "items": [
+                    {
+                        "kind": "nearby",
+                        "carIdx": 44,
+                        "bounds": {"x": 142, "y": 92, "width": 16, "height": 36},
+                    },
+                    {
+                        "kind": "focus",
+                        "carIdx": 12,
+                        "bounds": {"x": 136, "y": 130, "width": 28, "height": 42},
+                    },
+                ],
+                "primitives": [
+                    {"kind": "background", "bounds": {"x": 0, "y": 0, "width": 300, "height": 300}},
+                    {"kind": "ring-1", "bounds": {"x": 32, "y": 32, "width": 236, "height": 236}},
+                ],
+                "labels": [],
+            },
+        },
+    }
 
 
 def mutation_input_waiting_screenshot() -> dict[str, object]:
@@ -10734,6 +12570,87 @@ def mutation_effective_settings_screenshot(
             row_count=0,
             extra_settings=settings),
     }
+
+
+def mutation_fuel_calculating_screenshot() -> dict[str, object]:
+    plan_segments = [
+        {"label": "Race", "value": "31 laps", "tone": "info"},
+        {"label": "Remain", "value": "30.4 laps", "tone": "info"},
+        {"label": "Stints", "value": "Calculating", "tone": "waiting"},
+        {"label": "Stops", "value": "Calculating", "tone": "waiting"},
+        {"label": "Save", "value": "Calculating", "tone": "waiting"},
+    ]
+    fuel_segments = [
+        {"label": "Current", "value": "74.0 L", "tone": "info"},
+        {"label": "Burn", "value": "Calculating", "tone": "waiting"},
+        {"label": "Tank", "value": "Calculating", "tone": "waiting"},
+        {"label": "Need", "value": "Calculating", "tone": "waiting"},
+    ]
+    effective = mutation_effective_settings(
+        "fuel-calculator",
+        "race",
+        "metrics",
+        should_render=True,
+        row_count=0,
+        fixture_variant="fuel-calculating")
+    effective["rendered"]["browserSource"] = {
+        "baseWidth": 503,
+        "baseHeight": 161,
+        "width": 503,
+        "height": 161,
+        "scale": 1,
+        "scalePercent": 100,
+        "opacity": 1,
+        "opacityPercent": 100,
+    }
+    effective["rendered"]["layout"] = {
+        "contentRowCount": 4,
+        "unusedHeightRatio": 0,
+    }
+    effective["rendered"]["fuelStrategy"] = {
+        "additionalFuelNeedState": "unavailable",
+        "successCopyRequiresMeasuredNeed": True,
+    }
+    return {
+        "overlayId": "fuel-calculator",
+        "fixtureVariant": "calculating",
+        "previewMode": "race",
+        "bodyKind": "metrics",
+        "status": "calculating strategy",
+        "shouldRender": True,
+        "width": 503,
+        "height": 161,
+        "textSample": "RACE INFORMATION PLAN RACE 31 laps REMAIN 30.4 laps STINTS Calculating STOPS Calculating SAVE Calculating FUEL CURRENT 74.0 L BURN Calculating TANK Calculating NEED Calculating",
+        "modelEvidence": {
+            "metricSections": [
+                {
+                    "title": "Race Information",
+                    "rows": [
+                        {
+                            "label": "Plan",
+                            "value": "31 laps | Calculating | Calculating",
+                            "tone": "waiting",
+                            "segments": plan_segments,
+                        },
+                        {
+                            "label": "Fuel",
+                            "value": "74.0 L | Calculating | Calculating",
+                            "tone": "waiting",
+                            "segments": fuel_segments,
+                        },
+                    ],
+                },
+            ],
+        },
+        "effectiveSettings": effective,
+    }
+
+
+def mutate_fuel_calculating_full_height(screenshot: dict[str, object]) -> None:
+    set_nested_value(screenshot, ("height",), 298)
+    set_nested_value(screenshot, ("effectiveSettings", "rendered", "browserSource", "baseHeight"), 298)
+    set_nested_value(screenshot, ("effectiveSettings", "rendered", "browserSource", "height"), 298)
+    set_nested_value(screenshot, ("effectiveSettings", "rendered", "layout", "unusedHeightRatio"), 0.46)
 
 
 def mutation_effective_settings(
@@ -10902,6 +12819,69 @@ def mutation_hidden_product_screenshot() -> dict[str, object]:
     }
 
 
+def mutation_hidden_no_render_screenshot() -> dict[str, object]:
+    return {
+        "overlayId": "fuel-calculator",
+        "fixtureVariant": "no-data",
+        "previewMode": "race",
+        "bodyKind": "metrics",
+        "status": "waiting for fuel telemetry",
+        "source": "source: waiting",
+        "shouldRender": False,
+        "rowCount": 0,
+        "metricCount": 0,
+        "textSample": None,
+        "headerItems": [],
+        "layout": {
+            "contract": "browser-layout/v1",
+            "root": {"x": 0, "y": 0, "width": 503, "height": 88},
+            "elements": [
+                {"role": "overlay", "text": None},
+                {"role": "content", "text": None},
+            ],
+        },
+        "scenarioEvidence": mutation_scenario_evidence(
+            slug="no-data",
+            query="fixture=fuel-no-data",
+            body_kind="metrics",
+            status="waiting for fuel telemetry",
+            source="source: waiting",
+            should_render=False,
+            row_count=0,
+            metric_count=0,
+            evidence_class="unavailable",
+            synthetic_state_kind="forced-unavailable",
+        ),
+        "effectiveSettings": {
+            "rendered": {
+                "bodyKind": "metrics",
+                "shouldRender": False,
+                "rowCount": 0,
+                "columnKeys": [],
+                "rowIdentities": [],
+                "placeholderRowCount": 0,
+                "headerItems": [],
+                "provenance": {
+                    "evidenceClass": "unavailable",
+                    "sourceContract": "validator mutation fixture",
+                    "syntheticStateKind": "forced-unavailable",
+                },
+                "unavailableContentPolicy": "suppress-rendered-content",
+            },
+        },
+        "modelEvidence": {
+            "contract": "overlay-model-layout-evidence/v1",
+            "bodyKind": "metrics",
+            "columns": [],
+            "rows": [],
+            "metrics": [],
+            "metricSections": [],
+            "gridSections": [],
+            "points": [],
+        },
+    }
+
+
 def mutation_input_no_content_screenshot() -> dict[str, object]:
     return {
         "overlayId": "input-state",
@@ -10962,6 +12942,9 @@ def mutation_scenario_evidence(
     body_kind: str,
     status: str,
     should_render: bool,
+    evidence_class: str = "synthetic-preview",
+    synthetic_state_kind: str | None = None,
+    source: str | None = None,
     row_count: int | None = None,
     metric_count: int | None = None,
     flag_count: int | None = None,
@@ -10971,20 +12954,26 @@ def mutation_scenario_evidence(
         "bodyKind": body_kind,
         "shouldRender": should_render,
     }
+    if source is not None:
+        summary["source"] = source
     if row_count is not None:
         summary["rowCount"] = row_count
     if metric_count is not None:
         summary["metricCount"] = metric_count
     if flag_count is not None:
         summary["flagCount"] = flag_count
+    provenance: dict[str, object] = {
+        "evidenceClass": evidence_class,
+        "captureSpecific": False,
+        "sourceContract": "validator mutation fixture",
+    }
+    if synthetic_state_kind is not None:
+        provenance["syntheticStateKind"] = synthetic_state_kind
+
     return {
         "fixtureVariant": slug,
         "urlPath": f"/review/overlays/example?preview=race&{query}",
-        "provenance": {
-            "evidenceClass": "synthetic-preview",
-            "captureSpecific": False,
-            "sourceContract": "validator mutation fixture",
-        },
+        "provenance": provenance,
         "modelSummary": summary,
     }
 
@@ -11003,21 +12992,24 @@ def mutation_manifest_parity_screenshot_sets(
     for overlay_id, size in WINDOWS_NATIVE_OVERLAY_SIZES.items():
         for mode in preview_modes_for_overlay(overlay_id):
             screenshot = mutation_preview_manifest(overlay_id, mode, size)
-            browser[f"browser-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
-            localhost[f"localhost-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
-            windows[f"native-overlays/{overlay_id}-{mode}.png"] = copy.deepcopy(screenshot)
+            browser_path = web_overlay_screenshot_path("browser-overlays", overlay_id, mode)
+            localhost_path = web_overlay_screenshot_path("localhost-overlays", overlay_id, mode)
+            windows_path = f"native-overlays/{overlay_id}-{mode}.png"
+            browser[browser_path] = copy.deepcopy(screenshot)
+            localhost[localhost_path] = copy.deepcopy(screenshot)
+            windows[windows_path] = copy.deepcopy(screenshot)
             if native_preview_size_mismatch == (overlay_id, mode):
-                windows[f"native-overlays/{overlay_id}-{mode}.png"]["width"] = size[0] + 17
+                windows[windows_path]["width"] = size[0] + 17
             if localhost_header_value_mismatch == (overlay_id, mode):
-                localhost[f"localhost-overlays/{overlay_id}-{mode}.png"]["headerItems"][0]["value"] = "06:36:00"
+                localhost[localhost_path]["headerItems"][0]["value"] = "06:36:00"
             if native_header_tone_mismatch == (overlay_id, mode):
-                windows[f"native-overlays/{overlay_id}-{mode}.png"]["headerItems"][0]["tone"] = "warning"
+                windows[windows_path]["headerItems"][0]["tone"] = "warning"
 
     for overlay_id, slug in WINDOWS_NATIVE_OVERLAY_VARIANT_KEYS:
         size = WINDOWS_NATIVE_OVERLAY_SIZES[overlay_id]
         screenshot = mutation_variant_manifest(overlay_id, slug, size)
-        browser[f"browser-overlays/{web_variant_stem(overlay_id, slug)}.png"] = copy.deepcopy(screenshot)
-        localhost[f"localhost-overlays/{web_variant_stem(overlay_id, slug)}.png"] = copy.deepcopy(screenshot)
+        browser[web_overlay_variant_screenshot_path("browser-overlays", overlay_id, slug)] = copy.deepcopy(screenshot)
+        localhost[web_overlay_variant_screenshot_path("localhost-overlays", overlay_id, slug)] = copy.deepcopy(screenshot)
         windows[f"native-overlays/{overlay_id}-{slug}.png"] = copy.deepcopy(screenshot)
 
     if missing_windows_variant is not None:
@@ -11121,48 +13113,11 @@ def expected_windows_settings_pngs(overlay_ids: list[str]) -> set[str]:
 
 
 def expected_browser_review_settings_pngs(overlay_ids: list[str]) -> set[str]:
-    paths = {
-        "settings/general.png",
-        "settings/general-update-disabled.png",
-        "settings/general-update-not-installed.png",
-        "settings/general-update-idle.png",
-        "settings/general-update-up-to-date.png",
-        "settings/general-update-available.png",
-        "settings/general-update-checking.png",
-        "settings/general-update-downloading.png",
-        "settings/general-update-pending-restart.png",
-        "settings/general-update-applying.png",
-        "settings/general-update-failed.png",
-        "settings/diagnostics.png",
-        "settings/support.png",
-        "settings/inputs.png",
-        "settings/inputs-content.png",
-        *(f"settings/general-preview-{mode}.png" for mode in PREVIEW_MODES),
-    }
-    for overlay_id in overlay_ids:
-        for region in regions_for_overlay(overlay_id):
-            suffix = "" if region == "general" else f"-{region}"
-            paths.add(f"settings/{overlay_id}{suffix}.png")
-    return paths
+    return set(browser_review_settings_pngs_for_overlay_ids(overlay_ids))
 
 
 def regions_for_overlay(overlay_id: str) -> tuple[str, ...]:
-    if overlay_id == "garage-cover":
-        return ("general", "preview")
-    if overlay_id == "stream-chat":
-        return ("general", "content", "twitch")
-    if overlay_id == "car-radar":
-        return ("general",)
-    if overlay_id in {
-        "standings",
-        "relative",
-        "fuel-calculator",
-        "gap-to-leader",
-        "session-weather",
-        "pit-service",
-    }:
-        return ("general", "content", "header")
-    return ("general", "content")
+    return settings_regions_for_overlay(overlay_id)
 
 
 def preview_modes_for_overlay(overlay_id: str) -> tuple[str, ...]:
@@ -11178,8 +13133,9 @@ def expected_overlay_preview_size(
 
 
 def preview_mode_from_overlay_path(relative_path: str) -> str:
+    stem = relative_path.rsplit("/", 1)[-1].removesuffix(".png")
     for mode in PREVIEW_MODES:
-        if relative_path.endswith(f"-{mode}.png"):
+        if stem == mode or stem.endswith(f"-{mode}"):
             return mode
     return "race"
 
@@ -11440,6 +13396,166 @@ def validate_release_tutorial(root: Path, min_unique_bytes: int, failures: list[
         )
 
 
+def validate_forensics_screenshot_manifests(root: Path, min_unique_bytes: int, failures: list[str]) -> None:
+    manifests = forensics_screenshot_manifest_paths(root)
+    if not manifests:
+        failures.append(f"{root}: no forensics screenshot manifests found")
+        return
+
+    for manifest_path in manifests:
+        validate_forensics_screenshot_manifest(manifest_path, min_unique_bytes, failures)
+
+
+def forensics_screenshot_manifest_paths(root: Path) -> list[Path]:
+    candidates = set(root.glob("overlays/*/screenshot-manifest.json"))
+    candidates.update(root.glob("*/overlays/*/screenshot-manifest.json"))
+    return sorted(candidates)
+
+
+def validate_forensics_screenshot_manifest(manifest_path: Path, min_unique_bytes: int, failures: list[str]) -> None:
+    label = str(manifest_path)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        failures.append(f"{label}: {exc}")
+        return
+    except json.JSONDecodeError as exc:
+        failures.append(f"{label}: invalid JSON: {exc}")
+        return
+    if not isinstance(manifest, dict):
+        failures.append(f"{label}: manifest must be an object")
+        return
+
+    overlay_id = str(manifest.get("overlayId") or "")
+    folder_overlay_id = forensics_manifest_folder_overlay_id(manifest_path)
+    if not folder_overlay_id:
+        failures.append(f"{label}: path must be under overlays/<overlay-id>/screenshot-manifest.json")
+    elif overlay_id != folder_overlay_id:
+        failures.append(f"{label}: overlayId expected {folder_overlay_id!r}, got {overlay_id!r}")
+    if overlay_id not in BROWSER_REVIEW_OVERLAY_IDS:
+        failures.append(f"{label}: unknown overlayId {overlay_id!r}")
+
+    if manifest.get("schemaVersion") != 1:
+        failures.append(f"{label}: schemaVersion expected 1, got {manifest.get('schemaVersion')!r}")
+    status = str(manifest.get("status") or "")
+    if status not in {"not-rendered", "skipped", "produced"}:
+        failures.append(f"{label}: status expected not-rendered/skipped/produced, got {status!r}")
+
+    screenshots = manifest.get("screenshots")
+    if not isinstance(screenshots, list):
+        failures.append(f"{label}: screenshots must be a list")
+        return
+
+    if status == "not-rendered":
+        if screenshots:
+            failures.append(f"{label}: not-rendered manifest must not contain screenshots")
+        gaps = manifest.get("gaps")
+        if not isinstance(gaps, list) or not any("renderer" in str(gap.get("kind") or gap.get("detail") or "") for gap in gaps if isinstance(gap, dict)):
+            failures.append(f"{label}: not-rendered manifest missing renderer gap evidence")
+        return
+
+    renderer = str(manifest.get("renderer") or "")
+    if status == "produced" and not renderer:
+        failures.append(f"{label}: produced manifest missing renderer")
+    captured_count = 0
+    for index, screenshot in enumerate(screenshots):
+        if not isinstance(screenshot, dict):
+            failures.append(f"{label}: screenshots[{index}] must be an object")
+            continue
+        captured = validate_forensics_screenshot_row(
+            manifest_path,
+            label,
+            index,
+            renderer,
+            screenshot,
+            min_unique_bytes,
+            failures,
+        )
+        if captured:
+            captured_count += 1
+
+    screenshot_count = manifest.get("screenshotCount")
+    if status == "produced":
+        if not isinstance(screenshot_count, int):
+            failures.append(f"{label}: produced manifest missing integer screenshotCount")
+        elif screenshot_count != captured_count:
+            failures.append(f"{label}: screenshotCount expected {captured_count}, got {screenshot_count}")
+
+
+def validate_forensics_screenshot_row(
+    manifest_path: Path,
+    manifest_label: str,
+    index: int,
+    renderer: str,
+    screenshot: dict[str, object],
+    min_unique_bytes: int,
+    failures: list[str],
+) -> bool:
+    row_label = f"{manifest_label}: screenshots[{index}]"
+    status = str(screenshot.get("status") or "")
+    captured_statuses = {"captured", "page-fallback-captured", "model-hidden-page-captured"}
+    if status not in captured_statuses:
+        failures.append(f"{row_label}: expected captured screenshot status, got {status!r}")
+        return False
+
+    for field in ("frameIndex", "path", "modelHash", "imageHash", "shouldRender", "modelStatus", "bodyKind", "visibleText"):
+        if field not in screenshot:
+            failures.append(f"{row_label}: missing {field}")
+
+    if status == "model-hidden-page-captured" and screenshot.get("shouldRender") is not False:
+        failures.append(f"{row_label}: model-hidden-page-captured expected shouldRender=false")
+
+    relative_path = screenshot.get("path")
+    if not isinstance(relative_path, str) or not relative_path:
+        failures.append(f"{row_label}: missing relative PNG path")
+        return True
+    if is_absolute_or_traversing_path(relative_path):
+        failures.append(f"{row_label}: screenshot path must be relative and stay inside overlay folder: {relative_path!r}")
+        return True
+    if renderer and not relative_path.startswith(f"screenshots/{renderer}/"):
+        failures.append(f"{row_label}: screenshot path expected under screenshots/{renderer}/, got {relative_path!r}")
+
+    image_path = manifest_path.parent / relative_path
+    if not is_inside_directory(image_path.resolve(), manifest_path.parent.resolve()):
+        failures.append(f"{row_label}: screenshot path escapes overlay folder: {relative_path!r}")
+        return True
+    try:
+        metadata = inspect_png(image_path, min_unique_bytes)
+    except Exception as exc:  # noqa: BLE001 - CLI validation boundary.
+        failures.append(f"{row_label}: {relative_path}: {exc}")
+        return True
+    if metadata["unique_bytes"] < min_unique_bytes:
+        failures.append(f"{row_label}: {relative_path}: only {metadata['unique_bytes']} sampled decoded bytes; image may be blank")
+    if metadata["byte_range"] < 24:
+        failures.append(f"{row_label}: {relative_path}: decoded byte range {metadata['byte_range']}; image may be blank")
+
+    expected_hash = screenshot.get("imageHash")
+    actual_hash = hashlib.sha256(image_path.read_bytes()).hexdigest()
+    if expected_hash != actual_hash:
+        failures.append(f"{row_label}: imageHash expected {actual_hash}, got {expected_hash!r}")
+    return True
+
+
+def is_absolute_or_traversing_path(value: str) -> bool:
+    candidates = (Path(value), PurePosixPath(value), PureWindowsPath(value))
+    return any(candidate.is_absolute() for candidate in candidates) or any(
+        ".." in candidate.parts
+        for candidate in candidates
+    )
+
+
+def forensics_manifest_folder_overlay_id(manifest_path: Path) -> str | None:
+    parts = manifest_path.parts
+    for index, part in enumerate(parts):
+        if part == "overlays" and index + 1 < len(parts):
+            return parts[index + 1]
+    return None
+
+
+def is_inside_directory(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
+
+
 def validate_png(
     root: Path,
     relative_path: str,
@@ -11509,6 +13625,63 @@ def inspect_png(path: Path, min_unique_bytes: int) -> dict[str, object]:
         "unique_bytes": unique_bytes,
         "byte_range": max(sample) - min(sample) if sample else 0,
         "sampleSource": "decoded-pixels" if use_decoded_pixels else "filtered-png-bytes",
+    }
+
+
+def inspect_png_blankness(path: Path) -> dict[str, object]:
+    if not path.exists():
+        raise FileNotFoundError("missing PNG")
+
+    width, height, color_type, pixels = read_decoded_png_pixels(path)
+    channels = channel_count(color_type)
+    alpha_offset = alpha_channel_offset(color_type)
+    unique_pixels = {
+        pixels[index:index + channels]
+        for index in range(0, len(pixels), channels)
+    }
+
+    opaque_pixel_count = width * height
+    alpha_range: tuple[int, int] | None = None
+    if alpha_offset is not None:
+        alphas = pixels[alpha_offset::channels]
+        min_alpha = min(alphas) if alphas else 0
+        max_alpha = max(alphas) if alphas else 0
+        alpha_range = (min_alpha, max_alpha)
+        opaque_pixel_count = sum(1 for alpha in alphas if alpha > 2)
+
+    return {
+        "size": (width, height),
+        "uniquePixelCount": len(unique_pixels),
+        "opaquePixelCount": opaque_pixel_count,
+        "alphaRange": alpha_range,
+        "isBlank": opaque_pixel_count == 0 or len(unique_pixels) <= 1,
+        "sampleSource": "decoded-pixels",
+    }
+
+
+def inspect_png_transparency(path: Path) -> dict[str, object]:
+    if not path.exists():
+        raise FileNotFoundError("missing PNG")
+
+    width, height, color_type, pixels = read_decoded_png_pixels(path)
+    channels = channel_count(color_type)
+    alpha_offset = alpha_channel_offset(color_type)
+    alpha_range: tuple[int, int] | None = None
+    opaque_pixel_count = width * height
+    if alpha_offset is not None:
+        alphas = pixels[alpha_offset::channels]
+        min_alpha = min(alphas) if alphas else 0
+        max_alpha = max(alphas) if alphas else 0
+        alpha_range = (min_alpha, max_alpha)
+        opaque_pixel_count = sum(1 for alpha in alphas if alpha > 2)
+
+    return {
+        "size": (width, height),
+        "colorType": color_type,
+        "hasAlpha": alpha_offset is not None,
+        "opaquePixelCount": opaque_pixel_count,
+        "alphaRange": alpha_range,
+        "sampleSource": "decoded-pixels",
     }
 
 

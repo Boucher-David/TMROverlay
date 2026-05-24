@@ -209,6 +209,39 @@ describe('browser overlay catalogue behaviour', () => {
     expect(render.cars.find((car) => car.kind === 'focus')).toBeTruthy();
   });
 
+  it('does not render a car radar side warning without a close attachment candidate', () => {
+    const farSignal = carRadarRenderModelFromState({
+      isAvailable: true,
+      hasCarLeft: true,
+      hasCarRight: false,
+      cars: [{ carIdx: 12, relativeMeters: 18, relativeSeconds: 1.2, carClassColorHex: '#FFDA59' }],
+      strongestMulticlassApproach: null,
+      showMulticlassWarning: true,
+      previewVisible: false,
+      hasCurrentSignal: true,
+      referenceCarClassColorHex: '#FFDA59'
+    });
+
+    expect(farSignal.shouldRender).toBe(true);
+    expect(farSignal.cars.find((car) => car.kind === 'side-left')).toBeFalsy();
+    expect(farSignal.cars.find((car) => car.kind === 'nearby' && car.carIdx === 12)).toBeTruthy();
+
+    const staleSignalOnly = carRadarRenderModelFromState({
+      isAvailable: true,
+      hasCarLeft: true,
+      hasCarRight: false,
+      cars: [],
+      strongestMulticlassApproach: null,
+      showMulticlassWarning: true,
+      previewVisible: false,
+      hasCurrentSignal: true,
+      referenceCarClassColorHex: '#FFDA59'
+    });
+
+    expect(staleSignalOnly.shouldRender).toBe(false);
+    expect(staleSignalOnly.cars).toEqual([]);
+  });
+
   it('preserves spectated Track Map focus position and class color', () => {
     const response = browserOverlayApiResponse('track-map', '/api/overlay-model/track-map', {
       live: freshLiveSnapshot({
@@ -265,6 +298,162 @@ describe('browser overlay catalogue behaviour', () => {
       isPlayerFocus: false,
       label: '7',
       fill: { red: 255, green: 218, blue: 89, alpha: 245 }
+    });
+  });
+
+  it('renders Track Map practice markers before race grid state is available', () => {
+    const response = browserOverlayApiResponse('track-map', '/api/overlay-model/track-map', {
+      live: freshLiveSnapshot({
+        session: {
+          hasData: true,
+          sessionType: 'Practice'
+        },
+        reference: {
+          hasData: true,
+          playerCarIdx: 10,
+          focusCarIdx: 22,
+          focusIsPlayer: false,
+          hasExplicitNonPlayerFocus: true,
+          lapDistPct: 0.624,
+          trackSurface: 3
+        },
+        driverDirectory: { hasData: true, playerCarIdx: 10, focusCarIdx: 22 },
+        timing: {
+          focusCarIdx: 22,
+          focusRow: {
+            carIdx: 22,
+            isFocus: true,
+            isPlayer: false,
+            lapDistPct: 0.624,
+            hasSpatialProgress: true,
+            hasTakenGrid: false,
+            classPosition: null,
+            overallPosition: null,
+            carClassColorHex: '#FFDA59',
+            trackSurface: 3
+          },
+          overallRows: [
+            {
+              carIdx: 10,
+              isFocus: false,
+              isPlayer: true,
+              lapDistPct: 0.412,
+              hasSpatialProgress: true,
+              hasTakenGrid: true,
+              classPosition: null,
+              overallPosition: null,
+              carClassColorHex: '#00AEEF',
+              trackSurface: 3
+            },
+            {
+              carIdx: 22,
+              isFocus: true,
+              isPlayer: false,
+              lapDistPct: 0.624,
+              hasSpatialProgress: true,
+              hasTakenGrid: false,
+              classPosition: null,
+              overallPosition: null,
+              carClassColorHex: '#FFDA59',
+              trackSurface: 3
+            },
+            {
+              carIdx: 33,
+              isFocus: false,
+              isPlayer: false,
+              lapDistPct: 0.18,
+              hasSpatialProgress: true,
+              hasTakenGrid: false,
+              classPosition: null,
+              overallPosition: null,
+              carClassColorHex: '#FFDA59',
+              trackSurface: 3
+            }
+          ],
+          classRows: []
+        },
+        scoring: { rows: [] }
+      }),
+      settings: {
+        trackMap: trackMapAsset(),
+        trackMapSettings: { internalOpacity: 1, showSectorBoundaries: true }
+      }
+    });
+
+    const markers = response.model.trackMap.renderModel.markers;
+    expect(markers.map((marker) => marker.carIdx).sort((left, right) => left - right)).toEqual([10, 22, 33]);
+    const focus = markers.find((marker) => marker.carIdx === 22);
+    const player = markers.find((marker) => marker.carIdx === 10);
+    const opponent = markers.find((marker) => marker.carIdx === 33);
+
+    expect(focus).toMatchObject({
+      isFocus: true,
+      isPlayerFocus: false,
+      label: null,
+      fill: { red: 255, green: 218, blue: 89, alpha: 245 }
+    });
+    expect(player).toMatchObject({ isFocus: false, label: null, fill: { red: 0, green: 174, blue: 239, alpha: 245 } });
+    expect(opponent).toMatchObject({ isFocus: false, label: null, fill: { red: 255, green: 218, blue: 89, alpha: 245 } });
+    expect(focus.radius).toBeGreaterThan(player.radius);
+  });
+
+  it('preserves player Track Map focus class color instead of replacing it with focus cyan', () => {
+    const response = browserOverlayApiResponse('track-map', '/api/overlay-model/track-map', {
+      live: freshLiveSnapshot({
+        reference: {
+          hasData: true,
+          playerCarIdx: 3,
+          focusCarIdx: 3,
+          focusIsPlayer: true,
+          hasExplicitNonPlayerFocus: false,
+          lapDistPct: 0.08,
+          trackSurface: 3
+        },
+        driverDirectory: { hasData: true, playerCarIdx: 3, focusCarIdx: 3 },
+        timing: {
+          focusCarIdx: 3,
+          focusRow: {
+            carIdx: 3,
+            isFocus: true,
+            isPlayer: true,
+            lapDistPct: 0.08,
+            hasSpatialProgress: true,
+            hasTakenGrid: true,
+            classPosition: 1,
+            overallPosition: 1,
+            carClassColorHex: '#FFFFFF',
+            trackSurface: 3
+          },
+          overallRows: [
+            {
+              carIdx: 3,
+              isFocus: true,
+              isPlayer: true,
+              lapDistPct: 0.08,
+              hasSpatialProgress: true,
+              hasTakenGrid: true,
+              classPosition: 1,
+              overallPosition: 1,
+              carClassColorHex: '#FFFFFF',
+              trackSurface: 3
+            }
+          ],
+          classRows: []
+        }
+      }),
+      settings: {
+        trackMap: trackMapAsset(),
+        trackMapSettings: { internalOpacity: 1, showSectorBoundaries: true }
+      }
+    });
+
+    const focus = response.model.trackMap.renderModel.markers.find((marker) => marker.isFocus);
+
+    expect(focus).toMatchObject({
+      carIdx: 3,
+      isPlayerFocus: true,
+      label: '1',
+      fill: { red: 255, green: 255, blue: 255, alpha: 245 }
     });
   });
 
@@ -957,7 +1146,7 @@ function browserScenarios() {
         expect(document.querySelectorAll('.track ellipse, .track path, .track line').length).toBeGreaterThan(2);
         expect(document.querySelectorAll('.track circle[fill="rgba(51,206,255,0.961)"]').length).toBe(0);
         expect(document.querySelectorAll('.track circle[fill="rgba(255,218,89,0.961)"]').length).toBe(1);
-        expect(document.querySelectorAll('.track circle[fill="rgba(0,232,255,1.000)"]').length).toBe(1);
+        expect(document.querySelectorAll('.track circle[fill="rgba(255,255,255,0.961)"]').length).toBe(1);
         expect(document.querySelector('.track text')?.textContent).toBe('5');
         expect(document.getElementById('status')).toBeNull();
       }

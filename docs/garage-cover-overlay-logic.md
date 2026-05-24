@@ -6,13 +6,13 @@
 
 The overlay reads `LiveTelemetrySnapshot.Models.RaceEvents.IsGarageVisible`, which is derived from iRacing's `IsGarageVisible` telemetry value. This is intentionally different from `IsInGarage`: the cover should react to the visible Garage/setup screen, not just whether the car physics are in a garage state.
 
-The localhost route is served at `/overlays/garage-cover`. During normal fresh telemetry, it appears only when `IsGarageVisible` is true. It fails closed to the configured cover or fallback when telemetry is disconnected, not collecting, stale, or the localhost snapshot request fails; this avoids transparent flashes while OBS or the app is starting.
+The localhost route is served at `/overlays/garage-cover`. The cover renders only when the Garage Cover overlay is enabled and fresh telemetry reports `IsGarageVisible=true`. Disconnected, not collecting, stale, waiting, and settings-preview states do not open the live cover.
 
-Garage Cover is treated as an OBS privacy/safety route, not an ordinary native overlay visibility surface. Its localhost model must not be suppressed solely because an older saved overlay setting has `enabled=false`; the telemetry safety state decides whether the cover should render.
+Garage Cover is treated as an ordinary opt-in product surface for visibility purposes, even though it is localhost-only. A disabled Garage Cover source may still load and poll in OBS, but its model remains hidden until the user enables it in TMR settings.
 
-The settings tab shows the configured cover image in a Preview region and keeps import/clear actions in General. The current V1 UI does not expose a separate test-cover button; the localhost page itself still follows live garage visibility or the stored diagnostic preview state when one is set internally.
+The settings tab shows the configured cover image in a Preview region and keeps import/clear actions in General. The Preview region is settings-only evidence for the selected image; it does not force the live localhost cover open.
 
-When fresh telemetry reports `IsGarageVisible` as false and no diagnostic preview state is active, the localhost page fades out.
+When fresh telemetry reports `IsGarageVisible=false`, or telemetry is unavailable, the localhost page fades out.
 
 ## Display
 
@@ -24,7 +24,7 @@ The user can import a PNG, JPG, BMP, or GIF image. The app copies that file into
 
 The localhost server exposes `GET /api/garage-cover` for image metadata, `GET /api/garage-cover/image` for the app-owned imported image, and `GET /api/garage-cover/default-image` for the bundled stock fallback cover. If no image is imported, the saved image cannot be loaded, or the browser cannot decode the image, the localhost page paints the stock fallback first and only drops to a black centered `TMR` text fallback if the bundled asset is unavailable. The fallback still covers setup details.
 
-Diagnostics bundles include `metadata/garage-cover.json` with localhost route state, image status/metadata, preview state, last Garage-visible detection state, and fallback reason. The imported image itself is not copied into diagnostics bundles.
+Diagnostics bundles include `metadata/garage-cover.json` with localhost route state, product enabled state, current cover decision, image status/metadata, preview state, last Garage-visible detection state, and fallback reason. The imported image itself is not copied into diagnostics bundles.
 
 ## Product Boundary
 

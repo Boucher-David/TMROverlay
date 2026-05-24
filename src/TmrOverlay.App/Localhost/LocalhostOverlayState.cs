@@ -19,6 +19,8 @@ internal sealed class LocalhostOverlayState
     private readonly Dictionary<string, long> _clientCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, long> _routeClientCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, long> _pathClientCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _sourceUrlCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _sourceUrlClientCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, long> _statusCodeCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, long> _pathStatusCodeCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Queue<LocalhostOverlayRequestSample> _recentRequests = new();
@@ -26,6 +28,10 @@ internal sealed class LocalhostOverlayState
     private readonly Dictionary<string, long> _pageEventCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, long> _pageEventOverlayCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, long> _pageEventClientCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _pageEventSourceUrlCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _pageEventOverlayClientCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _pageEventClientIdCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _pageEventSourceUrlClientCounts = new(StringComparer.OrdinalIgnoreCase);
     private string _status;
     private DateTimeOffset? _startAttemptedAtUtc;
     private DateTimeOffset? _startedAtUtc;
@@ -45,11 +51,13 @@ internal sealed class LocalhostOverlayState
     private string? _lastRequestError;
     private string? _lastRequestUserAgent;
     private string? _lastRequestClientKind;
+    private string? _lastRequestSourceUrl;
     private DateTimeOffset? _lastPageEventAtUtc;
     private string? _lastPageEventKind;
     private string? _lastPageEventOverlayId;
     private string? _lastPageEventClientId;
     private string? _lastPageEventClientKind;
+    private string? _lastPageEventSourceUrl;
     private bool? _lastPageEventShouldRender;
     private string? _lastPageEventStatus;
     private string? _lastPageEventError;
@@ -125,7 +133,8 @@ internal sealed class LocalhostOverlayState
         int statusCode,
         TimeSpan duration,
         string? userAgent = null,
-        Exception? exception = null)
+        Exception? exception = null,
+        string? sourceUrl = null)
     {
         var routeKey = string.IsNullOrWhiteSpace(route) ? "unknown" : route.Trim();
         var statusKey = statusCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -151,19 +160,24 @@ internal sealed class LocalhostOverlayState
             }
 
             var pathKey = NormalizePathKey(path);
+            var sourceUrlKey = NormalizeSourceUrlKey(sourceUrl) ?? pathKey;
             var pathStatusKey = PathStatusKey(pathKey, statusKey);
             var routeClientKey = $"{routeKey}|{clientKind}";
             var pathClientKey = $"{pathKey}|{clientKind}";
+            var sourceUrlClientKey = $"{sourceUrlKey}|{clientKind}";
             _routeCounts[routeKey] = _routeCounts.GetValueOrDefault(routeKey) + 1;
             _pathCounts[pathKey] = _pathCounts.GetValueOrDefault(pathKey) + 1;
             _clientCounts[clientKind] = _clientCounts.GetValueOrDefault(clientKind) + 1;
             _routeClientCounts[routeClientKey] = _routeClientCounts.GetValueOrDefault(routeClientKey) + 1;
             _pathClientCounts[pathClientKey] = _pathClientCounts.GetValueOrDefault(pathClientKey) + 1;
+            _sourceUrlCounts[sourceUrlKey] = _sourceUrlCounts.GetValueOrDefault(sourceUrlKey) + 1;
+            _sourceUrlClientCounts[sourceUrlClientKey] = _sourceUrlClientCounts.GetValueOrDefault(sourceUrlClientKey) + 1;
             _statusCodeCounts[statusKey] = _statusCodeCounts.GetValueOrDefault(statusKey) + 1;
             _pathStatusCodeCounts[pathStatusKey] = _pathStatusCodeCounts.GetValueOrDefault(pathStatusKey) + 1;
             _lastRequestAtUtc = requestAtUtc;
             _lastRequestMethod = method;
             _lastRequestPath = pathKey;
+            _lastRequestSourceUrl = sourceUrlKey;
             _lastRequestRoute = routeKey;
             _lastRequestStatusCode = statusCode;
             _lastRequestDurationMs = durationMs;
@@ -174,6 +188,7 @@ internal sealed class LocalhostOverlayState
                 AtUtc: requestAtUtc,
                 Method: method,
                 Path: pathKey,
+                SourceUrl: sourceUrlKey,
                 Route: routeKey,
                 StatusCode: statusCode,
                 DurationMs: durationMs,
@@ -191,14 +206,16 @@ internal sealed class LocalhostOverlayState
     {
         lock (_sync)
         {
+            var capturedAtUtc = DateTimeOffset.UtcNow;
             var lastRequestAgeSeconds = _lastRequestAtUtc is { } lastRequestAtUtc
-                ? Math.Max(0d, (DateTimeOffset.UtcNow - lastRequestAtUtc).TotalSeconds)
+                ? Math.Max(0d, (capturedAtUtc - lastRequestAtUtc).TotalSeconds)
                 : (double?)null;
             return new LocalhostOverlaySnapshot(
                 Enabled: _options.Enabled,
                 Port: _options.Port,
                 Prefix: _options.Prefix,
                 Status: _status,
+                CapturedAtUtc: capturedAtUtc,
                 StartAttemptedAtUtc: _startAttemptedAtUtc,
                 StartedAtUtc: _startedAtUtc,
                 StoppedAtUtc: _stoppedAtUtc,
@@ -211,6 +228,7 @@ internal sealed class LocalhostOverlayState
                 LastRequestAtUtc: _lastRequestAtUtc,
                 LastRequestMethod: _lastRequestMethod,
                 LastRequestPath: _lastRequestPath,
+                LastRequestSourceUrl: _lastRequestSourceUrl,
                 LastRequestRoute: _lastRequestRoute,
                 LastRequestStatusCode: _lastRequestStatusCode,
                 LastRequestDurationMs: _lastRequestDurationMs,
@@ -224,6 +242,8 @@ internal sealed class LocalhostOverlayState
                 ClientCounts: CopyCounts(_clientCounts),
                 RouteClientCounts: CopyCounts(_routeClientCounts),
                 PathClientCounts: CopyCounts(_pathClientCounts),
+                SourceUrlCounts: CopyCounts(_sourceUrlCounts),
+                SourceUrlClientCounts: CopyCounts(_sourceUrlClientCounts),
                 PathStatusCodeCounts: CopyCounts(_pathStatusCodeCounts),
                 StatusCodeCounts: CopyCounts(_statusCodeCounts),
                 RecentRequests: _recentRequests.ToArray(),
@@ -232,12 +252,17 @@ internal sealed class LocalhostOverlayState
                 LastPageEventOverlayId: _lastPageEventOverlayId,
                 LastPageEventClientId: _lastPageEventClientId,
                 LastPageEventClientKind: _lastPageEventClientKind,
+                LastPageEventSourceUrl: _lastPageEventSourceUrl,
                 LastPageEventShouldRender: _lastPageEventShouldRender,
                 LastPageEventStatus: _lastPageEventStatus,
                 LastPageEventError: _lastPageEventError,
                 PageEventCounts: CopyCounts(_pageEventCounts),
                 PageEventOverlayCounts: CopyCounts(_pageEventOverlayCounts),
                 PageEventClientCounts: CopyCounts(_pageEventClientCounts),
+                PageEventSourceUrlCounts: CopyCounts(_pageEventSourceUrlCounts),
+                PageEventOverlayClientCounts: CopyCounts(_pageEventOverlayClientCounts),
+                PageEventClientIdCounts: CopyCounts(_pageEventClientIdCounts),
+                PageEventSourceUrlClientCounts: CopyCounts(_pageEventSourceUrlClientCounts),
                 RecentPageEvents: _recentPageEvents.ToArray());
         }
     }
@@ -247,28 +272,47 @@ internal sealed class LocalhostOverlayState
         var eventKind = NormalizeKey(pageEvent.Event, "unknown");
         var overlayId = NormalizeKey(pageEvent.OverlayId, "unknown");
         var clientKind = NormalizeClientKind(pageEvent.ClientKind);
+        var clientId = NormalizeClientId(pageEvent.ClientId);
+        var sourceUrl = NormalizeSourceUrlKey(pageEvent.SourceUrl);
         var recordedAtUtc = DateTimeOffset.UtcNow;
         lock (_sync)
         {
             _lastPageEventAtUtc = recordedAtUtc;
             _lastPageEventKind = eventKind;
             _lastPageEventOverlayId = overlayId;
-            _lastPageEventClientId = NormalizeOptional(pageEvent.ClientId);
+            _lastPageEventClientId = clientId;
             _lastPageEventClientKind = clientKind;
+            _lastPageEventSourceUrl = sourceUrl;
             _lastPageEventShouldRender = pageEvent.ShouldRender;
             _lastPageEventStatus = NormalizeOptional(pageEvent.Status);
             _lastPageEventError = NormalizeOptional(pageEvent.Error);
             var overlayEventKey = $"{overlayId}|{eventKind}";
             var clientEventKey = $"{clientKind}|{eventKind}";
+            var overlayClientKey = $"{overlayId}|{clientKind}";
             _pageEventCounts[eventKind] = _pageEventCounts.GetValueOrDefault(eventKind) + 1;
             _pageEventOverlayCounts[overlayEventKey] = _pageEventOverlayCounts.GetValueOrDefault(overlayEventKey) + 1;
             _pageEventClientCounts[clientEventKey] = _pageEventClientCounts.GetValueOrDefault(clientEventKey) + 1;
+            _pageEventOverlayClientCounts[overlayClientKey] = _pageEventOverlayClientCounts.GetValueOrDefault(overlayClientKey) + 1;
+            if (clientId is not null)
+            {
+                var clientIdKey = $"{overlayId}|{clientId}";
+                _pageEventClientIdCounts[clientIdKey] = _pageEventClientIdCounts.GetValueOrDefault(clientIdKey) + 1;
+            }
+
+            if (sourceUrl is not null)
+            {
+                _pageEventSourceUrlCounts[sourceUrl] = _pageEventSourceUrlCounts.GetValueOrDefault(sourceUrl) + 1;
+                var sourceUrlClientKey = $"{sourceUrl}|{clientKind}";
+                _pageEventSourceUrlClientCounts[sourceUrlClientKey] = _pageEventSourceUrlClientCounts.GetValueOrDefault(sourceUrlClientKey) + 1;
+            }
+
             _recentPageEvents.Enqueue(new LocalhostOverlayPageEventSample(
                 AtUtc: recordedAtUtc,
                 Event: eventKind,
                 OverlayId: overlayId,
-                ClientId: _lastPageEventClientId,
+                ClientId: clientId,
                 ClientKind: clientKind,
+                SourceUrl: sourceUrl,
                 ShouldRender: pageEvent.ShouldRender,
                 Status: _lastPageEventStatus,
                 Error: _lastPageEventError));
@@ -302,6 +346,41 @@ internal sealed class LocalhostOverlayState
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? NormalizeClientId(string? value)
+    {
+        var normalized = NormalizeOptional(value);
+        return normalized is null || normalized.Length <= 80 ? normalized : normalized[..80];
+    }
+
+    private static string? NormalizeSourceUrlKey(string? sourceUrl)
+    {
+        if (string.IsNullOrWhiteSpace(sourceUrl))
+        {
+            return null;
+        }
+
+        var value = sourceUrl.Trim();
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absoluteUri))
+        {
+            value = absoluteUri.PathAndQuery;
+        }
+        else
+        {
+            var fragmentIndex = value.IndexOf('#', StringComparison.Ordinal);
+            if (fragmentIndex >= 0)
+            {
+                value = value[..fragmentIndex];
+            }
+        }
+
+        if (!value.StartsWith("/", StringComparison.Ordinal))
+        {
+            value = "/" + value.TrimStart('/');
+        }
+
+        return value.Length > 512 ? value[..512] : value;
     }
 
     private static string NormalizeClientKind(string? clientKind)
@@ -364,6 +443,7 @@ internal sealed record LocalhostOverlaySnapshot(
     int Port,
     string Prefix,
     string Status,
+    DateTimeOffset CapturedAtUtc,
     DateTimeOffset? StartAttemptedAtUtc,
     DateTimeOffset? StartedAtUtc,
     DateTimeOffset? StoppedAtUtc,
@@ -376,6 +456,7 @@ internal sealed record LocalhostOverlaySnapshot(
     DateTimeOffset? LastRequestAtUtc,
     string? LastRequestMethod,
     string? LastRequestPath,
+    string? LastRequestSourceUrl,
     string? LastRequestRoute,
     int? LastRequestStatusCode,
     double? LastRequestDurationMs,
@@ -389,6 +470,8 @@ internal sealed record LocalhostOverlaySnapshot(
     IReadOnlyDictionary<string, long> ClientCounts,
     IReadOnlyDictionary<string, long> RouteClientCounts,
     IReadOnlyDictionary<string, long> PathClientCounts,
+    IReadOnlyDictionary<string, long> SourceUrlCounts,
+    IReadOnlyDictionary<string, long> SourceUrlClientCounts,
     IReadOnlyDictionary<string, long> PathStatusCodeCounts,
     IReadOnlyDictionary<string, long> StatusCodeCounts,
     IReadOnlyList<LocalhostOverlayRequestSample> RecentRequests,
@@ -397,18 +480,24 @@ internal sealed record LocalhostOverlaySnapshot(
     string? LastPageEventOverlayId,
     string? LastPageEventClientId,
     string? LastPageEventClientKind,
+    string? LastPageEventSourceUrl,
     bool? LastPageEventShouldRender,
     string? LastPageEventStatus,
     string? LastPageEventError,
     IReadOnlyDictionary<string, long> PageEventCounts,
     IReadOnlyDictionary<string, long> PageEventOverlayCounts,
     IReadOnlyDictionary<string, long> PageEventClientCounts,
+    IReadOnlyDictionary<string, long> PageEventSourceUrlCounts,
+    IReadOnlyDictionary<string, long> PageEventOverlayClientCounts,
+    IReadOnlyDictionary<string, long> PageEventClientIdCounts,
+    IReadOnlyDictionary<string, long> PageEventSourceUrlClientCounts,
     IReadOnlyList<LocalhostOverlayPageEventSample> RecentPageEvents);
 
 internal sealed record LocalhostOverlayRequestSample(
     DateTimeOffset AtUtc,
     string Method,
     string Path,
+    string SourceUrl,
     string Route,
     int StatusCode,
     double DurationMs,
@@ -423,7 +512,8 @@ internal sealed record LocalhostOverlayPageEvent(
     string? ClientKind,
     bool? ShouldRender,
     string? Status,
-    string? Error);
+    string? Error,
+    string? SourceUrl = null);
 
 internal sealed record LocalhostOverlayPageEventSample(
     DateTimeOffset AtUtc,
@@ -431,6 +521,7 @@ internal sealed record LocalhostOverlayPageEventSample(
     string OverlayId,
     string? ClientId,
     string ClientKind,
+    string? SourceUrl,
     bool? ShouldRender,
     string? Status,
     string? Error);

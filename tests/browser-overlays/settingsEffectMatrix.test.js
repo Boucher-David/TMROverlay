@@ -41,7 +41,7 @@ describe('settings effect matrix', () => {
       const overlay = overlayConfig(config, 'standings');
       expect.soft(overlay.scalePercent).toBe(125);
       expect.soft(overlay.opacityPercent).toBe(80);
-      expect.soft(overlay.browserSize).toBe('846 x 391');
+      expect.soft(overlay.browserSize).toBe('846 x 1030');
 
       const model = (await server.getJson(modelPath('standings'))).model;
       expect.soft(model.effectiveSettings.rendered.browserSource).toMatchObject({
@@ -386,7 +386,7 @@ function happyPathCases() {
       }
     },
     {
-      id: 'garage cover preview forces cover visible',
+      id: 'garage cover preview stays settings-only',
       overlayId: 'garage-cover',
       settingKey: 'garage-cover.previewVisible',
       expectedValue: true,
@@ -400,7 +400,7 @@ function happyPathCases() {
         expect.soft(overlay.garagePreviewVisible).toBe(true);
       },
       assertModel: (model) => {
-        expect.soft(model.garageCover?.shouldCover).toBe(true);
+        expect.soft(model.garageCover?.shouldCover).toBe(false);
       }
     },
     {

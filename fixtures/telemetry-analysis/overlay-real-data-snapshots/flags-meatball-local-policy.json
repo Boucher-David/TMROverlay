@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "flags-meatball-local-policy",
+  "overlayId": "flags",
+  "scenarioIds": ["flags-confirmed-meatball-real-data", "flags-local-vs-global-policy"],
+  "source": {
+    "captureId": "capture-20260522-194832-318",
+    "sourceCategory": "full-race-confirmed-meatball",
+    "redaction": "compact-summary",
+    "note": "Full-race capture where the meatball flag was confirmed real and driver-visible for the local/team car."
+  },
+  "provenance": {
+    "sessionType": "Race",
+    "sessionPhase": "green",
+    "focusRelation": "player",
+    "sampleWindowSeconds": 515.199
+  },
+  "rawEvidence": {
+    "sessionType": "Race",
+    "displayKindFrames": {
+      "Meatball": 90905
+    },
+    "longestDisplay": {
+      "kind": "Critical:Meatball",
+      "durationSeconds": 515.199
+    },
+    "confirmedByUser": true,
+    "localDriverEvidence": {
+      "field": "CarIdxSessionFlags",
+      "playerCarIdx": 10,
+      "repairFlagBit": 1048576,
+      "playerCarIdxSessionFlags": 1048576,
+      "globalSessionFlags": 1048576,
+      "localMatchesGlobal": true
+    },
+    "globalOnlyCounterexample": {
+      "globalSessionFlags": 589824,
+      "playerCarIdxSessionFlags": 0,
+      "containsBlackOrFurledBits": true,
+      "localDriverEvidencePresent": false
+    }
+  },
+  "expected": {
+    "confirmedMeatball": {
+      "shouldDisplay": true,
+      "displayKind": "Meatball",
+      "category": "Critical",
+      "source": "local-driver CarIdxSessionFlags",
+      "durationAloneIsNotFalsePositive": true
+    },
+    "globalOnlyCriticalPolicy": {
+      "shouldDisplayAsLocalCritical": false,
+      "requiredEvidence": "local-driver or session-context evidence",
+      "reason": "global repair/furled/black bits alone do not prove local driver critical state"
+    }
+  }
+}

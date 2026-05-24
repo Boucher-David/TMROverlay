@@ -11,6 +11,7 @@ using TmrOverlay.App.Overlays.PitService;
 using TmrOverlay.App.Overlays.Relative;
 using TmrOverlay.App.Overlays.SessionWeather;
 using TmrOverlay.App.Overlays.SettingsPanel;
+using TmrOverlay.App.Overlays.SimpleTelemetry;
 using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Overlays.TrackMap;
@@ -84,7 +85,7 @@ public sealed class OverlayContentColumnSettingsTests
         var size = BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings);
 
         Assert.Equal(1504, size.Width);
-        Assert.Equal(313, size.Height);
+        Assert.Equal(824, size.Height);
     }
 
     [Fact]
@@ -104,7 +105,7 @@ public sealed class OverlayContentColumnSettingsTests
         var relativeSize = BrowserOverlayRecommendedSize.For(RelativeOverlayDefinition.Definition, relative);
 
         Assert.Equal(677, standingsSize.Width);
-        Assert.Equal(313, standingsSize.Height);
+        Assert.Equal(824, standingsSize.Height);
         Assert.Equal(392, relativeSize.Width);
         Assert.Equal(308, relativeSize.Height);
     }
@@ -202,7 +203,7 @@ public sealed class OverlayContentColumnSettingsTests
 
         var size = BrowserOverlayRecommendedSize.ScaledFor(StandingsOverlayDefinition.Definition, standings);
 
-        Assert.Equal(new Size(846, 391), size);
+        Assert.Equal(new Size(846, 1030), size);
     }
 
     [Fact]
@@ -268,16 +269,16 @@ public sealed class OverlayContentColumnSettingsTests
             StandingsOverlayDefinition.Definition.DefaultHeight);
 
         Assert.Equal(
-            new Size(677, 313),
+            new Size(677, 824),
             BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings));
         Assert.Equal(
-            new Size(557, 313),
+            new Size(557, 824),
             BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Practice));
 
         standings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, false);
 
         Assert.Equal(
-            new Size(557, 275),
+            new Size(557, 790),
             BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Practice));
         Assert.Equal(
             new Size(557, 275),
@@ -378,7 +379,7 @@ public sealed class OverlayContentColumnSettingsTests
             StandingsOverlayDefinition.Definition.DefaultHeight);
         standings.SetBooleanOption(Column(OverlayContentColumnSettings.StandingsPitColumnId).EnabledKey(standings.Id), false);
 
-        Assert.Equal(new Size(629, 313), BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Race));
+        Assert.Equal(new Size(629, 824), BrowserOverlayRecommendedSize.For(StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Race));
         Assert.Equal(new Size(629, 313), ScaledSize(method, StandingsOverlayDefinition.Definition, standings, OverlaySessionKind.Race));
     }
 
@@ -552,6 +553,50 @@ public sealed class OverlayContentColumnSettingsTests
         SetBlock(raceInfoOff, OverlayContentColumnSettings.FuelCalculator, OverlayContentColumnSettings.FuelCalculatorRacePlanBlockId, false);
         SetBlock(raceInfoOff, OverlayContentColumnSettings.FuelCalculator, OverlayContentColumnSettings.FuelCalculatorRaceFuelBlockId, false);
         Assert.Equal(new Size(503, 201), BrowserOverlayRecommendedSize.For(FuelCalculatorOverlayDefinition.Definition, raceInfoOff, OverlaySessionKind.Race));
+    }
+
+    [Fact]
+    public void FuelCalculatorModelDrivenSizingShrinksNativeWindowToLiveRows()
+    {
+        var geometry = OverlayGeometryContracts.MetricRows;
+        var fuel = new ApplicationSettings().GetOrAddOverlay(
+            FuelCalculatorOverlayDefinition.Definition.Id,
+            FuelCalculatorOverlayDefinition.Definition.DefaultWidth,
+            FuelCalculatorOverlayDefinition.Definition.DefaultHeight);
+        fuel.Scale = 1.25d;
+        var metricSections = new[]
+        {
+            new SimpleTelemetryMetricSectionViewModel(
+                "Race Information",
+                [new SimpleTelemetryRowViewModel("Plan", "calculating")]),
+            new SimpleTelemetryMetricSectionViewModel(
+                "Fuel Usage",
+                [new SimpleTelemetryRowViewModel("Burn", "calculating")])
+        };
+        var expectedBase = new Size(
+            FuelCalculatorOverlayDefinition.Definition.DefaultWidth,
+            FuelCalculatorHeightFromContract(rowCount: 2, sectionCount: 2, geometry));
+        var expectedScaled = ScaleSize(expectedBase, fuel.Scale);
+
+        Assert.Equal(
+            expectedBase,
+            OverlayContentSizing.FuelCalculatorSizeForMetricSections(
+                FuelCalculatorOverlayDefinition.Definition,
+                fuel,
+                OverlaySessionKind.Race,
+                metricSections));
+
+        var size = OverlayManager.TargetOverlayClientSizeForApply(
+            FuelCalculatorOverlayDefinition.Definition,
+            fuel,
+            currentSize: new Size(999, 999),
+            sessionPreviewActive: false,
+            sessionKind: OverlaySessionKind.Race,
+            modelDrivenBaseSize: expectedBase);
+
+        Assert.Equal(expectedScaled, size);
+        Assert.Equal(expectedScaled.Width, fuel.Width);
+        Assert.Equal(expectedScaled.Height, fuel.Height);
     }
 
     [Fact]

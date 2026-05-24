@@ -58,6 +58,8 @@ internal sealed record GarageCoverDiagnosticsSnapshot(
     bool RouteEnabled,
     string RouteStatus,
     string Route,
+    bool OverlayEnabled,
+    bool ShouldCover,
     string ImageStatus,
     string? ImageFileName,
     string? ImageExtension,

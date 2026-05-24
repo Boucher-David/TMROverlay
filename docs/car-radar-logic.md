@@ -133,23 +133,23 @@ Right side is active for `3`, `4`, and `6`.
 
 `CarLeftRight` is a player-car scalar. When the camera is focused on another car, side occupancy is hidden instead of applying the player's side warning to the watched car.
 
-For side-by-side placement, `CarLeftRight` is authoritative. Timing never creates an alongside state by itself.
+For side-by-side placement, `CarLeftRight` is necessary but not sufficient. Timing never creates an alongside state by itself, and a side marker is shown only when the current spatial model can attach the side signal to a close physical car candidate.
 
 When a side warning exists, the radar may attach that side slot to a rendered decoded car only when:
 
-- The car has reliable relative meters inside the contact-length window.
+- The car has reliable relative meters inside the side-attachment window.
 
-The distance window uses the current local car body-length model.
+The side-attachment window uses the current local car body-length model and spans two local-car body lengths.
 
-If no physically placed car qualifies, the radar still draws the generic side-warning rectangle from `CarLeftRight`. This keeps the actual spotter warning visible without pretending a random timed car is alongside.
+If no physically placed car qualifies, the radar suppresses the side-warning rectangle from `CarLeftRight`. This avoids false side warnings from stale or technical spotter state when the only decoded car is far laterally or longitudinally away. The raw `CarLeftRight` state remains diagnostics evidence, but it is not rendered as a side marker without an attachment candidate.
 
 When a side warning is active and a nearby physically placed car is close enough to be the likely source of that warning, the radar attaches that car to the side slot and suppresses the same car's normal center-lane rectangle. This avoids showing one opponent twice during a pass. The side marker is biased slightly forward or backward from the local car based on the car's longitudinal gap, so a pass that has moved to the front-right/front-left does not keep looking like a centered side block.
 
 Data review note from the May 2026 capture analysis:
 
 - Long Nürburgring captures showed many frames with physical/timing proximity candidates but no side signal, and a smaller number of frames with a side signal but no clean same-frame contact candidate.
-- That supports keeping the current split: lap-distance/track-length and timing are longitudinal proximity inputs, while `CarLeftRight` remains the side-occupancy authority.
-- The generic side-warning rectangle is not just a fallback; it preserves real spotter state when the nearby-car reconstruction cannot confidently attach the warning to one decoded car.
+- That supports keeping the current split: lap-distance/track-length and timing are longitudinal proximity inputs, while `CarLeftRight` remains the side-occupancy gate.
+- Side warnings now require both sources: `CarLeftRight` plus a close decoded placement candidate. Frames with side signal but no placement stay visible in diagnostics as suppressed partial evidence rather than user-facing warning geometry.
 
 ## Radar Visibility
 
@@ -157,8 +157,8 @@ The radar fades in when any current signal exists:
 
 - Overlay error.
 - Settings preview mode.
-- Left side occupancy.
-- Right side occupancy.
+- Left side occupancy with an attached close spatial candidate.
+- Right side occupancy with an attached close spatial candidate.
 - At least one car in radar range.
 - Faster-class warning.
 
@@ -260,7 +260,7 @@ The radar does not have true lane-level lateral telemetry.
 Approximation:
 
 - `CarLeftRight` creates side slots: one left, one right, both sides, two left, or two right.
-- A rendered car can occupy a side slot only when physical distance places it within a close side-attachment window around the local car. The side signal is still the authority; timing does not select a decoded car for the side marker.
+- A rendered car can occupy a side slot only when physical distance places it within a close side-attachment window around the local car. The side signal remains the lateral gate, but it must be paired with an attachment candidate; timing does not select a decoded car for the side marker.
 - Otherwise distribute multiple radar cars across three simple lanes based on `CarIdx` and draw index.
 - A single visible car is centered.
 

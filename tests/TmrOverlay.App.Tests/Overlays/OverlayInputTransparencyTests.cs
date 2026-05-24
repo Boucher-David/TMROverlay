@@ -44,6 +44,16 @@ public sealed class OverlayInputTransparencyTests
     }
 
     [Fact]
+    public void DesignV2StandingsRendersChromeOnlyWaitingState()
+    {
+        Assert.True(DesignV2LiveOverlayForm.ShouldRenderStandingsTable(columnCount: 8, rowCount: 0, hasChrome: true));
+        Assert.True(DesignV2LiveOverlayForm.ShouldRenderStandingsTable(columnCount: 0, rowCount: 0, hasChrome: true));
+        Assert.True(DesignV2LiveOverlayForm.ShouldRenderStandingsTable(columnCount: 8, rowCount: 1, hasChrome: false));
+        Assert.False(DesignV2LiveOverlayForm.ShouldRenderStandingsTable(columnCount: 8, rowCount: 0, hasChrome: false));
+        Assert.False(DesignV2LiveOverlayForm.ShouldRenderStandingsTable(columnCount: 0, rowCount: 1, hasChrome: true));
+    }
+
+    [Fact]
     public void StreamChatHitRegion_AllowsHeaderDragAndKeepsBodyClickThrough()
     {
         var size = new Size(420, 320);
@@ -78,15 +88,28 @@ public sealed class OverlayInputTransparencyTests
     [Fact]
     public void DesignV2RadarBody_UsesSpatialCarsOnly()
     {
-        var spatialCar = new LiveSpatialCar(
+        var sideCar = new LiveSpatialCar(
             CarIdx: 12,
             Quality: LiveModelQuality.Reliable,
             PlacementEvidence: LiveSignalEvidence.Reliable("test"),
             RelativeLaps: 0.01d,
             RelativeSeconds: 1.2d,
-            RelativeMeters: 12d,
+            RelativeMeters: 2d,
             OverallPosition: 6,
             ClassPosition: 5,
+            CarClass: 4098,
+            TrackSurface: null,
+            OnPitRoad: false,
+            CarClassColorHex: "#FFDA59");
+        var nearbyCar = new LiveSpatialCar(
+            CarIdx: 14,
+            Quality: LiveModelQuality.Reliable,
+            PlacementEvidence: LiveSignalEvidence.Reliable("test"),
+            RelativeLaps: 0.01d,
+            RelativeSeconds: 1.2d,
+            RelativeMeters: 12d,
+            OverallPosition: 7,
+            ClassPosition: 6,
             CarClass: 4098,
             TrackSurface: null,
             OnPitRoad: false,
@@ -105,7 +128,7 @@ public sealed class OverlayInputTransparencyTests
             HasCarLeft = true,
             HasCarRight = false,
             ReferenceCarClassColorHex = "#FFDA59",
-            Cars = [spatialCar],
+            Cars = [sideCar, nearbyCar],
             MulticlassApproaches = [approach],
             StrongestMulticlassApproach = approach
         };
@@ -116,7 +139,7 @@ public sealed class OverlayInputTransparencyTests
         Assert.True(body.IsAvailable);
         Assert.True(body.HasLeft);
         Assert.False(body.HasRight);
-        Assert.Same(spatialCar, Assert.Single(body.Cars));
+        Assert.Equal(new[] { sideCar, nearbyCar }, body.Cars);
         Assert.Same(approach, body.StrongestMulticlassApproach);
         Assert.True(body.RenderModel.ShouldRender);
         var focus = Assert.Single(body.RenderModel.Cars, car => car.Kind == "focus");
@@ -125,11 +148,45 @@ public sealed class OverlayInputTransparencyTests
         Assert.Equal(255, focus.Stroke.Red);
         Assert.Equal(218, focus.Stroke.Green);
         Assert.Equal(89, focus.Stroke.Blue);
-        Assert.Contains(body.RenderModel.Cars, car => car.Kind == "side-left");
-        var nearby = Assert.Single(body.RenderModel.Cars, car => car.Kind == "nearby" && car.CarIdx == spatialCar.CarIdx);
+        var side = Assert.Single(body.RenderModel.Cars, car => car.Kind == "side-left");
+        Assert.Equal(sideCar.CarIdx, side.CarIdx);
+        var nearby = Assert.Single(body.RenderModel.Cars, car => car.Kind == "nearby" && car.CarIdx == nearbyCar.CarIdx);
         Assert.Equal(255, nearby.Stroke.Red);
         Assert.Equal(218, nearby.Stroke.Green);
         Assert.Equal(89, nearby.Stroke.Blue);
+    }
+
+    [Fact]
+    public void CarRadarRenderModel_DoesNotRenderSideWarningWithoutAttachmentCandidate()
+    {
+        var farCar = SpatialCar(12, relativeMeters: 18d, relativeSeconds: 1.2d);
+
+        var render = CarRadarRenderModel.FromState(
+            isAvailable: true,
+            hasCarLeft: true,
+            hasCarRight: false,
+            cars: [farCar],
+            strongestMulticlassApproach: null,
+            showMulticlassWarning: true,
+            previewVisible: false,
+            hasCurrentSignal: true);
+
+        Assert.True(render.ShouldRender);
+        Assert.DoesNotContain(render.Cars, car => car.Kind == "side-left");
+        Assert.Contains(render.Cars, car => car.Kind == "nearby" && car.CarIdx == farCar.CarIdx);
+
+        var staleSignalOnly = CarRadarRenderModel.FromState(
+            isAvailable: true,
+            hasCarLeft: true,
+            hasCarRight: false,
+            cars: [],
+            strongestMulticlassApproach: null,
+            showMulticlassWarning: true,
+            previewVisible: false,
+            hasCurrentSignal: true);
+
+        Assert.False(staleSignalOnly.ShouldRender);
+        Assert.Empty(staleSignalOnly.Cars);
     }
 
     [Fact]
@@ -649,6 +706,7 @@ public sealed class OverlayInputTransparencyTests
             Weather: [],
             LeaderChanges: [],
             DriverChanges: [],
+            PitWindows: [],
             StartSeconds: 0d,
             EndSeconds: 10d,
             MaxGapSeconds: 20d,

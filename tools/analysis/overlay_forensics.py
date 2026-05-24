@@ -42,6 +42,14 @@ ALL_OVERLAYS = [
     "stream-chat",
 ]
 
+OBS_READINESS_STATES = {
+    "not-requested",
+    "page-loaded-no-model",
+    "model-polled-hidden",
+    "model-rendered",
+    "browser-source-error",
+}
+
 OVERLAY_RAW_SECTIONS = {
     "standings": ["scoring", "positionCadence"],
     "relative": ["relativeLapRelationship", "lapDelta", "radar"],
@@ -55,6 +63,138 @@ OVERLAY_RAW_SECTIONS = {
     "session-weather": ["rawTelemetry"],
     "garage-cover": ["sampleFrames", "rawTelemetry"],
     "stream-chat": [],
+}
+
+OVERLAY_SEMANTIC_CONTRACTS = {
+    "standings": {
+        "purpose": "Prove scoring source, row identity, class grouping, and chrome-only waiting behavior.",
+        "rawFields": ["SessionType", "SessionState", "SessionResults", "CarIdxPosition", "CarIdxClassPosition", "CarIdxLapCompleted", "CarIdxLapDistPct"],
+        "modelFields": ["source", "status", "shouldRender", "rows", "headers", "headerItems", "effectiveSettings.rendered.headerItems"],
+        "rendererFields": ["visibleRows", "headerText", "footerSource", "renderHiddenTransitions"],
+        "assertions": [
+            "practice-before-results does not alternate hidden/render without a real source transition",
+            "race-only GAP/INT/leader semantics are absent before an accepted standings source exists",
+            "chrome-only waiting is explicit when header/footer is enabled but rows are empty",
+        ],
+    },
+    "relative": {
+        "purpose": "Prove practice/race timing source, row relationship, and focus-car context.",
+        "rawFields": ["SessionType", "SessionState", "PlayerCarIdx", "CamCarIdx", "CarIdxF2Time", "CarIdxEstTime", "CarIdxLapDistPct"],
+        "modelFields": ["source", "status", "rows[].relativeSeconds", "rows[].distanceMeters", "rows[].relationship", "effectiveSettings"],
+        "rendererFields": ["visibleRows", "gapText", "rowTone", "renderHiddenTransitions"],
+        "assertions": [
+            "practice rows use second-formatted timing when iRacing timing evidence exists",
+            "same-lap, lap-ahead, lap-behind, and pending relationships are distinguishable",
+            "focus car identity is recorded for every sampled row set",
+        ],
+    },
+    "gap-to-leader": {
+        "purpose": "Prove selected graph lines, pit-state behavior, scale bounds, and long-tail readability.",
+        "rawFields": ["SessionType", "PlayerCarIdx", "CamCarIdx", "CarIdxPosition", "CarIdxClassPosition", "CarIdxLapDistPct", "OnPitRoad"],
+        "modelFields": ["points", "graph", "source", "status", "effectiveSettings", "series", "scaleMode"],
+        "rendererFields": ["lineCount", "axisBounds", "selectedSeries", "pitAnnotations", "paintDuration"],
+        "assertions": [
+            "pit-stop windows do not corrupt leader/reference scale",
+            "far-away final rows do not make top cars unreadable",
+            "native paint stays within budget or reports the over-budget window",
+        ],
+    },
+    "car-radar": {
+        "purpose": "Prove local-vs-focus context, side-signal source, placement eligibility, and settings-preview lifetime.",
+        "rawFields": ["PlayerCarIdx", "CamCarIdx", "CarLeftRight", "CarIdxLapDistPct", "CarIdxF2Time", "CarIdxEstTime", "CarIdxTrackSurface", "CarIdxOnPitRoad"],
+        "modelFields": ["carRadar.renderModel", "status", "source", "effectiveSettings", "settingsPreview"],
+        "rendererFields": ["sideIndicators", "approachWarnings", "placementCandidates", "previewActive"],
+        "assertions": [
+            "side-signal-only and placement-backed warnings are classified separately",
+            "faster-class approach timing records the selected source and threshold",
+            "settings preview ends when Settings is no longer the active preview context",
+        ],
+    },
+    "fuel-calculator": {
+        "purpose": "Prove measured-burn trust, rendered row count, compact height, and size-lock reason.",
+        "rawFields": ["FuelLevel", "FuelUsePerHour", "LapCompleted", "LapCurrentLapTime", "OnPitRoad", "PlayerCarInPitStall"],
+        "modelFields": ["metricSections", "fuelStrategyEvidence", "effectiveSettings.rendered.browserSource", "status"],
+        "rendererFields": ["visibleSectionCount", "visibleRowCount", "browserSourceHeight", "nativeWindowHeight", "unusedHeightRatio"],
+        "assertions": [
+            "rendered row/section count drives compact recommended height unless size is locked",
+            "measured green-lap burn becomes trusted when current-session laps support it",
+            "height disagreements identify custom, persisted, OBS-fixed, or model-render sizing causes",
+        ],
+    },
+    "pit-service": {
+        "purpose": "Prove pit-service command state, pit-window transitions, and shared refuel detection.",
+        "rawFields": ["PitSvFlags", "PitSvFuel", "PitstopActive", "PlayerCarInPitStall", "FuelLevel"],
+        "modelFields": ["gridSections", "metricSections", "status", "source", "effectiveSettings"],
+        "rendererFields": ["visibleCommands", "requestedFuel", "pitWindowState", "refuelDetected"],
+        "assertions": [
+            "pit-service route is requested when raw service signals exist and overlay is expected",
+            "net fuel increases during pit windows set refuel-detected evidence",
+            "local-strategy suppression reason is recorded when rows are hidden",
+        ],
+    },
+    "flags": {
+        "purpose": "Prove displayed flags, local-driver evidence, session phase, and confirmed meatball behavior.",
+        "rawFields": ["SessionFlags", "SessionState", "PlayerCarIdx", "CarIdxOnPitRoad", "CarIdxTrackSurface"],
+        "modelFields": ["status", "source", "rows", "metrics", "headerItems"],
+        "rendererFields": ["visibleFlagKind", "tone", "duration", "renderHiddenTransitions"],
+        "assertions": [
+            "confirmed real meatball/black displays are preserved",
+            "global repair/furled bits are not treated as local critical flags without local evidence",
+            "duration alone never classifies a critical flag as false",
+        ],
+    },
+    "track-map": {
+        "purpose": "Prove map source, focus marker, marker sizing, and practice/open-session progress policy.",
+        "rawFields": ["PlayerCarIdx", "CamCarIdx", "CarIdxLapDistPct", "CarIdxTrackSurface", "SessionType", "SessionState"],
+        "modelFields": ["trackMap.renderModel.mapKind", "trackMap.renderModel.markers", "trackMap.markers", "status", "effectiveSettings"],
+        "rendererFields": ["mapKind", "markerCount", "focusMarker", "markerRadius", "sectorHighlights"],
+        "assertions": [
+            "non-player focused car becomes the large focus marker when camera focus changes",
+            "practice/open-session timing markers do not depend on race pre-grid HasTakenGrid semantics",
+            "generated-map versus circle-fallback source and fallback reason are recorded",
+        ],
+    },
+    "input-state": {
+        "purpose": "Prove control signal availability, trace count, latest values, and graph normalization.",
+        "rawFields": ["Throttle", "Brake", "Clutch", "SteeringWheelAngle", "Gear", "RPM"],
+        "modelFields": ["inputState", "metrics", "status", "effectiveSettings"],
+        "rendererFields": ["tracePointCount", "latestPedalValues", "gearText", "staleState"],
+        "assertions": [
+            "latest scalar values and graph/rail traces come from the same sample window",
+            "stale/unavailable input state is explicit",
+        ],
+    },
+    "session-weather": {
+        "purpose": "Prove weather source, units, wetness/rain mapping, and stale/unavailable states.",
+        "rawFields": ["AirTemp", "TrackTemp", "WindVel", "WindDir", "Precipitation", "TrackWetness"],
+        "modelFields": ["metricSections", "status", "source", "effectiveSettings"],
+        "rendererFields": ["visibleUnits", "wetnessLabel", "temperatureText", "staleState"],
+        "assertions": [
+            "air/track temperature and wind units match app settings",
+            "wetness/rain labels preserve source and unavailable states",
+        ],
+    },
+    "garage-cover": {
+        "purpose": "Prove garage-visible cover state, product-enabled state, image readiness, brand fallback asset, and OBS route readiness.",
+        "rawFields": ["IsGarageVisible", "IsInGarage", "IsOnTrack", "SessionState"],
+        "modelFields": ["garageCover", "shouldRender", "status", "imageStatus", "detectionState"],
+        "rendererFields": ["shouldCover", "imageRendered", "defaultBrandAsset", "modelHiddenEvents"],
+        "assertions": [
+            "cover renders only when product enabled and fresh telemetry reports IsGarageVisible=true",
+            "default brand image is ready when no custom image is configured",
+            "loaded OBS source route polling is not treated as render proof without garage-visible telemetry",
+        ],
+    },
+    "stream-chat": {
+        "purpose": "Prove provider route health without treating external chat content as raw telemetry truth.",
+        "rawFields": [],
+        "modelFields": ["streamChat", "status", "source", "rows"],
+        "rendererFields": ["visibleMessageCount", "providerStatus", "sanitizedText"],
+        "assertions": [
+            "provider status and visible message count are recorded",
+            "external chat source is classified separately from telemetry-derived overlays",
+        ],
+    },
 }
 
 EVENT_PREFIX_TO_OVERLAY = {
@@ -82,6 +222,9 @@ CAPTURE_HEADER = struct.Struct("<8siiiiq")
 APP_INITIAL_PACKAGE_FILES = {
     "storage-boundary.json",
     "input-inventory.json",
+    "package-status.json",
+    "obs-readiness.json",
+    "evidence-gaps.json",
     "overlay-forensics.json",
     "overlay-forensics.md",
 }
@@ -120,6 +263,7 @@ class InputPaths:
     diagnostics_live_overlay_diagnostics: Path | None
     localhost_overlays: Path | None
     localhost_overlay_models: Path | None
+    window_z_order: Path | None
     evidence_quality: Path | None
     performance_summary: Path | None
     performance_jsonl: list[Path]
@@ -147,7 +291,9 @@ def main() -> int:
     parser.add_argument("--render", default="none", help="Requested renderers. Initial tool records requested gaps only.")
     parser.add_argument("--model-replay", default="auto", choices=["auto", "off", "required"], help="Run production C# overlay model replay when available.")
     parser.add_argument("--model-replay-command", default="", help="Explicit model replay command. Use {capture}, {sample_plan}, {output}, {overlays}, and {settings} placeholders.")
+    parser.add_argument("--timeline-validation", default="auto", choices=["auto", "off", "required"], help="Validate replayed overlay model timelines when model rows are available.")
     parser.add_argument("--settings", type=Path, help="Optional app settings JSON for production model replay.")
+    parser.add_argument("--app-data-root", type=Path, help="Optional TmrOverlay app-data root to inventory history/settings next to the capture.")
     parser.add_argument("--renderer-command", default="", help="Explicit renderer command. Use {output}, {overlays}, and {renderer} placeholders.")
     parser.add_argument("--render-limit", default=40, type=int, help="Maximum replay screenshots per overlay and renderer.")
     parser.add_argument("--assert", dest="assert_mode", default="warn", choices=["warn", "strict", "off"])
@@ -172,9 +318,12 @@ def main() -> int:
     live_diag = load_json(live_diag_path) if live_diag_path else None
     localhost = load_json(paths.localhost_overlays) if paths.localhost_overlays else None
     localhost_models = load_json(paths.localhost_overlay_models) if paths.localhost_overlay_models else None
+    window_z_order = load_json(paths.window_z_order) if paths.window_z_order else None
     evidence_quality = load_json(paths.evidence_quality) if paths.evidence_quality else None
     performance_summary = load_json(paths.performance_summary) if paths.performance_summary else None
     capture_synthesis = load_json(paths.capture_synthesis) if paths.capture_synthesis else None
+    app_data_root, app_data_root_source = resolve_app_data_root(args.app_data_root, paths.capture)
+    history_inventory = build_history_inventory(app_data_root, app_data_root_source)
 
     cadence_seconds = cadence_for(args.strategy, args.cadence)
     window_before = parse_duration_seconds(args.window_before)
@@ -185,7 +334,7 @@ def main() -> int:
     frame_scan = scan_frame_headers(paths.telemetry_bin, manifest)
     frames = frame_scan.pop("_frames", [])
 
-    inventory = build_input_inventory(paths, manifest, capture_synthesis, live_diag_path, evidence_quality)
+    inventory = build_input_inventory(paths, manifest, capture_synthesis, live_diag_path, evidence_quality, history_inventory)
     event_index = build_event_index(
         live_diag,
         localhost,
@@ -218,12 +367,16 @@ def main() -> int:
     write_json(output / "sample-plan.json", sample_plan)
     write_json(output / "performance-timeline.json", performance_timeline)
     write_json(output / "storage-boundary.json", storage_boundary)
+    write_json(output / "history-inventory.json", history_inventory)
 
     model_replay_result = run_model_replay(args, paths, output, overlays)
+    model_timeline_result = run_model_timeline_validation(args, output, overlays, model_replay_result)
     renderer_results = run_renderer_replays(args, output, overlays, model_replay_result)
+    model_sample_summaries = build_model_sample_summaries(output, overlays)
     tool_runs = {
         "schemaVersion": 1,
         "modelReplay": model_replay_result,
+        "modelTimelineValidation": model_timeline_result,
         "rendererReplay": renderer_results,
     }
     write_json(output / "tool-runs.json", tool_runs)
@@ -233,6 +386,7 @@ def main() -> int:
         live_diag,
         localhost,
         localhost_models,
+        window_z_order,
         evidence_quality,
         performance_summary,
         performance_timeline,
@@ -241,23 +395,58 @@ def main() -> int:
         args.render,
         model_replay_result,
         renderer_results,
+        model_sample_summaries,
     )
+    obs_readiness = {
+        "schemaVersion": 1,
+        "overlays": {
+            overlay_id: report["obsReadiness"]
+            for overlay_id, report in overlay_reports.items()
+        },
+        "sourceLifecycle": {
+            overlay_id: report["sourceLifecycle"]
+            for overlay_id, report in overlay_reports.items()
+        },
+    }
+    write_json(output / "obs-readiness.json", obs_readiness)
+    write_json(output / "live-model-samples.json", {
+        "schemaVersion": 1,
+        "overlays": model_sample_summaries,
+    })
     evidence_gaps = build_evidence_gaps(
         args.render,
         model_replay_result,
+        model_timeline_result,
         renderer_results,
         evidence_quality,
         localhost_models,
         overlay_reports,
         live_diag_path,
     )
+    package_status = build_package_status(
+        manifest,
+        output,
+        model_replay_result,
+        model_timeline_result,
+        renderer_results,
+        evidence_gaps,
+        history_inventory,
+    )
 
     write_json(output / "evidence-gaps.json", evidence_gaps)
+    write_json(output / "package-status.json", package_status)
 
     overlay_root = output / "overlays"
     mkdir(overlay_root)
     for overlay_id, report in overlay_reports.items():
-        write_overlay_artifacts(overlay_root / overlay_id, overlay_id, report, sample_plan, event_index, localhost_models)
+        write_overlay_artifacts(
+            overlay_root / overlay_id,
+            overlay_id,
+            report,
+            sample_plan,
+            event_index,
+            localhost_models,
+            model_sample_summaries.get(overlay_id, default_model_sample_summary(overlay_id)))
 
     top_level = {
         "schemaVersion": 1,
@@ -265,7 +454,9 @@ def main() -> int:
         "captureId": manifest.get("captureId"),
         "capture": inventory["capture"],
         "diagnostics": inventory.get("diagnostics"),
+        "historyInventory": history_inventory,
         "storageBoundary": storage_boundary,
+        "packageStatus": package_status,
         "overlays": overlay_reports,
         "evidenceGaps": evidence_gaps,
         "toolRuns": tool_runs,
@@ -276,10 +467,18 @@ def main() -> int:
             "sample-plan.json",
             "performance-timeline.json",
             "storage-boundary.json",
+            "history-inventory.json",
+            "obs-readiness.json",
+            "live-model-samples.json",
             "tool-runs.json",
             "model-replay-result.json",
+            "model-timeline-validation.json",
             "renderer-replay-<renderer>-result.json",
             "evidence-gaps.json",
+            "package-status.json",
+            "overlays/<overlay-id>/semantic-manifest.json",
+            "overlays/<overlay-id>/source-lifecycle.json",
+            "overlays/<overlay-id>/live-model-summary.json",
             "overlays/<overlay-id>/semantic-results.json",
             "overlays/<overlay-id>/timeline.md",
         ],
@@ -362,6 +561,65 @@ def run_model_replay(
     return run_command_result(command, "model-replay", result_path, required=required)
 
 
+def run_model_timeline_validation(
+    args: argparse.Namespace,
+    output: Path,
+    overlays: list[str],
+    model_replay_result: dict[str, Any],
+) -> dict[str, Any]:
+    required = args.timeline_validation == "required"
+    report_path = output / "model-timeline-validation.json"
+    script = Path("tools/analysis/validate_model_timeline.py")
+    command = default_model_timeline_command(script, output, overlays, report_path)
+
+    if args.timeline_validation == "off":
+        return {
+            "schemaVersion": 1,
+            "status": "disabled",
+            "required": False,
+            "reason": "model timeline validation disabled by --timeline-validation off",
+        }
+    if not script.exists():
+        return {
+            "schemaVersion": 1,
+            "status": "skipped",
+            "required": required,
+            "reason": f"model timeline validator not found: {script}",
+            "command": command,
+        }
+    if not any_model_timeline_rows(output, overlays):
+        return {
+            "schemaVersion": 1,
+            "status": "skipped",
+            "required": required,
+            "reason": model_replay_result.get("reason") or "no replayed overlay model rows were found",
+            "command": command,
+        }
+
+    command_parts = [
+        sys.executable,
+        str(script),
+        "--forensics-output",
+        str(output),
+        "--overlays",
+        ",".join(overlays),
+        "--fail-on",
+        "off",
+        "--write-report",
+        str(report_path),
+    ]
+    print(f"Running model timeline validation: {command_display(command_parts)}", file=sys.stderr)
+    return run_command_result(command_parts, "model-timeline-validation", report_path, required=required)
+
+
+def any_model_timeline_rows(output: Path, overlays: list[str]) -> bool:
+    for overlay_id in overlays:
+        path = output / "overlays" / overlay_id / "models.jsonl"
+        if path.exists() and path.stat().st_size > 0:
+            return True
+    return False
+
+
 def run_renderer_replays(
     args: argparse.Namespace,
     output: Path,
@@ -430,7 +688,7 @@ def run_renderer_replays(
 
 def command_from_template(template: str, placeholders: dict[str, str]) -> list[str]:
     formatted = template.format(**placeholders)
-    return shlex.split(formatted)
+    return shlex.split(formatted, posix=os.name != "nt")
 
 
 def default_model_replay_command(project: Path, placeholders: dict[str, str]) -> str:
@@ -452,6 +710,21 @@ def default_model_replay_command(project: Path, placeholders: dict[str, str]) ->
     if placeholders.get("settings"):
         parts.extend(["--settings", placeholders["settings"]])
     return command_display(parts)
+
+
+def default_model_timeline_command(script: Path, output: Path, overlays: list[str], report_path: Path) -> str:
+    return command_display([
+        sys.executable,
+        str(script),
+        "--forensics-output",
+        str(output),
+        "--overlays",
+        ",".join(overlays),
+        "--fail-on",
+        "off",
+        "--write-report",
+        str(report_path),
+    ])
 
 
 def default_renderer_command(script: Path, placeholders: dict[str, str], limit: int) -> str:
@@ -510,7 +783,7 @@ def run_command_result(
         "stdoutTail": tail_text(completed.stdout),
         "stderrTail": tail_text(completed.stderr),
         **({"overlays": (result_document or {}).get("overlays")} if isinstance(result_document, dict) and (result_document or {}).get("overlays") is not None else {}),
-        **({"summary": result_document} if isinstance(result_document, dict) and kind == "model-replay" else {}),
+        **({"summary": result_document} if isinstance(result_document, dict) and kind in {"model-replay", "model-timeline-validation"} else {}),
     }
 
 
@@ -553,6 +826,7 @@ def resolve_inputs(capture: Path, diagnostics: Path | None) -> InputPaths:
         diagnostics_live_overlay_diagnostics=existing(diagnostics / "latest-capture" / "live-overlay-diagnostics.json") if diagnostics else None,
         localhost_overlays=existing(diagnostics / "metadata" / "localhost-overlays.json") if diagnostics else None,
         localhost_overlay_models=existing(diagnostics / "metadata" / "localhost-overlay-models.json") if diagnostics else None,
+        window_z_order=existing(diagnostics / "metadata" / "window-z-order.json") if diagnostics else None,
         evidence_quality=existing(diagnostics / "metadata" / "evidence-quality.json") if diagnostics else None,
         performance_summary=existing(diagnostics / "metadata" / "performance.json") if diagnostics else None,
         performance_jsonl=perf_jsonl,
@@ -729,6 +1003,7 @@ def build_input_inventory(
     capture_synthesis: dict[str, Any] | None,
     live_diag_path: Path | None,
     evidence_quality: dict[str, Any] | None,
+    history_inventory: dict[str, Any],
 ) -> dict[str, Any]:
     source_files = {
         "captureManifest": file_info(paths.capture_manifest),
@@ -740,6 +1015,7 @@ def build_input_inventory(
         "diagnosticsLiveOverlayDiagnostics": file_info(paths.diagnostics_live_overlay_diagnostics),
         "localhostOverlays": file_info(paths.localhost_overlays),
         "localhostOverlayModels": file_info(paths.localhost_overlay_models),
+        "windowZOrder": file_info(paths.window_z_order),
         "evidenceQuality": file_info(paths.evidence_quality),
         "performanceSummary": file_info(paths.performance_summary),
         "performanceJsonl": [file_info(path) for path in paths.performance_jsonl],
@@ -766,7 +1042,111 @@ def build_input_inventory(
         },
         "sourceFiles": source_files,
         "evidenceWarnings": (evidence_quality or {}).get("warnings", []),
+        "history": compact_dict(
+            history_inventory,
+            ["status", "appDataRoot", "userHistoryRoot", "aggregateCount", "summaryCount", "fuelHistoryAggregateCount"],
+        ),
     }
+
+
+def resolve_app_data_root(configured_root: Path | None, capture: Path) -> tuple[Path | None, str]:
+    if configured_root is not None:
+        return configured_root.expanduser().resolve(), "explicit"
+
+    capture = capture.resolve()
+    parent = capture.parent
+    if parent.name.lower() == "captures":
+        candidate = parent.parent
+        if any((candidate / name).exists() for name in ("history", "settings", "forensics", "logs")):
+            return candidate, "capture-parent"
+
+    return None, "not-resolved"
+
+
+def build_history_inventory(app_data_root: Path | None, source: str) -> dict[str, Any]:
+    if app_data_root is None:
+        return {
+            "schemaVersion": 1,
+            "status": "unavailable",
+            "source": source,
+            "appDataRoot": None,
+            "reason": "No app-data root was provided or inferred from the capture path.",
+            "aggregateCount": 0,
+            "summaryCount": 0,
+            "fuelHistoryAggregateCount": 0,
+            "aggregates": [],
+        }
+
+    history_root = app_data_root / "history" / "user"
+    aggregate_paths = sorted(history_root.glob("cars/*/tracks/*/sessions/*/aggregate.json")) if history_root.exists() else []
+    aggregates = [compact_history_aggregate(path, history_root) for path in aggregate_paths]
+    aggregates = [aggregate for aggregate in aggregates if aggregate is not None]
+    summary_count = sum(int(aggregate.get("summaryCount") or 0) for aggregate in aggregates)
+    fuel_history_count = sum(1 for aggregate in aggregates if aggregate.get("hasFuelHistory"))
+    radar_calibration_count = len(list(history_root.glob("cars/*/radar-calibration.json"))) if history_root.exists() else 0
+    analysis_count = len(list((history_root / "analysis").glob("*.json"))) if (history_root / "analysis").exists() else 0
+
+    return {
+        "schemaVersion": 1,
+        "status": "available" if aggregates else "missing-history-aggregates",
+        "source": source,
+        "appDataRoot": str(app_data_root),
+        "userHistoryRoot": str(history_root),
+        "aggregateCount": len(aggregates),
+        "summaryCount": summary_count,
+        "fuelHistoryAggregateCount": fuel_history_count,
+        "radarCalibrationAggregateCount": radar_calibration_count,
+        "analysisReportCount": analysis_count,
+        "sessionCounts": dict(sorted(Counter(str((aggregate.get("combo") or {}).get("sessionKey") or "unknown") for aggregate in aggregates).items())),
+        "aggregates": aggregates[:80],
+        "truncated": len(aggregates) > 80,
+    }
+
+
+def compact_history_aggregate(path: Path, history_root: Path) -> dict[str, Any] | None:
+    try:
+        aggregate = load_json(path)
+    except (OSError, json.JSONDecodeError):
+        return {
+            "path": str(path.relative_to(history_root)),
+            "status": "unreadable",
+            "summaryCount": count_summary_files(path),
+            "hasFuelHistory": False,
+        }
+
+    combo = aggregate.get("combo") if isinstance(aggregate, dict) else {}
+    if not isinstance(combo, dict):
+        combo = {}
+    fuel_per_lap = compact_metric(aggregate.get("fuelPerLapLiters") if isinstance(aggregate, dict) else None)
+    stint_fuel_per_lap = compact_metric(aggregate.get("averageStintFuelPerLapLiters") if isinstance(aggregate, dict) else None)
+    return {
+        "path": str(path.relative_to(history_root)),
+        "status": "available",
+        "aggregateVersion": aggregate.get("aggregateVersion") if isinstance(aggregate, dict) else None,
+        "combo": compact_dict(combo, ["carKey", "trackKey", "sessionKey"]),
+        "updatedAtUtc": aggregate.get("updatedAtUtc") if isinstance(aggregate, dict) else None,
+        "sessionCount": aggregate.get("sessionCount") if isinstance(aggregate, dict) else None,
+        "baselineSessionCount": aggregate.get("baselineSessionCount") if isinstance(aggregate, dict) else None,
+        "summaryCount": count_summary_files(path),
+        "fuelPerLapLiters": fuel_per_lap,
+        "averageStintFuelPerLapLiters": stint_fuel_per_lap,
+        "hasFuelHistory": metric_has_samples(fuel_per_lap) or metric_has_samples(stint_fuel_per_lap),
+    }
+
+
+def compact_metric(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    return compact_dict(value, ["sampleCount", "mean", "minimum", "maximum"])
+
+
+def metric_has_samples(value: dict[str, Any] | None) -> bool:
+    return isinstance(value, dict) and int(value.get("sampleCount") or 0) > 0 and value.get("mean") is not None
+
+
+def count_summary_files(aggregate_path: Path) -> int:
+    summaries = aggregate_path.parent / "summaries"
+    return len(list(summaries.glob("*.json"))) if summaries.exists() else 0
 
 
 def build_event_index(
@@ -1025,6 +1405,7 @@ def build_overlay_reports(
     live_diag: dict[str, Any] | None,
     localhost: dict[str, Any] | None,
     localhost_models: dict[str, Any] | None,
+    window_z_order: dict[str, Any] | None,
     evidence_quality: dict[str, Any] | None,
     performance_summary: dict[str, Any] | None,
     performance_timeline: dict[str, Any],
@@ -1033,6 +1414,7 @@ def build_overlay_reports(
     requested_renderers: str,
     model_replay_result: dict[str, Any],
     renderer_results: dict[str, Any],
+    model_sample_summaries: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     route_stats = build_route_stats(localhost, localhost_models)
     model_pages = model_pages_by_overlay(localhost_models)
@@ -1041,6 +1423,8 @@ def build_overlay_reports(
     for overlay_id in overlays:
         raw_signal = raw_signal_summary(live_diag, overlay_id)
         route = route_stats.get(overlay_id, default_route_stats(overlay_id))
+        obs_readiness = classify_obs_readiness(overlay_id, raw_signal, route, localhost, window_z_order)
+        source_lifecycle = classify_source_lifecycle(overlay_id, route)
         page = model_pages.get(overlay_id)
         perf_metrics = [metric for metric in over_budget_metrics(performance_summary, [overlay_id])]
         perf_window = (performance_timeline.get("overlayWindows") or {}).get(overlay_id, {})
@@ -1061,7 +1445,11 @@ def build_overlay_reports(
             "overlayId": overlay_id,
             "rawSignal": raw_signal,
             "routeCoverage": route,
+            "obsReadiness": obs_readiness,
+            "sourceLifecycle": source_lifecycle,
             "finalModelSnapshot": compact_model_page(page),
+            "liveModelSamples": model_sample_summaries.get(overlay_id, default_model_sample_summary(overlay_id)),
+            "semanticContract": semantic_contract(overlay_id),
             "performance": {
                 "window": perf_window,
                 "overBudgetMetrics": perf_metrics,
@@ -1080,6 +1468,308 @@ def build_overlay_reports(
             },
         }
     return reports
+
+
+def classify_obs_readiness(
+    overlay_id: str,
+    raw_signal: dict[str, Any],
+    route: dict[str, Any],
+    localhost: dict[str, Any] | None,
+    window_z_order: dict[str, Any] | None,
+) -> dict[str, Any]:
+    html_requests = int(route.get("htmlRouteRequestCount") or 0)
+    model_requests = int(route.get("modelApiRequestCount") or 0)
+    render_events = int(route.get("modelRenderEventCount") or 0)
+    hidden_events = int(route.get("modelHiddenEventCount") or 0)
+    page_loaded_events = int(route.get("pageLoadedEventCount") or 0)
+    error_events = int(route.get("modelErrorEventCount") or 0)
+    null_events = int(route.get("modelNullEventCount") or 0)
+    has_raw_signal = bool(raw_signal.get("hasSignal"))
+
+    if error_events > 0:
+        state = "browser-source-error"
+        detail = "Browser source posted model-error events."
+    elif render_events > 0:
+        state = "model-rendered"
+        detail = "Browser source requested models and reported rendered frames."
+    elif model_requests > 0 or hidden_events > 0 or null_events > 0:
+        state = "model-polled-hidden"
+        if hidden_events > 0:
+            detail = "Browser source requested models, but observed page events were hidden."
+        elif null_events > 0:
+            detail = "Browser source requested models, but observed page events reported no model."
+        else:
+            detail = "Browser source requested models, but no rendered frame was observed."
+    elif page_loaded_events > 0 or html_requests > 0:
+        state = "page-loaded-no-model"
+        if page_loaded_events > 0:
+            detail = "Browser source page loaded but did not request the overlay model API."
+        else:
+            detail = "Overlay HTML route was requested, but no page-loaded event or model API request was observed."
+    else:
+        state = "not-requested"
+        detail = "No overlay HTML, model API, or page events were observed."
+
+    severity = "info"
+    if has_raw_signal and state in {"not-requested", "page-loaded-no-model", "browser-source-error"}:
+        severity = "fail"
+    elif has_raw_signal and state == "model-polled-hidden":
+        severity = "warn"
+
+    return {
+        "schemaVersion": 1,
+        "overlayId": overlay_id,
+        "state": state,
+        "severity": severity,
+        "detail": detail,
+        "rawSignalPresent": has_raw_signal,
+        "obsProcessPresent": obs_process_present(localhost, window_z_order),
+        "routeCounts": {
+            "html": html_requests,
+            "model": model_requests,
+            "pageLoaded": page_loaded_events,
+            "modelRender": render_events,
+            "modelHidden": hidden_events,
+            "modelNull": null_events,
+            "modelError": error_events,
+        },
+        "clientCounts": route.get("clientCounts") or {},
+        "sourceUrlCounts": route.get("sourceUrlCounts") or {},
+        "sourceUrlClientCounts": route.get("sourceUrlClientCounts") or {},
+        "recentRequests": route.get("recentRequests") or [],
+        "recentPageEvents": route.get("recentPageEvents") or [],
+    }
+
+
+def classify_source_lifecycle(overlay_id: str, route: dict[str, Any]) -> dict[str, Any]:
+    html_requests = int(route.get("htmlRouteRequestCount") or 0)
+    model_requests = int(route.get("modelApiRequestCount") or 0)
+    render_events = int(route.get("modelRenderEventCount") or 0)
+    hidden_events = int(route.get("modelHiddenEventCount") or 0)
+    null_events = int(route.get("modelNullEventCount") or 0)
+    page_loaded_events = int(route.get("pageLoadedEventCount") or 0)
+    error_events = int(route.get("modelErrorEventCount") or 0)
+
+    if error_events > 0:
+        state = "source-error"
+        detail = "Browser source reported model-error events."
+    elif render_events > 0:
+        state = "source-rendering"
+        detail = "Browser source loaded, polled the model API, and reported rendered frames."
+    elif hidden_events > 0 or null_events > 0:
+        state = "source-hidden"
+        detail = "Browser source loaded and polled the model API, but the model was hidden or null."
+    elif model_requests > 0:
+        state = "source-polling"
+        detail = "Model API was requested, but no render/hidden/null/error page event was observed."
+    elif page_loaded_events > 0 or html_requests > 0:
+        state = "source-loaded"
+        detail = "Overlay source loaded, but no model API polling was observed."
+    else:
+        state = "not-seen"
+        detail = "No source load, model poll, render, hidden, null, or error evidence was observed."
+
+    evidence_limitations = [
+        "modelPollsNotCorrelatedByClientId",
+        "sourceViewportNotCaptured",
+        "pollDurationNotCaptured",
+    ]
+    if not route.get("sourceUrlCounts"):
+        evidence_limitations.insert(0, "sourceUrlQueryNotCaptured")
+
+    return {
+        "schemaVersion": 1,
+        "overlayId": overlay_id,
+        "state": state,
+        "detail": detail,
+        "expected": {
+            "htmlRoute": f"/overlays/{overlay_id}",
+            "modelApiPath": f"/api/overlay-model/{overlay_id}",
+        },
+        "counts": {
+            "html": html_requests,
+            "model": model_requests,
+            "pageLoaded": page_loaded_events,
+            "modelRender": render_events,
+            "modelHidden": hidden_events,
+            "modelNull": null_events,
+            "modelError": error_events,
+        },
+        "clientCounts": route.get("clientCounts") or {},
+        "sourceUrlCounts": route.get("sourceUrlCounts") or {},
+        "sourceUrlClientCounts": route.get("sourceUrlClientCounts") or {},
+        "recentRequests": route.get("recentRequests") or [],
+        "recentPageEvents": route.get("recentPageEvents") or [],
+        "evidenceLimitations": evidence_limitations,
+    }
+
+
+def build_model_sample_summaries(output: Path, overlays: list[str]) -> dict[str, dict[str, Any]]:
+    return {
+        overlay_id: summarize_model_rows(overlay_id, output / "overlays" / overlay_id / "models.jsonl")
+        for overlay_id in overlays
+    }
+
+
+def summarize_model_rows(overlay_id: str, path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return default_model_sample_summary(overlay_id)
+
+    rows: list[dict[str, Any]] = []
+    status_counts: Counter[str] = Counter()
+    source_counts: Counter[str] = Counter()
+    render_counts: Counter[str] = Counter()
+    row_counts: list[int] = []
+    metric_section_counts: list[int] = []
+    grid_section_counts: list[int] = []
+    header_counts: list[int] = []
+    compact_samples: list[dict[str, Any]] = []
+
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            rows.append(row)
+            model = (((row.get("response") or {}).get("model")) or row.get("model") or {})
+            status_counts[str(model.get("status") or row.get("status") or "unknown")] += 1
+            source_counts[str(model.get("source") or "unknown")] += 1
+            should_render = model.get("shouldRender") if "shouldRender" in model else row.get("shouldRender")
+            render_counts[str(should_render).lower()] += 1
+            counts = model_content_counts(model)
+            if counts["rowCount"] is not None:
+                row_counts.append(counts["rowCount"])
+            metric_section_counts.append(counts["metricSectionCount"])
+            grid_section_counts.append(counts["gridSectionCount"])
+            header_counts.append(counts["headerItemCount"])
+            if len(compact_samples) < 25:
+                compact_samples.append(compact_model_sample(row, model, counts))
+
+    return {
+        "schemaVersion": 1,
+        "overlayId": overlay_id,
+        "source": str(path),
+        "status": "available" if rows else "empty",
+        "sampleCount": len(rows),
+        "statusCounts": dict(sorted(status_counts.items())),
+        "sourceCounts": dict(sorted(source_counts.items())),
+        "shouldRenderCounts": dict(sorted(render_counts.items())),
+        "rowCountRange": number_range(row_counts),
+        "metricSectionCountRange": number_range(metric_section_counts),
+        "gridSectionCountRange": number_range(grid_section_counts),
+        "headerItemCountRange": number_range(header_counts),
+        "samples": compact_samples,
+        "contract": semantic_contract(overlay_id),
+    }
+
+
+def default_model_sample_summary(overlay_id: str) -> dict[str, Any]:
+    return {
+        "schemaVersion": 1,
+        "overlayId": overlay_id,
+        "status": "missing",
+        "sampleCount": 0,
+        "reason": "No live production model replay rows were found.",
+        "contract": semantic_contract(overlay_id),
+    }
+
+
+def semantic_contract(overlay_id: str) -> dict[str, Any]:
+    return {
+        "schemaVersion": 1,
+        "overlayId": overlay_id,
+        **(OVERLAY_SEMANTIC_CONTRACTS.get(overlay_id) or {
+            "purpose": "Generic overlay evidence contract.",
+            "rawFields": [],
+            "modelFields": ["shouldRender", "status", "source"],
+            "rendererFields": ["visibleText", "screenshotHash"],
+            "assertions": [],
+        }),
+    }
+
+
+def compact_model_sample(row: dict[str, Any], model: dict[str, Any], counts: dict[str, Any]) -> dict[str, Any]:
+    sample = {
+        "frameIndex": row.get("frameIndex"),
+        "capturedAtUtc": row.get("capturedAtUtc"),
+        "sessionTimeSeconds": row.get("sessionTimeSeconds"),
+        "sampleReasons": (row.get("samplePlan") or {}).get("reasons"),
+        "shouldRender": model.get("shouldRender") if "shouldRender" in model else row.get("shouldRender"),
+        "status": model.get("status") or row.get("status"),
+        "source": model.get("source"),
+        "bodyKind": model.get("bodyKind") or row.get("bodyKind"),
+        **counts,
+    }
+    evidence = overlay_model_evidence(model)
+    if evidence:
+        sample["evidence"] = evidence
+    return sample
+
+
+def model_content_counts(model: dict[str, Any]) -> dict[str, Any]:
+    metric_sections = model.get("metricSections") if isinstance(model.get("metricSections"), list) else []
+    grid_sections = model.get("gridSections") if isinstance(model.get("gridSections"), list) else []
+    rows = model.get("rows") if isinstance(model.get("rows"), list) else []
+    metrics = model.get("metrics") if isinstance(model.get("metrics"), list) else []
+    headers = model.get("headerItems") if isinstance(model.get("headerItems"), list) else []
+    points = model.get("points") if isinstance(model.get("points"), list) else []
+    return {
+        "rowCount": len(rows),
+        "metricCount": len(metrics),
+        "metricSectionCount": len(metric_sections),
+        "metricSectionRowCount": sum(len(section.get("rows") or []) for section in metric_sections if isinstance(section, dict)),
+        "gridSectionCount": len(grid_sections),
+        "gridSectionRowCount": sum(len(section.get("rows") or []) for section in grid_sections if isinstance(section, dict)),
+        "headerItemCount": len(headers),
+        "pointCount": len(points),
+    }
+
+
+def overlay_model_evidence(model: dict[str, Any]) -> dict[str, Any]:
+    evidence: dict[str, Any] = {}
+    effective = model.get("effectiveSettings") or {}
+    rendered = effective.get("rendered") or {}
+    browser_source = rendered.get("browserSource") or {}
+    if browser_source:
+        evidence["browserSource"] = compact_dict(browser_source, ["baseWidth", "baseHeight", "width", "height", "scale", "layout"])
+    if model.get("fuelStrategyEvidence") is not None:
+        evidence["fuelStrategyEvidence"] = model.get("fuelStrategyEvidence")
+    if model.get("carRadar") is not None:
+        car_radar = model.get("carRadar") or {}
+        render_model = car_radar.get("renderModel") or {}
+        evidence["carRadar"] = {
+            **compact_dict(car_radar, ["isAvailable", "status", "radarVisibilitySeconds", "multiclassWarningSeconds"]),
+            "renderModel": compact_dict(render_model, ["shouldRender", "left", "right", "approachWarnings", "placementCandidates"]),
+        }
+    if model.get("trackMap") is not None:
+        track_map = model.get("trackMap") or {}
+        render_model = track_map.get("renderModel") or {}
+        markers = render_model.get("markers") if isinstance(render_model.get("markers"), list) else []
+        evidence["trackMap"] = {
+            **compact_dict(track_map, ["mapSource", "fallbackReason", "status"]),
+            "renderModel": {
+                **compact_dict(render_model, ["mapKind", "primitiveCount"]),
+                "markerCount": len(markers),
+                "focusMarkers": [
+                    compact_dict(marker, ["carIdx", "label", "isFocus", "isPlayerFocus", "radius", "classKey"])
+                    for marker in markers
+                    if isinstance(marker, dict) and (marker.get("isFocus") or marker.get("isPlayerFocus"))
+                ][:8],
+            },
+        }
+    if model.get("garageCover") is not None:
+        evidence["garageCover"] = compact_dict(model.get("garageCover") or {}, ["shouldCover", "detectionState", "imageStatus", "imageSource", "status"])
+    return {key: value for key, value in evidence.items() if value}
+
+
+def number_range(values: list[int]) -> dict[str, Any] | None:
+    if not values:
+        return None
+    return {"min": min(values), "max": max(values)}
 
 
 def semantic_checks(
@@ -1108,8 +1798,11 @@ def semantic_checks(
     else:
         checks.append(warn("obs-route-unobserved", "No model requests were observed for this overlay."))
 
-    if model_requests > 0 and render_events == 0 and hidden_events > 0:
-        checks.append(warn("obs-polled-hidden", "OBS polled this overlay but every observed page event was hidden."))
+    if model_requests > 0 and render_events == 0:
+        if hidden_events > 0:
+            checks.append(warn("obs-polled-hidden", "OBS polled this overlay but every observed page event was hidden."))
+        else:
+            checks.append(warn("obs-polled-no-render", "OBS polled this overlay but no model-render event was observed."))
     elif render_events > 0:
         checks.append(pass_check("obs-render-events", f"Observed {render_events} model-render event(s)."))
 
@@ -1146,7 +1839,13 @@ def semantic_checks(
             checks.append(warn("final-model-snapshot-stale", "Final model snapshot is a post-session waiting/disconnected state, not live-render proof."))
 
     if overlay_id == "garage-cover" and model_requests > 0 and render_events == 0:
-        checks.append(fail("garage-cover-product-hidden", "Garage Cover route was polled but never rendered; product hidden/default-disabled state likely blocked OBS cover."))
+        raw_summary = raw_signal.get("summary", {})
+        sample_summary = raw_summary.get("sampleFrames") if isinstance(raw_summary, dict) else None
+        true_garage_visible_count = sample_summary.get("trueGarageVisibleCount", 0) if isinstance(sample_summary, dict) else 0
+        if true_garage_visible_count:
+            checks.append(fail("garage-cover-not-rendered-while-garage-visible", "Garage Cover route was polled and garage-visible samples existed, but no render events were recorded."))
+        else:
+            checks.append(warn("garage-cover-polled-no-render", "Garage Cover route was polled but never rendered; this is expected when Garage Cover is disabled or no fresh IsGarageVisible=true samples exist."))
 
     if overlay_id == "flags" and raw_signal.get("summary", {}).get("longestDisplayState"):
         checks.append(warn("flags-local-context-needed", "Flag displays require local-driver context validation; duration alone is not enough to classify a flag as false."))
@@ -1159,6 +1858,7 @@ def semantic_checks(
 def build_evidence_gaps(
     requested_renderers: str,
     model_replay_result: dict[str, Any],
+    model_timeline_result: dict[str, Any],
     renderer_results: dict[str, Any],
     evidence_quality: dict[str, Any] | None,
     localhost_models: dict[str, Any] | None,
@@ -1184,6 +1884,17 @@ def build_evidence_gaps(
             "detail": model_replay_result.get("reason") or "Production model replay did not produce live-frame model rows.",
             "command": model_replay_result.get("command"),
         })
+    if model_timeline_result.get("status") not in {"produced", "disabled"}:
+        if model_replay_result.get("status") == "produced" or model_timeline_result.get("required"):
+            status = "fail" if model_timeline_result.get("required") else "warn"
+            gaps.append({
+                "status": status,
+                "kind": "model-timeline-validation-missing",
+                "detail": model_timeline_result.get("reason") or "Model timeline validation did not run.",
+                "command": model_timeline_result.get("command"),
+            })
+    elif model_timeline_result.get("status") == "produced":
+        append_model_timeline_gaps(gaps, model_timeline_result, overlay_reports)
     renderers = parse_csv(requested_renderers)
     for renderer in renderers:
         if renderer == "none":
@@ -1215,6 +1926,151 @@ def build_evidence_gaps(
     }
 
 
+def append_model_timeline_gaps(
+    gaps: list[dict[str, Any]],
+    model_timeline_result: dict[str, Any],
+    overlay_reports: dict[str, Any],
+) -> None:
+    report = model_timeline_result.get("summary") if isinstance(model_timeline_result.get("summary"), dict) else {}
+    timeline_overlays = report.get("overlays") if isinstance(report.get("overlays"), dict) else {}
+    for overlay_id in overlay_reports:
+        if overlay_id not in timeline_overlays:
+            gaps.append({
+                "status": "warn",
+                "kind": "model-timeline-overlay-missing",
+                "overlayId": overlay_id,
+                "detail": "Production model replay did not provide timeline rows for this overlay.",
+            })
+            continue
+
+        overlay_report = timeline_overlays.get(overlay_id) or {}
+        for issue in overlay_report.get("issues") or []:
+            status = issue.get("status")
+            if status not in {"warn", "fail"}:
+                continue
+            rule = issue.get("rule") or "model-timeline"
+            detail = issue.get("detail") or rule
+            gaps.append({
+                "status": status,
+                "kind": rule,
+                "overlayId": overlay_id,
+                "detail": detail,
+                "frameIndex": issue.get("frameIndex"),
+                "sessionTimeSeconds": issue.get("sessionTimeSeconds"),
+            })
+
+
+def build_package_status(
+    manifest: dict[str, Any],
+    output: Path,
+    model_replay_result: dict[str, Any],
+    model_timeline_result: dict[str, Any],
+    renderer_results: dict[str, Any],
+    evidence_gaps: dict[str, Any],
+    history_inventory: dict[str, Any],
+) -> dict[str, Any]:
+    status_counts = evidence_gaps.get("statusCounts") or {}
+    fail_count = int(status_counts.get("fail") or 0)
+    warn_count = int(status_counts.get("warn") or 0)
+    status = "enriched_with_failures" if fail_count else "enriched_with_warnings" if warn_count else "enriched"
+    return {
+        "schemaVersion": 1,
+        "captureId": manifest.get("captureId"),
+        "status": status,
+        "enrichmentStatus": "offline",
+        "createdAtUtc": datetime.now(timezone.utc).isoformat(),
+        "createdBy": "tools/analysis/overlay_forensics.py",
+        "outputDirectory": str(output),
+        "modelReplay": {
+            "status": model_replay_result.get("status"),
+            "required": model_replay_result.get("required"),
+            "reason": model_replay_result.get("reason"),
+            "command": model_replay_result.get("command"),
+        },
+        "modelTimelineValidation": {
+            "status": model_timeline_result.get("status"),
+            "required": model_timeline_result.get("required"),
+            "reason": model_timeline_result.get("reason"),
+            "command": model_timeline_result.get("command"),
+            "statusCounts": (model_timeline_result.get("summary") or {}).get("statusCounts")
+            if isinstance(model_timeline_result.get("summary"), dict)
+            else None,
+        },
+        "rendererReplay": {
+            renderer: {
+                "status": result.get("status"),
+                "reason": result.get("reason"),
+                "command": result.get("command"),
+            }
+            for renderer, result in sorted(renderer_results.items())
+        },
+        "history": compact_dict(
+            history_inventory,
+            ["status", "source", "aggregateCount", "summaryCount", "fuelHistoryAggregateCount", "analysisReportCount"],
+        ),
+        "evidenceGapCounts": status_counts,
+        "nextActions": package_next_actions(model_replay_result, model_timeline_result, renderer_results, evidence_gaps, history_inventory),
+    }
+
+
+def package_next_actions(
+    model_replay_result: dict[str, Any],
+    model_timeline_result: dict[str, Any],
+    renderer_results: dict[str, Any],
+    evidence_gaps: dict[str, Any],
+    history_inventory: dict[str, Any],
+) -> list[str]:
+    actions: list[str] = []
+    if model_replay_result.get("status") != "produced":
+        command = model_replay_result.get("command")
+        actions.append(
+            f"Run production model replay to add active model rows: {command}"
+            if command
+            else "Run production model replay to add active model rows."
+        )
+
+    if model_timeline_result.get("status") not in {"produced", "disabled"} and model_replay_result.get("status") == "produced":
+        command = model_timeline_result.get("command")
+        actions.append(
+            f"Run model timeline validation to classify temporal behavior: {command}"
+            if command
+            else "Run model timeline validation to classify temporal behavior."
+        )
+
+    for renderer, result in sorted(renderer_results.items()):
+        if result.get("status") == "produced":
+            continue
+        command = result.get("command")
+        actions.append(
+            f"Run {renderer} renderer replay to add screenshot and manifest evidence: {command}"
+            if command
+            else f"Run {renderer} renderer replay to add screenshot and manifest evidence."
+        )
+
+    if history_inventory.get("status") != "available":
+        actions.append("Pass --app-data-root or place the capture under an app-data captures directory to inventory fuel/history aggregates.")
+    elif int(history_inventory.get("fuelHistoryAggregateCount") or 0) == 0:
+        actions.append("History inventory found no fuel aggregates; Fuel Calculator history fallback cannot be proven from this package.")
+
+    for gap in evidence_gaps.get("gaps", []):
+        if gap.get("status") == "fail":
+            detail = gap.get("detail") or gap.get("kind")
+            actions.append(f"Resolve failing evidence gap: {detail}")
+
+    return dedupe(actions)
+
+
+def dedupe(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
 def write_overlay_artifacts(
     root: Path,
     overlay_id: str,
@@ -1222,8 +2078,13 @@ def write_overlay_artifacts(
     sample_plan: dict[str, Any],
     event_index: dict[str, Any],
     localhost_models: dict[str, Any] | None,
+    model_sample_summary: dict[str, Any],
 ) -> None:
     mkdir(root)
+    write_json(root / "semantic-manifest.json", semantic_contract(overlay_id))
+    write_json(root / "live-model-summary.json", model_sample_summary)
+    write_json(root / "obs-readiness.json", report["obsReadiness"])
+    write_json(root / "source-lifecycle.json", report["sourceLifecycle"])
     write_json(root / "semantic-results.json", report["semanticResults"])
     screenshot_manifest_path = root / "screenshot-manifest.json"
     if not screenshot_manifest_path.exists():
@@ -1246,15 +2107,41 @@ def write_overlay_artifacts(
 def build_route_stats(localhost: dict[str, Any] | None, localhost_models: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
     stats = {overlay_id: default_route_stats(overlay_id) for overlay_id in ALL_OVERLAYS}
     path_counts = (localhost or {}).get("pathCounts") or {}
+    path_client_counts = (localhost or {}).get("pathClientCounts") or {}
+    source_url_counts = (localhost or {}).get("sourceUrlCounts") or {}
+    source_url_client_counts = (localhost or {}).get("sourceUrlClientCounts") or {}
     page_event_counts = (localhost or {}).get("pageEventOverlayCounts") or {}
+    recent_requests = (localhost or {}).get("recentRequests") or []
+    recent_page_events = (localhost or {}).get("recentPageEvents") or []
     for overlay_id in ALL_OVERLAYS:
+        html_path = f"/overlays/{overlay_id}"
+        model_path = f"/api/overlay-model/{overlay_id}"
+        overlay_paths = {html_path, model_path}
         stats[overlay_id].update(
             {
-                "htmlRouteRequestCount": int(path_counts.get(f"/overlays/{overlay_id}", 0) or 0),
-                "modelApiRequestCount": int(path_counts.get(f"/api/overlay-model/{overlay_id}", 0) or 0),
+                "htmlRouteRequestCount": int(path_counts.get(html_path, 0) or 0),
+                "modelApiRequestCount": int(path_counts.get(model_path, 0) or 0),
                 "modelRenderEventCount": int(page_event_counts.get(f"{overlay_id}|model-render", 0) or 0),
                 "modelHiddenEventCount": int(page_event_counts.get(f"{overlay_id}|model-hidden", 0) or 0),
+                "modelNullEventCount": int(page_event_counts.get(f"{overlay_id}|model-null", 0) or 0),
+                "modelErrorEventCount": int(page_event_counts.get(f"{overlay_id}|model-error", 0) or 0),
                 "pageLoadedEventCount": int(page_event_counts.get(f"{overlay_id}|page-loaded", 0) or 0),
+                "clientCounts": {
+                    "html": client_counts_for_path(path_client_counts, html_path),
+                    "model": client_counts_for_path(path_client_counts, model_path),
+                },
+                "sourceUrlCounts": source_url_counts_for_paths(source_url_counts, overlay_paths),
+                "sourceUrlClientCounts": source_url_client_counts_for_paths(source_url_client_counts, overlay_paths),
+                "recentRequests": [
+                    request
+                    for request in recent_requests
+                    if request.get("path") in {html_path, model_path}
+                ][-10:],
+                "recentPageEvents": [
+                    event
+                    for event in recent_page_events
+                    if event.get("overlayId") == overlay_id
+                ][-10:],
             }
         )
     for page in (localhost_models or {}).get("pages") or []:
@@ -1266,7 +2153,11 @@ def build_route_stats(localhost: dict[str, Any] | None, localhost_models: dict[s
                     "modelApiRequestCount": int(page.get("modelApiRequestCount") or stats[overlay_id]["modelApiRequestCount"]),
                     "modelRenderEventCount": int(page.get("modelRenderEventCount") or stats[overlay_id]["modelRenderEventCount"]),
                     "modelHiddenEventCount": int(page.get("modelHiddenEventCount") or stats[overlay_id]["modelHiddenEventCount"]),
+                    "modelNullEventCount": int(page.get("modelNullEventCount") or stats[overlay_id]["modelNullEventCount"]),
+                    "modelErrorEventCount": int(page.get("modelErrorEventCount") or stats[overlay_id]["modelErrorEventCount"]),
                     "pageLoadedEventCount": int(page.get("pageLoadedEventCount") or stats[overlay_id]["pageLoadedEventCount"]),
+                    "sourceUrlCounts": max_count_maps(stats[overlay_id].get("sourceUrlCounts") or {}, page.get("sourceUrlCounts") or {}),
+                    "sourceUrlClientCounts": max_count_maps(stats[overlay_id].get("sourceUrlClientCounts") or {}, page.get("sourceUrlClientCounts") or {}),
                     "refreshIntervalMilliseconds": page.get("refreshIntervalMilliseconds"),
                     "requiresTelemetry": page.get("requiresTelemetry"),
                     "currentStatus": (page.get("current") or {}).get("status"),
@@ -1276,6 +2167,74 @@ def build_route_stats(localhost: dict[str, Any] | None, localhost_models: dict[s
     return stats
 
 
+def source_url_counts_for_paths(source_url_counts: dict[str, Any], paths: set[str]) -> dict[str, int]:
+    normalized_paths = {source_url_path(path) for path in paths}
+    return {
+        source_url: int(count or 0)
+        for source_url, count in sorted(source_url_counts.items())
+        if source_url_path(source_url) in normalized_paths
+    }
+
+
+def source_url_client_counts_for_paths(source_url_client_counts: dict[str, Any], paths: set[str]) -> dict[str, int]:
+    normalized_paths = {source_url_path(path) for path in paths}
+    result: dict[str, int] = {}
+    for key, count in sorted(source_url_client_counts.items()):
+        if not isinstance(key, str) or "|" not in key:
+            continue
+        source_url = key.rsplit("|", 1)[0]
+        if source_url_path(source_url) in normalized_paths:
+            result[key] = int(count or 0)
+    return result
+
+
+def source_url_path(source_url: str) -> str:
+    return str(source_url or "").split("?", 1)[0].rstrip("/") or "/"
+
+
+def max_count_maps(first: dict[str, Any], second: dict[str, Any]) -> dict[str, int]:
+    result = {str(key): int(value or 0) for key, value in first.items()}
+    for key, value in second.items():
+        key_string = str(key)
+        result[key_string] = max(result.get(key_string, 0), int(value or 0))
+    return dict(sorted(result.items()))
+
+
+def client_counts_for_path(path_client_counts: dict[str, Any], path: str) -> dict[str, int]:
+    prefix = f"{path}|"
+    counts: dict[str, int] = {}
+    for key, value in path_client_counts.items():
+        if not isinstance(key, str) or not key.startswith(prefix):
+            continue
+        client_kind = key[len(prefix):] or "unknown"
+        counts[client_kind] = int(value or 0)
+    return dict(sorted(counts.items()))
+
+
+def obs_process_present(localhost: dict[str, Any] | None, window_z_order: dict[str, Any] | None) -> bool | None:
+    window_data = window_z_order or {}
+    if obs_window_like(window_data.get("foregroundWindow")):
+        return True
+    for key in ("windows", "foregroundHistory"):
+        for window in window_data.get(key) or []:
+            if obs_window_like(window):
+                return True
+    if not localhost:
+        return None
+    client_counts = localhost.get("clientCounts") or {}
+    if int(client_counts.get("obs", 0) or 0) > 0:
+        return True
+    return None
+
+
+def obs_window_like(window: Any) -> bool:
+    if not isinstance(window, dict):
+        return False
+    process = str(window.get("processName") or window.get("name") or "")
+    title = str(window.get("title") or "")
+    return "obs" in process.lower() or "obs" in title.lower()
+
+
 def default_route_stats(overlay_id: str) -> dict[str, Any]:
     return {
         "overlayId": overlay_id,
@@ -1283,7 +2242,12 @@ def default_route_stats(overlay_id: str) -> dict[str, Any]:
         "modelApiRequestCount": 0,
         "modelRenderEventCount": 0,
         "modelHiddenEventCount": 0,
+        "modelNullEventCount": 0,
+        "modelErrorEventCount": 0,
         "pageLoadedEventCount": 0,
+        "clientCounts": {},
+        "recentRequests": [],
+        "recentPageEvents": [],
     }
 
 
@@ -1586,24 +2550,33 @@ def render_markdown_report(
         "",
         "## Overlay Results",
         "",
-        "| Overlay | Route | Render Events | Raw Signal | Checks |",
-        "| --- | ---: | ---: | --- | --- |",
+        "| Overlay | OBS readiness | Route | Render Events | Raw Signal | Model samples | Checks |",
+        "| --- | --- | ---: | ---: | --- | ---: | --- |",
     ]
     for overlay_id, report in top_level["overlays"].items():
         route = report["routeCoverage"]
+        readiness = report.get("obsReadiness") or {}
         raw = "yes" if report["rawSignal"].get("hasSignal") else "no"
+        model_samples = (report.get("liveModelSamples") or {}).get("sampleCount") or 0
         counts = report["semanticResults"]["statusCounts"]
         check_text = ", ".join(f"{key}:{value}" for key, value in counts.items()) or "none"
         lines.append(
-            f"| `{overlay_id}` | {route.get('modelApiRequestCount', 0)} | {route.get('modelRenderEventCount', 0)} | {raw} | {check_text} |"
+            f"| `{overlay_id}` | `{readiness.get('state', 'unknown')}` | {route.get('modelApiRequestCount', 0)} | {route.get('modelRenderEventCount', 0)} | {raw} | {model_samples} | {check_text} |"
         )
     tool_runs = top_level.get("toolRuns") or {}
     model_run = tool_runs.get("modelReplay") or {}
+    timeline_run = tool_runs.get("modelTimelineValidation") or {}
     renderer_runs = tool_runs.get("rendererReplay") or {}
     lines.extend(["", "## Tool Runs", ""])
     lines.append(f"- Production model replay: `{model_run.get('status', 'unknown')}`")
+    lines.append(f"- Model timeline validation: `{timeline_run.get('status', 'unknown')}`")
     for renderer, result in renderer_runs.items():
         lines.append(f"- `{renderer}` renderer replay: `{result.get('status', 'unknown')}`")
+    history = top_level.get("historyInventory") or {}
+    lines.extend(["", "## History Inventory", ""])
+    lines.append(f"- Status: `{history.get('status', 'unknown')}`")
+    lines.append(f"- Aggregates: `{history.get('aggregateCount', 0)}`")
+    lines.append(f"- Fuel aggregates: `{history.get('fuelHistoryAggregateCount', 0)}`")
     lines.extend(["", "## Evidence Gaps", ""])
     for gap in top_level["evidenceGaps"].get("gaps", []):
         overlay = f" `{gap.get('overlayId')}`" if gap.get("overlayId") else ""
@@ -1624,10 +2597,28 @@ def render_overlay_timeline(
     lines = [
         f"# {overlay_id} Timeline",
         "",
+        "## OBS Readiness",
+        "",
+        "```json",
+        json.dumps(report["obsReadiness"], indent=2, sort_keys=True),
+        "```",
+        "",
+        "## Source Lifecycle",
+        "",
+        "```json",
+        json.dumps(report["sourceLifecycle"], indent=2, sort_keys=True),
+        "```",
+        "",
         "## Route Coverage",
         "",
         "```json",
         json.dumps(report["routeCoverage"], indent=2, sort_keys=True),
+        "```",
+        "",
+        "## Live Model Samples",
+        "",
+        "```json",
+        json.dumps(report.get("liveModelSamples") or {}, indent=2, sort_keys=True),
         "```",
         "",
         "## Semantic Checks",

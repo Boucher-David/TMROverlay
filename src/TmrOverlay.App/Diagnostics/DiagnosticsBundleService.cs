@@ -2533,12 +2533,14 @@ internal sealed class DiagnosticsBundleService
                     localhost.Port,
                     localhost.Prefix,
                     localhost.Status,
+                    localhost.CapturedAtUtc,
                     localhost.TotalRequests,
                     localhost.SuccessfulRequests,
                     localhost.FailedRequests,
                     localhost.RequestErrorCount,
                     localhost.LastRequestAtUtc,
                     localhost.LastRequestPath,
+                    localhost.LastRequestSourceUrl,
                     localhost.LastRequestRoute,
                     localhost.LastRequestStatusCode,
                     localhost.LastRequestClientKind,
@@ -2548,15 +2550,22 @@ internal sealed class DiagnosticsBundleService
                     localhost.LastPageEventOverlayId,
                     localhost.LastPageEventClientId,
                     localhost.LastPageEventClientKind,
+                    localhost.LastPageEventSourceUrl,
                     localhost.LastPageEventShouldRender,
                     localhost.LastPageEventStatus,
                     localhost.LastPageEventError,
                     localhost.ClientCounts,
                     localhost.RouteClientCounts,
                     localhost.PathClientCounts,
+                    localhost.SourceUrlCounts,
+                    localhost.SourceUrlClientCounts,
                     localhost.PageEventCounts,
                     localhost.PageEventOverlayCounts,
                     localhost.PageEventClientCounts,
+                    localhost.PageEventSourceUrlCounts,
+                    localhost.PageEventOverlayClientCounts,
+                    localhost.PageEventClientIdCounts,
+                    localhost.PageEventSourceUrlClientCounts,
                     localhost.RecentPageEvents,
                     OverlayModelRequestCount = overlayModelRequestCount,
                     OverlayModelSuccessCount = overlayModelSuccessCount,
@@ -2627,7 +2636,14 @@ internal sealed class DiagnosticsBundleService
             PageLoadedEventCount: RequestCountForRoute(localhost.PageEventOverlayCounts, $"{page.Id}|page-loaded"),
             ModelRenderEventCount: RequestCountForRoute(localhost.PageEventOverlayCounts, $"{page.Id}|model-render"),
             ModelHiddenEventCount: RequestCountForRoute(localhost.PageEventOverlayCounts, $"{page.Id}|model-hidden"),
+            ModelNullEventCount: RequestCountForRoute(localhost.PageEventOverlayCounts, $"{page.Id}|model-null"),
             ModelErrorEventCount: RequestCountForRoute(localhost.PageEventOverlayCounts, $"{page.Id}|model-error"),
+            SourceUrlCounts: SourceUrlCountsForPaths(localhost.SourceUrlCounts, page.Routes.Append(modelApiPath)),
+            SourceUrlClientCounts: SourceUrlClientCountsForPaths(localhost.SourceUrlClientCounts, page.Routes.Append(modelApiPath)),
+            PageEventSourceUrlCounts: SourceUrlCountsForPaths(localhost.PageEventSourceUrlCounts, page.Routes),
+            PageEventSourceUrlClientCounts: SourceUrlClientCountsForPaths(localhost.PageEventSourceUrlClientCounts, page.Routes),
+            PageEventClientCounts: ClientCountsForPrefixedKeys(localhost.PageEventOverlayClientCounts, page.Id),
+            PageEventClientIdCounts: ClientCountsForPrefixedKeys(localhost.PageEventClientIdCounts, page.Id),
             RecentPageEvents: localhost.RecentPageEvents
                 .Where(pageEvent => string.Equals(pageEvent.OverlayId, page.Id, StringComparison.OrdinalIgnoreCase))
                 .ToArray(),
@@ -2863,6 +2879,7 @@ internal sealed class DiagnosticsBundleService
                 WeatherPointCount = graph.Weather.Count,
                 LeaderChangeMarkerCount = graph.LeaderChanges.Count,
                 DriverChangeMarkerCount = graph.DriverChanges.Count,
+                PitWindowCount = graph.PitWindows.Count,
                 graph.StartSeconds,
                 graph.EndSeconds,
                 graph.MaxGapSeconds,
@@ -2928,6 +2945,68 @@ internal sealed class DiagnosticsBundleService
         return counts
             .Where(item => normalizedPaths.Contains(BrowserOverlayPage.NormalizeRoute(item.Key)))
             .Sum(item => item.Value);
+    }
+
+    private static IReadOnlyDictionary<string, long> SourceUrlCountsForPaths(
+        IReadOnlyDictionary<string, long> counts,
+        IEnumerable<string> paths)
+    {
+        var normalizedPaths = paths
+            .Select(BrowserOverlayPage.NormalizeRoute)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return counts
+            .Where(item => normalizedPaths.Contains(BrowserOverlayPage.NormalizeRoute(SourceUrlPath(item.Key))))
+            .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, long> SourceUrlClientCountsForPaths(
+        IReadOnlyDictionary<string, long> counts,
+        IEnumerable<string> paths)
+    {
+        var normalizedPaths = paths
+            .Select(BrowserOverlayPage.NormalizeRoute)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return counts
+            .Where(item => TrySplitSourceUrlClientKey(item.Key, out var sourceUrl, out _)
+                && normalizedPaths.Contains(BrowserOverlayPage.NormalizeRoute(SourceUrlPath(sourceUrl))))
+            .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, long> ClientCountsForPrefixedKeys(
+        IReadOnlyDictionary<string, long> counts,
+        string prefixValue)
+    {
+        var prefix = $"{prefixValue}|";
+        return counts
+            .Where(item => item.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                item => item.Key[prefix.Length..],
+                item => item.Value,
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string SourceUrlPath(string sourceUrl)
+    {
+        var queryIndex = sourceUrl.IndexOf('?', StringComparison.Ordinal);
+        return queryIndex >= 0 ? sourceUrl[..queryIndex] : sourceUrl;
+    }
+
+    private static bool TrySplitSourceUrlClientKey(string key, out string sourceUrl, out string clientKind)
+    {
+        var separator = key.LastIndexOf('|');
+        if (separator <= 0 || separator >= key.Length - 1)
+        {
+            sourceUrl = key;
+            clientKind = string.Empty;
+            return false;
+        }
+
+        sourceUrl = key[..separator];
+        clientKind = key[(separator + 1)..];
+        return true;
     }
 
     private static long RequestCountForPathStatus(
@@ -4679,7 +4758,14 @@ internal sealed record LocalhostOverlayPageModelDiagnosticsSnapshot(
     long PageLoadedEventCount,
     long ModelRenderEventCount,
     long ModelHiddenEventCount,
+    long ModelNullEventCount,
     long ModelErrorEventCount,
+    IReadOnlyDictionary<string, long> SourceUrlCounts,
+    IReadOnlyDictionary<string, long> SourceUrlClientCounts,
+    IReadOnlyDictionary<string, long> PageEventSourceUrlCounts,
+    IReadOnlyDictionary<string, long> PageEventSourceUrlClientCounts,
+    IReadOnlyDictionary<string, long> PageEventClientCounts,
+    IReadOnlyDictionary<string, long> PageEventClientIdCounts,
     IReadOnlyList<LocalhostOverlayPageEventSample> RecentPageEvents,
     LocalhostOverlayModelDiagnosticsSnapshot Current,
     LocalhostOverlayModelDiagnosticsSnapshot? LastActive);

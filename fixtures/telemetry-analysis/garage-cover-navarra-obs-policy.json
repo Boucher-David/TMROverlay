@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "id": "garage-cover-navarra-obs-policy",
+  "source": {
+    "captureId": "capture-20260523-050532-937",
+    "diagnosticsBundle": "bmw-m2-cs-racing-circuito-de-navarra-20260523-050737-592",
+    "sessionKind": "Practice",
+    "car": "BMW M2 CS Racing",
+    "track": "Circuito de Navarra",
+    "redaction": "driver identity, raw telemetry, and full session-info payloads omitted"
+  },
+  "observedEvidence": {
+    "sampledFrames": 117,
+    "garageVisibleSamples": 26,
+    "inGarageHiddenSamples": 3,
+    "garageHiddenSamples": 91,
+    "garageRoutePageRequests": 5,
+    "garageModelRequests": 1877,
+    "garageImageRequests": 13,
+    "oldBuildGarageModelRenderEvents": 65,
+    "oldBuildGarageModelHiddenEvents": 66,
+    "routeEnabled": true,
+    "routeStatus": "listening",
+    "configuredImageStatus": "ready",
+    "configuredImageFileName": "cover.png",
+    "configuredImageLengthBytes": 5380858,
+    "finalDetectionState": "iracing_disconnected"
+  },
+  "cases": [
+    {
+      "id": "disabled-garage-visible-ready-image",
+      "overlayEnabled": false,
+      "imageMode": "ready",
+      "previewActive": false,
+      "telemetry": {
+        "isConnected": true,
+        "isCollecting": true,
+        "updatedAgeSeconds": 0.1,
+        "sessionKind": "Practice",
+        "isInGarage": true,
+        "isGarageVisible": true
+      },
+      "expected": {
+        "modelPresent": false,
+        "shouldRender": false,
+        "status": "disabled | product hidden"
+      }
+    },
+    {
+      "id": "enabled-garage-hidden-ready-image",
+      "overlayEnabled": true,
+      "imageMode": "ready",
+      "previewActive": false,
+      "telemetry": {
+        "isConnected": true,
+        "isCollecting": true,
+        "updatedAgeSeconds": 0.1,
+        "sessionKind": "Practice",
+        "isInGarage": false,
+        "isGarageVisible": false
+      },
+      "expected": {
+        "modelPresent": true,
+        "shouldRender": false,
+        "shouldCover": false,
+        "status": "garage hidden",
+        "detectionState": "garage_hidden",
+        "imageStatus": "ready",
+        "fallbackReason": null,
+        "previewVisible": false
+      }
+    },
+    {
+      "id": "enabled-in-garage-ui-hidden-ready-image",
+      "overlayEnabled": true,
+      "imageMode": "ready",
+      "previewActive": false,
+      "telemetry": {
+        "isConnected": true,
+        "isCollecting": true,
+        "updatedAgeSeconds": 0.1,
+        "sessionKind": "Practice",
+        "isInGarage": true,
+        "isGarageVisible": false
+      },
+      "expected": {
+        "modelPresent": true,
+        "shouldRender": false,
+        "shouldCover": false,
+        "status": "garage hidden",
+        "detectionState": "garage_hidden",
+        "imageStatus": "ready",
+        "fallbackReason": null,
+        "previewVisible": false
+      }
+    },
+    {
+      "id": "enabled-garage-visible-ready-image",
+      "overlayEnabled": true,
+      "imageMode": "ready",
+      "previewActive": false,
+      "telemetry": {
+        "isConnected": true,
+        "isCollecting": true,
+        "updatedAgeSeconds": 0.1,
+        "sessionKind": "Practice",
+        "isInGarage": true,
+        "isGarageVisible": true
+      },
+      "expected": {
+        "modelPresent": true,
+        "shouldRender": true,
+        "shouldCover": true,
+        "status": "garage visible",
+        "detectionState": "garage_visible",
+        "imageStatus": "ready",
+        "fallbackReason": null,
+        "previewVisible": false
+      }
+    },
+    {
+      "id": "enabled-garage-visible-missing-image",
+      "overlayEnabled": true,
+      "imageMode": "missing",
+      "previewActive": false,
+      "telemetry": {
+        "isConnected": true,
+        "isCollecting": true,
+        "updatedAgeSeconds": 0.1,
+        "sessionKind": "Practice",
+        "isInGarage": true,
+        "isGarageVisible": true
+      },
+      "expected": {
+        "modelPresent": true,
+        "shouldRender": true,
+        "shouldCover": true,
+        "status": "garage visible",
+        "detectionState": "garage_visible",
+        "imageStatus": "file_missing",
+        "fallbackReason": "file_missing",
+        "previewVisible": false
+      }
+    },
+    {
+      "id": "enabled-garage-visible-default-brand-fallback",
+      "overlayEnabled": true,
+      "imageMode": "not-configured",
+      "previewActive": false,
+      "telemetry": {
+        "isConnected": true,
+        "isCollecting": true,
+        "updatedAgeSeconds": 0.1,
+        "sessionKind": "Practice",
+        "isInGarage": true,
+        "isGarageVisible": true
+      },
+      "expected": {
+        "modelPresent": true,
+        "shouldRender": true,
+        "shouldCover": true,
+        "status": "garage visible",
+        "detectionState": "garage_visible",
+        "imageStatus": "not_configured",
+        "fallbackReason": "not_configured",
+        "previewVisible": false
+      }
+    },
+    {
+      "id": "enabled-stale-garage-visible-ready-image",
+      "overlayEnabled": true,
+      "imageMode": "ready",
+      "previewActive": false,
+      "telemetry": {
+        "isConnected": true,
+        "isCollecting": true,
+        "updatedAgeSeconds": 5.0,
+        "sessionKind": "Practice",
+        "isInGarage": true,
+        "isGarageVisible": true
+      },
+      "expected": {
+        "modelPresent": true,
+        "shouldRender": false,
+        "shouldCover": false,
+        "status": "telemetry stale",
+        "detectionState": "telemetry_stale",
+        "imageStatus": "ready",
+        "fallbackReason": null,
+        "previewVisible": false
+      }
+    },
+    {
+      "id": "enabled-disconnected-garage-visible-ready-image",
+      "overlayEnabled": true,
+      "imageMode": "ready",
+      "previewActive": false,
+      "telemetry": {
+        "isConnected": false,
+        "isCollecting": false,
+        "updatedAgeSeconds": null,
+        "sessionKind": "Practice",
+        "isInGarage": true,
+        "isGarageVisible": true
+      },
+      "expected": {
+        "modelPresent": true,
+        "shouldRender": false,
+        "shouldCover": false,
+        "status": "iRacing disconnected",
+        "detectionState": "iracing_disconnected",
+        "imageStatus": "ready",
+        "fallbackReason": null,
+        "previewVisible": false
+      }
+    },
+    {
+      "id": "enabled-preview-garage-hidden-ready-image",
+      "overlayEnabled": true,
+      "imageMode": "ready",
+      "previewActive": true,
+      "telemetry": {
+        "isConnected": true,
+        "isCollecting": true,
+        "updatedAgeSeconds": 0.1,
+        "sessionKind": "Practice",
+        "isInGarage": false,
+        "isGarageVisible": false
+      },
+      "expected": {
+        "modelPresent": true,
+        "shouldRender": false,
+        "shouldCover": false,
+        "status": "garage hidden",
+        "detectionState": "garage_hidden",
+        "imageStatus": "ready",
+        "fallbackReason": null,
+        "previewVisible": true
+      }
+    }
+  ]
+}

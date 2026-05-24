@@ -1,0 +1,14 @@
+{
+  "windows": [
+    {
+      "processName": "iRacingSim64DX11",
+      "title": "iRacing.com Simulator"
+    }
+  ],
+  "foregroundHistory": [
+    {
+      "processName": "obs64",
+      "title": "OBS 32.1.2"
+    }
+  ]
+}

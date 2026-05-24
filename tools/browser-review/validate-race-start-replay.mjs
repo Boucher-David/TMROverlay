@@ -278,7 +278,7 @@ function validateMetrics(overlayId, metrics, canvasPixels, modelResponse = null)
   if (overlayId === 'stream-chat' && !metrics.hasChatLine) {
     failures.push('stream chat status line missing');
   }
-  if (overlayId === 'garage-cover' && !metrics.hasGarageCover) {
+  if (overlayId === 'garage-cover' && modelResponse?.model?.shouldRender === true && !metrics.hasGarageCover) {
     failures.push('garage cover body missing');
   }
   if (overlayId === 'flags' && modelResponse?.model?.shouldRender === true && !metrics.hasFlags) {

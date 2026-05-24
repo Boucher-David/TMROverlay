@@ -71,11 +71,13 @@ describe('browser overlay shell runtime', () => {
         event: 'page-loaded',
         overlayId: 'relative',
         clientId: 'obs-unit',
-        clientKind: 'obs'
+        clientKind: 'obs',
+        sourceUrl: '/overlays/relative?fixture=race&client=obs-unit&clientKind=obs'
       }),
       expect.objectContaining({
         event: 'model-render',
         overlayId: 'relative',
+        sourceUrl: '/overlays/relative?fixture=race&client=obs-unit&clientKind=obs',
         shouldRender: true,
         status: 'scoring | race'
       })

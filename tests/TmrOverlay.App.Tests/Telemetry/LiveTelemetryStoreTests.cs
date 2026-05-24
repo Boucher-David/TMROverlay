@@ -76,6 +76,99 @@ public sealed class LiveTelemetryStoreTests
     }
 
     [Fact]
+    public void RecordFrame_UsesTeamProgressForMeasuredFuelBaselineEligibility()
+    {
+        var store = new LiveTelemetryStore();
+
+        store.RecordFrame(CreateSample(
+            sessionState: 4,
+            playerCarIdx: 10,
+            lapCompleted: -1,
+            teamLapCompleted: 4,
+            teamLapDistPct: 0.42d,
+            fuelLevelLiters: 50d));
+
+        var snapshot = store.Snapshot();
+
+        Assert.Equal("requires_previous_green_distance_sample", snapshot.Models.FuelPit.BaselineEligibilityEvidence.MissingReason);
+    }
+
+    [Fact]
+    public void ApplySessionInfo_PreservesMeasuredFuelBurnAnchorForSameActiveSession()
+    {
+        var store = new LiveTelemetryStore();
+        var startedAtUtc = DateTimeOffset.Parse("2026-05-17T12:00:00Z");
+        ApplyRaceSession(store);
+
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc,
+            sessionTime: 0d,
+            sessionState: 4,
+            playerCarIdx: 10,
+            teamLapCompleted: 0,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 50d));
+        ApplyRaceSession(store);
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc.AddSeconds(90),
+            sessionTime: 90d,
+            sessionState: 4,
+            playerCarIdx: 10,
+            teamLapCompleted: 1,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 47.5d));
+
+        var snapshot = store.Snapshot();
+
+        Assert.Equal(2.5d, snapshot.Fuel.FuelPerLapLiters!.Value, precision: 3);
+        Assert.Equal(1, snapshot.Fuel.MeasuredFuelPerLapSampleCount);
+        Assert.Equal("measured-green-lap", snapshot.Fuel.Confidence);
+    }
+
+    [Fact]
+    public void ApplySessionInfo_ResetsMeasuredFuelBurnWhenActiveSessionChanges()
+    {
+        var store = new LiveTelemetryStore();
+        var startedAtUtc = DateTimeOffset.Parse("2026-05-17T12:00:00Z");
+        ApplyPracticeSession(store);
+
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc,
+            sessionTime: 0d,
+            sessionState: 4,
+            playerCarIdx: 10,
+            teamLapCompleted: 0,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 50d));
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc.AddSeconds(90),
+            sessionTime: 90d,
+            sessionState: 4,
+            playerCarIdx: 10,
+            teamLapCompleted: 1,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 47.5d));
+
+        Assert.Equal("measured-green-lap", store.Snapshot().Fuel.Confidence);
+
+        ApplyRaceSession(store);
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc.AddMinutes(10),
+            sessionTime: 0d,
+            sessionState: 4,
+            playerCarIdx: 10,
+            teamLapCompleted: 0,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 50d));
+
+        var snapshot = store.Snapshot();
+
+        Assert.Null(snapshot.Fuel.FuelPerLapLiters);
+        Assert.Equal(0, snapshot.Fuel.MeasuredFuelPerLapSampleCount);
+        Assert.Equal("level-only", snapshot.Fuel.Confidence);
+    }
+
+    [Fact]
     public void RecordFrame_DoesNotCountPreGreenToGreenFuelDropAsLapBurn()
     {
         var store = new LiveTelemetryStore();
@@ -1188,6 +1281,122 @@ DriverInfo:
     }
 
     [Fact]
+    public void RecordFrame_UsesF2TimingForMulticlassApproachWhenEstimatedTimingDisagrees()
+    {
+        var store = new LiveTelemetryStore();
+        ApplyMulticlassClassOrderSession(store);
+
+        store.RecordFrame(CreateSample(
+            playerCarIdx: 10,
+            teamLapDistPct: 0.50d,
+            teamF2TimeSeconds: 100d,
+            teamEstimatedTimeSeconds: 50d,
+            teamCarClass: 4098,
+            nearbyCars:
+            [
+                new HistoricalCarProximity(
+                    CarIdx: 51,
+                    LapCompleted: 2,
+                    LapDistPct: 0.47d,
+                    F2TimeSeconds: 103d,
+                    EstimatedTimeSeconds: 45.4d,
+                    Position: 3,
+                    ClassPosition: 1,
+                    CarClass: 4100,
+                    TrackSurface: 3,
+                    OnPitRoad: false)
+            ]));
+
+        var approach = Assert.Single(store.Snapshot().Proximity.MulticlassApproaches);
+
+        Assert.Equal(51, approach.CarIdx);
+        Assert.Equal(-3d, approach.RelativeSeconds!.Value, precision: 6);
+    }
+
+    [Fact]
+    public void RecordFrame_DoesNotSurfaceExtendedMulticlassApproachWithoutClosingEvidence()
+    {
+        var store = new LiveTelemetryStore();
+        ApplyMulticlassClassOrderSession(store);
+
+        store.RecordFrame(CreateSample(
+            playerCarIdx: 10,
+            teamLapDistPct: 0.50d,
+            teamEstimatedTimeSeconds: 50d,
+            teamCarClass: 4098,
+            nearbyCars:
+            [
+                new HistoricalCarProximity(
+                    CarIdx: 51,
+                    LapCompleted: 2,
+                    LapDistPct: 0.42d,
+                    F2TimeSeconds: 0d,
+                    EstimatedTimeSeconds: 42d,
+                    Position: 3,
+                    ClassPosition: 1,
+                    CarClass: 4100,
+                    TrackSurface: 3,
+                    OnPitRoad: false)
+            ]));
+
+        Assert.Empty(store.Snapshot().Proximity.MulticlassApproaches);
+    }
+
+    [Fact]
+    public void RecordFrame_SurfacesExtendedMulticlassApproachWithClosingEvidence()
+    {
+        var store = new LiveTelemetryStore();
+        ApplyMulticlassClassOrderSession(store);
+        var started = DateTimeOffset.UtcNow;
+
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: started,
+            playerCarIdx: 10,
+            teamLapDistPct: 0.50d,
+            teamEstimatedTimeSeconds: 50d,
+            teamCarClass: 4098,
+            nearbyCars:
+            [
+                new HistoricalCarProximity(
+                    CarIdx: 51,
+                    LapCompleted: 2,
+                    LapDistPct: 0.415d,
+                    F2TimeSeconds: 0d,
+                    EstimatedTimeSeconds: 41.5d,
+                    Position: 3,
+                    ClassPosition: 1,
+                    CarClass: 4100,
+                    TrackSurface: 3,
+                    OnPitRoad: false)
+            ]));
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: started.AddSeconds(1),
+            playerCarIdx: 10,
+            teamLapDistPct: 0.50d,
+            teamEstimatedTimeSeconds: 50d,
+            teamCarClass: 4098,
+            nearbyCars:
+            [
+                new HistoricalCarProximity(
+                    CarIdx: 51,
+                    LapCompleted: 2,
+                    LapDistPct: 0.42d,
+                    F2TimeSeconds: 0d,
+                    EstimatedTimeSeconds: 42d,
+                    Position: 3,
+                    ClassPosition: 1,
+                    CarClass: 4100,
+                    TrackSurface: 3,
+                    OnPitRoad: false)
+            ]));
+
+        var approach = Assert.Single(store.Snapshot().Proximity.MulticlassApproaches);
+        Assert.Equal(51, approach.CarIdx);
+        Assert.Equal(-8d, approach.RelativeSeconds!.Value, precision: 6);
+        Assert.True(approach.ClosingRateSecondsPerSecond >= 0.15d);
+    }
+
+    [Fact]
     public void RecordFrame_SurfacesNearestFasterClassApproachForCountdown()
     {
         var store = new LiveTelemetryStore();
@@ -1937,6 +2146,48 @@ DriverInfo:
             row.CarIdx == 12
             && row.Source == "estimated-relative"
             && row.RelativeSeconds == -2d);
+    }
+
+    [Fact]
+    public void RecordFrame_KeepsEstimatedRelativeRowsInPracticeWhenSessionStateIsNonRace()
+    {
+        var store = new LiveTelemetryStore();
+        store.ApplySessionInfo("""
+WeekendInfo:
+ EventType: Race
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Practice
+   SessionName: PRACTICE
+   SessionTime: 3600 sec
+   SessionLaps: unlimited
+DriverInfo:
+ DriverCarIdx: 10
+""");
+
+        store.RecordFrame(CreateSample(
+            sessionState: 1,
+            playerCarIdx: 10,
+            focusCarIdx: 10,
+            focusLapDistPct: 0.50d,
+            focusEstimatedTimeSeconds: 50d,
+            teamCarClass: 4098,
+            teamLapDistPct: 0.50d,
+            teamEstimatedTimeSeconds: 50d,
+            allCars:
+            [
+                Car(10, position: 0, classPosition: 0, lapDistPct: 0.50d, f2TimeSeconds: 0d, estimatedTimeSeconds: 50d),
+                Car(12, position: 0, classPosition: 0, lapDistPct: 0.47d, f2TimeSeconds: 0d, estimatedTimeSeconds: 47d)
+            ]));
+
+        var relativeRow = Assert.Single(store.Snapshot().Models.Relative.Rows);
+        Assert.Equal(12, relativeRow.CarIdx);
+        Assert.Equal("estimated-relative", relativeRow.Source);
+        Assert.True(relativeRow.IsBehind);
+        Assert.Equal(-3d, relativeRow.RelativeSeconds!.Value, precision: 6);
+        Assert.Equal("CarIdxEstTime+CarIdxLapDistPct", relativeRow.TimingEvidence.Source);
     }
 
     [Fact]

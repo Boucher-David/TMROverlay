@@ -129,8 +129,7 @@ internal sealed class BrowserOverlayModelFactory
         var modelSnapshot = snapshot with { Models = snapshot.CompleteModels() };
         var unitSystem = UnitSystem(settings);
         var sessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(modelSnapshot);
-        if (!string.Equals(overlayId, GarageCoverOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            && TryGetDefinition(overlayId, out var hiddenDefinition)
+        if (TryGetDefinition(overlayId, out var hiddenDefinition)
             && TryBuildHiddenProductModel(hiddenDefinition, modelSnapshot, settings, now, out response))
         {
             return true;
@@ -242,41 +241,56 @@ internal sealed class BrowserOverlayModelFactory
             settings,
             OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
         var overlay = FindOverlay(settings, StandingsOverlayDefinition.Definition.Id);
+        var sessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot);
+        var hasRenderableContent = overlay is null
+            || OverlayContentSizing.HasRenderableContent(
+                StandingsOverlayDefinition.Definition,
+                overlay,
+                sessionKind);
         var viewModel = StandingsOverlayViewModel.From(
             snapshot,
             now,
             browserSettings.MaximumRows,
             browserSettings.OtherClassRowsPerClass,
             browserSettings.ClassSeparatorsEnabled);
-        var columns = BrowserColumnsWithValidationCapacity(browserSettings.Columns);
-        var rows = viewModel.Rows
-            .Select(row => new BrowserOverlayDisplayRow(
-                Cells: columns
-                    .Select(column => StandingsCell(row, column.DataKey))
-                    .ToArray(),
-                IsReference: row.IsReference,
-                IsClassHeader: row.IsClassHeader,
-                IsPit: !string.IsNullOrWhiteSpace(row.Pit),
-                IsPartial: row.IsPartial,
-                IsPendingGrid: row.IsPendingGrid,
-                CarClassColorHex: row.CarClassColorHex,
-                HeaderTitle: row.IsClassHeader ? row.Driver : null,
-                HeaderDetail: row.IsClassHeader ? ClassHeaderDetail(row.Gap, row.Interval) : null,
-                CellTones: columns
-                    .Select(column => StandingsCellTone(row, column.DataKey))
-                    .ToArray()))
-            .ToArray();
+        var hasBodyRows = hasRenderableContent && viewModel.Rows.Count > 0;
+        var columns = hasBodyRows
+            ? BrowserColumnsWithValidationCapacity(browserSettings.Columns)
+            : [];
+        var rows = hasBodyRows
+            ? viewModel.Rows
+                .Select(row => new BrowserOverlayDisplayRow(
+                    Cells: columns
+                        .Select(column => StandingsCell(row, column.DataKey))
+                        .ToArray(),
+                    IsReference: row.IsReference,
+                    IsClassHeader: row.IsClassHeader,
+                    IsPit: !string.IsNullOrWhiteSpace(row.Pit),
+                    IsPartial: row.IsPartial,
+                    IsPendingGrid: row.IsPendingGrid,
+                    CarClassColorHex: row.CarClassColorHex,
+                    HeaderTitle: row.IsClassHeader ? row.Driver : null,
+                    HeaderDetail: row.IsClassHeader ? ClassHeaderDetail(row.Gap, row.Interval) : null,
+                    CellTones: columns
+                        .Select(column => StandingsCellTone(row, column.DataKey))
+                        .ToArray()))
+                .ToArray()
+            : [];
         var headerItems = HeaderItems(overlay, snapshot, viewModel.Status, viewModel.Rows.Count == 0 ? "waiting" : "info");
 
+        var shouldRender = ShouldRenderTable(columns, rows)
+            || ShouldRenderChromeOnlyTable(headerItems);
         return BrowserOverlayDisplayModel.Table(
             StandingsOverlayDefinition.Definition.Id,
             StandingsOverlayDefinition.Definition.DisplayName,
-            BrowserStatus(headerItems, viewModel.Status),
+            hasRenderableContent
+                ? BrowserStatus(headerItems, viewModel.Status)
+                : "chrome only | content disabled",
             SourceText(overlay, snapshot, viewModel.Source),
             columns,
             rows,
             headerItems,
-            ShouldRenderTable(columns, rows));
+            shouldRender);
     }
 
     private static string StandingsCell(StandingsOverlayRowViewModel row, string dataKey)
@@ -390,6 +404,12 @@ internal sealed class BrowserOverlayModelFactory
         IReadOnlyList<BrowserOverlayDisplayRow> rows)
     {
         return columns.Count > 0 && rows.Count > 0;
+    }
+
+    private static bool ShouldRenderChromeOnlyTable(
+        IReadOnlyList<BrowserOverlayHeaderItem> headerItems)
+    {
+        return headerItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
     }
 
     private static string RelativeCell(RelativeOverlayRowViewModel row, string dataKey)
@@ -740,7 +760,7 @@ internal sealed class BrowserOverlayModelFactory
         var renderModel = _trackMapRenderBuilder.Build(viewModel, now);
         var status = viewModel.Status;
         var headerItems = HeaderItems(overlay, snapshot, status, viewModel.IsAvailable ? "info" : "waiting");
-        var shouldRender = viewModel.IsAvailable && renderModel.Markers.Count > 0;
+        var shouldRender = viewModel.IsAvailable && renderModel.Primitives.Count > 0;
         return new BrowserOverlayDisplayModel(
             TrackMapOverlayDefinition.Definition.Id,
             viewModel.Title,
@@ -1193,6 +1213,7 @@ internal sealed class BrowserOverlayModelFactory
 
         if (state.IsOnPitRoad && state.CurrentPitEntryAxisSeconds is { } pitEntry)
         {
+            state.LastPitEntryAxisSeconds = pitEntry;
             state.LastPitDurationSeconds = Math.Max(0d, axisSeconds - pitEntry);
             state.LastPitLap = state.CurrentPitEntryLap ?? car.CurrentLap;
             state.LastPitExitAxisSeconds = axisSeconds;
@@ -1339,6 +1360,7 @@ internal sealed class BrowserOverlayModelFactory
             _gapWeather.Where(point => point.AxisSeconds >= startSeconds && point.AxisSeconds <= endSeconds).ToArray(),
             _gapLeaderChanges.Where(marker => marker.AxisSeconds >= startSeconds && marker.AxisSeconds <= endSeconds).ToArray(),
             _gapDriverChanges.Where(marker => marker.AxisSeconds >= startSeconds && marker.AxisSeconds <= endSeconds).ToArray(),
+            BuildBrowserGapPitWindows(selectedSeries, startSeconds, endSeconds),
             startSeconds,
             Math.Max(endSeconds, startSeconds + 1d),
             Math.Max(1d, scale.MaxGapSeconds),
@@ -1422,6 +1444,70 @@ internal sealed class BrowserOverlayModelFactory
             new BrowserGapTrendMetric("Pit", null, null, "pit", null, primaryPit, threatPit, comparisonPit),
             new BrowserGapTrendMetric("PLap", null, null, "pitLap", null, primaryPit, threatPit, comparisonPit)
         };
+    }
+
+    private static IReadOnlyList<BrowserGapPitWindow> BuildBrowserGapPitWindows(
+        IReadOnlyList<BrowserGapSeriesSelection> selectedSeries,
+        double startSeconds,
+        double endSeconds)
+    {
+        if (selectedSeries.Count == 0)
+        {
+            return [];
+        }
+
+        var windows = new List<BrowserGapPitWindow>();
+        foreach (var selection in selectedSeries)
+        {
+            var state = selection.State;
+            if (!state.IsReference)
+            {
+                continue;
+            }
+
+            if (state.IsOnPitRoad
+                && state.CurrentPitEntryAxisSeconds is { } activeEntry
+                && PitWindowOverlaps(activeEntry, endSeconds, startSeconds, endSeconds))
+            {
+                windows.Add(new BrowserGapPitWindow(
+                    activeEntry,
+                    null,
+                    state.CarIdx,
+                    state.ClassPosition,
+                    state.IsReference,
+                    IsActive: true,
+                    Math.Max(0d, endSeconds - activeEntry),
+                    state.CurrentPitEntryLap ?? state.LastPitLap));
+            }
+
+            if (state.LastPitEntryAxisSeconds is { } entry
+                && state.LastPitExitAxisSeconds is { } exit
+                && PitWindowOverlaps(entry, exit, startSeconds, endSeconds))
+            {
+                windows.Add(new BrowserGapPitWindow(
+                    entry,
+                    exit,
+                    state.CarIdx,
+                    state.ClassPosition,
+                    state.IsReference,
+                    IsActive: false,
+                    Math.Max(0d, exit - entry),
+                    state.LastPitLap));
+            }
+        }
+
+        return windows
+            .OrderBy(window => window.EntryAxisSeconds)
+            .ToArray();
+    }
+
+    private static bool PitWindowOverlaps(
+        double entryAxisSeconds,
+        double exitAxisSeconds,
+        double startSeconds,
+        double endSeconds)
+    {
+        return exitAxisSeconds >= startSeconds && entryAxisSeconds <= endSeconds;
     }
 
     private BrowserGapTrendMetric BuildBrowserGapTireTrendMetric(
@@ -2648,10 +2734,16 @@ internal sealed class BrowserOverlayModelFactory
             return "hidden | qualifying unsupported";
         }
 
-        if (!OverlayContentSizing.HasRenderableContent(definition, overlay, sessionKind)
-            || !GapWindowEnabled(overlay))
+        if (!GapWindowEnabled(overlay))
         {
             return "hidden | no enabled content";
+        }
+
+        if (!OverlayContentSizing.HasRenderableContent(definition, overlay, sessionKind))
+        {
+            return CanRenderChromeWithoutBodyData(definition, overlay, snapshot, sessionKind)
+                ? null
+                : "hidden | no enabled content";
         }
 
         var context = LiveLocalStrategyContext.ForRequirement(snapshot, now, definition.ContextRequirement);
@@ -2667,6 +2759,17 @@ internal sealed class BrowserOverlayModelFactory
         }
 
         return null;
+    }
+
+    private static bool CanRenderChromeWithoutBodyData(
+        OverlayDefinition definition,
+        OverlaySettings overlay,
+        LiveTelemetrySnapshot snapshot,
+        OverlaySessionKind? sessionKind)
+    {
+        return string.Equals(definition.Id, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && OverlayChromeSettings.ShowHeaderTimeRemainingForSession(overlay, sessionKind)
+            && !string.IsNullOrWhiteSpace(OverlayHeaderTimeFormatter.FormatTimeRemaining(snapshot));
     }
 
     private static string HiddenBodyKind(string overlayId)
@@ -2754,6 +2857,13 @@ internal sealed class BrowserOverlayModelFactory
             browserBaseSize = new System.Drawing.Size(
                 browserBaseSize.Width,
                 FuelBrowserSourceHeight(model, browserBaseSize.Height));
+        }
+        else if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && model.ShouldRender)
+        {
+            browserBaseSize = new System.Drawing.Size(
+                browserBaseSize.Width,
+                StandingsBrowserSourceHeight(model, browserBaseSize.Height));
         }
 
         var browserScaledSize = new System.Drawing.Size(
@@ -3094,6 +3204,26 @@ internal sealed class BrowserOverlayModelFactory
             : Math.Max(OverlayGeometryContracts.MetricRows.MinimumChromeAdjustedHeight, height - OverlayGeometryContracts.MetricRows.HeaderChromeHeight);
     }
 
+    private static int StandingsBrowserSourceHeight(BrowserOverlayDisplayModel model, int fallbackHeight)
+    {
+        if (!string.Equals(model.OverlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return fallbackHeight;
+        }
+
+        var hasVisibleHeader = model.HeaderItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
+        if (model.Rows.Count <= 0)
+        {
+            return hasVisibleHeader ? StandingsOverlaySizing.ChromeOnlyClientHeight : fallbackHeight;
+        }
+
+        return StandingsOverlaySizing.TargetClientHeightForRows(
+            model.Rows.Count,
+            fallbackHeight,
+            hasVisibleHeader,
+            showFooter: false);
+    }
+
     private static BrowserOverlayFuelStrategyEvidence? EffectiveFuelStrategyEvidence(
         string overlayId,
         BrowserOverlayDisplayModel model)
@@ -3182,6 +3312,11 @@ internal sealed class BrowserOverlayModelFactory
             return "section-aware-placeholders";
         }
 
+        if (IsChromeOnlyUnavailablePlaceholderModel(model))
+        {
+            return "chrome-only-placeholder";
+        }
+
         return !HasSemanticRenderedContent(model) ? "suppress-rendered-content" : null;
     }
 
@@ -3190,6 +3325,14 @@ internal sealed class BrowserOverlayModelFactory
         return string.Equals(model.OverlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             && model.MetricSections?.Any(section => section.Rows.Count > 0) == true
             && model.Status.Contains("weather unavailable", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsChromeOnlyUnavailablePlaceholderModel(BrowserOverlayDisplayModel model)
+    {
+        return string.Equals(model.OverlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && model.ShouldRender
+            && model.Rows.Count == 0
+            && model.HeaderItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
     }
 
     private static bool IsUnavailableModel(BrowserOverlayDisplayModel model)
@@ -3213,7 +3356,7 @@ internal sealed class BrowserOverlayModelFactory
             || model.Inputs?.HasRail == true
             || model.Inputs?.Trace.Count > 0
             || model.CarRadar?.RenderModel.ShouldRender == true
-            || model.TrackMap?.RenderModel.Markers.Count > 0
+            || model.TrackMap?.RenderModel.Primitives.Count > 0
             || model.Flags?.Flags.Count > 0
             || model.StreamChat?.Rows.Count > 0;
     }
@@ -3222,7 +3365,8 @@ internal sealed class BrowserOverlayModelFactory
     {
         var unavailableContentPolicy = UnavailableContentPolicy(model);
         if (!IsUnavailableModel(model)
-            || string.Equals(unavailableContentPolicy, "section-aware-placeholders", StringComparison.Ordinal))
+            || string.Equals(unavailableContentPolicy, "section-aware-placeholders", StringComparison.Ordinal)
+            || string.Equals(unavailableContentPolicy, "chrome-only-placeholder", StringComparison.Ordinal))
         {
             return model;
         }
@@ -3256,6 +3400,7 @@ internal sealed class BrowserOverlayModelFactory
                 Weather = [],
                 LeaderChanges = [],
                 DriverChanges = [],
+                PitWindows = [],
                 SelectedSeriesCount = 0,
                 TrendMetrics = [],
                 ActiveThreat = null,
@@ -3709,12 +3854,13 @@ internal sealed class BrowserOverlayModelFactory
     private static int FuelVisibleRowsForHeight(int height, bool showFooter)
     {
         var geometry = OverlayGeometryContracts.MetricRows;
-        var bodyHeight = height
+        var availableHeight = height
             - geometry.HeaderChromeHeight
             - (showFooter ? geometry.FooterChromeHeight : geometry.CollapsedFooterReserveHeight)
-            - geometry.BodyGap
-            - 34;
-        return Math.Max(1, (int)Math.Floor(bodyHeight / (geometry.PlainRowHeight + geometry.RowGap)));
+            - geometry.FuelContentVerticalPadding
+            - geometry.FuelSectionTitleReserveHeight
+            + geometry.RowGap;
+        return Math.Max(1, (int)Math.Floor(availableHeight / (geometry.SegmentedRowHeight + geometry.RowGap)));
     }
 
     private static string BrowserStatus(IReadOnlyList<BrowserOverlayHeaderItem> headerItems, string fallback)
@@ -4125,6 +4271,7 @@ internal sealed record BrowserGapGraph(
     IReadOnlyList<BrowserGapWeatherPoint> Weather,
     IReadOnlyList<BrowserGapLeaderChangeMarker> LeaderChanges,
     IReadOnlyList<BrowserGapDriverChangeMarker> DriverChanges,
+    IReadOnlyList<BrowserGapPitWindow> PitWindows,
     double StartSeconds,
     double EndSeconds,
     double MaxGapSeconds,
@@ -4248,6 +4395,16 @@ internal sealed record BrowserGapDriverChangeMarker(
     bool IsReference,
     string Label);
 
+internal sealed record BrowserGapPitWindow(
+    double EntryAxisSeconds,
+    double? ExitAxisSeconds,
+    int CarIdx,
+    int? ClassPosition,
+    bool IsReference,
+    bool IsActive,
+    double? DurationSeconds,
+    int? Lap);
+
 internal sealed record BrowserGapSeriesSelection(
     BrowserGapCarRenderState State,
     double Alpha,
@@ -4313,6 +4470,8 @@ internal sealed class BrowserGapCarRenderState(int carIdx)
     public double? CurrentPitEntryAxisSeconds { get; set; }
 
     public int? CurrentPitEntryLap { get; set; }
+
+    public double? LastPitEntryAxisSeconds { get; set; }
 
     public double? LastPitDurationSeconds { get; set; }
 

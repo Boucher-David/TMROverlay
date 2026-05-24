@@ -550,13 +550,14 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         var estimatedTimeSeconds = reader.ReadNullableDoubleArrayElement("CarIdxEstTime", carIdx);
         var position = reader.ReadInt32ArrayElement("CarIdxPosition", carIdx);
         var classPosition = reader.ReadInt32ArrayElement("CarIdxClassPosition", carIdx);
+        var hasLapDistance = HasLapDistance(lapDistPct);
         var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
         if (!hasLapProgress && requireLapProgress)
         {
             return null;
         }
 
-        if (!hasLapProgress && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
+        if (!hasLapDistance && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
         {
             return null;
         }
@@ -564,7 +565,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         return new CarProgress(
             CarIdx: carIdx,
             LapCompleted: hasLapProgress ? lapCompleted!.Value : -1,
-            LapDistPct: hasLapProgress ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
+            LapDistPct: hasLapDistance ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
             F2TimeSeconds: f2TimeSeconds,
             EstimatedTimeSeconds: estimatedTimeSeconds,
             LastLapTimeSeconds: reader.ReadNullableDoubleArrayElement("CarIdxLastLapTime", carIdx),
@@ -646,8 +647,9 @@ internal sealed class RawCaptureTelemetrySampleBuilder
             var estimatedTimeSeconds = reader.ReadNullableDoubleArrayElement("CarIdxEstTime", carIdx);
             var position = reader.ReadInt32ArrayElement("CarIdxPosition", carIdx);
             var classPosition = reader.ReadInt32ArrayElement("CarIdxClassPosition", carIdx);
+            var hasLapDistance = HasLapDistance(lapDistPct);
             var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
-            if (!hasLapProgress && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
+            if (!hasLapDistance && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
             {
                 continue;
             }
@@ -655,7 +657,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
             cars.Add(new HistoricalCarProximity(
                 CarIdx: carIdx,
                 LapCompleted: hasLapProgress ? lapCompleted!.Value : -1,
-                LapDistPct: hasLapProgress ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
+                LapDistPct: hasLapDistance ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
                 F2TimeSeconds: f2TimeSeconds,
                 EstimatedTimeSeconds: estimatedTimeSeconds,
                 Position: position,
@@ -681,8 +683,9 @@ internal sealed class RawCaptureTelemetrySampleBuilder
             var estimatedTimeSeconds = reader.ReadNullableDoubleArrayElement("CarIdxEstTime", carIdx);
             var position = reader.ReadInt32ArrayElement("CarIdxPosition", carIdx);
             var classPosition = reader.ReadInt32ArrayElement("CarIdxClassPosition", carIdx);
+            var hasLapDistance = HasLapDistance(lapDistPct);
             var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
-            if (!hasLapProgress && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
+            if (!hasLapDistance && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
             {
                 continue;
             }
@@ -690,7 +693,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
             cars.Add(new HistoricalCarProximity(
                 CarIdx: carIdx,
                 LapCompleted: hasLapProgress ? lapCompleted!.Value : -1,
-                LapDistPct: hasLapProgress ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
+                LapDistPct: hasLapDistance ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
                 F2TimeSeconds: f2TimeSeconds,
                 EstimatedTimeSeconds: estimatedTimeSeconds,
                 Position: position,
@@ -708,7 +711,12 @@ internal sealed class RawCaptureTelemetrySampleBuilder
     private static bool HasLapProgress(int? lapCompleted, double? lapDistPct)
     {
         return lapCompleted is >= 0
-            && lapDistPct is { } pct
+            && HasLapDistance(lapDistPct);
+    }
+
+    private static bool HasLapDistance(double? lapDistPct)
+    {
+        return lapDistPct is { } pct
             && !double.IsNaN(pct)
             && !double.IsInfinity(pct)
             && pct >= 0d;

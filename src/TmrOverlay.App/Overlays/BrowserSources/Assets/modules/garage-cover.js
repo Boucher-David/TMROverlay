@@ -15,7 +15,11 @@ TmrBrowserOverlay.register({
 });
 
 function renderGarageCover(model) {
-  if (model?.shouldRender === false) {
+  const garageCover = model?.garageCover;
+  const settings = garageCover?.browserSettings || garageCoverSettings;
+  const detection = garageCover?.detection || { displayText: 'localhost offline', isFresh: false };
+  const shouldCover = model?.shouldRender === true && garageCover?.shouldCover === true;
+  if (!shouldCover) {
     postBrowserSourceEvent('model-hidden', model);
     modelRootOpacity = rootOpacityFromModel(model);
     applyOverlayOpacity(0);
@@ -26,13 +30,9 @@ function renderGarageCover(model) {
     return;
   }
 
-  const garageCover = model?.garageCover;
-  const settings = garageCover?.browserSettings || garageCoverSettings;
-  const detection = garageCover?.detection || { displayText: 'localhost offline', isFresh: false };
-  const shouldCover = garageCover?.shouldCover ?? true;
-  postBrowserSourceEvent(shouldCover ? 'model-render' : model ? 'model-hidden' : 'model-null', model);
+  postBrowserSourceEvent('model-render', model);
   modelRootOpacity = rootOpacityFromModel(model);
-  applyOverlayOpacity(shouldCover ? 1 : 0);
+  applyOverlayOpacity(1);
 
   const renderKey = `${settings.hasImage}:${settings.imageVersion ?? ''}:${settings.fallbackReason ?? ''}`;
   if (renderKey !== lastGarageCoverRenderKey) {

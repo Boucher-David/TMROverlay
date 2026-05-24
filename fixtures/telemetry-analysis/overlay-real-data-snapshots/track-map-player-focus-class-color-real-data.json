@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "track-map-player-focus-class-color-real-data",
+  "overlayId": "track-map",
+  "scenarioIds": [
+    "track-map-player-focus-class-color"
+  ],
+  "source": {
+    "captureId": "capture-20260523-195914-398",
+    "sourceCategory": "gr86-practice-player-focus",
+    "redaction": "compact-summary",
+    "note": "Latest GR86 practice capture where iRacing reported the focused/player car class color as white. The focused marker must keep that class color rather than replacing it with focus cyan."
+  },
+  "provenance": {
+    "sessionType": "Practice",
+    "sessionPhase": "green",
+    "focusRelation": "player",
+    "sampleWindowSeconds": 128.2
+  },
+  "rawEvidence": {
+    "sessionType": "Practice",
+    "playerCarIdx": 3,
+    "focusCarIdx": 3,
+    "focusDiffersFromPlayer": false,
+    "iRacingClassColor": "#FFFFFF",
+    "timingRows": [
+      {
+        "carIdx": 3,
+        "role": "player-focus",
+        "carClass": "Toyota GR86",
+        "lapDistPct": 0.081,
+        "hasTakenGrid": true,
+        "classColor": "#FFFFFF"
+      }
+    ]
+  },
+  "expected": {
+    "mapSource": "generated-or-fallback-with-live-markers",
+    "focusMarker": {
+      "carIdx": 3,
+      "isPlayerFocus": true,
+      "classColor": "#FFFFFF",
+      "fill": "#FFFFFF",
+      "mustNotUseFocusColor": "#00E8FF",
+      "radiusGreaterThanNonFocus": true
+    },
+    "fallbackPolicy": {
+      "invalidOrMissingClassColorFill": "#FFFFFF",
+      "reason": "fallback should be neutral white so it cannot be confused with another class's actual hex code"
+    },
+    "practiceMarkerPolicy": {
+      "hideNonFocusWithoutTakenGrid": false,
+      "keepFocusWithoutTakenGrid": true,
+      "hiddenCarIdxs": [],
+      "visibleCarIdxs": [
+        3
+      ]
+    }
+  }
+}

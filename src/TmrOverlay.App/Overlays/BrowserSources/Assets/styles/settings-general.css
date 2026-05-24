@@ -347,6 +347,11 @@
       margin-top: var(--tmr-settings-preview-panel-margin-top, 28px);
     }
 
+    .visibility-context-panel {
+      width: var(--tmr-settings-panel-small-width, 392px);
+      height: var(--tmr-settings-overlay-controls-panel-height, 266px);
+    }
+
     .field-row {
       width: var(--tmr-settings-field-row-default-width, 346px);
       min-height: var(--tmr-settings-field-row-height, 34px);
@@ -795,7 +800,7 @@
     }
 
     .overlay-general-grid.garage .overlay-controls {
-      min-height: var(--tmr-settings-garage-overlay-controls-panel-height, 166px);
+      min-height: var(--tmr-settings-garage-overlay-controls-panel-height, 200px);
     }
 
     .cover-panel {

@@ -148,7 +148,9 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'gap-to-leader', slug: 'no-cars', query: 'fixture=gap-no-cars' },
   { overlayId: 'gap-to-leader', slug: 'long-tail-real-data', query: 'fixture=gap-long-tail-real-data' },
   { overlayId: 'gap-to-leader', slug: 'pit-window-real-data', query: 'fixture=gap-pit-window-real-data' },
-  { overlayId: 'gap-to-leader', slug: 'trend-row-off', query: 'fixture=gap-trend-row-off' },
+  { overlayId: 'gap-to-leader', slug: 'threat-capture-shaped', query: 'fixture=gap-threat-capture-shaped' },
+  { overlayId: 'gap-to-leader', slug: 'endurance-domain-capture-shaped', query: 'fixture=gap-endurance-domain-capture-shaped' },
+  { overlayId: 'gap-to-leader', slug: 'tire-trend-off', query: 'fixture=gap-tire-trend-off' },
   { overlayId: 'gap-to-leader', slug: 'trend-off', query: 'fixture=gap-trend-off' },
   { overlayId: 'gap-to-leader', slug: 'graph-off', query: 'fixture=gap-graph-off' },
   { overlayId: 'track-map', slug: 'no-markers', query: 'fixture=track-map-no-markers' },
@@ -2971,6 +2973,7 @@ function graphEvidence(graph, layout, model = null, scaleContext = null) {
       comparisonText: stringOrNull(metric?.comparisonText)
     })),
     weatherCount: arrayLength(graph?.weather),
+    pitWindowCount: arrayLength(graph?.pitWindows),
     leaderChangeCount: arrayLength(graph?.leaderChanges),
     driverChangeCount: arrayLength(graph?.driverChanges)
   };
@@ -3058,6 +3061,10 @@ function scaleGraphGeometry(geometry, scale) {
       ...band,
       bounds: scaleRectEvidence(band.bounds, scale)
     })),
+    pitWindows: (geometry.pitWindows || []).map((band) => ({
+      ...band,
+      bounds: scaleRectEvidence(band.bounds, scale)
+    })),
     markers: (geometry.markers || []).map((marker) => ({
       ...marker,
       start: scalePointEvidence(marker.start, scale),
@@ -3142,6 +3149,7 @@ function browserGraphGeometry(graph, canvasBounds) {
       latestReferenceGapSeconds: scale?.isFocusRelative === true ? numberOrNull(scale?.latestReferenceGapSeconds) : null,
       gridLines: [],
       weatherBands: [],
+      pitWindows: [],
       markers: [],
       metricRows: graphMetricRows(local.metricsRect, graph, canvasBounds),
       series: []
@@ -3169,6 +3177,7 @@ function browserGraphGeometry(graph, canvasBounds) {
     latestReferenceGapSeconds: scale?.isFocusRelative === true ? numberOrNull(scale?.latestReferenceGapSeconds) : null,
     gridLines: graphGridLines(graph, scale, local.plot, maxGapSeconds, canvasBounds),
     weatherBands: graphWeatherBands(graph, local.plot, canvasBounds),
+    pitWindows: graphPitWindows(graph, local.plot, canvasBounds),
     markers: graphMarkers(graph, scale, local.plot, maxGapSeconds, canvasBounds),
     metricRows: graphMetricRows(local.metricsRect, graph, canvasBounds),
     series: orderedSeries.map(({ series, sourceIndex }, drawIndex) =>
@@ -3204,6 +3213,7 @@ function browserFallbackGraphGeometry(graph, canvasBounds, local) {
     latestReferenceGapSeconds: null,
     gridLines: graphGridLines(graph, { isFocusRelative: false, maxGapSeconds: max }, local.plot, max, canvasBounds),
     weatherBands: [],
+    pitWindows: [],
     markers: [],
     metricRows: [],
     series: [{
@@ -3284,6 +3294,34 @@ function graphWeatherBands(graph, plot, canvasBounds) {
         endAxisSeconds: round(end),
         bounds: offsetRect(canvasBounds, { x, y: plot.y, width: Math.max(1, nextX - x), height: plot.height }),
         color
+      };
+    })
+    .filter(Boolean);
+}
+
+function graphPitWindows(graph, plot, canvasBounds) {
+  const windows = Array.isArray(graph?.pitWindows) ? graph.pitWindows : [];
+  const domain = graphDomain(graph);
+  return windows
+    .map((window) => {
+      const start = Math.max(domain.start, numberOr(window?.entryAxisSeconds, domain.start));
+      const end = Math.min(domain.end, Number.isFinite(window?.exitAxisSeconds) ? window.exitAxisSeconds : domain.end);
+      if (end <= start) return null;
+      const x = axisToX(graph, plot, start);
+      const nextX = axisToX(graph, plot, end);
+      if (nextX <= x) return null;
+      return {
+        kind: 'pit-window',
+        startAxisSeconds: round(start),
+        endAxisSeconds: round(end),
+        carIdx: numberOrNull(window?.carIdx),
+        classPosition: numberOrNull(window?.classPosition),
+        isReference: Boolean(window?.isReference),
+        isActive: Boolean(window?.isActive),
+        durationSeconds: numberOrNull(window?.durationSeconds),
+        lap: numberOrNull(window?.lap),
+        bounds: offsetRect(canvasBounds, { x, y: plot.y, width: Math.max(1, nextX - x), height: plot.height }),
+        color: window?.isActive === true ? 'rgba(112, 224, 146, 0.19)' : 'rgba(112, 224, 146, 0.13)'
       };
     })
     .filter(Boolean);

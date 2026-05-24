@@ -328,10 +328,63 @@ class OverlayRealDataSnapshotTests(unittest.TestCase):
         selected = expected["graph"]["selectedClassPositions"]
         for frame in frames:
             self.assertEqual(selected, frame["selectedClassPositions"])
+        self.assertEqual("P4", expected["graph"]["comparisonLabel"])
+        self.assertIsNone(expected["graph"]["activeThreat"])
+        pit_band = expected["graph"]["pitWindowBand"]
+        self.assertGreaterEqual(pit_band["minimumCount"], 1)
+        self.assertEqual(raw["focusCar"]["carIdx"], pit_band["expectedCarIdx"])
+        self.assertEqual(raw["focusCar"]["classPosition"], pit_band["expectedClassPosition"])
+        self.assertIn(4, expected["graph"]["forbiddenThreatClassPositions"])
+        self.assertIn(raw["focusCar"]["classPosition"], expected["graph"]["forbiddenThreatClassPositions"])
         self.assertTrue(expected["graph"]["mustKeepFocusAndLeaderDuringPitWindow"])
         self.assertTrue(expected["graph"]["mustNotSelectFarBehindOutlierDuringPitWindow"])
         for forbidden in expected["graph"]["forbiddenFarBehindClassPositions"]:
             self.assertNotIn(forbidden, selected)
+
+    def test_gap_threat_capture_shaped_snapshot_preserves_behind_threat_policy(self):
+        snapshot = snapshot_by_id("gap-to-leader-threat-capture-shaped")
+        raw = snapshot["rawEvidence"]
+        expected = snapshot["expected"]
+
+        self.assertEqual("gap-to-leader", snapshot["overlayId"])
+        self.assertEqual("capture-shaped-synthetic", snapshot["source"]["sourceCategory"])
+        self.assertIn("gap-pit-and-long-tail-real-data", snapshot["scenarioIds"])
+        self.assertEqual("Race", raw["sessionType"])
+
+        focus = raw["focusCar"]
+        threat = raw["behindThreat"]
+        active = expected["graph"]["activeThreat"]
+        selected = expected["graph"]["selectedClassPositions"]
+
+        self.assertEqual(focus["classPosition"], expected["graph"]["focusClassPosition"])
+        self.assertGreater(threat["classPosition"], focus["classPosition"])
+        self.assertGreater(threat["gainSeconds"], 0)
+        self.assertEqual(threat["carIdx"], active["carIdx"])
+        self.assertEqual(threat["classPosition"], active["classPosition"])
+        self.assertEqual("P6", active["label"])
+        self.assertIn(threat["classPosition"], selected)
+        for forbidden in expected["graph"]["forbiddenThreatClassPositions"]:
+            self.assertNotEqual(forbidden, threat["classPosition"])
+
+    def test_gap_endurance_domain_capture_shaped_snapshot_preserves_long_graph_policy(self):
+        snapshot = snapshot_by_id("gap-to-leader-endurance-domain-capture-shaped")
+        raw = snapshot["rawEvidence"]
+        expected = snapshot["expected"]["graph"]
+
+        self.assertEqual("gap-to-leader", snapshot["overlayId"])
+        self.assertEqual("capture-shaped-synthetic", snapshot["source"]["sourceCategory"])
+        self.assertIn("gap-pit-and-long-tail-real-data", snapshot["scenarioIds"])
+        self.assertEqual("Race", raw["sessionType"])
+
+        domain = raw["domain"]
+        self.assertGreaterEqual(domain["endSeconds"] - domain["startSeconds"], expected["minimumDurationHours"] * 60 * 60)
+        self.assertEqual(raw["selectedClassPositions"], expected["selectedClassPositions"])
+        self.assertIn(raw["classLeader"]["classPosition"], raw["selectedClassPositions"])
+        self.assertIn(raw["focusCar"]["classPosition"], raw["selectedClassPositions"])
+        self.assertGreaterEqual(len(raw["weatherPeriods"]), expected["minimumWeatherBandCount"])
+        self.assertGreaterEqual(len(raw["graphMarkers"]), expected["minimumGraphMarkerCount"])
+        self.assertGreaterEqual(len(raw["pitWindows"]), expected["minimumPitWindowBandCount"])
+        self.assertEqual("covered-by-graph-pit-window-band", expected["pitWindowGraphMarkerStatus"])
 
     def test_pit_service_refuel_snapshot_preserves_pit_request_and_window_evidence(self):
         snapshot = snapshot_by_id("pit-service-refuel-pit-window-real-data")

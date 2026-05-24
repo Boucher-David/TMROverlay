@@ -13,7 +13,10 @@ const snapshots = Object.freeze({
   flags: readSnapshot('flags-meatball-local-policy.json'),
   fuel: readSnapshot('fuel-measured-burn-real-data.json'),
   pitService: readSnapshot('pit-service-refuel-pit-window-real-data.json'),
-  gap: readSnapshot('gap-to-leader-long-tail-real-data.json')
+  gap: readSnapshot('gap-to-leader-long-tail-real-data.json'),
+  gapPitWindow: readSnapshot('gap-to-leader-pit-window-real-data.json'),
+  gapThreat: readSnapshot('gap-to-leader-threat-capture-shaped.json'),
+  gapEndurance: readSnapshot('gap-to-leader-endurance-domain-capture-shaped.json')
 });
 
 test.describe('real-data compact snapshot browser rendering', () => {
@@ -229,6 +232,85 @@ test.describe('real-data compact snapshot browser rendering', () => {
     expect(canvasHasPaint).toBe(true);
     expect(requests).toContain('/api/overlay-model/gap-to-leader');
     expect(requests).not.toContain('/api/snapshot');
+    expect(browserSourceEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: 'model-render', overlayId: 'gap-to-leader' })
+    ]));
+  });
+
+  test('renders Gap To Leader pit-window real data without treating the ahead car as a threat', async ({ page }) => {
+    const snapshot = snapshots.gapPitWindow;
+    const model = gapPitWindowModel(snapshot);
+    const { requests, browserSourceEvents } = await installOverlayRoutes(page, 'gap-to-leader', model);
+
+    await page.setViewportSize({ width: 654, height: 336 });
+    await page.goto('http://localhost:8765/overlays/gap-to-leader');
+
+    await expect(page.locator('.model-graph')).toBeVisible();
+    expect(model.graph.series.map((series) => series.classPosition)).toEqual(snapshot.expected.graph.selectedClassPositions);
+    expect(model.graph.comparisonLabel).toBe(snapshot.expected.graph.comparisonLabel);
+    expect(model.graph.activeThreat).toBeNull();
+    expect(model.graph.threatCarIdx).toBeNull();
+    expect(model.graph.pitWindows).toHaveLength(1);
+    expect(model.graph.pitWindows[0]).toEqual(expect.objectContaining({
+      carIdx: snapshot.rawEvidence.focusCar.carIdx,
+      classPosition: snapshot.rawEvidence.focusCar.classPosition,
+      isReference: true,
+      durationSeconds: snapshot.rawEvidence.pitWindow.durationSeconds,
+      lap: snapshot.rawEvidence.pitWindow.displayLap
+    }));
+    for (const classPosition of snapshot.expected.graph.forbiddenThreatClassPositions) {
+      expect(model.graph.series.find((series) => series.classPosition === classPosition)?.carIdx).not.toBe(model.graph.threatCarIdx);
+    }
+    expect(requests).toContain('/api/overlay-model/gap-to-leader');
+    expect(browserSourceEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: 'model-render', overlayId: 'gap-to-leader' })
+    ]));
+  });
+
+  test('renders Gap To Leader capture-shaped active threat behind the focused car', async ({ page }) => {
+    const snapshot = snapshots.gapThreat;
+    const model = gapThreatModel(snapshot);
+    const { requests, browserSourceEvents } = await installOverlayRoutes(page, 'gap-to-leader', model);
+
+    await page.setViewportSize({ width: 654, height: 336 });
+    await page.goto('http://localhost:8765/overlays/gap-to-leader');
+
+    await expect(page.locator('.model-graph')).toBeVisible();
+    expect(model.graph.series.map((series) => series.classPosition)).toEqual(snapshot.expected.graph.selectedClassPositions);
+    expect(model.graph.comparisonLabel).toBe(snapshot.expected.graph.comparisonLabel);
+    expect(model.graph.activeThreat.chaser.label).toBe(snapshot.expected.graph.activeThreat.label);
+    expect(model.graph.activeThreat.chaser.carIdx).toBe(snapshot.expected.graph.activeThreat.carIdx);
+    expect(model.graph.threatCarIdx).toBe(snapshot.expected.graph.activeThreat.carIdx);
+    const focusPosition = snapshot.expected.graph.focusClassPosition;
+    const threatPosition = snapshot.expected.graph.activeThreat.classPosition;
+    expect(threatPosition).toBeGreaterThan(focusPosition);
+    for (const classPosition of snapshot.expected.graph.forbiddenThreatClassPositions) {
+      expect(model.graph.series.find((series) => series.classPosition === classPosition)?.carIdx).not.toBe(model.graph.threatCarIdx);
+    }
+    expect(requests).toContain('/api/overlay-model/gap-to-leader');
+    expect(browserSourceEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: 'model-render', overlayId: 'gap-to-leader' })
+    ]));
+  });
+
+  test('renders Gap To Leader capture-shaped four-hour domain with markers and weather bands', async ({ page }) => {
+    const snapshot = snapshots.gapEndurance;
+    const model = gapEnduranceModel(snapshot);
+    const { requests, browserSourceEvents } = await installOverlayRoutes(page, 'gap-to-leader', model);
+
+    await page.setViewportSize({ width: 654, height: 336 });
+    await page.goto('http://localhost:8765/overlays/gap-to-leader');
+
+    await expect(page.locator('.model-graph')).toBeVisible();
+    expect(model.graph.endSeconds - model.graph.startSeconds).toBeGreaterThanOrEqual(snapshot.expected.graph.minimumDurationHours * 60 * 60);
+    expect(model.graph.series.map((series) => series.classPosition)).toEqual(snapshot.expected.graph.selectedClassPositions);
+    expect(model.graph.series.length).toBeGreaterThanOrEqual(snapshot.expected.graph.minimumVisibleSeriesCount);
+    expect(model.graph.weather.length).toBeGreaterThanOrEqual(snapshot.expected.graph.minimumWeatherBandCount);
+    expect(model.graph.leaderChanges.length + model.graph.driverChanges.length).toBeGreaterThanOrEqual(snapshot.expected.graph.minimumGraphMarkerCount);
+    expect(model.graph.pitWindows.length).toBeGreaterThanOrEqual(snapshot.expected.graph.minimumPitWindowBandCount);
+    expect(model.graph.activeThreat).toBeNull();
+    expect(model.graph.threatCarIdx).toBeNull();
+    expect(requests).toContain('/api/overlay-model/gap-to-leader');
     expect(browserSourceEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({ event: 'model-render', overlayId: 'gap-to-leader' })
     ]));
@@ -519,6 +601,7 @@ function gapLongTailModel(snapshot) {
       weather: [],
       leaderChanges: [],
       driverChanges: [],
+      pitWindows: [],
       startSeconds,
       endSeconds: startSeconds + 420,
       maxGapSeconds: snapshot.expected.graph.axisBehindSecondsMaximum,
@@ -544,6 +627,216 @@ function gapLongTailModel(snapshot) {
   };
 }
 
+function gapPitWindowModel(snapshot) {
+  const rawFrames = snapshot.rawEvidence.orderedFrames;
+  const firstFrame = rawFrames[0];
+  const lastFrame = rawFrames[rawFrames.length - 1];
+  const frames = [
+    ...rawFrames,
+    {
+      ...lastFrame,
+      role: 'post-exit-render-stable',
+      sessionTimeSeconds: Number(lastFrame.sessionTimeSeconds || 0) + 6,
+      focusGapToClassLeaderSeconds: Number(lastFrame.focusGapToClassLeaderSeconds || 0) + 0.1
+    }
+  ];
+  const point = (frame, gapSeconds) => ({
+    axisSeconds: Number(frame.sessionTimeSeconds),
+    gapSeconds,
+    startsSegment: frame === frames[0]
+  });
+  const focusPoints = frames.map((frame) => point(frame, Math.max(0, Number(frame.focusGapToClassLeaderSeconds || 0))));
+  const leaderPoints = frames.map((frame) => point(frame, 0));
+  const aheadPoints = frames.map((frame) => point(frame, Math.max(0.3, Number(frame.focusGapToClassLeaderSeconds || 0) - 1.1)));
+  const series = [
+    gapSeries(13, 1, true, false, leaderPoints),
+    gapSeries(16, 4, false, false, aheadPoints),
+    gapSeries(snapshot.rawEvidence.focusCar.carIdx, snapshot.rawEvidence.focusCar.classPosition, false, true, focusPoints)
+  ];
+  const maxFocusGap = Math.max(...focusPoints.map((item) => item.gapSeconds).filter(Number.isFinite), 1);
+  const pitWindow = snapshot.rawEvidence.pitWindow;
+  const pitWindows = pitWindow ? [{
+    entryAxisSeconds: pitWindow.entrySessionTimeSeconds,
+    exitAxisSeconds: pitWindow.exitSessionTimeSeconds,
+    carIdx: snapshot.rawEvidence.focusCar.carIdx,
+    classPosition: snapshot.rawEvidence.focusCar.classPosition,
+    isReference: true,
+    isActive: false,
+    durationSeconds: pitWindow.durationSeconds,
+    lap: pitWindow.displayLap
+  }] : [];
+
+  return {
+    ...baseModel('gap-to-leader', 'live | Dallara pit-window policy', 'source: compact Dallara pit-window capture'),
+    bodyKind: 'graph',
+    headerItems: [{ key: 'timeRemaining', value: '00:37:19', tone: 'live' }],
+    graph: {
+      series,
+      weather: [],
+      leaderChanges: [],
+      driverChanges: [],
+      pitWindows,
+      startSeconds: Number(firstFrame.sessionTimeSeconds || 0) - 4,
+      endSeconds: Number(frames[frames.length - 1]?.sessionTimeSeconds || firstFrame.sessionTimeSeconds || 0) + 4,
+      maxGapSeconds: Math.ceil(maxFocusGap + 2),
+      lapReferenceSeconds: 525.8,
+      selectedSeriesCount: series.length,
+      trendMetrics: gapTrendMetrics(),
+      activeThreat: snapshot.expected.graph.activeThreat,
+      threatCarIdx: null,
+      metricDeadbandSeconds: 0.25,
+      comparisonLabel: snapshot.expected.graph.comparisonLabel,
+      showGraph: true,
+      showTrendMetrics: true,
+      scale: {
+        maxGapSeconds: Math.ceil(maxFocusGap + 2),
+        isFocusRelative: true,
+        aheadSeconds: Math.ceil(maxFocusGap + 1),
+        behindSeconds: 3,
+        referencePoints: focusPoints,
+        latestReferenceGapSeconds: focusPoints[focusPoints.length - 1]?.gapSeconds ?? null
+      }
+    },
+    shouldRender: true
+  };
+}
+
+function gapThreatModel(snapshot) {
+  const startSeconds = Number(snapshot.provenance.sampleWindowSessionTimeSeconds[0]);
+  const trend = snapshot.rawEvidence.orderedTrend;
+  const threat = snapshot.expected.graph.activeThreat;
+  const threatCarIdx = threat.carIdx;
+  const point = (sample, gapSeconds, index) => ({
+    axisSeconds: startSeconds + Number(sample.offsetSeconds),
+    gapSeconds,
+    completedLap: 20 + index,
+    startsSegment: index === 0
+  });
+  const activeThreat = {
+    label: '5L',
+    focusGapChangeSeconds: -0.6,
+    chaser: {
+      carIdx: threatCarIdx,
+      label: threat.label,
+      gainSeconds: threat.gainSeconds
+    },
+    state: 'ready',
+    completedReferenceLaps: 10
+  };
+  const series = [
+    gapSeries(snapshot.rawEvidence.classLeader.carIdx, 1, true, false, trend.map((sample, index) => point(sample, sample.leaderGapSeconds, index))),
+    gapSeries(snapshot.rawEvidence.comparisonAhead.carIdx, 4, false, false, trend.map((sample, index) => point(sample, sample.aheadGapSeconds, index))),
+    gapSeries(snapshot.rawEvidence.focusCar.carIdx, 5, false, true, trend.map((sample, index) => point(sample, sample.focusGapSeconds, index))),
+    gapSeries(threatCarIdx, threat.classPosition, false, false, trend.map((sample, index) => point(sample, sample.threatGapSeconds, index)))
+  ];
+
+  return {
+    ...baseModel('gap-to-leader', 'live | capture-shaped threat', 'source: capture-shaped Dallara threat fixture'),
+    bodyKind: 'graph',
+    headerItems: [{ key: 'timeRemaining', value: '00:18:20', tone: 'live' }],
+    graph: {
+      series,
+      weather: [],
+      leaderChanges: [],
+      driverChanges: [],
+      pitWindows: [],
+      startSeconds,
+      endSeconds: startSeconds + Number(trend[trend.length - 1].offsetSeconds),
+      maxGapSeconds: 16,
+      lapReferenceSeconds: 525.8,
+      selectedSeriesCount: series.length,
+      trendMetrics: gapTrendMetrics(activeThreat),
+      activeThreat,
+      threatCarIdx,
+      metricDeadbandSeconds: 0.25,
+      comparisonLabel: snapshot.expected.graph.comparisonLabel,
+      showGraph: true,
+      showTrendMetrics: true,
+      scale: {
+        maxGapSeconds: 16,
+        isFocusRelative: false,
+        aheadSeconds: 0,
+        behindSeconds: 0,
+        referencePoints: series.find((item) => item.isReference).points,
+        latestReferenceGapSeconds: trend[trend.length - 1].focusGapSeconds
+      }
+    },
+    shouldRender: true
+  };
+}
+
+function gapEnduranceModel(snapshot) {
+  const startSeconds = Number(snapshot.rawEvidence.domain.startSeconds);
+  const endSeconds = Number(snapshot.rawEvidence.domain.endSeconds);
+  const offsets = [0, 1800, 3600, 5400, 7200, 9000, 10800, 12600, 14400];
+  const point = (offsetSeconds, gapSeconds, index) => ({
+    axisSeconds: startSeconds + offsetSeconds,
+    gapSeconds,
+    completedLap: 2 + index * 4,
+    startsSegment: index === 0
+  });
+  const line = (values) => offsets.map((offset, index) => point(offset, values[index], index));
+  const series = [
+    gapSeries(14, 1, true, false, line([0, 0.4, 0.2, 0, 0.6, 0.1, 0.5, 0.3, 0])),
+    gapSeries(43, 8, false, false, line([31.1, 32.0, 30.6, 29.8, 31.3, 32.4, 30.9, 31.8, 30.7])),
+    gapSeries(23, 9, false, false, line([33.2, 34.0, 33.1, 32.4, 34.5, 35.0, 33.7, 34.1, 33.6])),
+    gapSeries(15, 10, false, true, line([36.4, 37.1, 36.2, 35.8, 37.0, 38.2, 36.6, 37.5, 36.8])),
+    gapSeries(2, 11, false, false, line([37.4, 38.0, 37.2, 36.5, 38.2, 39.1, 37.6, 38.3, 37.8])),
+    gapSeries(9, 12, false, false, line([37.8, 38.6, 38.1, 37.2, 39.0, 40.0, 38.4, 39.1, 38.6])),
+    gapSeries(28, 13, false, false, line([42.7, 43.6, 44.8, 43.1, 45.2, 46.0, 44.3, 45.4, 44.1]))
+  ];
+  const leaderChanges = snapshot.rawEvidence.graphMarkers
+    .filter((marker) => marker.kind === 'leader-change')
+    .map((marker) => ({ axisSeconds: marker.axisSeconds, previousLeaderCarIdx: 14, newLeaderCarIdx: 32 }));
+  const driverChanges = snapshot.rawEvidence.graphMarkers
+    .filter((marker) => marker.kind === 'driver-change')
+    .map((marker) => ({ axisSeconds: marker.axisSeconds, carIdx: marker.carIdx, gapSeconds: 36.9, isReference: true, label: marker.label }));
+  const pitWindows = (snapshot.rawEvidence.pitWindows || []).map((window) => ({
+    entryAxisSeconds: window.entryAxisSeconds,
+    exitAxisSeconds: window.exitAxisSeconds,
+    carIdx: window.carIdx,
+    classPosition: window.classPosition,
+    isReference: window.isReference !== false,
+    isActive: window.isActive === true,
+    durationSeconds: window.durationSeconds,
+    lap: window.lap
+  }));
+
+  return {
+    ...baseModel('gap-to-leader', 'live | capture-shaped 4h graph', 'source: capture-shaped endurance gap fixture'),
+    bodyKind: 'graph',
+    headerItems: [{ key: 'timeRemaining', value: '03:12:48', tone: 'live' }],
+    graph: {
+      series,
+      weather: snapshot.rawEvidence.weatherPeriods,
+      leaderChanges,
+      driverChanges,
+      pitWindows,
+      startSeconds,
+      endSeconds,
+      maxGapSeconds: 48,
+      lapReferenceSeconds: 525.8,
+      selectedSeriesCount: series.length,
+      trendMetrics: gapTrendMetrics(),
+      activeThreat: null,
+      threatCarIdx: null,
+      metricDeadbandSeconds: 0.25,
+      comparisonLabel: snapshot.expected.graph.comparisonLabel,
+      showGraph: true,
+      showTrendMetrics: true,
+      scale: {
+        maxGapSeconds: 48,
+        isFocusRelative: false,
+        aheadSeconds: 0,
+        behindSeconds: 0,
+        referencePoints: series.find((item) => item.isReference).points,
+        latestReferenceGapSeconds: 36.8
+      }
+    },
+    shouldRender: true
+  };
+}
+
 function gapSeries(carIdx, classPosition, isClassLeader, isReference, points) {
   return {
     carIdx,
@@ -557,16 +850,16 @@ function gapSeries(carIdx, classPosition, isClassLeader, isReference, points) {
   };
 }
 
-function gapTrendMetrics() {
+function gapTrendMetrics(activeThreat = null) {
   return [
-    { label: 'Last', state: 'last', primaryText: '0.0', comparisonText: '-0.2', threatText: '--' },
-    { label: '5L', state: 'ready', focusGapChangeSeconds: -0.4, comparisonText: '-0.5', threatText: '--' },
-    { label: '10L', state: 'ready', focusGapChangeSeconds: -0.7, comparisonText: '-0.9', threatText: '--' },
-    { label: 'Pit', state: 'pit', primaryPit: { seconds: 78, lap: 3, isActive: false }, comparisonPit: { seconds: 82, lap: 3, isActive: false }, threatPit: null },
-    { label: 'PLap', state: 'pitLap', primaryPit: { seconds: 78, lap: 3, isActive: false }, comparisonPit: { seconds: 82, lap: 3, isActive: false }, threatPit: null },
-    { label: 'Stint', state: 'stint', comparisonText: '3L', threatText: '--' },
-    { label: 'Tire', state: 'tire', primaryTire: { shortLabel: 'D' }, comparisonTire: { shortLabel: 'D' }, threatTire: null },
-    { label: 'Status', state: 'status', comparisonText: 'Track', threatText: '--' }
+    { label: 'Last', state: 'last', primaryText: '0.0', comparisonText: '-0.2', threatText: activeThreat ? '-0.6' : '--' },
+    activeThreat || { label: '5L', state: 'ready', focusGapChangeSeconds: -0.4, comparisonText: '-0.5', threatText: '--', completedReferenceLaps: 8 },
+    { label: '10L', state: 'ready', focusGapChangeSeconds: -0.7, comparisonText: '-0.9', threatText: activeThreat ? '-3.5' : '--', chaser: activeThreat?.chaser || null, completedReferenceLaps: 12 },
+    { label: 'Pit', state: 'pit', primaryPit: { seconds: 78, lap: 3, isActive: false }, comparisonPit: { seconds: 82, lap: 3, isActive: false }, threatPit: activeThreat ? { seconds: 80, lap: 3, isActive: false } : null },
+    { label: 'PLap', state: 'pitLap', primaryPit: { seconds: 78, lap: 3, isActive: false }, comparisonPit: { seconds: 82, lap: 3, isActive: false }, threatPit: activeThreat ? { seconds: 80, lap: 3, isActive: false } : null },
+    { label: 'Stint', state: 'stint', comparisonText: '3L', threatText: activeThreat ? '2L' : '--' },
+    { label: 'Tire', state: 'tire', primaryTire: { shortLabel: 'D' }, comparisonTire: { shortLabel: 'D' }, threatTire: activeThreat ? { shortLabel: 'D' } : null },
+    { label: 'Status', state: 'status', comparisonText: 'Track', threatText: activeThreat ? 'Track' : '--' }
   ];
 }
 

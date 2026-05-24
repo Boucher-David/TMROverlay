@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "gap-to-leader-threat-capture-shaped",
+  "overlayId": "gap-to-leader",
+  "scenarioIds": ["gap-pit-and-long-tail-real-data"],
+  "source": {
+    "captureId": "capture-shaped-gap-threat",
+    "sourceCategory": "capture-shaped-synthetic",
+    "redaction": "synthetic-from-capture-pattern",
+    "note": "Synthetic compact window shaped from Dallara class-gap evidence. It exists to prove active behind-threat rendering without falsely labeling an ahead comparison car as the threat."
+  },
+  "provenance": {
+    "sessionType": "Race",
+    "sessionPhase": "green",
+    "trackKey": "nurburgring-combinedlong",
+    "focusRelation": "player",
+    "sampleWindowSessionTimeSeconds": [1600.0, 2200.0]
+  },
+  "rawEvidence": {
+    "sessionType": "Race",
+    "focusCar": {
+      "carIdx": 19,
+      "classPosition": 5
+    },
+    "classLeader": {
+      "carIdx": 13,
+      "classPosition": 1
+    },
+    "comparisonAhead": {
+      "carIdx": 16,
+      "classPosition": 4
+    },
+    "behindThreat": {
+      "carIdx": 22,
+      "classPosition": 6,
+      "startingGapToFocusSeconds": 4.4,
+      "endingGapToFocusSeconds": 0.9,
+      "gainSeconds": 3.5
+    },
+    "orderedTrend": [
+      { "offsetSeconds": 0, "leaderGapSeconds": 0.0, "aheadGapSeconds": 7.5, "focusGapSeconds": 10.8, "threatGapSeconds": 15.2 },
+      { "offsetSeconds": 120, "leaderGapSeconds": 0.0, "aheadGapSeconds": 7.2, "focusGapSeconds": 10.7, "threatGapSeconds": 14.1 },
+      { "offsetSeconds": 240, "leaderGapSeconds": 0.0, "aheadGapSeconds": 6.9, "focusGapSeconds": 10.6, "threatGapSeconds": 13.0 },
+      { "offsetSeconds": 360, "leaderGapSeconds": 0.0, "aheadGapSeconds": 6.7, "focusGapSeconds": 10.4, "threatGapSeconds": 12.2 },
+      { "offsetSeconds": 480, "leaderGapSeconds": 0.0, "aheadGapSeconds": 6.5, "focusGapSeconds": 10.3, "threatGapSeconds": 11.7 },
+      { "offsetSeconds": 600, "leaderGapSeconds": 0.0, "aheadGapSeconds": 6.4, "focusGapSeconds": 10.2, "threatGapSeconds": 11.1 }
+    ]
+  },
+  "expected": {
+    "graph": {
+      "scaleMode": "leader",
+      "selectedClassPositions": [1, 4, 5, 6],
+      "comparisonLabel": "P4",
+      "activeThreat": {
+        "label": "P6",
+        "carIdx": 22,
+        "classPosition": 6,
+        "gainSeconds": 3.5
+      },
+      "focusClassPosition": 5,
+      "threatMustBeBehindFocus": true,
+      "threatSeriesMustUseRed": true,
+      "forbiddenThreatClassPositions": [1, 4, 5]
+    },
+    "screenshots": [
+      "browser-overlays/gap-to-leader/threat-capture-shaped.png",
+      "localhost-overlays/gap-to-leader/threat-capture-shaped.png"
+    ]
+  }
+}

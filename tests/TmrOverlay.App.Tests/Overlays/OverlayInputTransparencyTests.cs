@@ -706,6 +706,7 @@ public sealed class OverlayInputTransparencyTests
             Weather: [],
             LeaderChanges: [],
             DriverChanges: [],
+            PitWindows: [],
             StartSeconds: 0d,
             EndSeconds: 10d,
             MaxGapSeconds: 20d,

@@ -459,7 +459,9 @@ OVERLAY_VARIANT_SPECS = (
     ("gap-to-leader", "no-cars", "fixture=gap-no-cars", True, None),
     ("gap-to-leader", "long-tail-real-data", "fixture=gap-long-tail-real-data", False, None),
     ("gap-to-leader", "pit-window-real-data", "fixture=gap-pit-window-real-data", False, None),
-    ("gap-to-leader", "trend-row-off", "fixture=gap-trend-row-off", True, None),
+    ("gap-to-leader", "threat-capture-shaped", "fixture=gap-threat-capture-shaped", False, None),
+    ("gap-to-leader", "endurance-domain-capture-shaped", "fixture=gap-endurance-domain-capture-shaped", False, None),
+    ("gap-to-leader", "tire-trend-off", "fixture=gap-tire-trend-off", True, None),
     ("gap-to-leader", "trend-off", "fixture=gap-trend-off", True, None),
     ("gap-to-leader", "graph-off", "fixture=gap-graph-off", True, None),
     ("track-map", "circle-fallback", "trackMap=fallback", True, "track-map-fallback"),
@@ -511,7 +513,6 @@ OVERLAY_VARIANTS_ALLOW_EMPTY_TEXT_SAMPLE = {
     ("car-radar", "clear"),
     ("car-radar", "side-no-placement"),
     ("gap-to-leader", "no-cars"),
-    ("track-map", "no-markers"),
     ("flags", "all-kinds"),
 }
 
@@ -527,7 +528,6 @@ OVERLAY_VARIANTS_ALLOW_LOW_PIXEL_ENTROPY = {
     ("pit-service", "no-data"),
     ("car-radar", "clear"),
     ("gap-to-leader", "no-cars"),
-    ("track-map", "no-markers"),
     ("garage-cover", "hidden"),
     ("garage-cover", "stale"),
     ("garage-cover", "disconnected"),
@@ -545,7 +545,6 @@ OVERLAY_VARIANT_MIN_UNIQUE_BYTES = {
     ("pit-service", "no-data"): 1,
     ("car-radar", "clear"): 1,
     ("gap-to-leader", "no-cars"): 1,
-    ("track-map", "no-markers"): 1,
     ("garage-cover", "hidden"): 1,
     ("garage-cover", "stale"): 1,
     ("garage-cover", "disconnected"): 1,
@@ -563,7 +562,6 @@ OVERLAY_VARIANT_MIN_BYTE_RANGE = {
     ("pit-service", "no-data"): 0,
     ("car-radar", "clear"): 0,
     ("gap-to-leader", "no-cars"): 0,
-    ("track-map", "no-markers"): 0,
     ("garage-cover", "hidden"): 0,
     ("garage-cover", "stale"): 0,
     ("garage-cover", "disconnected"): 0,
@@ -578,7 +576,6 @@ HIDDEN_NO_RENDER_VARIANT_REASON_TOKENS = {
     ("input-state", "no-data"): ("waiting", "car telemetry"),
     ("input-state", "no-content"): ("hidden", "no enabled content"),
     ("gap-to-leader", "no-cars"): ("hidden", "race gap", "no cars", "no gap"),
-    ("track-map", "no-markers"): ("hidden", "waiting", "unavailable", "no markers", "no active markers"),
 }
 
 HIDDEN_NO_RENDER_FORBIDDEN_LAYOUT_ROLES = {
@@ -660,7 +657,10 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("relative", "no-content"): (360, 274),
     ("gap-to-leader", "chrome-off"): (654, 298),
     ("gap-to-leader", "long-tail-real-data"): (654, 336),
-    ("gap-to-leader", "trend-row-off"): (654, 336),
+    ("gap-to-leader", "pit-window-real-data"): (654, 336),
+    ("gap-to-leader", "threat-capture-shaped"): (654, 336),
+    ("gap-to-leader", "endurance-domain-capture-shaped"): (654, 336),
+    ("gap-to-leader", "tire-trend-off"): (654, 336),
     ("gap-to-leader", "trend-off"): (444, 336),
     ("gap-to-leader", "graph-off"): (360, 336),
     ("session-weather", "chrome-off"): (464, 458),
@@ -5812,6 +5812,12 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
             validate_gap_no_cars_variant(path, values, failures)
         elif slug == "long-tail-real-data":
             validate_gap_long_tail_real_data_variant(path, values, failures)
+        elif slug == "pit-window-real-data":
+            validate_gap_pit_window_real_data_variant(path, values, failures)
+        elif slug == "threat-capture-shaped":
+            validate_gap_threat_capture_shaped_variant(path, values, failures)
+        elif slug == "endurance-domain-capture-shaped":
+            validate_gap_endurance_domain_capture_shaped_variant(path, values, failures)
         else:
             validate_gap_to_leader_contract(path, values, failures)
     elif overlay_id == "track-map":
@@ -6677,6 +6683,193 @@ def validate_gap_long_tail_real_data_variant(path: str, values: dict[str, object
         failures.append(f"{path}: gap long-tail expected comparisonLabel='P4', got {graph.get('comparisonLabel')!r}")
 
 
+def validate_gap_pit_window_real_data_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    validate_gap_to_leader_contract(path, values, failures)
+    require_equal(path, "gap pit-window bodyKind", values.get("bodyKind"), "graph", failures)
+    require_equal(path, "gap pit-window shouldRender", values.get("shouldRender"), True, failures)
+
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    if geometry.get("scale") != "focus-relative":
+        failures.append(f"{path}: gap pit-window expected focus-relative scale, got {geometry.get('scale')!r}")
+
+    class_positions = [
+        item.get("classPosition")
+        for item in evidence_list(graph, "series")
+        if isinstance(item, dict)
+    ]
+    require_sequence(
+        path,
+        "gap pit-window selected class positions",
+        class_positions,
+        [1, 4, 5],
+        failures,
+    )
+    for forbidden in (6, 9):
+        if forbidden in class_positions:
+            failures.append(f"{path}: gap pit-window still includes far-behind class position P{forbidden}")
+
+    if graph.get("comparisonLabel") != "P4":
+        failures.append(f"{path}: gap pit-window expected comparisonLabel='P4', got {graph.get('comparisonLabel')!r}")
+    if graph.get("activeThreat") is not None:
+        failures.append(f"{path}: gap pit-window should not label the P4 comparison-ahead car as activeThreat")
+    if graph.get("threatCarIdx") is not None:
+        failures.append(f"{path}: gap pit-window expected threatCarIdx=null when no behind threat is selected, got {graph.get('threatCarIdx')!r}")
+
+    pit_windows = evidence_list(geometry, "pitWindows")
+    if len(pit_windows) < 1:
+        failures.append(f"{path}: gap pit-window expected a rendered focus-car pit-window band")
+    for window in pit_windows:
+        if not isinstance(window, dict):
+            continue
+        if window.get("kind") != "pit-window":
+            failures.append(f"{path}: gap pit-window band has unexpected kind {window.get('kind')!r}")
+        if window.get("carIdx") != 19 or window.get("classPosition") != 5:
+            failures.append(f"{path}: gap pit-window band expected focus car P5/carIdx 19, got P{window.get('classPosition')}/carIdx {window.get('carIdx')}")
+        require_rect(path, typed_dict(window.get("bounds")), "gap pit-window band bounds", failures)
+
+    for series in evidence_list(geometry, "series"):
+        if not isinstance(series, dict):
+            continue
+        if series.get("classPosition") in (1, 4, 5):
+            for color_field in ("renderedColor", "baseColor"):
+                color = str(series.get(color_field) or "")
+                if is_gap_threat_red(color):
+                    failures.append(
+                        f"{path}: gap pit-window class position P{series.get('classPosition')} must not use active-threat red"
+                    )
+
+
+def validate_gap_threat_capture_shaped_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    validate_gap_to_leader_contract(path, values, failures)
+    require_equal(path, "gap threat bodyKind", values.get("bodyKind"), "graph", failures)
+    require_equal(path, "gap threat shouldRender", values.get("shouldRender"), True, failures)
+
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    class_positions = [
+        item.get("classPosition")
+        for item in evidence_list(graph, "series")
+        if isinstance(item, dict)
+    ]
+    require_sequence(
+        path,
+        "gap threat selected class positions",
+        class_positions,
+        [1, 4, 5, 6],
+        failures,
+    )
+    if graph.get("comparisonLabel") != "P4":
+        failures.append(f"{path}: gap threat expected comparisonLabel='P4', got {graph.get('comparisonLabel')!r}")
+
+    threat_car_idx = graph.get("threatCarIdx")
+    active_threat = typed_dict(graph.get("activeThreat"))
+    chaser = typed_dict(active_threat.get("chaser"))
+    if not active_threat:
+        failures.append(f"{path}: gap threat expected activeThreat evidence")
+    if chaser.get("label") != "P6":
+        failures.append(f"{path}: gap threat expected active threat label P6, got {chaser.get('label')!r}")
+    if chaser.get("carIdx") != threat_car_idx:
+        failures.append(f"{path}: gap threat chaser carIdx {chaser.get('carIdx')!r} does not match threatCarIdx {threat_car_idx!r}")
+    if chaser.get("gainSeconds") is None or not isinstance(chaser.get("gainSeconds"), (int, float)) or chaser.get("gainSeconds") <= 0:
+        failures.append(f"{path}: gap threat expected positive chaser gainSeconds, got {chaser.get('gainSeconds')!r}")
+
+    threat_series_count = 0
+    for series in evidence_list(geometry, "series"):
+        if not isinstance(series, dict):
+            continue
+        class_position = series.get("classPosition")
+        car_idx = series.get("carIdx")
+        red_fields = [
+            color_field
+            for color_field in ("renderedColor", "baseColor")
+            if is_gap_threat_red(str(series.get(color_field) or ""))
+        ]
+        if car_idx == threat_car_idx:
+            threat_series_count += 1
+            if class_position != 6:
+                failures.append(f"{path}: gap threat expected threat series class position P6, got P{class_position}")
+            if not red_fields:
+                failures.append(f"{path}: gap threat expected threat series car {car_idx!r} to use active-threat red")
+        elif red_fields:
+            failures.append(f"{path}: gap threat non-threat class position P{class_position} uses active-threat red")
+
+    if threat_series_count != 1:
+        failures.append(f"{path}: gap threat expected exactly one threat series, got {threat_series_count}")
+
+
+def validate_gap_endurance_domain_capture_shaped_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    validate_gap_to_leader_contract(path, values, failures)
+    require_equal(path, "gap endurance bodyKind", values.get("bodyKind"), "graph", failures)
+    require_equal(path, "gap endurance shouldRender", values.get("shouldRender"), True, failures)
+
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    start_seconds = graph.get("startSeconds")
+    end_seconds = graph.get("endSeconds")
+    if not isinstance(start_seconds, (int, float)) or not isinstance(end_seconds, (int, float)):
+        failures.append(f"{path}: gap endurance expected numeric start/end seconds, got {start_seconds!r}/{end_seconds!r}")
+    elif end_seconds - start_seconds < 4 * 60 * 60:
+        failures.append(f"{path}: gap endurance expected at least a 4h graph domain, got {end_seconds - start_seconds:g}s")
+
+    class_positions = [
+        item.get("classPosition")
+        for item in evidence_list(graph, "series")
+        if isinstance(item, dict)
+    ]
+    require_sequence(
+        path,
+        "gap endurance selected class positions",
+        class_positions,
+        [1, 8, 9, 10, 11, 12, 13],
+        failures,
+    )
+    if graph.get("selectedSeriesCount") != 7:
+        failures.append(f"{path}: gap endurance expected selectedSeriesCount=7, got {graph.get('selectedSeriesCount')!r}")
+    if graph.get("comparisonLabel") != "P9":
+        failures.append(f"{path}: gap endurance expected comparisonLabel='P9', got {graph.get('comparisonLabel')!r}")
+
+    weather_bands = evidence_list(geometry, "weatherBands")
+    if len(weather_bands) < 3:
+        failures.append(f"{path}: gap endurance expected at least three rendered weather bands, got {len(weather_bands)}")
+    weather_kinds = {
+        str(band.get("kind") or "").lower()
+        for band in weather_bands
+        if isinstance(band, dict)
+    }
+    for expected in ("damp", "wet", "declaredwet"):
+        if expected not in weather_kinds and expected.replace("wet", "-wet") not in weather_kinds:
+            failures.append(f"{path}: gap endurance missing weather band kind {expected!r}; got {sorted(weather_kinds)!r}")
+
+    markers = evidence_list(geometry, "markers")
+    if len(markers) < 3:
+        failures.append(f"{path}: gap endurance expected leader/driver graph markers, got {len(markers)}")
+    marker_kinds = [
+        marker.get("kind")
+        for marker in markers
+        if isinstance(marker, dict)
+    ]
+    if marker_kinds.count("leader-change") < 2:
+        failures.append(f"{path}: gap endurance expected at least two leader-change markers, got {marker_kinds!r}")
+    if "driver-change" not in marker_kinds:
+        failures.append(f"{path}: gap endurance expected a driver-change marker, got {marker_kinds!r}")
+
+    pit_windows = evidence_list(geometry, "pitWindows")
+    if len(pit_windows) < 1:
+        failures.append(f"{path}: gap endurance expected a rendered pit-window band, got {len(pit_windows)}")
+    for window in pit_windows:
+        if not isinstance(window, dict):
+            continue
+        if window.get("kind") != "pit-window":
+            failures.append(f"{path}: gap endurance pit-window band has unexpected kind {window.get('kind')!r}")
+        if window.get("classPosition") != 10:
+            failures.append(f"{path}: gap endurance pit-window band expected focus class position P10, got P{window.get('classPosition')}")
+        require_rect(path, typed_dict(window.get("bounds")), "gap endurance pit-window band bounds", failures)
+
+    if graph.get("activeThreat") is not None or graph.get("threatCarIdx") is not None:
+        failures.append(f"{path}: gap endurance should not imply active threat; it is a long-domain/marker fixture")
+
+
 def validate_gap_min_scale_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
     validate_gap_to_leader_contract(path, values, failures)
     graph = typed_dict(model_evidence(values).get("graph"))
@@ -6705,16 +6898,16 @@ def validate_track_map_variant(path: str, values: dict[str, object], slug: str, 
         if primitive_kinds.count("ellipse") < 3 or "arc" not in primitive_kinds:
             failures.append(f"{path}: track-map circle fallback expected ellipse/arc primitives, got {primitive_kinds!r}")
     elif slug == "no-markers":
-        require_equal(path, "track-map no-markers shouldRender", values.get("shouldRender"), False, failures)
+        require_equal(path, "track-map no-markers shouldRender", values.get("shouldRender"), True, failures)
         require_equal(path, "track-map no-markers mapKind", track_map.get("mapKind"), "generated", failures)
         require_equal(path, "track-map no-markers markerCount", track_map.get("markerCount"), 0, failures)
         require_equal(path, "track-map no-markers itemCount", track_map.get("itemCount"), 0, failures)
         primitive_kinds = [text_value(item, "kind") for item in evidence_list(track_map, "primitives")]
-        if primitive_kinds:
-            failures.append(f"{path}: track-map no-markers expected hidden overlay with no rendered primitives, got {primitive_kinds!r}")
-        if visible_header_items(values):
-            failures.append(f"{path}: track-map no-markers should not expose visible header items")
-        reject_hidden_overlay_text(path, values.get("textSample"), "track-map no-markers textSample", failures)
+        if primitive_kinds.count("path") < 4:
+            failures.append(f"{path}: track-map no-markers expected generated map path primitives, got {primitive_kinds!r}")
+        labels = [text_value(item, "text") for item in evidence_list(track_map, "labels")]
+        if labels:
+            failures.append(f"{path}: track-map no-markers expected zero marker labels, got {labels!r}")
     elif slug == "focus-practice-real-data":
         require_equal(path, "track-map focus-practice real-data shouldRender", values.get("shouldRender"), True, failures)
         require_equal(path, "track-map focus-practice real-data markerCount", track_map.get("markerCount"), 3, failures)
@@ -8045,7 +8238,7 @@ def validate_gap_to_leader_contract(path: str, values: dict[str, object], failur
             if len(rendered_points) >= 6 and starts_segment_count >= len(rendered_points):
                 failures.append(f"{path}: gap graph {label} series marks every point as a new segment; line continuity is unproven")
     expected_metric_labels = ["Last", "5L", "10L", "Pit", "PLap", "Stint", "Tire", "Status"]
-    if variant_key == ("gap-to-leader", "trend-row-off"):
+    if variant_key == ("gap-to-leader", "tire-trend-off"):
         expected_metric_labels = ["Last", "5L", "10L", "Pit", "PLap", "Stint", "Status"]
     elif variant_key == ("gap-to-leader", "trend-off"):
         expected_metric_labels = []
@@ -8184,7 +8377,11 @@ def validate_gap_v102_feedback_contract(
             failures.append(f"{path}: V102-018 Gap {label.upper()} ready value lacks completed-reference-lap evidence >= {expected_laps}, got {completed_laps!r}")
 
     active_threat = typed_dict(graph.get("activeThreat"))
-    if not active_threat and variant_key != ("gap-to-leader", "long-tail-real-data"):
+    if not active_threat and variant_key not in {
+        ("gap-to-leader", "long-tail-real-data"),
+        ("gap-to-leader", "pit-window-real-data"),
+        ("gap-to-leader", "endurance-domain-capture-shaped"),
+    }:
         failures.append(f"{path}: V102-025/V102-026 Gap validation fixture does not expose an active same-lap threat to prove label and red-line semantics")
     elif active_threat:
         chaser = typed_dict(active_threat.get("chaser"))
@@ -8201,7 +8398,12 @@ def validate_gap_v102_feedback_contract(
 
     scale = text_value(geometry, "scale").lower()
     max_gap_seconds = numeric(graph.get("maxGapSeconds"))
-    if reference_position is not None and reference_position > 8 and scale != "focus-relative":
+    if (
+        reference_position is not None
+        and reference_position > 8
+        and scale != "focus-relative"
+        and variant_key != ("gap-to-leader", "endurance-domain-capture-shaped")
+    ):
         failures.append(f"{path}: V102-021 Gap graph uses {scale or 'unknown'} scale for reference P{reference_position}, so far-behind clipping/focus-window behaviour is unproven")
     if max_gap_seconds >= 180 and scale != "focus-relative":
         failures.append(f"{path}: V102-017/V102-021 Gap graph max scale {max_gap_seconds:g}s is too wide for the focused V2 trend validation fixture")
@@ -8318,7 +8520,11 @@ def validate_track_map_contract(path: str, values: dict[str, object], failures: 
     if path.startswith(("browser-overlays/", "localhost-overlays/")):
         require_configured_canvas_backing_contract(path, values, "track-map", 360, 360, failures)
     marker_count = track_map.get("markerCount")
-    if marker_count != 4:
+    is_no_markers = "no-markers" in path
+    if is_no_markers:
+        if marker_count != 0:
+            failures.append(f"{path}: track-map no-markers expected 0 markers, got {marker_count!r}")
+    elif marker_count != 4:
         failures.append(f"{path}: track-map expected 4 markers, got {marker_count!r}")
     primitive_kinds = [text_value(item, "kind") for item in evidence_list(track_map, "primitives")]
     if expected_kind == "generated":
@@ -8337,9 +8543,13 @@ def validate_track_map_contract(path: str, values: dict[str, object], failures: 
         if primitive_kinds.count("ellipse") < 3 or "arc" not in primitive_kinds:
             failures.append(f"{path}: circle track-map expected ellipse/arc fallback primitives, got {primitive_kinds!r}")
     labels = [text_value(item, "text") for item in evidence_list(track_map, "labels")]
-    for label in ("1", "2", "24"):
-        if label not in labels:
-            failures.append(f"{path}: track-map missing marker label {label!r}")
+    if is_no_markers:
+        if labels:
+            failures.append(f"{path}: track-map no-markers should not expose marker labels, got {labels!r}")
+    else:
+        for label in ("1", "2", "24"):
+            if label not in labels:
+                failures.append(f"{path}: track-map missing marker label {label!r}")
 
 
 def validate_flags_contract(path: str, values: dict[str, object], failures: list[str]) -> None:

@@ -1665,6 +1665,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
         if (state.IsOnPitRoad && state.CurrentPitEntryAxisSeconds is { } pitEntry)
         {
+            state.LastPitEntryAxisSeconds = pitEntry;
             state.LastPitDurationSeconds = Math.Max(0d, axisSeconds - pitEntry);
             state.LastPitLap = state.CurrentPitEntryLap ?? car.CurrentLap;
             state.LastPitExitAxisSeconds = axisSeconds;
@@ -1904,6 +1905,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             _gapWeather.Where(point => point.AxisSeconds >= startSeconds && point.AxisSeconds <= endSeconds).ToArray(),
             _gapLeaderChangeMarkers.Where(marker => marker.AxisSeconds >= startSeconds && marker.AxisSeconds <= endSeconds).ToArray(),
             _gapDriverChangeMarkers.Where(marker => marker.AxisSeconds >= startSeconds && marker.AxisSeconds <= endSeconds).ToArray(),
+            BuildDesignV2GapPitWindows(selectedSeries, startSeconds, endSeconds),
             StartSeconds: startSeconds,
             EndSeconds: Math.Max(endSeconds, startSeconds + 1d),
             MaxGapSeconds: Math.Max(1d, scale.MaxGapSeconds),
@@ -2025,6 +2027,70 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             new DesignV2GapTrendMetric("Pit", null, null, "pit", null, primaryPit, threatPit, comparisonPit),
             new DesignV2GapTrendMetric("PLap", null, null, "pitLap", null, primaryPit, threatPit, comparisonPit)
         };
+    }
+
+    private static IReadOnlyList<DesignV2GapPitWindow> BuildDesignV2GapPitWindows(
+        IReadOnlyList<DesignV2GapSeriesSelection> selectedSeries,
+        double startSeconds,
+        double endSeconds)
+    {
+        if (selectedSeries.Count == 0)
+        {
+            return [];
+        }
+
+        var windows = new List<DesignV2GapPitWindow>();
+        foreach (var selection in selectedSeries)
+        {
+            var state = selection.State;
+            if (!state.IsReference)
+            {
+                continue;
+            }
+
+            if (state.IsOnPitRoad
+                && state.CurrentPitEntryAxisSeconds is { } activeEntry
+                && PitWindowOverlaps(activeEntry, endSeconds, startSeconds, endSeconds))
+            {
+                windows.Add(new DesignV2GapPitWindow(
+                    activeEntry,
+                    null,
+                    state.CarIdx,
+                    state.ClassPosition,
+                    state.IsReference,
+                    IsActive: true,
+                    Math.Max(0d, endSeconds - activeEntry),
+                    state.CurrentPitEntryLap ?? state.LastPitLap));
+            }
+
+            if (state.LastPitEntryAxisSeconds is { } entry
+                && state.LastPitExitAxisSeconds is { } exit
+                && PitWindowOverlaps(entry, exit, startSeconds, endSeconds))
+            {
+                windows.Add(new DesignV2GapPitWindow(
+                    entry,
+                    exit,
+                    state.CarIdx,
+                    state.ClassPosition,
+                    state.IsReference,
+                    IsActive: false,
+                    Math.Max(0d, exit - entry),
+                    state.LastPitLap));
+            }
+        }
+
+        return windows
+            .OrderBy(window => window.EntryAxisSeconds)
+            .ToArray();
+    }
+
+    private static bool PitWindowOverlaps(
+        double entryAxisSeconds,
+        double exitAxisSeconds,
+        double startSeconds,
+        double endSeconds)
+    {
+        return exitAxisSeconds >= startSeconds && entryAxisSeconds <= endSeconds;
     }
 
     private DesignV2GapTrendMetric BuildDesignV2GapTireTrendMetric(
@@ -2838,7 +2904,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             viewModel.Source,
             viewModel.IsAvailable ? DesignV2Evidence.Live : DesignV2Evidence.Unavailable,
             new DesignV2TrackMapBody(renderModel),
-            ShouldRender: viewModel.IsAvailable && renderModel.Markers.Count > 0);
+            ShouldRender: viewModel.IsAvailable && renderModel.Primitives.Count > 0);
     }
 
     private void RefreshTrackMap(LiveTelemetrySnapshot snapshot, DateTimeOffset now)
@@ -3292,6 +3358,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 MetricsTable = ScaleRect(graph.MetricsTable, scale),
                 Series = graph.Series.Select(series => ScaleGraphSeries(series, scale)).ToArray(),
                 WeatherBands = graph.WeatherBands.Select(band => ScaleGraphBand(band, scale)).ToArray(),
+                PitWindows = graph.PitWindows.Select(band => ScaleGraphBand(band, scale)).ToArray(),
                 Markers = graph.Markers.Select(marker => ScaleGraphMarker(marker, scale)).ToArray(),
                 GridLines = graph.GridLines.Select(line => ScaleLine(line, scale)).ToArray(),
                 MetricRows = graph.MetricRows.Select(row => ScaleRow(row, scale)).ToArray()
@@ -4083,6 +4150,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             {
                 Series = seriesLayouts,
                 WeatherBands = BuildGraphWeatherBands(graph, plot),
+                PitWindows = BuildGraphPitWindows(graph, plot),
                 Markers = BuildGraphMarkers(graph, plot, maxGapSeconds),
                 GridLines = BuildGraphGridLines(graph, scale, plot),
                 TrendMetrics = BuildGraphTrendMetrics(graph.TrendMetrics),
@@ -4210,6 +4278,43 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 nextAxis,
                 LayoutRect(new RectangleF(x, plot.Top, Math.Max(1f, nextX - x), plot.Height)),
                 ColorHex(color)));
+        }
+
+        return bands;
+    }
+
+    private static IReadOnlyList<DesignV2LayoutGraphBand> BuildGraphPitWindows(
+        DesignV2GraphBody graph,
+        RectangleF plot)
+    {
+        if (graph.PitWindows.Count == 0)
+        {
+            return [];
+        }
+
+        var bands = new List<DesignV2LayoutGraphBand>();
+        foreach (var window in graph.PitWindows)
+        {
+            var start = Math.Max(graph.StartSeconds, window.EntryAxisSeconds);
+            var end = Math.Min(graph.EndSeconds, window.ExitAxisSeconds ?? graph.EndSeconds);
+            if (end <= start)
+            {
+                continue;
+            }
+
+            var x = GapAxisToX(graph, plot, start);
+            var nextX = GapAxisToX(graph, plot, end);
+            if (nextX <= x)
+            {
+                continue;
+            }
+
+            bands.Add(new DesignV2LayoutGraphBand(
+                "pit-window",
+                start,
+                end,
+                LayoutRect(new RectangleF(x, plot.Top, Math.Max(1f, nextX - x), plot.Height)),
+                "#2670E092"));
         }
 
         return bands;
@@ -4728,7 +4833,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 Primitives = model.Primitives.Select(primitive => TrackMapPrimitiveLayout(target, primitive, scaleX, scaleY)).ToArray(),
                 Labels = labels,
                 MapKind = model.MapKind,
-                ShouldRender = model.IsAvailable && model.Markers.Count > 0
+                ShouldRender = model.IsAvailable && model.Primitives.Count > 0
             }
         };
     }
@@ -5754,6 +5859,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         var axisBounds = new RectangleF(frame.Left, frame.Top, geometry.AxisWidth - 8, plot.Height);
         var scale = graph.Scale ?? DesignV2GapScale.Leader(graph.MaxGapSeconds ?? 1d);
         DrawGapWeatherBands(graphics, graph, plot);
+        DrawGapPitWindows(graphics, graph, plot);
         DrawGapLapIntervalLines(graphics, graph, plot);
         DrawGapGridLines(graphics, graph, scale, plot, axisBounds);
         using var axisFont = FontOf(9.5f);
@@ -6781,6 +6887,40 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
             using var brush = new SolidBrush(color);
             graphics.FillRectangle(brush, x, plot.Top, nextX - x, plot.Height);
+        }
+    }
+
+    private static void DrawGapPitWindows(Graphics graphics, DesignV2GraphBody graph, RectangleF plot)
+    {
+        if (graph.PitWindows.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var window in graph.PitWindows)
+        {
+            var start = Math.Max(graph.StartSeconds, window.EntryAxisSeconds);
+            var end = Math.Min(graph.EndSeconds, window.ExitAxisSeconds ?? graph.EndSeconds);
+            if (end <= start)
+            {
+                continue;
+            }
+
+            var x = GapAxisToX(graph, plot, start);
+            var nextX = GapAxisToX(graph, plot, end);
+            if (nextX <= x)
+            {
+                continue;
+            }
+
+            using var brush = new SolidBrush(Color.FromArgb(window.IsActive ? 48 : 34, Green));
+            using var edgePen = new Pen(Color.FromArgb(window.IsActive ? 130 : 90, Green), 1f)
+            {
+                DashStyle = DashStyle.Dash
+            };
+            graphics.FillRectangle(brush, x, plot.Top, Math.Max(1f, nextX - x), plot.Height);
+            graphics.DrawLine(edgePen, x, plot.Top, x, plot.Bottom);
+            graphics.DrawLine(edgePen, nextX, plot.Top, nextX, plot.Bottom);
         }
     }
 
@@ -9311,6 +9451,8 @@ internal sealed record DesignV2LayoutGraph(
 
     public IReadOnlyList<DesignV2LayoutGraphBand> WeatherBands { get; init; } = [];
 
+    public IReadOnlyList<DesignV2LayoutGraphBand> PitWindows { get; init; } = [];
+
     public IReadOnlyList<DesignV2LayoutGraphMarker> Markers { get; init; } = [];
 
     public IReadOnlyList<DesignV2LayoutLine> GridLines { get; init; } = [];
@@ -9570,6 +9712,7 @@ internal sealed record DesignV2GraphBody(
     IReadOnlyList<DesignV2GapWeatherPoint> Weather,
     IReadOnlyList<DesignV2GapLeaderChangeMarker> LeaderChanges,
     IReadOnlyList<DesignV2GapDriverChangeMarker> DriverChanges,
+    IReadOnlyList<DesignV2GapPitWindow> PitWindows,
     double StartSeconds,
     double EndSeconds,
     double? MaxGapSeconds,
@@ -9585,7 +9728,7 @@ internal sealed record DesignV2GraphBody(
     bool ShowTrendMetrics = true) : DesignV2Body
 {
     public DesignV2GraphBody(IReadOnlyList<double> points)
-        : this(points, [], [], [], [], 0d, 0d, null, null, 0, [], null, null, 0d, "--")
+        : this(points, [], [], [], [], [], 0d, 0d, null, null, 0, [], null, null, 0d, "--")
     {
     }
 }
@@ -9697,6 +9840,16 @@ internal sealed record DesignV2GapDriverChangeMarker(
     bool IsReference,
     string Label);
 
+internal sealed record DesignV2GapPitWindow(
+    double EntryAxisSeconds,
+    double? ExitAxisSeconds,
+    int CarIdx,
+    int? ClassPosition,
+    bool IsReference,
+    bool IsActive,
+    double? DurationSeconds,
+    int? Lap);
+
 internal sealed record DesignV2GapEndpointLabel(
     string Text,
     PointF Point,
@@ -9771,6 +9924,8 @@ internal sealed class DesignV2GapCarRenderState(int carIdx)
     public double? CurrentPitEntryAxisSeconds { get; set; }
 
     public int? CurrentPitEntryLap { get; set; }
+
+    public double? LastPitEntryAxisSeconds { get; set; }
 
     public double? LastPitDurationSeconds { get; set; }
 

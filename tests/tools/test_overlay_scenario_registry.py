@@ -29,7 +29,7 @@ class OverlayScenarioRegistryTests(unittest.TestCase):
                 ("input-state", "no-content"),
             },
             "gap-content-variants": {
-                ("gap-to-leader", "trend-row-off"),
+                ("gap-to-leader", "tire-trend-off"),
                 ("gap-to-leader", "trend-off"),
                 ("gap-to-leader", "graph-off"),
             },

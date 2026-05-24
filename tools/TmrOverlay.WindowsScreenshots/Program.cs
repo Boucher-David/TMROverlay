@@ -1157,7 +1157,7 @@ internal static class Program
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "side-no-placement", "Side No Placement"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "no-cars", "No Cars"),
-            new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "trend-row-off", "Trend Row Off"),
+            new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "tire-trend-off", "Tire Trend Off"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "trend-off", "Trend Off"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "graph-off", "Graph Off"),
             new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "circle-fallback", "Circle Fallback"),
@@ -1494,7 +1494,7 @@ internal static class Program
             return slug switch
             {
                 var value when string.Equals(value, "no-cars", StringComparison.OrdinalIgnoreCase) => ReviewGapNoCarsModel(),
-                var value when string.Equals(value, "trend-row-off", StringComparison.OrdinalIgnoreCase) => ReviewGapContentVariant(showGraph: true, showTrendMetrics: true, hiddenTrendLabel: "Tire"),
+                var value when string.Equals(value, "tire-trend-off", StringComparison.OrdinalIgnoreCase) => ReviewGapContentVariant(showGraph: true, showTrendMetrics: true, hiddenTrendLabel: "Tire"),
                 var value when string.Equals(value, "trend-off", StringComparison.OrdinalIgnoreCase) => ReviewGapContentVariant(showGraph: true, showTrendMetrics: false),
                 var value when string.Equals(value, "graph-off", StringComparison.OrdinalIgnoreCase) => ReviewGapContentVariant(showGraph: false, showTrendMetrics: true),
                 _ => throw new InvalidOperationException($"Unknown gap-to-leader native overlay fixture variant {slug}.")
@@ -2092,14 +2092,20 @@ internal static class Program
     private static DesignV2OverlayModel ReviewTrackMapModel(bool includeMarkers = true, bool includeGeneratedMap = true)
     {
         TrackMapDocument? document = includeGeneratedMap ? ReviewTrackMapDocument() : null;
-        var status = includeMarkers
-            ? includeGeneratedMap ? "live" : "track map | circle fallback"
-            : "no active markers";
-        var source = includeMarkers
-            ? includeGeneratedMap
-                ? "source: IBT-derived Nurburgring 24h track map | live position telemetry"
-                : "source: live position telemetry | map fallback: no generated track map"
-            : "source: live position telemetry | no active markers";
+        var status = includeGeneratedMap ? "live" : "track map | circle fallback";
+        if (!includeMarkers)
+        {
+            status = $"{status} | no active markers";
+        }
+
+        var source = includeGeneratedMap
+            ? "source: IBT-derived Nurburgring 24h track map | live position telemetry"
+            : "source: live position telemetry | map fallback: no generated track map";
+        if (!includeMarkers)
+        {
+            source = $"{source} | no active markers";
+        }
+
         var viewModel = new TrackMapOverlayViewModel(
             Title: "Track Map",
             Status: status,
@@ -2119,16 +2125,17 @@ internal static class Program
             InternalOpacity: TrackMapBrowserSettings.Default.InternalOpacity,
             IncludeUserMaps: true,
             TrackMap: document);
+        var renderModel = TrackMapRenderModel.FromViewModel(viewModel);
         return new DesignV2OverlayModel(
             "Track Map",
             status,
             source,
-            includeMarkers ? DesignV2Evidence.Live : DesignV2Evidence.Unavailable,
-            new DesignV2TrackMapBody(TrackMapRenderModel.FromViewModel(viewModel)),
+            DesignV2Evidence.Live,
+            new DesignV2TrackMapBody(renderModel),
             HeaderText: "06:37:08",
             ShowFooter: false,
             ShowHeader: false,
-            ShouldRender: includeMarkers);
+            ShouldRender: renderModel.Primitives.Count > 0);
     }
 
     private static DesignV2OverlayModel ReviewTrackMapPlayerFocusClassColorModel()
@@ -2865,6 +2872,7 @@ internal static class Program
             Weather: [],
             LeaderChanges: [],
             DriverChanges: [],
+            PitWindows: [],
             StartSeconds: startSeconds,
             EndSeconds: endSeconds,
             MaxGapSeconds: 250d,
@@ -8311,7 +8319,7 @@ internal static class Program
             var id when string.Equals(id, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase) => slug.ToLowerInvariant() switch
             {
                 "no-cars" => "gap-no-cars",
-                "trend-row-off" => "gap-trend-row-off",
+                "tire-trend-off" => "gap-tire-trend-off",
                 "trend-off" => "gap-trend-off",
                 "graph-off" => "gap-graph-off",
                 "min-scale" => "gap-to-leader-min-scale",
@@ -8603,7 +8611,6 @@ internal static class Program
             || fixtureVariant.Contains("no-cars", StringComparison.OrdinalIgnoreCase)
             || fixtureVariant.Contains("no-content", StringComparison.OrdinalIgnoreCase)
             || fixtureVariant.Contains("no-data", StringComparison.OrdinalIgnoreCase)
-            || fixtureVariant.Contains("no-markers", StringComparison.OrdinalIgnoreCase)
             || fixtureVariant.Contains("hidden", StringComparison.OrdinalIgnoreCase)
             || fixtureVariant.Contains("unavailable", StringComparison.OrdinalIgnoreCase)
             ? "forced-unavailable"
@@ -9851,7 +9858,7 @@ internal static class Program
 
     private static bool IsGapSectionOffSlug(string slug)
     {
-        return string.Equals(slug, "trend-row-off", StringComparison.OrdinalIgnoreCase)
+        return string.Equals(slug, "tire-trend-off", StringComparison.OrdinalIgnoreCase)
             || string.Equals(slug, "trend-off", StringComparison.OrdinalIgnoreCase)
             || string.Equals(slug, "graph-off", StringComparison.OrdinalIgnoreCase);
     }
@@ -10071,7 +10078,7 @@ internal static class Program
         {
             labels = slug.ToLowerInvariant() switch
             {
-                "trend-row-off" => ["Tire"],
+                "tire-trend-off" => ["Tire"],
                 "trend-off" => ["Last", "5L", "10L", "Pit", "PLap", "Stint", "Tire", "Status"],
                 "graph-off" => ["Graph"],
                 _ => []

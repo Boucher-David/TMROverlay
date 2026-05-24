@@ -40,12 +40,13 @@ internal sealed record TrackMapOverlayViewModel(
         var sessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot);
         var models = snapshot.CompleteModels();
         var hasGeneratedTrackMap = HasGeneratedTrackMap(trackMap);
+        var markers = BuildMarkers(snapshot with { Models = models });
         return new TrackMapOverlayViewModel(
             Title: "Track Map",
-            Status: TrackMapStatus(availability, hasGeneratedTrackMap),
-            Source: TrackMapSource(availability, hasGeneratedTrackMap),
+            Status: TrackMapStatus(availability, hasGeneratedTrackMap, markers.Count > 0),
+            Source: TrackMapSource(availability, hasGeneratedTrackMap, markers.Count > 0),
             IsAvailable: availability.IsAvailable,
-            Markers: BuildMarkers(snapshot with { Models = models }),
+            Markers: markers,
             Sectors: models.TrackMap.Sectors,
             ShowSectorBoundaries: OverlayContentColumnSettings.ContentEnabledForSession(
                 settings,
@@ -61,26 +62,34 @@ internal sealed record TrackMapOverlayViewModel(
             TrackMap: trackMap);
     }
 
-    private static string TrackMapStatus(OverlayAvailabilitySnapshot availability, bool hasGeneratedTrackMap)
+    private static string TrackMapStatus(
+        OverlayAvailabilitySnapshot availability,
+        bool hasGeneratedTrackMap,
+        bool hasActiveMarkers)
     {
         if (!availability.IsAvailable)
         {
             return availability.StatusText;
         }
 
-        return hasGeneratedTrackMap ? "live" : "track map | circle fallback";
+        var status = hasGeneratedTrackMap ? "live" : "track map | circle fallback";
+        return hasActiveMarkers ? status : $"{status} | no active markers";
     }
 
-    private static string TrackMapSource(OverlayAvailabilitySnapshot availability, bool hasGeneratedTrackMap)
+    private static string TrackMapSource(
+        OverlayAvailabilitySnapshot availability,
+        bool hasGeneratedTrackMap,
+        bool hasActiveMarkers)
     {
         if (!availability.IsAvailable)
         {
             return "source: waiting";
         }
 
-        return hasGeneratedTrackMap
+        var source = hasGeneratedTrackMap
             ? "source: live position telemetry"
             : "source: live position telemetry | map fallback: no generated track map";
+        return hasActiveMarkers ? source : $"{source} | no active markers";
     }
 
     private static bool HasGeneratedTrackMap(TrackMapDocument? trackMap)

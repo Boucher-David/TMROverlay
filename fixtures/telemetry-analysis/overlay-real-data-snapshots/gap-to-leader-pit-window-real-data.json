@@ -81,6 +81,15 @@
     "graph": {
       "scaleMode": "focus-relative",
       "selectedClassPositions": [1, 4, 5],
+      "comparisonLabel": "P4",
+      "activeThreat": null,
+      "pitWindowBand": {
+        "minimumCount": 1,
+        "source": "focus-car pit entry/exit session-time window",
+        "expectedCarIdx": 19,
+        "expectedClassPosition": 5
+      },
+      "forbiddenThreatClassPositions": [1, 4, 5],
       "forbiddenFarBehindClassPositions": [6, 9],
       "mustKeepFocusAndLeaderDuringPitWindow": true,
       "mustNotSelectFarBehindOutlierDuringPitWindow": true

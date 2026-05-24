@@ -13,7 +13,26 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-No active release branch is documented here right now. Add the next branch target before starting another milestone or patch release.
+### v1.2.0 - Overlay Evidence Contracts And Real-Data Validation
+
+Status: active branch-complete validation on branch `v1.1.1`, promoted to the v1.2.0 product milestone because the scope grew beyond patch hardening.
+
+Suggested squash title:
+
+```text
+[v1.2.0] Add overlay evidence contracts and real-data validation
+```
+
+Suggested squash body:
+
+```text
+- Added parseable overlay scenario contracts and app-owned overlay behavior descriptors so renderer support, no-data policy, chrome/content gating, scale behavior, OBS readiness, and evidence coverage are tracked as product rules.
+- Expanded the opt-in forensics and replay toolchain with app-owned forensics packages, model timeline validation, compact real-data fixtures, AppData fuel-history fixtures, OBS/source readiness classification, and per-forensics screenshot-manifest validation.
+- Expanded browser review, localhost/OBS, and Windows-native screenshot evidence for populated, no-render, chrome-on/no-data, minimum-scale, real-data snapshot, and cross-surface parity scenarios, and wired the new validator lanes into CI.
+- Fixed V1.1 follow-up product bugs across Garage Cover eligibility/default art, Standings no-results chrome, Relative practice timing, Fuel measured-burn/compact-height/history fallback, Track Map focus/practice marker/class-color behavior, Radar timing/preview evidence, Gap To Leader pit/long-tail evidence, Flags local critical evidence, and native scaling/text-bound evidence.
+- Updated docs, scenario contracts, validation guidance, and branch notes so screenshot/manifest/contract failures are treated as product evidence and future overlay changes start from the shared contracts.
+- User-data compatibility: no durable raw-capture format or released data-contract snapshot change is intended. New compact fixtures, diagnostics metadata, and forensics packages are additive, and high-fidelity capture remains opt-in through Enhanced iRacing Telemetry Capture.
+```
 
 ## Merged Mainline Milestones
 

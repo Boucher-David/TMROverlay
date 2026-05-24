@@ -760,7 +760,7 @@ internal sealed class BrowserOverlayModelFactory
         var renderModel = _trackMapRenderBuilder.Build(viewModel, now);
         var status = viewModel.Status;
         var headerItems = HeaderItems(overlay, snapshot, status, viewModel.IsAvailable ? "info" : "waiting");
-        var shouldRender = viewModel.IsAvailable && renderModel.Markers.Count > 0;
+        var shouldRender = viewModel.IsAvailable && renderModel.Primitives.Count > 0;
         return new BrowserOverlayDisplayModel(
             TrackMapOverlayDefinition.Definition.Id,
             viewModel.Title,
@@ -1213,6 +1213,7 @@ internal sealed class BrowserOverlayModelFactory
 
         if (state.IsOnPitRoad && state.CurrentPitEntryAxisSeconds is { } pitEntry)
         {
+            state.LastPitEntryAxisSeconds = pitEntry;
             state.LastPitDurationSeconds = Math.Max(0d, axisSeconds - pitEntry);
             state.LastPitLap = state.CurrentPitEntryLap ?? car.CurrentLap;
             state.LastPitExitAxisSeconds = axisSeconds;
@@ -1359,6 +1360,7 @@ internal sealed class BrowserOverlayModelFactory
             _gapWeather.Where(point => point.AxisSeconds >= startSeconds && point.AxisSeconds <= endSeconds).ToArray(),
             _gapLeaderChanges.Where(marker => marker.AxisSeconds >= startSeconds && marker.AxisSeconds <= endSeconds).ToArray(),
             _gapDriverChanges.Where(marker => marker.AxisSeconds >= startSeconds && marker.AxisSeconds <= endSeconds).ToArray(),
+            BuildBrowserGapPitWindows(selectedSeries, startSeconds, endSeconds),
             startSeconds,
             Math.Max(endSeconds, startSeconds + 1d),
             Math.Max(1d, scale.MaxGapSeconds),
@@ -1442,6 +1444,70 @@ internal sealed class BrowserOverlayModelFactory
             new BrowserGapTrendMetric("Pit", null, null, "pit", null, primaryPit, threatPit, comparisonPit),
             new BrowserGapTrendMetric("PLap", null, null, "pitLap", null, primaryPit, threatPit, comparisonPit)
         };
+    }
+
+    private static IReadOnlyList<BrowserGapPitWindow> BuildBrowserGapPitWindows(
+        IReadOnlyList<BrowserGapSeriesSelection> selectedSeries,
+        double startSeconds,
+        double endSeconds)
+    {
+        if (selectedSeries.Count == 0)
+        {
+            return [];
+        }
+
+        var windows = new List<BrowserGapPitWindow>();
+        foreach (var selection in selectedSeries)
+        {
+            var state = selection.State;
+            if (!state.IsReference)
+            {
+                continue;
+            }
+
+            if (state.IsOnPitRoad
+                && state.CurrentPitEntryAxisSeconds is { } activeEntry
+                && PitWindowOverlaps(activeEntry, endSeconds, startSeconds, endSeconds))
+            {
+                windows.Add(new BrowserGapPitWindow(
+                    activeEntry,
+                    null,
+                    state.CarIdx,
+                    state.ClassPosition,
+                    state.IsReference,
+                    IsActive: true,
+                    Math.Max(0d, endSeconds - activeEntry),
+                    state.CurrentPitEntryLap ?? state.LastPitLap));
+            }
+
+            if (state.LastPitEntryAxisSeconds is { } entry
+                && state.LastPitExitAxisSeconds is { } exit
+                && PitWindowOverlaps(entry, exit, startSeconds, endSeconds))
+            {
+                windows.Add(new BrowserGapPitWindow(
+                    entry,
+                    exit,
+                    state.CarIdx,
+                    state.ClassPosition,
+                    state.IsReference,
+                    IsActive: false,
+                    Math.Max(0d, exit - entry),
+                    state.LastPitLap));
+            }
+        }
+
+        return windows
+            .OrderBy(window => window.EntryAxisSeconds)
+            .ToArray();
+    }
+
+    private static bool PitWindowOverlaps(
+        double entryAxisSeconds,
+        double exitAxisSeconds,
+        double startSeconds,
+        double endSeconds)
+    {
+        return exitAxisSeconds >= startSeconds && entryAxisSeconds <= endSeconds;
     }
 
     private BrowserGapTrendMetric BuildBrowserGapTireTrendMetric(
@@ -3290,7 +3356,7 @@ internal sealed class BrowserOverlayModelFactory
             || model.Inputs?.HasRail == true
             || model.Inputs?.Trace.Count > 0
             || model.CarRadar?.RenderModel.ShouldRender == true
-            || model.TrackMap?.RenderModel.Markers.Count > 0
+            || model.TrackMap?.RenderModel.Primitives.Count > 0
             || model.Flags?.Flags.Count > 0
             || model.StreamChat?.Rows.Count > 0;
     }
@@ -3334,6 +3400,7 @@ internal sealed class BrowserOverlayModelFactory
                 Weather = [],
                 LeaderChanges = [],
                 DriverChanges = [],
+                PitWindows = [],
                 SelectedSeriesCount = 0,
                 TrendMetrics = [],
                 ActiveThreat = null,
@@ -4204,6 +4271,7 @@ internal sealed record BrowserGapGraph(
     IReadOnlyList<BrowserGapWeatherPoint> Weather,
     IReadOnlyList<BrowserGapLeaderChangeMarker> LeaderChanges,
     IReadOnlyList<BrowserGapDriverChangeMarker> DriverChanges,
+    IReadOnlyList<BrowserGapPitWindow> PitWindows,
     double StartSeconds,
     double EndSeconds,
     double MaxGapSeconds,
@@ -4327,6 +4395,16 @@ internal sealed record BrowserGapDriverChangeMarker(
     bool IsReference,
     string Label);
 
+internal sealed record BrowserGapPitWindow(
+    double EntryAxisSeconds,
+    double? ExitAxisSeconds,
+    int CarIdx,
+    int? ClassPosition,
+    bool IsReference,
+    bool IsActive,
+    double? DurationSeconds,
+    int? Lap);
+
 internal sealed record BrowserGapSeriesSelection(
     BrowserGapCarRenderState State,
     double Alpha,
@@ -4392,6 +4470,8 @@ internal sealed class BrowserGapCarRenderState(int carIdx)
     public double? CurrentPitEntryAxisSeconds { get; set; }
 
     public int? CurrentPitEntryLap { get; set; }
+
+    public double? LastPitEntryAxisSeconds { get; set; }
 
     public double? LastPitDurationSeconds { get; set; }
 

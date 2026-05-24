@@ -10,5 +10,9 @@ to turn a real observation into a deterministic CI assertion:
 - raw evidence fields that explain why the frame/window matters
 - expected model/render contract fields that should be proven before pixels
 
+Synthetic or capture-shaped snapshots are allowed only when the file says so in
+`source.sourceCategory`, keeps the provenance honest, and uses the fixture to
+prove renderer/product capability rather than claiming raw telemetry replay.
+
 Do not commit `telemetry.bin`, full session YAML, source `.ibt` files, driver
 names, user IDs, or team identities here.

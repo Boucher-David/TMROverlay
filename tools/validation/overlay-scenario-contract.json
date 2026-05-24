@@ -1,7 +1,7 @@
 {
   "contract": "overlay-scenario-contract/v1",
-  "tracker": "v1.1.md",
-  "updated": "2026-05-23",
+  "tracker": "v1.2.md",
+  "updated": "2026-05-24",
   "purpose": "Parseable matrix for overlay-specific screenshot, replay, and cross-surface parity scenarios. This is the planning contract for what each overlay must prove across browser review, localhost/OBS, Windows native, compact replay fixtures, and optional full-capture replay.",
   "productDescriptor": {
     "source": "src/TmrOverlay.Core/Overlays/OverlayBehaviorDescriptorCatalog.cs",
@@ -1038,8 +1038,8 @@
           "tier": "tier1-ci-contract-fixtures",
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
-          "artifacts": ["browser-overlays/gap-to-leader/trend-row-off.png", "browser-overlays/gap-to-leader/trend-off.png", "browser-overlays/gap-to-leader/graph-off.png"],
-          "assertions": ["trend row, trend graph, and graph-off variants preserve expected visible content"]
+          "artifacts": ["browser-overlays/gap-to-leader/tire-trend-off.png", "browser-overlays/gap-to-leader/trend-off.png", "browser-overlays/gap-to-leader/graph-off.png"],
+          "assertions": ["Tire trend metric, all trend metrics, and graph-off variants preserve expected visible content"]
         },
         {
           "id": "gap-pit-and-long-tail-real-data",
@@ -1047,12 +1047,12 @@
           "tier": "tier2-capture-derived-replay",
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
-          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-long-tail-real-data.json", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-pit-window-real-data.json"],
-          "artifacts": ["browser-overlays/gap-to-leader/long-tail-real-data.png", "localhost-overlays/gap-to-leader/long-tail-real-data.png", "browser-overlays/gap-to-leader/pit-window-real-data.png", "localhost-overlays/gap-to-leader/pit-window-real-data.png"],
+          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-long-tail-real-data.json", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-pit-window-real-data.json", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-threat-capture-shaped.json", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-endurance-domain-capture-shaped.json"],
+          "artifacts": ["browser-overlays/gap-to-leader/long-tail-real-data.png", "localhost-overlays/gap-to-leader/long-tail-real-data.png", "browser-overlays/gap-to-leader/pit-window-real-data.png", "localhost-overlays/gap-to-leader/pit-window-real-data.png", "browser-overlays/gap-to-leader/threat-capture-shaped.png", "localhost-overlays/gap-to-leader/threat-capture-shaped.png", "browser-overlays/gap-to-leader/endurance-domain-capture-shaped.png", "localhost-overlays/gap-to-leader/endurance-domain-capture-shaped.png"],
           "testFiles": ["tests/tools/test_model_timeline_validator.py", "tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js"],
-          "validatorRules": ["tools/analysis/validate_model_timeline.py:gap-long-tail-dominates-scale", "tools/validate_overlay_screenshots.py:validate_gap_long_tail_real_data_variant"],
-          "assertions": ["pit entry/exit windows preserve selected series and scale mode", "far trailing selected line cannot flatten useful top-car range without explicit warning", "initial long-tail rule hides or compresses the furthest behind car when its gap to the focused car is greater than the focused car's gap to the leader", "Dallara-derived graph screenshots exclude far-behind class positions while preserving leader/focus/ahead context"],
-          "gaps": ["compact real pit entry/exit replay and browser/localhost screenshots now prove pit-window and long-tail behavior; Windows native render replay from these compact snapshots is still missing"]
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:gap-long-tail-dominates-scale", "tools/validate_overlay_screenshots.py:validate_gap_long_tail_real_data_variant", "tools/validate_overlay_screenshots.py:validate_gap_pit_window_real_data_variant", "tools/validate_overlay_screenshots.py:validate_gap_threat_capture_shaped_variant", "tools/validate_overlay_screenshots.py:validate_gap_endurance_domain_capture_shaped_variant"],
+          "assertions": ["pit entry/exit windows preserve selected series and scale mode", "pit windows render as graph bands from focus-car entry/exit evidence", "far trailing selected line cannot flatten useful top-car range without explicit warning", "active threat is the behind car gaining on the focus car, not the leader, focus, or ahead comparison car", "four-hour endurance-domain graph keeps leader/focus/nearby lines, weather bands, leader/driver markers, and a pit-window band visible", "initial long-tail rule hides or compresses the furthest behind car when its gap to the focused car is greater than the focused car's gap to the leader", "Dallara-derived graph screenshots exclude far-behind class positions while preserving leader/focus/ahead context"],
+          "gaps": ["browser/localhost compact and capture-shaped screenshots now prove pit-window, active-threat, long-tail, weather-marker, and four-hour domain behavior; Windows native render replay from these compact snapshots is still missing"]
         },
         {
           "id": "gap-minimum-scale",
@@ -1106,8 +1106,8 @@
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "artifacts": ["browser-overlays/track-map/default.png", "browser-overlays/track-map/fallback.png", "browser-overlays/track-map/no-markers.png"],
-          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_hidden_no_render_manifest_contract", "tools/validate_overlay_screenshots.py:validate_hidden_no_render_png_evidence"],
-          "assertions": ["generated-map vs circle-fallback source is explicit", "marker and vector bounds are compared", "no-markers state is not blank without explanation"]
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_track_map_contract", "tools/validate_overlay_screenshots.py:validate_track_map_variant"],
+          "assertions": ["generated-map vs circle-fallback source is explicit", "marker and vector bounds are compared", "no-markers renders generated map primitives with zero markers"]
         },
         {
           "id": "track-map-focus-real-data",

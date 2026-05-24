@@ -2850,18 +2850,22 @@ function trackMapDisplayModel(page, live, settings) {
   const hasGeneratedTrackMap = hasGeneratedTrackMapAsset(settings?.trackMap);
   const renderModel = trackMapRenderModel(live, settings);
   const markers = trackMapMarkers(live);
-  const shouldRender = telemetryIsAvailable(live) && renderModel.markers.length > 0;
+  const telemetryAvailable = telemetryIsAvailable(live);
+  const hasMarkers = renderModel.markers.length > 0;
+  const shouldRender = telemetryAvailable && renderModel.primitives.length > 0;
   return {
     ...emptyDisplayModel(page.page.id, page.title),
-    status: shouldRender
-      ? hasGeneratedTrackMap ? 'live' : 'track map | circle fallback'
-      : telemetryIsAvailable(live) ? 'no active markers' : 'waiting for telemetry',
-    headerItems: [],
-    source: shouldRender
+    status: telemetryAvailable
       ? hasGeneratedTrackMap
-        ? 'source: IBT-derived Nurburgring 24h track map | live position telemetry'
-        : 'source: live position telemetry | map fallback: no generated track map'
-      : 'source: live position telemetry | no active markers',
+        ? hasMarkers ? 'live' : 'live | no active markers'
+        : hasMarkers ? 'track map | circle fallback' : 'track map | circle fallback | no active markers'
+      : 'waiting for telemetry',
+    headerItems: [],
+    source: telemetryAvailable
+      ? hasGeneratedTrackMap
+        ? `source: IBT-derived Nurburgring 24h track map | live position telemetry${hasMarkers ? '' : ' | no active markers'}`
+        : `source: live position telemetry | map fallback: no generated track map${hasMarkers ? '' : ' | no active markers'}`
+      : 'source: waiting',
     bodyKind: 'track-map',
     shouldRender,
     trackMap: {

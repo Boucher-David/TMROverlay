@@ -2879,6 +2879,7 @@ internal sealed class DiagnosticsBundleService
                 WeatherPointCount = graph.Weather.Count,
                 LeaderChangeMarkerCount = graph.LeaderChanges.Count,
                 DriverChangeMarkerCount = graph.DriverChanges.Count,
+                PitWindowCount = graph.PitWindows.Count,
                 graph.StartSeconds,
                 graph.EndSeconds,
                 graph.MaxGapSeconds,

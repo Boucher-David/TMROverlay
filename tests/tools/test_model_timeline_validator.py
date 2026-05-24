@@ -43,6 +43,7 @@ class ModelTimelineValidatorTests(unittest.TestCase):
         self.assertIn("gap-long-tail-dominates-scale", rules)
         self.assertIn("relative-practice-timing-meter-fallback", rules)
         self.assertIn("track-map-focus-marker-mismatch", rules)
+        self.assertIn("track-map-focus-marker-count", rules)
 
     def test_forensics_output_models_are_supported(self):
         with tempfile.TemporaryDirectory(prefix="tmr-model-timeline-") as temp_dir:

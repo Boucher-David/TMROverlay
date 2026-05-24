@@ -996,13 +996,14 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         var estimatedTimeSeconds = ReadNullableDoubleArrayElement(sdk, "CarIdxEstTime", carIdx);
         var position = ReadInt32ArrayElement(sdk, "CarIdxPosition", carIdx);
         var classPosition = ReadInt32ArrayElement(sdk, "CarIdxClassPosition", carIdx);
+        var hasLapDistance = HasLapDistance(lapDistPct);
         var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
         if (!hasLapProgress && requireLapProgress)
         {
             return null;
         }
 
-        if (!hasLapProgress && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
+        if (!hasLapDistance && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
         {
             return null;
         }
@@ -1010,7 +1011,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return new CarProgress(
             CarIdx: carIdx,
             LapCompleted: hasLapProgress ? lapCompleted!.Value : -1,
-            LapDistPct: hasLapProgress ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
+            LapDistPct: hasLapDistance ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
             F2TimeSeconds: f2TimeSeconds,
             EstimatedTimeSeconds: estimatedTimeSeconds,
             LastLapTimeSeconds: ReadNullableDoubleArrayElement(sdk, "CarIdxLastLapTime", carIdx),
@@ -1092,8 +1093,9 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             var estimatedTimeSeconds = ReadNullableDoubleArrayElement(sdk, "CarIdxEstTime", carIdx);
             var position = ReadInt32ArrayElement(sdk, "CarIdxPosition", carIdx);
             var classPosition = ReadInt32ArrayElement(sdk, "CarIdxClassPosition", carIdx);
+            var hasLapDistance = HasLapDistance(lapDistPct);
             var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
-            if (!hasLapProgress && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
+            if (!hasLapDistance && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
             {
                 continue;
             }
@@ -1101,7 +1103,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             cars.Add(new HistoricalCarProximity(
                 CarIdx: carIdx,
                 LapCompleted: hasLapProgress ? lapCompleted!.Value : -1,
-                LapDistPct: hasLapProgress ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
+                LapDistPct: hasLapDistance ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
                 F2TimeSeconds: f2TimeSeconds,
                 EstimatedTimeSeconds: estimatedTimeSeconds,
                 Position: position,
@@ -1127,8 +1129,9 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             var estimatedTimeSeconds = ReadNullableDoubleArrayElement(sdk, "CarIdxEstTime", carIdx);
             var position = ReadInt32ArrayElement(sdk, "CarIdxPosition", carIdx);
             var classPosition = ReadInt32ArrayElement(sdk, "CarIdxClassPosition", carIdx);
+            var hasLapDistance = HasLapDistance(lapDistPct);
             var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
-            if (!hasLapProgress && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
+            if (!hasLapDistance && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
             {
                 continue;
             }
@@ -1136,7 +1139,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             cars.Add(new HistoricalCarProximity(
                 CarIdx: carIdx,
                 LapCompleted: hasLapProgress ? lapCompleted!.Value : -1,
-                LapDistPct: hasLapProgress ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
+                LapDistPct: hasLapDistance ? Math.Clamp(lapDistPct!.Value, 0d, 1d) : -1d,
                 F2TimeSeconds: f2TimeSeconds,
                 EstimatedTimeSeconds: estimatedTimeSeconds,
                 Position: position,
@@ -1154,7 +1157,12 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
     private static bool HasLapProgress(int? lapCompleted, double? lapDistPct)
     {
         return lapCompleted is >= 0
-            && lapDistPct is { } pct
+            && HasLapDistance(lapDistPct);
+    }
+
+    private static bool HasLapDistance(double? lapDistPct)
+    {
+        return lapDistPct is { } pct
             && !double.IsNaN(pct)
             && !double.IsInfinity(pct)
             && pct >= 0d;

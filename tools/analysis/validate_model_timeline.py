@@ -267,7 +267,10 @@ def check_track_map_focus_policy(rows: list[dict[str, Any]], issues: list[dict[s
         semantic = row.get("semantic") or {}
         expected = semantic.get("expectedFocusCarIdx")
         actual = semantic.get("focusMarkerCarIdx")
-        if expected is not None and actual is not None and expected != actual:
+        focus_marker_count = number_or_none(semantic.get("focusMarkerCount"))
+        if expected is not None and focus_marker_count is not None and focus_marker_count != 1:
+            add_issue(issues, "track-map", row, "fail", "track-map-focus-marker-count", f"expected exactly one focus marker for car {expected}, got {focus_marker_count:g}")
+        elif expected is not None and actual is not None and expected != actual:
             add_issue(issues, "track-map", row, "fail", "track-map-focus-marker-mismatch", f"focus marker expected car {expected}, got {actual}")
         if semantic.get("focusMarkerRadiusOk") is False:
             add_issue(issues, "track-map", row, "fail", "track-map-focus-marker-radius", "focus marker radius/tone did not match focus-car policy")
@@ -316,6 +319,14 @@ def normalize_row(default_overlay_id: str, row: dict[str, Any]) -> dict[str, Any
     overlay_id = str(row.get("overlayId") or model.get("overlayId") or default_overlay_id)
     counts = content_counts(model)
     row_keys = explicit_row_keys(row, model)
+    semantic = dict(row.get("semantic")) if isinstance(row.get("semantic"), dict) else {}
+    if overlay_id == "track-map":
+        focus_marker_car_indices = track_map_focus_marker_car_indices(model)
+        semantic.setdefault("focusMarkerCount", len(focus_marker_car_indices))
+        semantic.setdefault("focusMarkerCarIdxs", focus_marker_car_indices)
+        if len(focus_marker_car_indices) == 1:
+            semantic.setdefault("focusMarkerCarIdx", focus_marker_car_indices[0])
+
     normalized = {
         "overlayId": overlay_id,
         "frameIndex": row.get("frameIndex"),
@@ -327,7 +338,7 @@ def normalize_row(default_overlay_id: str, row: dict[str, Any]) -> dict[str, Any
         "source": model.get("source") or row.get("source"),
         "bodyKind": model.get("bodyKind") or row.get("bodyKind"),
         "rowKeys": row_keys,
-        "semantic": row.get("semantic") if isinstance(row.get("semantic"), dict) else {},
+        "semantic": semantic,
         **counts,
     }
     normalized["contentCount"] = (
@@ -373,6 +384,21 @@ def content_counts(model: dict[str, Any]) -> dict[str, int]:
         "pointCount": len(points) + sum(len(list_value(dict_value(item).get("points"))) for item in series),
         "markerCount": len(markers),
     }
+
+
+def track_map_focus_marker_car_indices(model: dict[str, Any]) -> list[int]:
+    track_map = dict_value(model.get("trackMap"))
+    render_model = dict_value(track_map.get("renderModel"))
+    markers = list_value(render_model.get("markers")) or list_value(track_map.get("markers"))
+    car_indices: list[int] = []
+    for marker in markers:
+        marker_dict = dict_value(marker)
+        if marker_dict.get("isFocus") is not True:
+            continue
+        car_idx = number_or_none(first_present(marker_dict, ("carIdx", "carId", "id")))
+        if car_idx is not None:
+            car_indices.append(int(car_idx))
+    return car_indices
 
 
 def explicit_row_keys(row: dict[str, Any], model: dict[str, Any]) -> list[str]:

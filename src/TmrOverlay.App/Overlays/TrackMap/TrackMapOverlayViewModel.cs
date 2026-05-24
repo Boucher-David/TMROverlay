@@ -134,9 +134,9 @@ internal sealed record TrackMapOverlayViewModel(
         foreach (var row in models.Timing.OverallRows.Concat(models.Timing.ClassRows))
         {
             scoringByCarIdx.TryGetValue(row.CarIdx, out var scoringRow);
-            var isFocus = row.IsFocus
-                || row.CarIdx == referenceCarIdx
-                || scoringRow?.IsFocus == true;
+            var isFocus = referenceCarIdx is { } refCarIdx
+                ? row.CarIdx == refCarIdx
+                : row.IsFocus || scoringRow?.IsFocus == true;
             if (!TrackMapMarkerPolicy.ShouldRenderTimingMarker(row, isFocus, sessionKind)
                 || row.LapDistPct is not { } lapDistPct)
             {

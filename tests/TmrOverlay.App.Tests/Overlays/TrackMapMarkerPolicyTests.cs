@@ -319,6 +319,76 @@ public sealed class TrackMapMarkerPolicyTests
     }
 
     [Fact]
+    public void TrackMapMarkers_MakeReferenceFocusAuthoritativeOverStaleTimingAndScoringRows()
+    {
+        var staleLmp2 = Row(carIdx: 21, hasTakenGrid: true) with
+        {
+            IsPlayer = false,
+            IsFocus = true,
+            CarClassName = "LMP2",
+            CarClassColorHex = "#A66CFF",
+            OverallPosition = 5,
+            ClassPosition = 3,
+            CarClass = 2002,
+            LapDistPct = 0.20d
+        };
+        var focusGt3 = Row(carIdx: 12, hasTakenGrid: true) with
+        {
+            IsPlayer = false,
+            IsFocus = false,
+            CarClassName = "GT3",
+            CarClassColorHex = "#FFDA59",
+            OverallPosition = 13,
+            ClassPosition = 7,
+            CarClass = 4098,
+            LapDistPct = 0.58d
+        };
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            Models = LiveRaceModels.Empty with
+            {
+                Reference = LiveReferenceModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    PlayerCarIdx = 10,
+                    FocusCarIdx = 12,
+                    FocusIsPlayer = false,
+                    HasExplicitNonPlayerFocus = true,
+                    LapDistPct = 0.58d,
+                    TrackSurface = 3
+                },
+                Scoring = LiveScoringModel.Empty with
+                {
+                    Rows =
+                    [
+                        ScoringRow(carIdx: 21, position: 5, isFocus: true),
+                        ScoringRow(carIdx: 12, position: 13, isFocus: false)
+                    ]
+                },
+                Timing = LiveTimingModel.Empty with
+                {
+                    FocusCarIdx = 21,
+                    FocusRow = staleLmp2,
+                    OverallRows = [staleLmp2, focusGt3]
+                }
+            }
+        };
+
+        var markers = TrackMapOverlayViewModel.BuildMarkers(snapshot);
+
+        var focus = Assert.Single(markers, marker => marker.IsFocus);
+        var stale = Assert.Single(markers, marker => marker.CarIdx == 21);
+        Assert.Equal(12, focus.CarIdx);
+        Assert.False(stale.IsFocus);
+
+        var rendered = TrackMapRenderModel.FromViewModel(ViewModel(markers, Sectors: [])).Markers;
+        var renderedFocus = Assert.Single(rendered, marker => marker.CarIdx == 12);
+        var renderedStale = Assert.Single(rendered, marker => marker.CarIdx == 21);
+        Assert.True(renderedFocus.Radius > renderedStale.Radius);
+    }
+
+    [Fact]
     public void TrackMapRenderModel_UsesClassColorForSpectatedFocus()
     {
         var viewModel = ViewModel(

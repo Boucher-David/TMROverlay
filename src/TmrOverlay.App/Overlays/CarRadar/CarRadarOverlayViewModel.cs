@@ -78,6 +78,7 @@ internal sealed record CarRadarOverlayViewModel(
             .GroupBy(car => car.CarIdx)
             .Select(group => group.MinBy(car => Math.Abs(RangeRatio(car, calibration, visibilitySeconds)))!)
             .ToArray();
+        var sideWarnings = EffectiveSideWarnings(spatial.HasCarLeft, spatial.HasCarRight, cars, calibration, visibilitySeconds);
         LiveMulticlassApproach? multiclass = showMulticlassWarning
             ? spatial.MulticlassApproaches
                 .Where(approach => IsInMulticlassWarningRange(approach, warningRangeSeconds))
@@ -91,11 +92,11 @@ internal sealed record CarRadarOverlayViewModel(
                 ? localContext.StatusText
             : !hasSpatialData
                 ? "waiting for radar"
-            : spatial.HasCarLeft && spatial.HasCarRight
+            : sideWarnings.Left && sideWarnings.Right
                 ? "cars both sides"
-                : spatial.HasCarLeft
+                : sideWarnings.Left
                     ? "car left"
-                    : spatial.HasCarRight
+                    : sideWarnings.Right
                         ? "car right"
                         : multiclass is not null
                             ? "faster class"
@@ -106,8 +107,8 @@ internal sealed record CarRadarOverlayViewModel(
             Status: status,
             Source: hasSpatialData ? "source: spatial telemetry" : "source: waiting",
             IsAvailable: canRender || previewVisible,
-            HasCarLeft: spatial.HasCarLeft,
-            HasCarRight: spatial.HasCarRight,
+            HasCarLeft: sideWarnings.Left,
+            HasCarRight: sideWarnings.Right,
             Cars: cars,
             StrongestMulticlassApproach: multiclass,
             ShowMulticlassWarning: showMulticlassWarning,
@@ -115,6 +116,52 @@ internal sealed record CarRadarOverlayViewModel(
             RadarVisibilitySeconds: visibilitySeconds,
             PreviewVisible: previewVisible,
             Spatial: spatial);
+    }
+
+    private static (bool Left, bool Right) EffectiveSideWarnings(
+        bool hasCarLeft,
+        bool hasCarRight,
+        IReadOnlyList<LiveSpatialCar> cars,
+        CarRadarCalibrationProfile calibration,
+        int radarVisibilitySeconds)
+    {
+        var usedCarIdxs = new HashSet<int>();
+        var left = hasCarLeft
+            ? SelectSideAttachment(cars, usedCarIdxs, calibration, radarVisibilitySeconds)
+            : null;
+        if (left is not null)
+        {
+            usedCarIdxs.Add(left.CarIdx);
+        }
+
+        var right = hasCarRight
+            ? SelectSideAttachment(cars, usedCarIdxs, calibration, radarVisibilitySeconds)
+            : null;
+        return (left is not null, right is not null);
+    }
+
+    private static LiveSpatialCar? SelectSideAttachment(
+        IReadOnlyList<LiveSpatialCar> cars,
+        ISet<int> excludedCarIdxs,
+        CarRadarCalibrationProfile calibration,
+        int radarVisibilitySeconds)
+    {
+        return cars
+            .Where(car => !excludedCarIdxs.Contains(car.CarIdx))
+            .Where(car => IsSideAttachmentCandidate(car, calibration, radarVisibilitySeconds))
+            .OrderBy(car => Math.Abs(RangeRatio(car, calibration, radarVisibilitySeconds)))
+            .ThenBy(car => car.CarIdx)
+            .FirstOrDefault();
+    }
+
+    private static bool IsSideAttachmentCandidate(
+        LiveSpatialCar car,
+        CarRadarCalibrationProfile calibration,
+        int radarVisibilitySeconds)
+    {
+        return IsInRadarRange(car, calibration, radarVisibilitySeconds)
+            && ReliableRelativeMeters(car) is { } meters
+            && Math.Abs(meters) <= Math.Max(0.001d, calibration.BodyLengthMeters) * 2d;
     }
 
     public static bool IsInRadarRange(LiveSpatialCar car)

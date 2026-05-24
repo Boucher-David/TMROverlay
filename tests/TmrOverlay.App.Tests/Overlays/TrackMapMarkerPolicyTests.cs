@@ -1,6 +1,7 @@
 using TmrOverlay.App.Overlays.DesignV2;
 using TmrOverlay.App.Overlays.TrackMap;
 using TmrOverlay.Core.History;
+using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Telemetry.Live;
 using TmrOverlay.Core.TrackMaps;
 using Xunit;
@@ -10,13 +11,25 @@ namespace TmrOverlay.App.Tests.Overlays;
 public sealed class TrackMapMarkerPolicyTests
 {
     [Fact]
-    public void ShouldRenderTimingMarker_HidesOpponentUntilItHasTakenGrid()
+    public void ShouldRenderTimingMarker_HidesRaceOpponentUntilItHasTakenGrid()
     {
         var pending = Row(carIdx: 12, hasTakenGrid: false);
         var racing = pending with { HasTakenGrid = true };
 
-        Assert.False(TrackMapMarkerPolicy.ShouldRenderTimingMarker(pending, isFocus: false));
-        Assert.True(TrackMapMarkerPolicy.ShouldRenderTimingMarker(racing, isFocus: false));
+        Assert.False(TrackMapMarkerPolicy.ShouldRenderTimingMarker(pending, isFocus: false, OverlaySessionKind.Race));
+        Assert.True(TrackMapMarkerPolicy.ShouldRenderTimingMarker(racing, isFocus: false, OverlaySessionKind.Race));
+    }
+
+    [Theory]
+    [InlineData("Practice")]
+    [InlineData("Qualifying")]
+    [InlineData("Offline Testing")]
+    public void ShouldRenderTimingMarker_AllowsOpenSessionOpponentWithoutTakenGrid(string sessionType)
+    {
+        Assert.True(TrackMapMarkerPolicy.ShouldRenderTimingMarker(
+            Row(carIdx: 12, hasTakenGrid: false),
+            isFocus: false,
+            OverlayAvailabilityEvaluator.ClassifySession(sessionType)));
     }
 
     [Fact]
@@ -24,7 +37,26 @@ public sealed class TrackMapMarkerPolicyTests
     {
         Assert.True(TrackMapMarkerPolicy.ShouldRenderTimingMarker(
             Row(carIdx: 10, hasTakenGrid: false),
-            isFocus: true));
+            isFocus: true,
+            OverlaySessionKind.Race));
+    }
+
+    [Fact]
+    public void TrackMapMarkers_HideRaceOpponentBeforeGrid()
+    {
+        var snapshot = TimingSnapshot("Race", [Row(carIdx: 12, hasTakenGrid: false)]);
+
+        Assert.Empty(TrackMapOverlayViewModel.BuildMarkers(snapshot));
+    }
+
+    [Fact]
+    public void TrackMapMarkers_RenderPracticeOpponentWithoutTakenGrid()
+    {
+        var marker = Assert.Single(TrackMapOverlayViewModel.BuildMarkers(
+            TimingSnapshot("Practice", [Row(carIdx: 12, hasTakenGrid: false)])));
+
+        Assert.Equal(12, marker.CarIdx);
+        Assert.False(marker.IsFocus);
     }
 
     [Fact]
@@ -313,6 +345,43 @@ public sealed class TrackMapMarkerPolicyTests
     }
 
     [Fact]
+    public void TrackMapRenderModel_UsesClassColorForPlayerFocusAndWhiteFallback()
+    {
+        var viewModel = ViewModel(
+            Markers:
+            [
+                new TrackMapOverlayMarker(
+                    3,
+                    0.58d,
+                    IsFocus: true,
+                    ClassColorHex: "#FFFFFF",
+                    Position: 1,
+                    TrackSurface: 3,
+                    IsPlayerFocus: true),
+                new TrackMapOverlayMarker(
+                    4,
+                    0.62d,
+                    IsFocus: false,
+                    ClassColorHex: null,
+                    Position: 2,
+                    TrackSurface: 3,
+                    IsPlayerFocus: false)
+            ],
+            Sectors: []);
+
+        var markers = TrackMapRenderModel.FromViewModel(viewModel).Markers;
+        var playerFocus = Assert.Single(markers, marker => marker.CarIdx == 3);
+        var fallback = Assert.Single(markers, marker => marker.CarIdx == 4);
+
+        Assert.True(playerFocus.IsFocus);
+        Assert.True(playerFocus.IsPlayerFocus);
+        Assert.True(IsColor(playerFocus.Fill, red: 255, green: 255, blue: 255));
+        Assert.Equal(245, playerFocus.Fill.Alpha);
+        Assert.True(IsColor(fallback.Fill, red: 255, green: 255, blue: 255));
+        Assert.Equal(245, fallback.Fill.Alpha);
+    }
+
+    [Fact]
     public void TrackMapRenderModel_UsesUniformNonFocusLabelRadius()
     {
         var viewModel = ViewModel(
@@ -475,6 +544,28 @@ public sealed class TrackMapMarkerPolicyTests
             TrackSurface: 3,
             OnPitRoad: false,
             HasTakenGrid: hasTakenGrid);
+    }
+
+    private static LiveTelemetrySnapshot TimingSnapshot(string sessionType, IReadOnlyList<LiveTimingRow> rows)
+    {
+        return LiveTelemetrySnapshot.Empty with
+        {
+            Models = LiveRaceModels.Empty with
+            {
+                Session = LiveSessionModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    SessionType = sessionType
+                },
+                Timing = LiveTimingModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    OverallRows = rows
+                }
+            }
+        };
     }
 
     private static LiveScoringRow ScoringRow(int carIdx, int position, bool isFocus)

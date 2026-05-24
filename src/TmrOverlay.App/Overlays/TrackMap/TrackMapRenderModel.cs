@@ -648,13 +648,8 @@ internal sealed record TrackMapRenderModel(
             return ColorOf(OffTrackAlertMarkerColor);
         }
 
-        if (isFocus && isPlayerFocus)
-        {
-            return ColorOf(OverlayTheme.DesignV2.Cyan);
-        }
-
         var color = OverlayClassColor.TryParseWithAlpha(classColorHex, 245)
-            ?? Color.FromArgb(245, 237, 245, 250);
+            ?? Color.FromArgb(245, 255, 255, 255);
         return ColorOf(color);
     }
 

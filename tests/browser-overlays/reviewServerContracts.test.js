@@ -299,12 +299,34 @@ describe('browser review server validation contracts', () => {
     ]);
     expect.soft(chromeOnly.effectiveSettings.rendered).toMatchObject({
       shouldRender: true,
-      rowCount: 0
+      rowCount: 0,
+      browserSource: expect.objectContaining({
+        baseHeight: 40,
+        height: 40
+      })
     });
     expect.soft(chromeOnly.effectiveSettings.settings).toContainEqual(expect.objectContaining({
       key: 'chrome.header.time-remaining.race',
       value: true
     }));
+
+    const noResultsChrome = (await reviewServer.getJson('/api/overlay-model/standings?preview=race&fixture=standings-no-results-chrome-on')).model;
+    expect.soft(noResultsChrome.shouldRender).toBe(true);
+    expect.soft(noResultsChrome.status).toBe('waiting for standings');
+    expect.soft(noResultsChrome.columns || []).toEqual([]);
+    expect.soft(noResultsChrome.rows || []).toEqual([]);
+    expect.soft(noResultsChrome.headerItems || []).toEqual([
+      expect.objectContaining({ key: 'timeRemaining', value: '06:37:08' })
+    ]);
+    expect.soft(noResultsChrome.effectiveSettings.rendered).toMatchObject({
+      shouldRender: true,
+      rowCount: 0,
+      browserSource: expect.objectContaining({
+        baseHeight: 40,
+        height: 40
+      }),
+      unavailableContentPolicy: 'chrome-only-placeholder'
+    });
   });
 
   it('keeps Session Weather missing data distinct from user-disabled weather content', async () => {

@@ -76,6 +76,24 @@ public sealed class LiveTelemetryStoreTests
     }
 
     [Fact]
+    public void RecordFrame_UsesTeamProgressForMeasuredFuelBaselineEligibility()
+    {
+        var store = new LiveTelemetryStore();
+
+        store.RecordFrame(CreateSample(
+            sessionState: 4,
+            playerCarIdx: 10,
+            lapCompleted: -1,
+            teamLapCompleted: 4,
+            teamLapDistPct: 0.42d,
+            fuelLevelLiters: 50d));
+
+        var snapshot = store.Snapshot();
+
+        Assert.Equal("requires_previous_green_distance_sample", snapshot.Models.FuelPit.BaselineEligibilityEvidence.MissingReason);
+    }
+
+    [Fact]
     public void ApplySessionInfo_PreservesMeasuredFuelBurnAnchorForSameActiveSession()
     {
         var store = new LiveTelemetryStore();

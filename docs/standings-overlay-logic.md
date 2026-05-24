@@ -28,7 +28,7 @@ When scoring is unavailable, the overlay falls back to the older timing-table be
 
 Standings does not promote `PlayerCarIdx` to the reference when `CamCarIdx`/focus is unavailable. It waits for a focus car so a spectator/teammate workflow does not accidentally show a player-centered table after focus telemetry is degraded.
 
-If iRacing is disconnected, live collection is stopped, the latest snapshot is stale, or neither scoring nor timing rows are available, the overlay clears the table and shows a waiting status instead of retaining old standings.
+If iRacing is disconnected, live collection is stopped, or the latest snapshot is stale, the overlay no-renders instead of retaining old standings. When fresh telemetry exists but neither scoring nor timing rows are available, Standings may keep enabled header chrome such as race time visible, but the table/body section is hidden and no empty standings placeholder row is rendered. If all body content and header/footer chrome are disabled, the overlay remains hidden.
 
 The native Standings window keeps the user-configured/persisted overlay height while live row counts change. Row capacity inside the table can adapt, but telemetry row-count changes should not resize the OS window every refresh.
 

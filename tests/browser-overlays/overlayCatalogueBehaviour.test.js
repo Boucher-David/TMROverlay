@@ -209,6 +209,39 @@ describe('browser overlay catalogue behaviour', () => {
     expect(render.cars.find((car) => car.kind === 'focus')).toBeTruthy();
   });
 
+  it('does not render a car radar side warning without a close attachment candidate', () => {
+    const farSignal = carRadarRenderModelFromState({
+      isAvailable: true,
+      hasCarLeft: true,
+      hasCarRight: false,
+      cars: [{ carIdx: 12, relativeMeters: 18, relativeSeconds: 1.2, carClassColorHex: '#FFDA59' }],
+      strongestMulticlassApproach: null,
+      showMulticlassWarning: true,
+      previewVisible: false,
+      hasCurrentSignal: true,
+      referenceCarClassColorHex: '#FFDA59'
+    });
+
+    expect(farSignal.shouldRender).toBe(true);
+    expect(farSignal.cars.find((car) => car.kind === 'side-left')).toBeFalsy();
+    expect(farSignal.cars.find((car) => car.kind === 'nearby' && car.carIdx === 12)).toBeTruthy();
+
+    const staleSignalOnly = carRadarRenderModelFromState({
+      isAvailable: true,
+      hasCarLeft: true,
+      hasCarRight: false,
+      cars: [],
+      strongestMulticlassApproach: null,
+      showMulticlassWarning: true,
+      previewVisible: false,
+      hasCurrentSignal: true,
+      referenceCarClassColorHex: '#FFDA59'
+    });
+
+    expect(staleSignalOnly.shouldRender).toBe(false);
+    expect(staleSignalOnly.cars).toEqual([]);
+  });
+
   it('preserves spectated Track Map focus position and class color', () => {
     const response = browserOverlayApiResponse('track-map', '/api/overlay-model/track-map', {
       live: freshLiveSnapshot({
@@ -265,6 +298,66 @@ describe('browser overlay catalogue behaviour', () => {
       isPlayerFocus: false,
       label: '7',
       fill: { red: 255, green: 218, blue: 89, alpha: 245 }
+    });
+  });
+
+  it('preserves player Track Map focus class color instead of replacing it with focus cyan', () => {
+    const response = browserOverlayApiResponse('track-map', '/api/overlay-model/track-map', {
+      live: freshLiveSnapshot({
+        reference: {
+          hasData: true,
+          playerCarIdx: 3,
+          focusCarIdx: 3,
+          focusIsPlayer: true,
+          hasExplicitNonPlayerFocus: false,
+          lapDistPct: 0.08,
+          trackSurface: 3
+        },
+        driverDirectory: { hasData: true, playerCarIdx: 3, focusCarIdx: 3 },
+        timing: {
+          focusCarIdx: 3,
+          focusRow: {
+            carIdx: 3,
+            isFocus: true,
+            isPlayer: true,
+            lapDistPct: 0.08,
+            hasSpatialProgress: true,
+            hasTakenGrid: true,
+            classPosition: 1,
+            overallPosition: 1,
+            carClassColorHex: '#FFFFFF',
+            trackSurface: 3
+          },
+          overallRows: [
+            {
+              carIdx: 3,
+              isFocus: true,
+              isPlayer: true,
+              lapDistPct: 0.08,
+              hasSpatialProgress: true,
+              hasTakenGrid: true,
+              classPosition: 1,
+              overallPosition: 1,
+              carClassColorHex: '#FFFFFF',
+              trackSurface: 3
+            }
+          ],
+          classRows: []
+        }
+      }),
+      settings: {
+        trackMap: trackMapAsset(),
+        trackMapSettings: { internalOpacity: 1, showSectorBoundaries: true }
+      }
+    });
+
+    const focus = response.model.trackMap.renderModel.markers.find((marker) => marker.isFocus);
+
+    expect(focus).toMatchObject({
+      carIdx: 3,
+      isPlayerFocus: true,
+      label: '1',
+      fill: { red: 255, green: 255, blue: 255, alpha: 245 }
     });
   });
 
@@ -957,7 +1050,7 @@ function browserScenarios() {
         expect(document.querySelectorAll('.track ellipse, .track path, .track line').length).toBeGreaterThan(2);
         expect(document.querySelectorAll('.track circle[fill="rgba(51,206,255,0.961)"]').length).toBe(0);
         expect(document.querySelectorAll('.track circle[fill="rgba(255,218,89,0.961)"]').length).toBe(1);
-        expect(document.querySelectorAll('.track circle[fill="rgba(0,232,255,1.000)"]').length).toBe(1);
+        expect(document.querySelectorAll('.track circle[fill="rgba(255,255,255,0.961)"]').length).toBe(1);
         expect(document.querySelector('.track text')?.textContent).toBe('5');
         expect(document.getElementById('status')).toBeNull();
       }

@@ -708,9 +708,6 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             otherClassRowsPerClass: otherRows,
             showClassSeparators: showClassSeparators);
         var visibleColumns = OverlayContentColumnSettings.VisibleColumnsFor(_settings, OverlayContentColumnSettings.Standings, sessionKind);
-        var columns = visibleColumns
-            .Select(column => new DesignV2Column(column.Label, column.Width, AlignmentFor(column.Alignment)))
-            .ToArray();
         var rows = viewModel.Rows.Select(row => new DesignV2TableRow(
             ValuesForStandingsRow(row, visibleColumns),
             row.IsReference,
@@ -720,6 +717,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             row.IsClassHeader ? row.Driver : string.Empty,
             row.IsClassHeader ? ClassHeaderDetail(row) : string.Empty,
             CellForegrounds: CellForegroundsForStandingsRow(row, visibleColumns))).ToArray();
+        var columns = rows.Length > 0
+            ? visibleColumns
+                .Select(column => new DesignV2Column(column.Label, column.Width, AlignmentFor(column.Alignment)))
+                .ToArray()
+            : [];
         return new DesignV2OverlayModel(
             "Standings",
             viewModel.Status,
@@ -731,7 +733,9 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     internal static bool ShouldRenderStandingsTable(int columnCount, int rowCount, bool hasChrome)
     {
-        return columnCount > 0 && (rowCount > 0 || hasChrome);
+        return rowCount > 0
+            ? columnCount > 0
+            : hasChrome;
     }
 
     private bool EnsureClientHeightForStandingsRows(int rowCount, bool showHeader, bool showFooter)
@@ -1122,10 +1126,12 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             spatial.ReferenceCarClassColorHex,
             calibration,
             radarVisibilitySeconds);
+        var hasEffectiveLeft = renderModel.Cars.Any(car => car.Kind == "side-left");
+        var hasEffectiveRight = renderModel.Cars.Any(car => car.Kind == "side-right");
         return new DesignV2RadarBody(
             isAvailable || previewVisible,
-            spatial.HasCarLeft,
-            spatial.HasCarRight,
+            hasEffectiveLeft,
+            hasEffectiveRight,
             cars,
             multiclass,
             showMulticlassWarning,
@@ -3122,12 +3128,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private static Color MarkerColor(string? classColorHex, bool isFocus, bool isPlayerFocus)
     {
-        if (isFocus && isPlayerFocus)
-        {
-            return Cyan;
-        }
-
-        return OverlayClassColor.TryParseWithAlpha(classColorHex, 245) ?? Color.FromArgb(245, 237, 245, 250);
+        return OverlayClassColor.TryParseWithAlpha(classColorHex, 245) ?? Color.FromArgb(245, 255, 255, 255);
     }
 
     private static double ProgressDelta(double current, double target)
@@ -5116,6 +5117,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private void DrawTable(Graphics graphics, RectangleF rect, DesignV2TableBody table)
     {
+        if (table.Columns.Count == 0 && table.Rows.Count == 0)
+        {
+            return;
+        }
+
         FillRounded(graphics, rect, 5, SurfaceInset, BorderMuted);
         if (table.Columns.Count == 0)
         {

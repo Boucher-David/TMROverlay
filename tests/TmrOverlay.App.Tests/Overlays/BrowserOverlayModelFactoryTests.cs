@@ -432,11 +432,15 @@ public sealed class BrowserOverlayModelFactoryTests
 
         Assert.True(built);
         Assert.True(response.Model.ShouldRender);
-        Assert.NotEmpty(response.Model.Columns);
+        Assert.Empty(response.Model.Columns);
         Assert.Empty(response.Model.Rows);
         Assert.Equal("waiting for standings", response.Model.Status);
         Assert.Contains(response.Model.HeaderItems, item => item.Key == "timeRemaining" && item.Value == "00:10:00");
         Assert.Equal("chrome-only-placeholder", response.Model.EffectiveSettings!.Rendered.UnavailableContentPolicy);
+        Assert.Empty(response.Model.EffectiveSettings.Rendered.ColumnKeys!);
+        Assert.Equal(0, response.Model.EffectiveSettings.Rendered.TableStatus!.DataRowCount);
+        Assert.Equal(StandingsOverlaySizing.ChromeOnlyClientHeight, response.Model.EffectiveSettings.Rendered.BrowserSource.BaseHeight);
+        Assert.Equal(StandingsOverlaySizing.ChromeOnlyClientHeight, response.Model.EffectiveSettings.Rendered.BrowserSource.Height);
     }
 
     [Fact]

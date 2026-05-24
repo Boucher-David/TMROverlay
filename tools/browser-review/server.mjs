@@ -24,6 +24,12 @@ const reviewAppState = createReviewAppState();
 const reviewNurburgringTrackMap = JSON.parse(readFileSync(
   resolve(repoRoot, 'fixtures/screenshot-scenarios/track-map-nurburgring-24h.json'),
   'utf8'));
+const gapLongTailRealDataSnapshot = JSON.parse(readFileSync(
+  resolve(repoRoot, 'fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-long-tail-real-data.json'),
+  'utf8'));
+const trackMapPlayerFocusClassColorSnapshot = JSON.parse(readFileSync(
+  resolve(repoRoot, 'fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-player-focus-class-color-real-data.json'),
+  'utf8'));
 const clients = new Set();
 const productionOverlayModelIds = new Set(browserOverlayPages()
   .filter((page) => page.modelRoute)
@@ -837,7 +843,7 @@ function reviewLiveSnapshot(previewMode = 'off', searchParams = new URLSearchPar
       referenceCarClassColorHex: '#ffda59',
       cars: [
         { carIdx: 33, relativeSeconds: -1.1, carClassColorHex: '#33ceff' },
-        { carIdx: 91, relativeSeconds: 1.7, carClassColorHex: '#ffaa00' },
+        { carIdx: 91, relativeSeconds: 0.2, relativeMeters: 2, carClassColorHex: '#ffaa00' },
         { carIdx: 12, relativeSeconds: -2.8, carClassColorHex: '#ff4fd8' }
       ]
     },
@@ -907,14 +913,32 @@ function applyReviewFixtureToLiveSnapshot(live, fixture) {
   }
 
   if (fixture.startsWith('car-radar-')) {
+    const variant = fixture.replace('car-radar-', '');
     const sides = {
       left: [true, false],
       right: [false, true],
       'both-sides': [true, true],
-      clear: [false, false]
-    }[fixture.replace('car-radar-', '')];
+      clear: [false, false],
+      'side-no-placement': [true, false]
+    }[variant];
     if (sides) {
       const [hasCarLeft, hasCarRight] = sides;
+      const cars = {
+        left: [
+          { carIdx: 21, relativeSeconds: -0.2, relativeMeters: -2, carClassColorHex: '#33ceff' }
+        ],
+        right: [
+          { carIdx: 22, relativeSeconds: 0.2, relativeMeters: 2, carClassColorHex: '#ffaa00' }
+        ],
+        'both-sides': [
+          { carIdx: 21, relativeSeconds: -0.2, relativeMeters: -2, carClassColorHex: '#33ceff' },
+          { carIdx: 22, relativeSeconds: 0.2, relativeMeters: 2, carClassColorHex: '#ffaa00' }
+        ],
+        clear: [],
+        'side-no-placement': [
+          { carIdx: 23, relativeSeconds: 1.2, relativeMeters: 18, carClassColorHex: '#ffda59' }
+        ]
+      }[variant] || [];
       models.spatial = {
         ...(models.spatial || {}),
         hasData: true,
@@ -927,7 +951,7 @@ function applyReviewFixtureToLiveSnapshot(live, fixture) {
             : hasCarRight
               ? 'right'
               : 'clear',
-        cars: [],
+        cars,
         multiclassApproaches: [],
         strongestMulticlassApproach: null
       };
@@ -951,6 +975,61 @@ function applyReviewFixtureToLiveSnapshot(live, fixture) {
       trackSurface: 1,
       onPitRoad: true,
       playerOnPitRoad: true
+    };
+    return live;
+  }
+
+  if (fixture === 'track-map-player-focus-class-color') {
+    const raw = trackMapPlayerFocusClassColorSnapshot.rawEvidence;
+    const row = raw.timingRows.find((candidate) => candidate.role === 'player-focus');
+    const focusRow = reviewTimingRow(
+      row.carIdx,
+      1,
+      1,
+      row.lapDistPct,
+      row.classColor,
+      {
+        isFocus: true,
+        isPlayer: true,
+        hasTakenGrid: row.hasTakenGrid === true,
+        carClassName: row.carClass,
+        trackSurface: 3
+      });
+    models.reference = {
+      ...(models.reference || {}),
+      hasData: true,
+      playerCarIdx: raw.playerCarIdx,
+      focusCarIdx: raw.focusCarIdx,
+      focusIsPlayer: true,
+      hasExplicitNonPlayerFocus: false,
+      lapDistPct: row.lapDistPct,
+      playerLapDistPct: row.lapDistPct,
+      trackSurface: 3,
+      playerTrackSurface: 3,
+      onPitRoad: false,
+      playerOnPitRoad: false,
+      classPosition: 1,
+      overallPosition: 1
+    };
+    models.driverDirectory = {
+      ...(models.driverDirectory || {}),
+      hasData: true,
+      playerCarIdx: raw.playerCarIdx,
+      focusCarIdx: raw.focusCarIdx
+    };
+    models.timing = {
+      ...(models.timing || {}),
+      hasData: true,
+      focusCarIdx: raw.focusCarIdx,
+      playerCarIdx: raw.playerCarIdx,
+      focusRow,
+      playerRow: focusRow,
+      overallRows: [focusRow],
+      classRows: []
+    };
+    models.scoring = {
+      ...(models.scoring || {}),
+      rows: []
     };
     return live;
   }
@@ -1467,7 +1546,8 @@ function withoutOrdinaryOverlayTitle(model) {
 
 function suppressUnavailableRenderedContent(model) {
   if (!isUnavailableModel(model)
-    || unavailableContentPolicy(model) === 'section-aware-placeholders') {
+    || unavailableContentPolicy(model) === 'section-aware-placeholders'
+    || unavailableContentPolicy(model) === 'chrome-only-placeholder') {
     return model;
   }
 
@@ -1708,12 +1788,16 @@ function reviewEffectiveBrowserSource(overlayId, overlayState, previewMode, mode
 }
 
 function standingsBrowserSourceHeightForModel(model, fallbackHeight) {
-  if (!model || !Array.isArray(model.rows) || model.rows.length <= 0) {
+  if (!model || !Array.isArray(model.rows)) {
     return fallbackHeight;
   }
 
   const hasHeader = Array.isArray(model.headerItems)
     && model.headerItems.some((item) => String(item?.value || '').trim());
+  if (model.rows.length <= 0) {
+    return hasHeader ? 40 : fallbackHeight;
+  }
+
   const persistedHeight = 313 - (hasHeader ? 0 : 38);
   return reviewStandingsHeightForRows(model.rows.length, Math.max(28, persistedHeight), hasHeader, false);
 }
@@ -1952,6 +2036,7 @@ function mapFallbackEvidence(overlayId, model) {
 function unavailableContentPolicy(model) {
   if (!isUnavailableModel(model)) return null;
   if (isSectionAwareUnavailablePlaceholderModel(model)) return 'section-aware-placeholders';
+  if (isChromeOnlyUnavailablePlaceholderModel(model)) return 'chrome-only-placeholder';
   if (!hasSemanticRenderedContent(model)) {
     return 'suppress-rendered-content';
   }
@@ -1963,6 +2048,13 @@ function isSectionAwareUnavailablePlaceholderModel(model) {
     && Array.isArray(model?.metricSections)
     && model.metricSections.some((section) => (section?.rows || []).length)
     && /weather unavailable/i.test(String(model?.status || ''));
+}
+
+function isChromeOnlyUnavailablePlaceholderModel(model) {
+  return model?.overlayId === 'standings'
+    && model?.shouldRender === true
+    && (model?.rows || []).length === 0
+    && (model?.headerItems || []).some((item) => String(item?.value || '').trim());
 }
 
 function hasSemanticRenderedContent(model) {
@@ -2848,6 +2940,9 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           shouldRender: false
         });
       }
+      if (fixture === 'gap-long-tail-real-data') {
+        return withChrome(reviewGapLongTailRealDataModel());
+      }
       if (session !== 'race') {
         return withChrome({
           overlayId,
@@ -3060,6 +3155,113 @@ function reviewGapGraph(overlayState = {}, session = 'race') {
       latestReferenceGapSeconds: 236.5
     }
   };
+}
+
+function reviewGapLongTailRealDataModel() {
+  const snapshot = gapLongTailRealDataSnapshot;
+  const startSeconds = snapshot.provenance.sampleSessionTimeSeconds - 420;
+  const focusGaps = [
+    1.78,
+    1.66,
+    1.58,
+    1.51,
+    1.46,
+    1.42,
+    1.39,
+    snapshot.rawEvidence.focusCar.gapToClassLeaderSeconds
+  ];
+  const leaderGaps = focusGaps.map(() => 0);
+  const aheadGaps = [0.96, 0.91, 0.86, 0.79, 0.72, 0.64, 0.55, 0.43];
+  const point = (index, gapSeconds) => ({
+    axisSeconds: startSeconds + index * 60,
+    gapSeconds,
+    startsSegment: index === 0
+  });
+  const threatCarIdx = null;
+  const series = [
+    reviewGapSeries(
+      snapshot.rawEvidence.classLeader.carIdx,
+      false,
+      true,
+      snapshot.rawEvidence.classLeader.classPosition,
+      leaderGaps.map((value, index) => point(index, value)),
+      0,
+      threatCarIdx),
+    reviewGapSeries(
+      16,
+      false,
+      false,
+      4,
+      aheadGaps.map((value, index) => point(index, value)),
+      1,
+      threatCarIdx),
+    reviewGapSeries(
+      snapshot.rawEvidence.focusCar.carIdx,
+      true,
+      false,
+      snapshot.rawEvidence.focusCar.classPosition,
+      focusGaps.map((value, index) => point(index, value)),
+      2,
+      threatCarIdx)
+  ];
+
+  return {
+    overlayId: 'gap-to-leader',
+    title: 'Gap To Leader',
+    status: 'live | Dallara long-tail policy',
+    source: 'source: compact Dallara race capture',
+    bodyKind: 'graph',
+    columns: [],
+    rows: [],
+    metrics: [],
+    points: [],
+    graph: {
+      series,
+      weather: [],
+      leaderChanges: [],
+      driverChanges: [],
+      startSeconds,
+      endSeconds: startSeconds + 420,
+      maxGapSeconds: snapshot.expected.graph.axisBehindSecondsMaximum,
+      lapReferenceSeconds: 525.8,
+      selectedSeriesCount: series.length,
+      trendMetrics: reviewGapLongTailTrendMetrics(),
+      activeThreat: null,
+      threatCarIdx,
+      metricDeadbandSeconds: 0.25,
+      comparisonLabel: snapshot.expected.graph.comparisonLabel,
+      showGraph: true,
+      showTrendMetrics: true,
+      scale: {
+        maxGapSeconds: snapshot.expected.graph.axisBehindSecondsMaximum,
+        isFocusRelative: true,
+        aheadSeconds: 2,
+        behindSeconds: snapshot.expected.graph.axisBehindSecondsMaximum,
+        referencePoints: focusGaps.map((value, index) => point(index, value)),
+        latestReferenceGapSeconds: focusGaps[focusGaps.length - 1]
+      }
+    },
+    headerItems: [
+      { key: 'timeRemaining', value: '00:38:44' }
+    ],
+    shouldRender: true
+  };
+}
+
+function reviewGapLongTailTrendMetrics() {
+  const focusPit = { seconds: 78, lap: 3, isActive: false };
+  const comparisonPit = { seconds: 82, lap: 3, isActive: false };
+  const dryTire = { label: 'Dry', shortLabel: 'D', isWet: false };
+  return [
+    { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, primaryText: '0.0', comparisonText: '-0.2', threatText: '--' },
+    { label: '5L', focusGapChangeSeconds: -0.4, chaser: null, state: 'ready', stateLabel: null, completedReferenceLaps: 5, comparisonText: '-0.5', threatText: '--' },
+    { label: '10L', focusGapChangeSeconds: -0.7, chaser: null, state: 'ready', stateLabel: null, completedReferenceLaps: 10, comparisonText: '-0.9', threatText: '--' },
+    { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'pit', stateLabel: null, primaryPit: focusPit, comparisonPit, threatPit: null },
+    { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'pitLap', stateLabel: null, primaryPit: focusPit, comparisonPit, threatPit: null },
+    { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, comparisonText: '3L', threatText: '--' },
+    { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null, primaryTire: dryTire, comparisonTire: dryTire, threatTire: null },
+    { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track', threatText: '--' }
+  ];
 }
 
 function reviewGapSeries(carIdx, isReference, isClassLeader, classPosition, points, index, threatCarIdx) {
@@ -3359,6 +3561,7 @@ function filterTableModelContent(model, overlayId, overlayState, session = null,
   }));
   const visible = columnsWithIndex.filter((entry) => contentEnabled(overlayState, entry.contentLabel, tableContentDefault(overlayId, entry.contentLabel), [], session));
   const suppressFallbackColumn = overlayId === 'standings'
+    && columnsWithIndex.length > 0
     && visible.length === 0
     && chromeEnabled(overlayState, 'header', 'Time remaining', session, true);
   const retained = visible.length
@@ -3670,6 +3873,23 @@ function gridCell(value, tone) {
 }
 
 function standingsDisplayModel(previewLabel = 'review fixture', session = 'race', fixture = '') {
+  if (fixture === 'standings-no-results-chrome-on') {
+    return {
+      overlayId: 'standings',
+      title: 'Standings',
+      status: 'waiting for standings',
+      source: 'source: waiting for standings',
+      bodyKind: 'table',
+      columns: [],
+      rows: [],
+      metrics: [],
+      shouldRender: true,
+      headerItems: [
+        { key: 'timeRemaining', value: '06:37:08' }
+      ]
+    };
+  }
+
   const raceColumns = session === 'race';
   const columns = raceColumns
     ? [

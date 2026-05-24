@@ -9,9 +9,11 @@ const snapshots = Object.freeze({
   relative: readSnapshot('relative-practice-timing-real-data.json'),
   standings: readSnapshot('standings-practice-no-results-stability.json'),
   trackMap: readSnapshot('track-map-focus-and-practice-marker-policy.json'),
+  trackMapPlayerFocus: readSnapshot('track-map-player-focus-class-color-real-data.json'),
   flags: readSnapshot('flags-meatball-local-policy.json'),
   fuel: readSnapshot('fuel-measured-burn-real-data.json'),
-  pitService: readSnapshot('pit-service-refuel-pit-window-real-data.json')
+  pitService: readSnapshot('pit-service-refuel-pit-window-real-data.json'),
+  gap: readSnapshot('gap-to-leader-long-tail-real-data.json')
 });
 
 test.describe('real-data compact snapshot browser rendering', () => {
@@ -53,7 +55,8 @@ test.describe('real-data compact snapshot browser rendering', () => {
     await expect(page.locator('.overlay')).toHaveCSS('opacity', '1');
     await expect(page.locator('.header-items')).toContainText('Practice');
     await expect(page.locator('tbody tr')).toHaveCount(snapshot.expected.bodyRowCount);
-    await expect(page.locator('#content')).toContainText('Waiting for live rows.');
+    await expect(page.locator('#content')).toBeHidden();
+    await expect(page.locator('table')).toHaveCount(0);
     const contentText = await page.locator('#content').textContent();
     for (const pattern of snapshot.expected.forbiddenTextPatterns) {
       expect(contentText).not.toContain(pattern);
@@ -65,7 +68,7 @@ test.describe('real-data compact snapshot browser rendering', () => {
     ]));
   });
 
-  test('renders Track Map focus marker and hides practice pending-grid markers', async ({ page }) => {
+  test('renders Track Map focus and practice open-session markers', async ({ page }) => {
     const snapshot = snapshots.trackMap;
     const model = trackMapModel(snapshot);
     const { requests, browserSourceEvents } = await installOverlayRoutes(page, 'track-map', model);
@@ -75,7 +78,7 @@ test.describe('real-data compact snapshot browser rendering', () => {
 
     await expect(page.locator('.track svg')).toBeVisible();
     const markerLabels = await page.locator('.track svg text').allTextContents();
-    expect(markerLabels.sort()).toEqual(['10', '22']);
+    expect(markerLabels.sort()).toEqual(snapshot.expected.practiceMarkerPolicy.visibleCarIdxs.map(String).sort());
     for (const hiddenCarIdx of snapshot.expected.practiceMarkerPolicy.hiddenCarIdxs) {
       expect(markerLabels).not.toContain(String(hiddenCarIdx));
     }
@@ -90,6 +93,32 @@ test.describe('real-data compact snapshot browser rendering', () => {
     expect(focusMarker?.radius).toBeGreaterThan(playerMarker?.radius ?? 0);
     expect(focusMarker?.fill).toBe('rgba(255,218,89,1.000)');
     expect(playerMarker?.fill).toBe('rgba(0,174,239,1.000)');
+    expect(requests).toContain('/api/overlay-model/track-map');
+    expect(requests).not.toContain('/api/snapshot');
+    expect(browserSourceEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: 'model-render', overlayId: 'track-map' })
+    ]));
+  });
+
+  test('renders Track Map player focus with class-owned white marker fill', async ({ page }) => {
+    const snapshot = snapshots.trackMapPlayerFocus;
+    const model = trackMapPlayerFocusModel(snapshot);
+    const { requests, browserSourceEvents } = await installOverlayRoutes(page, 'track-map', model);
+
+    await page.setViewportSize({ width: 360, height: 360 });
+    await page.goto('http://localhost:8765/overlays/track-map');
+
+    await expect(page.locator('.track svg')).toBeVisible();
+    const marker = await page.locator('.track svg g').evaluate((group) => ({
+      label: group.querySelector('text')?.textContent,
+      radius: Number(group.querySelector('circle')?.getAttribute('r')),
+      fill: group.querySelector('circle')?.getAttribute('fill')
+    }));
+
+    expect(marker.label).toBe(String(snapshot.expected.focusMarker.carIdx));
+    expect(marker.fill).toBe('rgba(255,255,255,1.000)');
+    expect(marker.fill).not.toBe('rgba(0,232,255,1.000)');
+    expect(marker.radius).toBeGreaterThan(9);
     expect(requests).toContain('/api/overlay-model/track-map');
     expect(requests).not.toContain('/api/snapshot');
     expect(browserSourceEvents).toEqual(expect.arrayContaining([
@@ -168,6 +197,40 @@ test.describe('real-data compact snapshot browser rendering', () => {
     expect(requests).not.toContain('/api/snapshot');
     expect(browserSourceEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({ event: 'model-render', overlayId: 'pit-service' })
+    ]));
+  });
+
+  test('renders Gap To Leader long-tail real data without far-behind outlier series', async ({ page }) => {
+    const snapshot = snapshots.gap;
+    const model = gapLongTailModel(snapshot);
+    const { requests, browserSourceEvents } = await installOverlayRoutes(page, 'gap-to-leader', model);
+
+    await page.setViewportSize({ width: 654, height: 336 });
+    await page.goto('http://localhost:8765/overlays/gap-to-leader');
+
+    await expect(page.locator('.model-graph')).toBeVisible();
+    const selectedClassPositions = model.graph.series.map((series) => series.classPosition);
+    expect(selectedClassPositions).toEqual(snapshot.expected.graph.selectedClassPositions);
+    for (const classPosition of snapshot.expected.graph.forbiddenClassPositions) {
+      expect(selectedClassPositions).not.toContain(classPosition);
+    }
+    expect(model.graph.scale.isFocusRelative).toBe(true);
+    expect(model.graph.scale.behindSeconds).toBeLessThanOrEqual(snapshot.expected.graph.axisBehindSecondsMaximum);
+    expect(model.graph.scale.behindSeconds).toBeGreaterThanOrEqual(snapshot.expected.graph.maxIncludedGapToFocusSeconds);
+
+    const canvasHasPaint = await page.locator('.model-graph').evaluate((canvas) => {
+      const context = canvas.getContext('2d');
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      for (let index = 3; index < pixels.length; index += 4) {
+        if (pixels[index] > 0) return true;
+      }
+      return false;
+    });
+    expect(canvasHasPaint).toBe(true);
+    expect(requests).toContain('/api/overlay-model/gap-to-leader');
+    expect(requests).not.toContain('/api/snapshot');
+    expect(browserSourceEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: 'model-render', overlayId: 'gap-to-leader' })
     ]));
   });
 });
@@ -257,11 +320,7 @@ function standingsNoResultsModel(snapshot) {
     ...baseModel('standings', snapshot.expected.source, 'source: waiting-for-practice-results'),
     bodyKind: 'table',
     headerItems: [{ key: 'session', value: 'Practice', tone: 'waiting' }],
-    columns: [
-      { label: 'Pos', dataKey: 'classPosition', width: 35, alignment: 'right' },
-      { label: 'CAR', dataKey: 'carNumber', width: 50, alignment: 'center' },
-      { label: 'Driver', dataKey: 'driver', width: 250, alignment: 'left' }
-    ],
+    columns: [],
     rows: [],
     shouldRender: true
   };
@@ -270,14 +329,19 @@ function standingsNoResultsModel(snapshot) {
 function trackMapModel(snapshot) {
   const rowsByCarIdx = new Map(snapshot.rawEvidence.timingRows.map((row) => [row.carIdx, row]));
   const markerCarIdxs = snapshot.expected.practiceMarkerPolicy.visibleCarIdxs;
+  const nonFocusPositions = [{ x: 130, y: 220 }, { x: 110, y: 150 }, { x: 180, y: 250 }];
+  let nonFocusIndex = 0;
   const markers = markerCarIdxs.map((carIdx) => {
     const row = rowsByCarIdx.get(carIdx);
     const isFocus = carIdx === snapshot.expected.focusMarker.carIdx;
+    const position = isFocus
+      ? { x: 230, y: 120 }
+      : nonFocusPositions[nonFocusIndex++ % nonFocusPositions.length];
     return {
       carIdx,
       label: String(carIdx),
-      x: isFocus ? 230 : 130,
-      y: isFocus ? 120 : 220,
+      x: position.x,
+      y: position.y,
       radius: isFocus ? 14 : 9,
       strokeWidth: 2,
       fill: colorFromHex(row.classColor),
@@ -306,6 +370,46 @@ function trackMapModel(snapshot) {
           }
         ],
         markers
+      }
+    },
+    shouldRender: true
+  };
+}
+
+function trackMapPlayerFocusModel(snapshot) {
+  const row = snapshot.rawEvidence.timingRows.find((candidate) => candidate.role === 'player-focus');
+  const marker = {
+    carIdx: row.carIdx,
+    label: String(row.carIdx),
+    x: 230,
+    y: 120,
+    radius: 14,
+    strokeWidth: 2,
+    fill: colorFromHex(snapshot.expected.focusMarker.fill),
+    stroke: colorFromHex('#FFFFFF'),
+    labelColor: colorFromHex('#051017')
+  };
+  return {
+    ...baseModel('track-map', 'track map player focus class color', 'source: compact GR86 player-focus class color'),
+    bodyKind: 'track-map',
+    trackMap: {
+      mapKind: 'fallback-live-markers',
+      markerCount: 1,
+      renderModel: {
+        width: 360,
+        height: 360,
+        mapKind: 'fallback-live-markers',
+        markerCount: 1,
+        primitives: [
+          {
+            kind: 'ellipse',
+            rect: { x: 48, y: 48, width: 264, height: 264 },
+            fill: colorFromHex('#111820', 0),
+            stroke: colorFromHex('#6EA8D9'),
+            strokeWidth: 2
+          }
+        ],
+        markers: [marker]
       }
     },
     shouldRender: true
@@ -388,6 +492,82 @@ function pitServiceRefuelModel(snapshot) {
     }],
     shouldRender: true
   };
+}
+
+function gapLongTailModel(snapshot) {
+  const startSeconds = snapshot.provenance.sampleSessionTimeSeconds - 420;
+  const focusGaps = [1.78, 1.66, 1.58, 1.51, 1.46, 1.42, 1.39, snapshot.rawEvidence.focusCar.gapToClassLeaderSeconds];
+  const leaderGaps = focusGaps.map(() => 0);
+  const aheadGaps = [0.96, 0.91, 0.86, 0.79, 0.72, 0.64, 0.55, 0.43];
+  const point = (index, gapSeconds) => ({
+    axisSeconds: startSeconds + index * 60,
+    gapSeconds,
+    startsSegment: index === 0
+  });
+  const series = [
+    gapSeries(snapshot.rawEvidence.classLeader.carIdx, 1, true, false, leaderGaps.map((value, index) => point(index, value))),
+    gapSeries(16, 4, false, false, aheadGaps.map((value, index) => point(index, value))),
+    gapSeries(snapshot.rawEvidence.focusCar.carIdx, 5, false, true, focusGaps.map((value, index) => point(index, value)))
+  ];
+
+  return {
+    ...baseModel('gap-to-leader', 'live | Dallara long-tail policy', 'source: compact Dallara race capture'),
+    bodyKind: 'graph',
+    headerItems: [{ key: 'timeRemaining', value: '00:38:44', tone: 'live' }],
+    graph: {
+      series,
+      weather: [],
+      leaderChanges: [],
+      driverChanges: [],
+      startSeconds,
+      endSeconds: startSeconds + 420,
+      maxGapSeconds: snapshot.expected.graph.axisBehindSecondsMaximum,
+      lapReferenceSeconds: 525.8,
+      selectedSeriesCount: series.length,
+      trendMetrics: gapTrendMetrics(),
+      activeThreat: null,
+      threatCarIdx: null,
+      metricDeadbandSeconds: 0.25,
+      comparisonLabel: snapshot.expected.graph.comparisonLabel,
+      showGraph: true,
+      showTrendMetrics: true,
+      scale: {
+        maxGapSeconds: snapshot.expected.graph.axisBehindSecondsMaximum,
+        isFocusRelative: true,
+        aheadSeconds: 2.0,
+        behindSeconds: snapshot.expected.graph.axisBehindSecondsMaximum,
+        referencePoints: focusGaps.map((value, index) => point(index, value)),
+        latestReferenceGapSeconds: focusGaps[focusGaps.length - 1]
+      }
+    },
+    shouldRender: true
+  };
+}
+
+function gapSeries(carIdx, classPosition, isClassLeader, isReference, points) {
+  return {
+    carIdx,
+    isReference,
+    isClassLeader,
+    classPosition,
+    alpha: 1,
+    isStickyExit: false,
+    isStale: false,
+    points
+  };
+}
+
+function gapTrendMetrics() {
+  return [
+    { label: 'Last', state: 'last', primaryText: '0.0', comparisonText: '-0.2', threatText: '--' },
+    { label: '5L', state: 'ready', focusGapChangeSeconds: -0.4, comparisonText: '-0.5', threatText: '--' },
+    { label: '10L', state: 'ready', focusGapChangeSeconds: -0.7, comparisonText: '-0.9', threatText: '--' },
+    { label: 'Pit', state: 'pit', primaryPit: { seconds: 78, lap: 3, isActive: false }, comparisonPit: { seconds: 82, lap: 3, isActive: false }, threatPit: null },
+    { label: 'PLap', state: 'pitLap', primaryPit: { seconds: 78, lap: 3, isActive: false }, comparisonPit: { seconds: 82, lap: 3, isActive: false }, threatPit: null },
+    { label: 'Stint', state: 'stint', comparisonText: '3L', threatText: '--' },
+    { label: 'Tire', state: 'tire', primaryTire: { shortLabel: 'D' }, comparisonTire: { shortLabel: 'D' }, threatTire: null },
+    { label: 'Status', state: 'status', comparisonText: 'Track', threatText: '--' }
+  ];
 }
 
 function baseModel(overlayId, status, source) {

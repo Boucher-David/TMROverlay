@@ -97,11 +97,19 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
         var trackMap = response.Model.TrackMap;
         Assert.NotNull(trackMap);
         var markers = trackMap!.Markers.OrderBy(marker => marker.CarIdx).ToArray();
-        Assert.Collection(
-            markers.Select(marker => marker.CarIdx),
-            carIdx => Assert.Equal(10, carIdx),
-            carIdx => Assert.Equal(22, carIdx));
-        Assert.DoesNotContain(markers, marker => marker.CarIdx == 33);
+        Assert.Equal(
+            Get(snapshotFixture, "expected", "practiceMarkerPolicy", "visibleCarIdxs")
+                .EnumerateArray()
+                .Select(item => item.GetInt32())
+                .Order()
+                .ToArray(),
+            markers.Select(marker => marker.CarIdx).ToArray());
+        foreach (var hiddenCarIdx in Get(snapshotFixture, "expected", "practiceMarkerPolicy", "hiddenCarIdxs")
+            .EnumerateArray()
+            .Select(item => item.GetInt32()))
+        {
+            Assert.DoesNotContain(markers, marker => marker.CarIdx == hiddenCarIdx);
+        }
 
         var focus = Assert.Single(markers, marker => marker.CarIdx == Int(Get(snapshotFixture, "expected", "focusMarker"), "carIdx"));
         var player = Assert.Single(markers, marker => marker.CarIdx == Int(Get(snapshotFixture, "expected", "playerMarker"), "carIdx"));
@@ -116,6 +124,32 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
         Assert.True(renderedFocus.Radius > renderedPlayer.Radius);
         AssertColor(renderedFocus.Fill, red: 255, green: 218, blue: 89);
         AssertColor(renderedPlayer.Fill, red: 0, green: 174, blue: 239);
+    }
+
+    [Fact]
+    public void TrackMapPlayerFocusClassColorSnapshot_DoesNotReplaceClassWhiteWithFocusCyan()
+    {
+        var snapshotFixture = ReadSnapshot("track-map-player-focus-class-color-real-data.json");
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "track-map");
+        var now = DateTimeOffset.Parse("2026-05-23T20:01:00Z", CultureInfo.InvariantCulture);
+        var snapshot = TrackMapSnapshot(snapshotFixture, now);
+
+        var built = Factory().TryBuild("track-map", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.True(response.Model.ShouldRender);
+        var trackMap = response.Model.TrackMap;
+        Assert.NotNull(trackMap);
+        var expected = Get(snapshotFixture, "expected", "focusMarker");
+        var marker = Assert.Single(trackMap!.Markers, marker => marker.CarIdx == Int(expected, "carIdx"));
+        var renderedMarker = Assert.Single(trackMap.RenderModel.Markers, marker => marker.CarIdx == Int(expected, "carIdx"));
+
+        Assert.True(marker.IsFocus);
+        Assert.True(marker.IsPlayerFocus);
+        Assert.Equal("#FFFFFF", marker.ClassColorHex);
+        AssertColor(renderedMarker.Fill, red: 255, green: 255, blue: 255);
+        Assert.False(renderedMarker.Fill.Red == 0 && renderedMarker.Fill.Green == 232 && renderedMarker.Fill.Blue == 255);
     }
 
     [Fact]
@@ -452,12 +486,13 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
         var raw = Get(fixture, "rawEvidence");
         var playerCarIdx = Int(raw, "playerCarIdx");
         var focusCarIdx = Int(raw, "focusCarIdx");
+        var focusDiffersFromPlayer = Bool(raw, "focusDiffersFromPlayer");
         var timingRows = Get(raw, "timingRows")
             .EnumerateArray()
             .Select(row => TimingRow(
                 carIdx: Int(row, "carIdx"),
-                isPlayer: String(row, "role") == "player",
-                isFocus: String(row, "role") == "focus",
+                isPlayer: String(row, "role") == "player" || String(row, "role") == "player-focus",
+                isFocus: String(row, "role") == "focus" || String(row, "role") == "player-focus",
                 lapDistPct: Double(row, "lapDistPct"),
                 classColorHex: String(row, "classColor"),
                 hasTakenGrid: Bool(row, "hasTakenGrid"),
@@ -479,8 +514,8 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
                 {
                     PlayerCarIdx = playerCarIdx,
                     FocusCarIdx = focusCarIdx,
-                    FocusIsPlayer = false,
-                    HasExplicitNonPlayerFocus = true,
+                    FocusIsPlayer = !focusDiffersFromPlayer,
+                    HasExplicitNonPlayerFocus = focusDiffersFromPlayer,
                     LapDistPct = focusRow.LapDistPct,
                     PlayerLapDistPct = playerRow.LapDistPct,
                     TrackSurface = 3,

@@ -470,15 +470,17 @@
           "status": "partial",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
-          "testFiles": ["tests/tools/test_model_timeline_validator.py"],
+          "artifacts": ["browser-overlays/standings/no-results-chrome-on.png", "localhost-overlays/standings/no-results-chrome-on.png", "native-overlays/standings-no-results-chrome-on.png"],
+          "testFiles": ["tests/tools/test_model_timeline_validator.py", "tests/TmrOverlay.App.Tests/Overlays/BrowserOverlayModelFactoryTests.cs", "tests/browser-overlays/standingsRendering.test.js", "tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js"],
           "validatorRules": ["tools/analysis/validate_model_timeline.py:standings-chrome-no-data-hidden", "tools/analysis/validate_model_timeline.py:standings-no-data-content-visible"],
           "assertions": [
             "enabled Standings header/footer chrome has an explicit stable policy when scoring rows are absent",
             "no-data state cannot flash between hidden and visible shells before accepted scoring source exists",
-            "header/footer-only visibility is distinguished from all-content-disabled no-render"
+            "header/footer-only visibility is distinguished from all-content-disabled no-render",
+            "rowless chrome-on Standings hides the table/body section instead of rendering an empty body placeholder"
           ],
           "gaps": [
-            "temporal model fixture proves the policy shape, but browser/localhost/native chrome-on telemetry-no-data screenshots are still missing"
+            "native screenshot generation must run on Windows to refresh the committed no-results chrome-on artifact"
           ]
         },
         {
@@ -937,8 +939,9 @@
           "tier": "tier1-ci-contract-fixtures",
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
-          "artifacts": ["browser-overlays/car-radar/left.png", "browser-overlays/car-radar/right.png", "browser-overlays/car-radar/both-sides.png", "browser-overlays/car-radar/clear.png"],
-          "assertions": ["left/right/both/clear states render correct side semantics", "radar bounds are compared"]
+          "artifacts": ["browser-overlays/car-radar/left.png", "browser-overlays/car-radar/right.png", "browser-overlays/car-radar/both-sides.png", "browser-overlays/car-radar/clear.png", "browser-overlays/car-radar/side-no-placement.png"],
+          "testFiles": ["tests/TmrOverlay.App.Tests/Overlays/OverlayInputTransparencyTests.cs:CarRadarRenderModel_DoesNotRenderSideWarningWithoutAttachmentCandidate", "tests/browser-overlays/overlayCatalogueBehaviour.test.js:does not render a car radar side warning without a close attachment candidate"],
+          "assertions": ["left/right/both/clear states render correct side semantics", "side-no-placement keeps raw CarLeftRight from rendering a side rectangle without an attachment candidate", "radar bounds are compared"]
         },
         {
           "id": "radar-side-signal-placement-real-data",
@@ -947,7 +950,7 @@
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
           "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
-          "testFiles": ["tests/tools/test_model_timeline_validator.py"],
+          "testFiles": ["tests/tools/test_model_timeline_validator.py", "tests/TmrOverlay.App.Tests/Overlays/OverlayInputTransparencyTests.cs:CarRadarRenderModel_DoesNotRenderSideWarningWithoutAttachmentCandidate", "tests/browser-overlays/overlayCatalogueBehaviour.test.js:does not render a car radar side warning without a close attachment candidate"],
           "validatorRules": ["tools/analysis/validate_model_timeline.py:radar-side-warning-without-actual-alongside"],
           "captureTargets": ["Race 2 sideSignalWithoutPlacementFrames", "v1.1.0 race sideSignalWithoutPlacementFrames"],
           "assertions": ["CarLeftRight-only, placement-only, and both-source states are classified", "side warning must not render unless evidence says a car is actually alongside"],
@@ -1035,11 +1038,12 @@
           "tier": "tier2-capture-derived-replay",
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
-          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
-          "testFiles": ["tests/tools/test_model_timeline_validator.py"],
-          "validatorRules": ["tools/analysis/validate_model_timeline.py:gap-long-tail-dominates-scale"],
-          "assertions": ["pit entry/exit windows preserve selected series and scale mode", "far trailing selected line cannot flatten useful top-car range without explicit warning", "initial long-tail rule hides or compresses the furthest behind car when its gap to the focused car is greater than the focused car's gap to the leader"],
-          "gaps": ["temporal model fixture proves the initial long-tail policy, but real pit entry/exit replay and graph rendering calibration are still missing"]
+          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-long-tail-real-data.json"],
+          "artifacts": ["browser-overlays/gap-to-leader/long-tail-real-data.png", "localhost-overlays/gap-to-leader/long-tail-real-data.png"],
+          "testFiles": ["tests/tools/test_model_timeline_validator.py", "tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js"],
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:gap-long-tail-dominates-scale", "tools/validate_overlay_screenshots.py:validate_gap_long_tail_real_data_variant"],
+          "assertions": ["pit entry/exit windows preserve selected series and scale mode", "far trailing selected line cannot flatten useful top-car range without explicit warning", "initial long-tail rule hides or compresses the furthest behind car when its gap to the focused car is greater than the focused car's gap to the leader", "Dallara-derived graph screenshots exclude far-behind class positions while preserving leader/focus/ahead context"],
+          "gaps": ["real pit entry/exit replay is still aggregate evidence; Windows native render replay from this compact snapshot is still missing"]
         },
         {
           "id": "gap-minimum-scale",
@@ -1109,14 +1113,48 @@
           "assertions": ["focused GT3 marker becomes isFocus=true with focus radius", "non-player focus uses correct marker tone", "stale LMP2 focus is rejected"],
           "gaps": ["Windows native rendered marker geometry from this compact snapshot is still missing"]
         },
-        {
-          "id": "track-map-practice-marker-policy",
-          "family": "real-data-window",
-          "tier": "tier2-capture-derived-replay",
+    {
+      "id": "track-map-player-focus-class-color",
+      "family": "real-data-window",
+      "tier": "tier2-capture-derived-replay",
+      "status": "partial",
+      "surfaces": [
+        "compactReplay",
+        "browserReview",
+        "localhostObs",
+        "windowsNative"
+      ],
+      "fixtures": [
+        "fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-player-focus-class-color-real-data.json"
+      ],
+      "artifacts": [
+        "browser-overlays/track-map/player-focus-class-color.png",
+        "localhost-overlays/track-map/player-focus-class-color.png"
+      ],
+      "testFiles": [
+        "tests/tools/test_overlay_real_data_snapshots.py",
+        "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js",
+        "tests/browser-overlays/overlayCatalogueBehaviour.test.js",
+        "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs",
+        "tests/TmrOverlay.App.Tests/Overlays/TrackMapMarkerPolicyTests.cs"
+      ],
+      "assertions": [
+        "player-focus marker fill remains the iRacing class color",
+        "focus cyan is not substituted for marker fill",
+        "missing or invalid class color falls back to neutral white"
+      ],
+      "gaps": [
+        "Windows native rendered screenshot evidence for this compact GR86 sample is still missing"
+      ]
+    },
+    {
+      "id": "track-map-practice-marker-policy",
+      "family": "real-data-window",
+      "tier": "tier2-capture-derived-replay",
           "status": "partial",
           "surfaces": ["compactReplay", "localhostObs"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-focus-and-practice-marker-policy.json"],
-          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
+          "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs", "tests/TmrOverlay.App.Tests/Overlays/TrackMapMarkerPolicyTests.cs"],
           "assertions": ["practice/open-session valid lap-distance markers do not depend on HasTakenGrid", "race pre-grid pending-grid policy remains separate"],
           "gaps": ["Windows native render replay comparing hidden pending-grid markers against visible focus markers is still missing"]
         },

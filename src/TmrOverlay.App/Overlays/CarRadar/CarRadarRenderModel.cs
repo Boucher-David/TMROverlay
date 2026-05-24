@@ -93,24 +93,32 @@ internal sealed record CarRadarRenderModel(
         CarRadarCalibrationProfile? calibrationProfile = null,
         int radarVisibilitySeconds = CarRadarOverlayViewModel.DefaultRadarVisibilitySeconds)
     {
-        var shouldRender = (isAvailable && hasCurrentSignal) || previewVisible;
-        if (!shouldRender)
-        {
-            return Empty;
-        }
-
         var geometry = CarRadarGeometry.From(calibrationProfile, radarVisibilitySeconds);
-        var background = BackgroundCircle();
-        var rings = DistanceRings(geometry);
-        var labels = new List<CarRadarRenderText>(rings.Count + 1);
-        labels.AddRange(rings.Select(ring => ring.Label).OfType<CarRadarRenderText>());
-
         var currentCars = cars
             .Where(car => IsInRadarRange(car, geometry))
             .GroupBy(car => car.CarIdx)
             .Select(group => group.MinBy(car => Math.Abs(RangeRatio(car, geometry)))!)
             .ToArray();
         var sideAttachments = SideWarningAttachmentsFor(hasCarLeft, hasCarRight, currentCars, geometry);
+        var effectiveHasCarLeft = hasCarLeft && sideAttachments.Left is not null;
+        var effectiveHasCarRight = hasCarRight && sideAttachments.Right is not null;
+        var multiclassArc = showMulticlassWarning && strongestMulticlassApproach is not null
+            ? MulticlassApproachArc(strongestMulticlassApproach)
+            : null;
+        var hasRenderableSignal = currentCars.Length > 0
+            || effectiveHasCarLeft
+            || effectiveHasCarRight
+            || multiclassArc is not null;
+        var shouldRender = previewVisible || (isAvailable && hasRenderableSignal);
+        if (!shouldRender)
+        {
+            return Empty;
+        }
+
+        var background = BackgroundCircle();
+        var rings = DistanceRings(geometry);
+        var labels = new List<CarRadarRenderText>(rings.Count + 1);
+        labels.AddRange(rings.Select(ring => ring.Label).OfType<CarRadarRenderText>());
         var renderCars = new List<CarRadarRenderRectangle>();
 
         foreach (var placement in RadarCarPlacements(currentCars, sideAttachments, geometry))
@@ -118,12 +126,9 @@ internal sealed record CarRadarRenderModel(
             renderCars.Add(NearbyCarRectangle(placement, geometry));
         }
 
-        renderCars.AddRange(SideWarningRectangles(hasCarLeft, hasCarRight, sideAttachments, geometry));
+        renderCars.AddRange(SideWarningRectangles(effectiveHasCarLeft, effectiveHasCarRight, sideAttachments, geometry));
         renderCars.Add(PlayerCarRectangle(referenceCarClassColorHex));
 
-        var multiclassArc = showMulticlassWarning && strongestMulticlassApproach is not null
-            ? MulticlassApproachArc(strongestMulticlassApproach)
-            : null;
         if (multiclassArc?.Label is { } label)
         {
             labels.Add(label);

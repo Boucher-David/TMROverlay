@@ -6,6 +6,8 @@ namespace TmrOverlay.App.Overlays.Standings;
 
 internal static class StandingsOverlaySizing
 {
+    public const int ChromeOnlyClientHeight = 40;
+
     private const int AssumedBrowserSourceClassCount = 3;
     private const int HeaderHeight = 38;
     private const int BodyGap = 12;

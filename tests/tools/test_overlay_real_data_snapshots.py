@@ -109,7 +109,7 @@ class OverlayRealDataSnapshotTests(unittest.TestCase):
         self.assertEqual(raw["playerCarIdx"], timing_by_role["player"]["carIdx"])
         self.assertEqual(raw["focusCarIdx"], timing_by_role["focus"]["carIdx"])
         self.assertFalse(timing_by_role["focus"]["hasTakenGrid"])
-        self.assertFalse(timing_by_role["opponent-pending-grid"]["hasTakenGrid"])
+        self.assertFalse(timing_by_role["opponent-open-session"]["hasTakenGrid"])
 
         self.assertEqual(raw["focusCarIdx"], expected["focusMarker"]["carIdx"])
         self.assertFalse(expected["focusMarker"]["isPlayerFocus"])
@@ -119,10 +119,33 @@ class OverlayRealDataSnapshotTests(unittest.TestCase):
         self.assertFalse(expected["playerMarker"]["isFocus"])
 
         policy = expected["practiceMarkerPolicy"]
-        self.assertTrue(policy["hideNonFocusWithoutTakenGrid"])
+        self.assertFalse(policy["hideNonFocusWithoutTakenGrid"])
         self.assertTrue(policy["keepFocusWithoutTakenGrid"])
-        self.assertIn(timing_by_role["opponent-pending-grid"]["carIdx"], policy["hiddenCarIdxs"])
+        self.assertEqual([], policy["hiddenCarIdxs"])
+        self.assertIn(timing_by_role["opponent-open-session"]["carIdx"], policy["visibleCarIdxs"])
         self.assertIn(raw["focusCarIdx"], policy["visibleCarIdxs"])
+
+    def test_track_map_player_focus_class_color_snapshot_keeps_white_class_fill(self):
+        snapshot = snapshot_by_id("track-map-player-focus-class-color-real-data")
+        raw = snapshot["rawEvidence"]
+        expected = snapshot["expected"]
+
+        self.assertEqual("Practice", raw["sessionType"])
+        self.assertEqual(raw["playerCarIdx"], raw["focusCarIdx"])
+        self.assertFalse(raw["focusDiffersFromPlayer"])
+        self.assertEqual("#FFFFFF", raw["iRacingClassColor"])
+
+        player_focus = next(row for row in raw["timingRows"] if row["role"] == "player-focus")
+        self.assertEqual(raw["focusCarIdx"], player_focus["carIdx"])
+        self.assertEqual("#FFFFFF", player_focus["classColor"])
+        self.assertTrue(player_focus["hasTakenGrid"])
+
+        self.assertEqual(raw["focusCarIdx"], expected["focusMarker"]["carIdx"])
+        self.assertTrue(expected["focusMarker"]["isPlayerFocus"])
+        self.assertEqual("#FFFFFF", expected["focusMarker"]["classColor"])
+        self.assertEqual("#FFFFFF", expected["focusMarker"]["fill"])
+        self.assertEqual("#00E8FF", expected["focusMarker"]["mustNotUseFocusColor"])
+        self.assertEqual("#FFFFFF", expected["fallbackPolicy"]["invalidOrMissingClassColorFill"])
 
     def test_flags_meatball_snapshot_preserves_confirmed_local_critical_evidence(self):
         snapshot = snapshot_by_id("flags-meatball-local-policy")
@@ -203,6 +226,56 @@ class OverlayRealDataSnapshotTests(unittest.TestCase):
         self.assertGreater(refuel["fuelAfterLiters"], refuel["fuelBeforeLiters"])
         self.assertIn("service_active_signal", refuel["confidenceFlags"])
         self.assertTrue(expected["mustNotRequirePostSessionHistoryForLiveFuelCalculator"])
+
+    def test_gap_long_tail_snapshot_preserves_focus_relative_cap_policy(self):
+        snapshot = snapshot_by_id("gap-to-leader-long-tail-real-data")
+        raw = snapshot["rawEvidence"]
+        expected = snapshot["expected"]
+
+        self.assertEqual("gap-to-leader", snapshot["overlayId"])
+        self.assertIn("gap-pit-and-long-tail-real-data", snapshot["scenarioIds"])
+        self.assertEqual("Race", raw["sessionType"])
+
+        focus = raw["focusCar"]
+        existing = raw["existingSelection"]
+        furthest = existing["furthestBehind"]
+        policy = expected["policy"]
+
+        self.assertEqual(focus["carIdx"], 19)
+        self.assertEqual(focus["classPosition"], 5)
+        self.assertGreater(existing["selectedSeriesCount"], len(expected["graph"]["selectedClassPositions"]))
+        self.assertTrue(existing["readabilityViolation"])
+        self.assertGreater(furthest["gapToFocusSeconds"], focus["gapToClassLeaderSeconds"])
+        self.assertGreater(existing["graphMaxGapSeconds"], expected["graph"]["maxIncludedGapToFocusSeconds"] * 20)
+        self.assertAlmostEqual(
+            focus["gapToClassLeaderSeconds"],
+            policy["behindCapSeconds"],
+            places=4,
+        )
+        self.assertTrue(policy["keepClassLeader"])
+        self.assertTrue(policy["keepFocusCar"])
+        self.assertTrue(policy["excludeBehindBeyondFocusGapToLeader"])
+
+        selected_positions = expected["graph"]["selectedClassPositions"]
+        forbidden_positions = expected["graph"]["forbiddenClassPositions"]
+        self.assertIn(raw["classLeader"]["classPosition"], selected_positions)
+        self.assertIn(focus["classPosition"], selected_positions)
+        self.assertNotIn(furthest["classPosition"], selected_positions)
+        self.assertIn(furthest["classPosition"], forbidden_positions)
+
+        for candidate in expected["excludedCandidates"]:
+            self.assertGreater(candidate["gapToFocusSeconds"], policy["behindCapSeconds"])
+            self.assertIn(candidate["classPosition"], forbidden_positions)
+
+        self.assertEqual("focus-relative", expected["graph"]["scaleMode"])
+        self.assertLessEqual(expected["graph"]["axisBehindSecondsMaximum"], 2.0)
+        self.assertEqual(
+            [
+                "browser-overlays/gap-to-leader/long-tail-real-data.png",
+                "localhost-overlays/gap-to-leader/long-tail-real-data.png",
+            ],
+            expected["screenshots"],
+        )
 
     def test_pit_service_refuel_snapshot_preserves_pit_request_and_window_evidence(self):
         snapshot = snapshot_by_id("pit-service-refuel-pit-window-real-data")

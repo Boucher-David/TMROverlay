@@ -105,6 +105,7 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'standings', slug: 'starting-grid', query: 'fixture=standings-starting-grid' },
   { overlayId: 'standings', slug: 'no-content', query: 'fixture=standings-no-content' },
   { overlayId: 'standings', slug: 'content-off-chrome-on', query: 'fixture=standings-content-off-chrome-on' },
+  { overlayId: 'standings', slug: 'no-results-chrome-on', query: 'fixture=standings-no-results-chrome-on' },
   { overlayId: 'standings', slug: 'min-scale', query: 'fixture=standings-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'relative', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'relative', slug: 'rightmost-evidence', query: 'fixture=rightmost-evidence' },
@@ -142,12 +143,15 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'car-radar', slug: 'right', query: 'fixture=car-radar-right' },
   { overlayId: 'car-radar', slug: 'both-sides', query: 'fixture=car-radar-both-sides' },
   { overlayId: 'car-radar', slug: 'clear', query: 'fixture=car-radar-clear' },
+  { overlayId: 'car-radar', slug: 'side-no-placement', query: 'fixture=car-radar-side-no-placement' },
   { overlayId: 'car-radar', slug: 'min-scale', query: 'fixture=car-radar-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'gap-to-leader', slug: 'no-cars', query: 'fixture=gap-no-cars' },
+  { overlayId: 'gap-to-leader', slug: 'long-tail-real-data', query: 'fixture=gap-long-tail-real-data' },
   { overlayId: 'gap-to-leader', slug: 'trend-row-off', query: 'fixture=gap-trend-row-off' },
   { overlayId: 'gap-to-leader', slug: 'trend-off', query: 'fixture=gap-trend-off' },
   { overlayId: 'gap-to-leader', slug: 'graph-off', query: 'fixture=gap-graph-off' },
   { overlayId: 'track-map', slug: 'no-markers', query: 'fixture=track-map-no-markers' },
+  { overlayId: 'track-map', slug: 'player-focus-class-color', query: 'fixture=track-map-player-focus-class-color' },
   { overlayId: 'track-map', slug: 'min-scale', query: 'fixture=track-map-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'flags', slug: 'all-kinds', query: 'fixture=flags-all-kinds' },
   { overlayId: 'flags', slug: 'min-scale', query: 'fixture=flags-min-scale', minScale: 0.6, scaleTransform: 0.6 },
@@ -444,6 +448,7 @@ function variantMinBytes(variant) {
   if ([
     'input-state/waiting',
     'car-radar/clear',
+    'car-radar/side-no-placement',
     'track-map/no-markers'
   ].includes(key)) {
     return 500;

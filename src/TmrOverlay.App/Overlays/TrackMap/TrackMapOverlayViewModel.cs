@@ -120,6 +120,7 @@ internal sealed record TrackMapOverlayViewModel(
     public static IReadOnlyList<TrackMapOverlayMarker> BuildMarkers(LiveTelemetrySnapshot snapshot)
     {
         var models = snapshot.CompleteModels();
+        var modelSnapshot = snapshot with { Models = models };
         var markers = new Dictionary<int, TrackMapOverlayMarker>();
         var scoringByCarIdx = models.Scoring.Rows
             .GroupBy(row => row.CarIdx)
@@ -128,6 +129,7 @@ internal sealed record TrackMapOverlayViewModel(
             ?? models.Scoring.ReferenceCarIdx
             ?? models.Timing.FocusCarIdx
             ?? models.Spatial.ReferenceCarIdx;
+        var sessionKind = OverlayAvailabilityEvaluator.CurrentSessionKind(modelSnapshot);
 
         foreach (var row in models.Timing.OverallRows.Concat(models.Timing.ClassRows))
         {
@@ -135,7 +137,7 @@ internal sealed record TrackMapOverlayViewModel(
             var isFocus = row.IsFocus
                 || row.CarIdx == referenceCarIdx
                 || scoringRow?.IsFocus == true;
-            if (!TrackMapMarkerPolicy.ShouldRenderTimingMarker(row, isFocus)
+            if (!TrackMapMarkerPolicy.ShouldRenderTimingMarker(row, isFocus, sessionKind)
                 || row.LapDistPct is not { } lapDistPct)
             {
                 continue;

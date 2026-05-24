@@ -3122,7 +3122,7 @@ internal static class LiveRaceModelBuilder
             return LiveSignalEvidence.Unavailable("measured-local-fuel-baseline", "pit_or_service_context");
         }
 
-        if (Progress(sample.LapCompleted, sample.LapDistPct) is null)
+        if (LocalFuelProgress(sample) is null)
         {
             return LiveSignalEvidence.Unavailable("measured-local-fuel-baseline", "local_lap_progress_missing");
         }
@@ -3130,6 +3130,19 @@ internal static class LiveRaceModelBuilder
         return LiveSignalEvidence.Partial(
             "measured-local-fuel-baseline",
             "requires_previous_green_distance_sample");
+    }
+
+    private static double? LocalFuelProgress(HistoricalTelemetrySample sample)
+    {
+        var lapCompleted = sample.TeamLapCompleted is >= 0
+            ? sample.TeamLapCompleted
+            : sample.LapCompleted is >= 0
+                ? sample.LapCompleted
+                : null;
+        var lapDistPct = ValidLapDistPct(sample.TeamLapDistPct) is not null
+            ? sample.TeamLapDistPct
+            : sample.LapDistPct;
+        return Progress(lapCompleted, lapDistPct);
     }
 
     private static bool HasTimingSignal(

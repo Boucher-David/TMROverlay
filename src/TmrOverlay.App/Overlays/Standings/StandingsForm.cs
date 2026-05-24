@@ -326,6 +326,7 @@ internal sealed class StandingsForm : PersistentOverlayForm
             var columns = DisplayColumns();
             changed |= ApplyColumns(columns);
             changed |= ApplyLayoutSizes();
+            changed |= OverlayChrome.SetVisibleIfChanged(_table, viewModel.Rows.Count > 0);
             changed |= OverlayChrome.ApplyChromeState(
                 this,
                 _titleLabel,
@@ -358,20 +359,22 @@ internal sealed class StandingsForm : PersistentOverlayForm
 
     private bool ApplyActiveRowCapacity(int rowCount)
     {
-        var nextCapacity = Math.Clamp(Math.Max(1, rowCount), 1, AllocatedRows);
+        var nextCapacity = rowCount <= 0
+            ? 0
+            : Math.Clamp(rowCount, 1, AllocatedRows);
         if (_activeRowCapacity == nextCapacity && _table.RowStyles.Count > nextCapacity)
         {
             return false;
         }
 
         _activeRowCapacity = nextCapacity;
-        var activeRowsIncludingHeader = nextCapacity + 1;
-        var activePercent = 100f / activeRowsIncludingHeader;
+        var activeRowsIncludingHeader = nextCapacity > 0 ? nextCapacity + 1 : 0;
+        var activePercent = activeRowsIncludingHeader > 0 ? 100f / activeRowsIncludingHeader : 0f;
         var changed = false;
         for (var index = 0; index < _table.RowStyles.Count; index++)
         {
             var style = _table.RowStyles[index];
-            var active = index <= nextCapacity;
+            var active = activeRowsIncludingHeader > 0 && index <= nextCapacity;
             var nextType = active ? SizeType.Percent : SizeType.Absolute;
             var nextHeight = active ? activePercent : 0f;
             if (style.SizeType != nextType)

@@ -1864,15 +1864,18 @@ function captureCarRadarModel(models, fallbackStatus, headerItems, radarSettings
     hasCurrentSignal,
     referenceCarClassColorHex: spatial.referenceCarClassColorHex
   };
+  const renderModel = carRadarRenderModelFromState(carRadar);
+  const hasEffectiveLeft = renderModel.cars?.some((car) => car.kind === 'side-left') === true;
+  const hasEffectiveRight = renderModel.cars?.some((car) => car.kind === 'side-right') === true;
   const status = !inCar
     ? 'waiting for player in car'
     : spatial.hasData === false
       ? 'waiting for radar'
-      : spatial.hasCarLeft && spatial.hasCarRight
+      : hasEffectiveLeft && hasEffectiveRight
         ? 'cars both sides'
-        : spatial.hasCarLeft
+        : hasEffectiveLeft
           ? 'car left'
-          : spatial.hasCarRight
+          : hasEffectiveRight
             ? 'car right'
             : showMulticlassWarning && strongestMulticlassApproach
               ? 'faster class'
@@ -1883,7 +1886,14 @@ function captureCarRadarModel(models, fallbackStatus, headerItems, radarSettings
     bodyKind: 'car-radar',
     carRadar: {
       ...carRadar,
-      renderModel: carRadarRenderModelFromState(carRadar)
+      hasCarLeft: hasEffectiveLeft,
+      hasCarRight: hasEffectiveRight,
+      hasCurrentSignal: Boolean(
+        hasEffectiveLeft
+        || hasEffectiveRight
+        || (showMulticlassWarning && strongestMulticlassApproach)
+        || cars.some((car) => isInCarRadarRange(car, radarVisibilitySeconds))),
+      renderModel
     }
   };
 }

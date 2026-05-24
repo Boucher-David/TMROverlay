@@ -1117,6 +1117,7 @@ internal static class Program
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "starting-grid", "Starting Grid"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "no-content", "No Content"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "content-off-chrome-on", "Content Off Chrome On"),
+            new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "no-results-chrome-on", "No Results Chrome On"),
             new NativeOverlayVariantSpec(StandingsOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "rightmost-evidence", "Rightmost Evidence"),
@@ -1153,6 +1154,7 @@ internal static class Program
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "right", "Right"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "both-sides", "Both Sides"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "clear", "Clear"),
+            new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "side-no-placement", "Side No Placement"),
             new NativeOverlayVariantSpec(CarRadarOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "no-cars", "No Cars"),
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "trend-row-off", "Trend Row Off"),
@@ -1160,6 +1162,7 @@ internal static class Program
             new NativeOverlayVariantSpec(GapToLeaderOverlayDefinition.Definition.Id, "graph-off", "Graph Off"),
             new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "circle-fallback", "Circle Fallback"),
             new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "no-markers", "No Markers"),
+            new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "player-focus-class-color", "Player Focus Class Color"),
             new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(FlagsOverlayDefinition.Definition.Id, "all-kinds", "All Kinds"),
             new NativeOverlayVariantSpec(FlagsOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
@@ -1360,6 +1363,11 @@ internal static class Program
             {
                 return ReviewStandingsChromeOnlyModel();
             }
+
+            if (string.Equals(slug, "no-results-chrome-on", StringComparison.OrdinalIgnoreCase))
+            {
+                return ReviewStandingsNoResultsChromeOnlyModel();
+            }
         }
 
         if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
@@ -1503,6 +1511,7 @@ internal static class Program
                 var value when string.Equals(value, "no-markers", StringComparison.OrdinalIgnoreCase) => ReviewTrackMapModel(
                     includeMarkers: false,
                     includeGeneratedMap: true),
+                var value when string.Equals(value, "player-focus-class-color", StringComparison.OrdinalIgnoreCase) => ReviewTrackMapPlayerFocusClassColorModel(),
                 _ => throw new InvalidOperationException($"Unknown track-map native overlay fixture variant {slug}.")
             };
         }
@@ -1566,6 +1575,7 @@ internal static class Program
             {
                 "no-content" => new Size(284, 28),
                 "content-off-chrome-on" => new Size(284, 40),
+                "no-results-chrome-on" => new Size(677, 40),
                 "three-class" => new Size(form.ClientSize.Width, 386),
                 _ => form.ClientSize
             };
@@ -1637,6 +1647,18 @@ internal static class Program
             "chrome only | content disabled",
             "source: preview fixture extremes",
             DesignV2Evidence.Measured,
+            new DesignV2TableBody([], []),
+            HeaderText: "06:37:08",
+            ShowFooter: false);
+    }
+
+    private static DesignV2OverlayModel ReviewStandingsNoResultsChromeOnlyModel()
+    {
+        return new DesignV2OverlayModel(
+            "Standings",
+            "waiting for standings",
+            "source: waiting for standings",
+            DesignV2Evidence.Unavailable,
             new DesignV2TableBody([], []),
             HeaderText: "06:37:08",
             ShowFooter: false);
@@ -2112,6 +2134,42 @@ internal static class Program
             ShowFooter: false,
             ShowHeader: false,
             ShouldRender: includeMarkers);
+    }
+
+    private static DesignV2OverlayModel ReviewTrackMapPlayerFocusClassColorModel()
+    {
+        var viewModel = new TrackMapOverlayViewModel(
+            Title: "Track Map",
+            Status: "track map player focus class color",
+            Source: "source: compact GR86 player-focus class color",
+            IsAvailable: true,
+            Markers:
+            [
+                new TrackMapOverlayMarker(
+                    3,
+                    0.081d,
+                    IsFocus: true,
+                    ClassColorHex: "#FFFFFF",
+                    Position: 1,
+                    TrackSurface: 3,
+                    IsPlayerFocus: true)
+            ],
+            Sectors: [],
+            ShowSectorBoundaries: false,
+            InternalOpacity: TrackMapBrowserSettings.Default.InternalOpacity,
+            IncludeUserMaps: true,
+            TrackMap: null);
+
+        return new DesignV2OverlayModel(
+            "Track Map",
+            "track map player focus class color",
+            "source: compact GR86 player-focus class color",
+            DesignV2Evidence.Live,
+            new DesignV2TrackMapBody(TrackMapRenderModel.FromViewModel(viewModel)),
+            HeaderText: "06:37:08",
+            ShowFooter: false,
+            ShowHeader: false,
+            ShouldRender: true);
     }
 
     private static TrackMapDocument ReviewTrackMapDocument()
@@ -2873,7 +2931,6 @@ internal static class Program
     {
         var session = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) ?? previewMode;
         var hasRight = session == OverlaySessionKind.Race;
-        var status = hasRight ? "car right" : "faster class";
         var approach = new LiveMulticlassApproach(
             CarIdx: 12,
             CarClass: null,
@@ -2881,17 +2938,22 @@ internal static class Program
             RelativeSeconds: -2.4d,
             ClosingRateSecondsPerSecond: null,
             Urgency: 0d);
+        IReadOnlyList<LiveSpatialCar> cars = hasRight
+            ? [ReviewRadarCar(91, 2d, 0.2d, "#FFAA00")]
+            : [];
         var renderModel = CarRadarRenderModel.FromState(
             isAvailable: true,
             hasCarLeft: false,
             hasCarRight: hasRight,
-            cars: [],
+            cars: cars,
             strongestMulticlassApproach: approach,
             showMulticlassWarning: true,
             previewVisible: false,
             hasCurrentSignal: true,
             referenceCarClassColorHex: "#FFDA59",
             calibrationProfile: CarRadarCalibrationProfile.Default);
+        var effectiveHasRight = renderModel.Cars.Any(car => car.Kind == "side-right");
+        var status = effectiveHasRight ? "car right" : "faster class";
         return new DesignV2OverlayModel(
             "Car Radar",
             status,
@@ -2900,8 +2962,8 @@ internal static class Program
             new DesignV2RadarBody(
                 IsAvailable: true,
                 HasLeft: false,
-                HasRight: hasRight,
-                Cars: [],
+                HasRight: effectiveHasRight,
+                Cars: cars,
                 StrongestMulticlassApproach: approach,
                 ShowMulticlassWarning: true,
                 PreviewVisible: false,
@@ -2917,7 +2979,8 @@ internal static class Program
         if (!string.Equals(slug, "left", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(slug, "right", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(slug, "both-sides", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(slug, "clear", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(slug, "clear", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(slug, "side-no-placement", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException($"Unknown car-radar native overlay fixture variant {slug}.");
         }
@@ -2926,24 +2989,38 @@ internal static class Program
             || string.Equals(slug, "both-sides", StringComparison.OrdinalIgnoreCase);
         var hasRight = string.Equals(slug, "right", StringComparison.OrdinalIgnoreCase)
             || string.Equals(slug, "both-sides", StringComparison.OrdinalIgnoreCase);
-        var status = hasLeft && hasRight
-            ? "cars both sides"
-            : hasLeft
-                ? "car left"
-                : hasRight
-                    ? "car right"
-                    : "clear";
+        IReadOnlyList<LiveSpatialCar> cars = slug.ToLowerInvariant() switch
+        {
+            "left" => [ReviewRadarCar(21, -2d, -0.2d, "#33CEFF")],
+            "right" => [ReviewRadarCar(22, 2d, 0.2d, "#FFAA00")],
+            "both-sides" =>
+            [
+                ReviewRadarCar(21, -2d, -0.2d, "#33CEFF"),
+                ReviewRadarCar(22, 2d, 0.2d, "#FFAA00")
+            ],
+            "side-no-placement" => [ReviewRadarCar(23, 18d, 1.2d, "#FFDA59")],
+            _ => []
+        };
         var renderModel = CarRadarRenderModel.FromState(
             isAvailable: true,
             hasCarLeft: hasLeft,
             hasCarRight: hasRight,
-            cars: [],
+            cars: cars,
             strongestMulticlassApproach: null,
             showMulticlassWarning: true,
             previewVisible: false,
-            hasCurrentSignal: hasLeft || hasRight,
+            hasCurrentSignal: hasLeft || hasRight || cars.Count > 0,
             referenceCarClassColorHex: "#FFDA59",
             calibrationProfile: CarRadarCalibrationProfile.Default);
+        var effectiveHasLeft = renderModel.Cars.Any(car => car.Kind == "side-left");
+        var effectiveHasRight = renderModel.Cars.Any(car => car.Kind == "side-right");
+        var status = effectiveHasLeft && effectiveHasRight
+            ? "cars both sides"
+            : effectiveHasLeft
+                ? "car left"
+                : effectiveHasRight
+                    ? "car right"
+                    : "clear";
         return new DesignV2OverlayModel(
             "Car Radar",
             status,
@@ -2951,9 +3028,9 @@ internal static class Program
             DesignV2Evidence.Live,
             new DesignV2RadarBody(
                 IsAvailable: true,
-                HasLeft: hasLeft,
-                HasRight: hasRight,
-                Cars: [],
+                HasLeft: effectiveHasLeft,
+                HasRight: effectiveHasRight,
+                Cars: cars,
                 StrongestMulticlassApproach: null,
                 ShowMulticlassWarning: true,
                 PreviewVisible: false,
@@ -2962,6 +3039,27 @@ internal static class Program
             HeaderText: string.Empty,
             ShowFooter: false,
             ShouldRender: renderModel.ShouldRender);
+    }
+
+    private static LiveSpatialCar ReviewRadarCar(
+        int carIdx,
+        double relativeMeters,
+        double relativeSeconds,
+        string carClassColorHex)
+    {
+        return new LiveSpatialCar(
+            CarIdx: carIdx,
+            Quality: LiveModelQuality.Reliable,
+            PlacementEvidence: LiveSignalEvidence.Reliable("native-screenshot-fixture"),
+            RelativeLaps: relativeMeters / 5100d,
+            RelativeSeconds: relativeSeconds,
+            RelativeMeters: relativeMeters,
+            OverallPosition: null,
+            ClassPosition: null,
+            CarClass: 4098,
+            TrackSurface: 3,
+            OnPitRoad: false,
+            CarClassColorHex: carClassColorHex);
     }
 
     private static DesignV2OverlayModel ReviewGapNoCarsModel()
@@ -9669,6 +9767,10 @@ internal static class Program
             {
                 size = new Size(284, 40);
             }
+            else if (string.Equals(slug, "no-results-chrome-on", StringComparison.OrdinalIgnoreCase))
+            {
+                size = new Size(size.Width, 40);
+            }
             else if (string.Equals(slug, "three-class", StringComparison.OrdinalIgnoreCase))
             {
                 size = new Size(size.Width, 386);
@@ -9782,7 +9884,8 @@ internal static class Program
             or "focused-class-only"
             or "starting-grid"
             or "no-content"
-            or "content-off-chrome-on";
+            or "content-off-chrome-on"
+            or "no-results-chrome-on";
     }
 
     private static void ApplyStandingsVariantSettings(OverlaySettings settings, string slug)
@@ -9811,6 +9914,10 @@ internal static class Program
         else if (string.Equals(slug, "content-off-chrome-on", StringComparison.OrdinalIgnoreCase))
         {
             SetOnlyStandingsColumnsEnabled(settings, []);
+            SetSharedChromeOptions(settings, enabled: true);
+        }
+        else if (string.Equals(slug, "no-results-chrome-on", StringComparison.OrdinalIgnoreCase))
+        {
             SetSharedChromeOptions(settings, enabled: true);
         }
     }

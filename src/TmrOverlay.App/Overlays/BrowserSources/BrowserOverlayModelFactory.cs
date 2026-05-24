@@ -253,10 +253,11 @@ internal sealed class BrowserOverlayModelFactory
             browserSettings.MaximumRows,
             browserSettings.OtherClassRowsPerClass,
             browserSettings.ClassSeparatorsEnabled);
-        var columns = hasRenderableContent
+        var hasBodyRows = hasRenderableContent && viewModel.Rows.Count > 0;
+        var columns = hasBodyRows
             ? BrowserColumnsWithValidationCapacity(browserSettings.Columns)
             : [];
-        var rows = hasRenderableContent
+        var rows = hasBodyRows
             ? viewModel.Rows
                 .Select(row => new BrowserOverlayDisplayRow(
                     Cells: columns
@@ -3139,16 +3140,21 @@ internal sealed class BrowserOverlayModelFactory
 
     private static int StandingsBrowserSourceHeight(BrowserOverlayDisplayModel model, int fallbackHeight)
     {
-        if (!string.Equals(model.OverlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            || model.Rows.Count <= 0)
+        if (!string.Equals(model.OverlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
             return fallbackHeight;
+        }
+
+        var hasVisibleHeader = model.HeaderItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
+        if (model.Rows.Count <= 0)
+        {
+            return hasVisibleHeader ? StandingsOverlaySizing.ChromeOnlyClientHeight : fallbackHeight;
         }
 
         return StandingsOverlaySizing.TargetClientHeightForRows(
             model.Rows.Count,
             fallbackHeight,
-            model.HeaderItems.Any(item => !string.IsNullOrWhiteSpace(item.Value)),
+            hasVisibleHeader,
             showFooter: false);
     }
 
@@ -3259,7 +3265,6 @@ internal sealed class BrowserOverlayModelFactory
     {
         return string.Equals(model.OverlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             && model.ShouldRender
-            && model.Columns.Count > 0
             && model.Rows.Count == 0
             && model.HeaderItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
     }

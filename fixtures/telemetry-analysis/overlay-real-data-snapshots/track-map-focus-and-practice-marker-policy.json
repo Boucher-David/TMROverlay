@@ -39,7 +39,7 @@
       },
       {
         "carIdx": 33,
-        "role": "opponent-pending-grid",
+        "role": "opponent-open-session",
         "carClass": "GT3",
         "lapDistPct": 0.180,
         "hasTakenGrid": false,
@@ -61,10 +61,10 @@
       "classColor": "#00AEEF"
     },
     "practiceMarkerPolicy": {
-      "hideNonFocusWithoutTakenGrid": true,
+      "hideNonFocusWithoutTakenGrid": false,
       "keepFocusWithoutTakenGrid": true,
-      "hiddenCarIdxs": [33],
-      "visibleCarIdxs": [10, 22]
+      "hiddenCarIdxs": [],
+      "visibleCarIdxs": [10, 22, 33]
     }
   }
 }

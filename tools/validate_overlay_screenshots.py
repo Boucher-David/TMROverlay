@@ -416,6 +416,7 @@ OVERLAY_VARIANT_SPECS = (
     ("standings", "starting-grid", "fixture=standings-starting-grid", True, None),
     ("standings", "no-content", "fixture=standings-no-content", True, None),
     ("standings", "content-off-chrome-on", "fixture=standings-content-off-chrome-on", True, None),
+    ("standings", "no-results-chrome-on", "fixture=standings-no-results-chrome-on", True, None),
     ("standings", "min-scale", "fixture=standings-min-scale", True, None),
     ("relative", "chrome-off", "fixture=chrome-off", True, None),
     ("relative", "rightmost-evidence", "fixture=rightmost-evidence", True, None),
@@ -453,13 +454,16 @@ OVERLAY_VARIANT_SPECS = (
     ("car-radar", "right", "fixture=car-radar-right", True, None),
     ("car-radar", "both-sides", "fixture=car-radar-both-sides", True, None),
     ("car-radar", "clear", "fixture=car-radar-clear", True, None),
+    ("car-radar", "side-no-placement", "fixture=car-radar-side-no-placement", True, None),
     ("car-radar", "min-scale", "fixture=car-radar-min-scale", True, None),
     ("gap-to-leader", "no-cars", "fixture=gap-no-cars", True, None),
+    ("gap-to-leader", "long-tail-real-data", "fixture=gap-long-tail-real-data", False, None),
     ("gap-to-leader", "trend-row-off", "fixture=gap-trend-row-off", True, None),
     ("gap-to-leader", "trend-off", "fixture=gap-trend-off", True, None),
     ("gap-to-leader", "graph-off", "fixture=gap-graph-off", True, None),
     ("track-map", "circle-fallback", "trackMap=fallback", True, "track-map-fallback"),
     ("track-map", "no-markers", "fixture=track-map-no-markers", True, None),
+    ("track-map", "player-focus-class-color", "fixture=track-map-player-focus-class-color", True, None),
     ("track-map", "min-scale", "fixture=track-map-min-scale", True, None),
     ("flags", "all-kinds", "fixture=flags-all-kinds", True, None),
     ("flags", "min-scale", "fixture=flags-min-scale", True, None),
@@ -503,6 +507,7 @@ OVERLAY_VARIANTS_ALLOW_EMPTY_TEXT_SAMPLE = {
     ("car-radar", "right"),
     ("car-radar", "both-sides"),
     ("car-radar", "clear"),
+    ("car-radar", "side-no-placement"),
     ("gap-to-leader", "no-cars"),
     ("track-map", "no-markers"),
     ("flags", "all-kinds"),
@@ -643,6 +648,7 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("standings", "starting-grid"): (677, 313),
     ("standings", "no-content"): (284, 28),
     ("standings", "content-off-chrome-on"): (284, 40),
+    ("standings", "no-results-chrome-on"): (677, 40),
     ("standings", "min-scale"): (406, 188),
     ("relative", "chrome-off"): (392, 274),
     ("relative", "rightmost-evidence"): (440, 308),
@@ -651,6 +657,7 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("relative", "rows-2"): (392, 246),
     ("relative", "no-content"): (360, 274),
     ("gap-to-leader", "chrome-off"): (654, 298),
+    ("gap-to-leader", "long-tail-real-data"): (654, 336),
     ("gap-to-leader", "trend-row-off"): (654, 336),
     ("gap-to-leader", "trend-off"): (444, 336),
     ("gap-to-leader", "graph-off"): (360, 336),
@@ -686,6 +693,7 @@ WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("standings", "starting-grid"): (677, 313),
     ("standings", "no-content"): (284, 28),
     ("standings", "content-off-chrome-on"): (284, 40),
+    ("standings", "no-results-chrome-on"): (677, 40),
     ("relative", "chrome-off"): (392, 274),
     ("relative", "rightmost-evidence"): (440, 308),
     ("relative", "driver-only"): (274, 308),
@@ -2002,6 +2010,7 @@ def allows_empty_table_evidence(path: str) -> bool:
     return is_expected_hidden_relative_state(path) or screenshot_variant_key(path) in {
         ("standings", "no-content"),
         ("standings", "content-off-chrome-on"),
+        ("standings", "no-results-chrome-on"),
     }
 
 
@@ -5799,6 +5808,8 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
     elif overlay_id == "gap-to-leader":
         if slug == "no-cars":
             validate_gap_no_cars_variant(path, values, failures)
+        elif slug == "long-tail-real-data":
+            validate_gap_long_tail_real_data_variant(path, values, failures)
         else:
             validate_gap_to_leader_contract(path, values, failures)
     elif overlay_id == "track-map":
@@ -6519,6 +6530,7 @@ def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, 
         "right": "car right",
         "both-sides": "cars both sides",
         "clear": "clear",
+        "side-no-placement": "clear",
     }.get(slug)
     if expected_status is None:
         failures.append(f"{path}: unknown car-radar fixture variant {slug!r}")
@@ -6536,6 +6548,7 @@ def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, 
         "right": ["side-right"],
         "both-sides": ["side-left", "side-right"],
         "clear": [],
+        "side-no-placement": ["nearby", "focus"],
     }[slug]
     for kind in expected_items:
         if kind not in item_kinds:
@@ -6546,6 +6559,8 @@ def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, 
         if visible_header_items(values):
             failures.append(f"{path}: car-radar clear should not expose visible header items")
         reject_hidden_overlay_text(path, values.get("textSample"), "car-radar clear textSample", failures)
+    if slug == "side-no-placement" and any(kind.startswith("side-") for kind in item_kinds):
+        failures.append(f"{path}: car-radar side-no-placement should not expose side items, got {item_kinds!r}")
     primitive_kinds = [text_value(item, "kind") for item in evidence_list(radar, "primitives")]
     if "arc" in primitive_kinds:
         failures.append(f"{path}: car-radar {slug} should not expose multiclass arc primitive")
@@ -6565,6 +6580,46 @@ def validate_gap_no_cars_variant(path: str, values: dict[str, object], failures:
         failures.append(f"{path}: gap no-cars expected no metric rows")
     if graph.get("selectedSeriesCount") not in (None, 0):
         failures.append(f"{path}: gap no-cars expected selectedSeriesCount=0, got {graph.get('selectedSeriesCount')!r}")
+
+
+def validate_gap_long_tail_real_data_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    validate_gap_to_leader_contract(path, values, failures)
+    require_equal(path, "gap long-tail bodyKind", values.get("bodyKind"), "graph", failures)
+    require_equal(path, "gap long-tail shouldRender", values.get("shouldRender"), True, failures)
+
+    graph = typed_dict(model_evidence(values).get("graph"))
+    geometry = typed_dict(graph.get("geometry"))
+    if geometry.get("scale") != "focus-relative":
+        failures.append(f"{path}: gap long-tail expected focus-relative scale, got {geometry.get('scale')!r}")
+
+    behind_seconds = geometry.get("behindSeconds")
+    if not isinstance(behind_seconds, (int, float)) or behind_seconds > 2.0:
+        failures.append(f"{path}: gap long-tail expected behindSeconds <= 2.0, got {behind_seconds!r}")
+
+    latest_reference_gap = geometry.get("latestReferenceGapSeconds")
+    if not isinstance(latest_reference_gap, (int, float)) or latest_reference_gap <= 0:
+        failures.append(f"{path}: gap long-tail expected positive latest reference gap, got {latest_reference_gap!r}")
+
+    class_positions = [
+        item.get("classPosition")
+        for item in evidence_list(graph, "series")
+        if isinstance(item, dict)
+    ]
+    require_sequence(
+        path,
+        "gap long-tail selected class positions",
+        class_positions,
+        [1, 4, 5],
+        failures,
+    )
+    for forbidden in (6, 9):
+        if forbidden in class_positions:
+            failures.append(f"{path}: gap long-tail still includes far-behind class position P{forbidden}")
+
+    if graph.get("selectedSeriesCount") != 3:
+        failures.append(f"{path}: gap long-tail expected selectedSeriesCount=3, got {graph.get('selectedSeriesCount')!r}")
+    if graph.get("comparisonLabel") != "P4":
+        failures.append(f"{path}: gap long-tail expected comparisonLabel='P4', got {graph.get('comparisonLabel')!r}")
 
 
 def validate_gap_min_scale_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -6605,6 +6660,21 @@ def validate_track_map_variant(path: str, values: dict[str, object], slug: str, 
         if visible_header_items(values):
             failures.append(f"{path}: track-map no-markers should not expose visible header items")
         reject_hidden_overlay_text(path, values.get("textSample"), "track-map no-markers textSample", failures)
+    elif slug == "player-focus-class-color":
+        require_equal(path, "track-map player-focus class color shouldRender", values.get("shouldRender"), True, failures)
+        require_equal(path, "track-map player-focus class color markerCount", track_map.get("markerCount"), 1, failures)
+        markers = evidence_list(track_map, "items")
+        focus_markers = [typed_dict(marker) for marker in markers if marker.get("kind") == "focus-marker"]
+        if len(focus_markers) != 1:
+            failures.append(f"{path}: track-map player-focus class color expected one focus marker, got {len(focus_markers)}")
+        else:
+            marker = focus_markers[0]
+            if marker.get("fill") != "rgba(255, 255, 255, 0.961)":
+                failures.append(f"{path}: track-map player-focus marker expected white fill, got {marker.get('fill')!r}")
+            if marker.get("fill") == "rgba(0, 232, 255, 1)":
+                failures.append(f"{path}: track-map player-focus marker must not use focus cyan fill")
+            if text_value(marker, "label") != "1":
+                failures.append(f"{path}: track-map player-focus marker expected position label '1', got {marker.get('label')!r}")
     else:
         failures.append(f"{path}: unknown track-map fixture variant {slug!r}")
     require_size_fields(path, "track-map", track_map, 360, 360, failures)
@@ -6739,6 +6809,9 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
     if slug == "content-off-chrome-on":
         validate_standings_content_off_chrome_on_variant(path, values, failures)
         return
+    if slug == "no-results-chrome-on":
+        validate_standings_no_results_chrome_on_variant(path, values, failures)
+        return
 
     expected_labels, expected_widths, expected_alignments = expected_standings_columns(mode, slug)
     require_sequence(path, "standings column labels", [text_value(column, "label") for column in columns], expected_labels, failures)
@@ -6829,6 +6902,7 @@ def validate_standings_variant(path: str, values: dict[str, object], slug: str, 
         "starting-grid",
         "no-content",
         "content-off-chrome-on",
+        "no-results-chrome-on",
         "min-scale",
     }:
         failures.append(f"{path}: unknown standings fixture variant {slug!r}")
@@ -7118,6 +7192,38 @@ def validate_standings_content_off_chrome_on_variant(path: str, values: dict[str
         "standings.content.standings.pit.enabled",
     ):
         require_effective_standings_setting(path, values, key, False, failures)
+    if not path.startswith("native-overlays/"):
+        settings = evidence_list(typed_dict(values.get("effectiveSettings")), "settings")
+        require_effective_setting_value(path, settings, "chrome.header.time-remaining.race", True, failures)
+
+
+def validate_standings_no_results_chrome_on_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "standings no-results chrome-on bodyKind", values.get("bodyKind"), "table", failures)
+    require_equal(path, "standings no-results chrome-on status", values.get("status"), "waiting for standings", failures)
+    require_equal(path, "standings no-results chrome-on shouldRender", values.get("shouldRender"), True, failures)
+    require_equal(path, "standings no-results chrome-on rowCount", values.get("rowCount"), 0, failures)
+    model = model_evidence(values)
+    if evidence_list(model, "columns"):
+        failures.append(f"{path}: standings no-results chrome-on expected hidden table columns")
+    if evidence_list(model, "rows"):
+        failures.append(f"{path}: standings no-results chrome-on expected hidden table rows")
+    header_items = visible_header_items(values)
+    if not header_items:
+        failures.append(f"{path}: standings no-results chrome-on expected visible headerItems")
+    elif not any(str(item.get("key") or "").lower() == "timeremaining" for item in header_items):
+        failures.append(f"{path}: standings no-results chrome-on expected timeRemaining header item, got {header_items!r}")
+    rendered = typed_dict(typed_dict(values.get("effectiveSettings")).get("rendered"))
+    require_equal(
+        path,
+        "standings no-results chrome-on unavailable policy",
+        rendered.get("unavailableContentPolicy"),
+        "chrome-only-placeholder",
+        failures)
+    text = str(values.get("textSample") or "")
+    for stale in ("Kousuke", "Kauan", "Tech Mates Racing", "Tommie Wittens", "Leader", "Waiting for live rows."):
+        if stale.lower() in text.lower():
+            failures.append(f"{path}: standings no-results chrome-on leaked stale/body placeholder text {text!r}")
+            break
     if not path.startswith("native-overlays/"):
         settings = evidence_list(typed_dict(values.get("effectiveSettings")), "settings")
         require_effective_setting_value(path, settings, "chrome.header.time-remaining.race", True, failures)
@@ -7857,14 +7963,20 @@ def validate_gap_to_leader_contract(path: str, values: dict[str, object], failur
     if metric_rows:
         labels = [text_value(row, "text") for row in metric_rows]
         require_sequence(path, "gap rendered metric row labels", labels, expected_metric_labels, failures)
-        validate_gap_rendered_trend_cells(path, metric_rows, failures)
+        active_threat_present = bool(typed_dict(graph.get("activeThreat")))
+        validate_gap_rendered_trend_cells(path, metric_rows, failures, active_threat_present)
         validate_gap_rendered_trend_layout(path, geometry, metric_rows, failures)
     elif show_trend and path.startswith(("browser-overlays/", "localhost-overlays/")):
         failures.append(f"{path}: Gap To Leader trend section missing rendered metric row evidence")
     validate_gap_v102_feedback_contract(path, graph, geometry, failures)
 
 
-def validate_gap_rendered_trend_cells(path: str, metric_rows: list[object], failures: list[str]) -> None:
+def validate_gap_rendered_trend_cells(
+    path: str,
+    metric_rows: list[object],
+    failures: list[str],
+    active_threat_present: bool,
+) -> None:
     for row_index, row in enumerate(metric_rows):
         if not isinstance(row, dict):
             continue
@@ -7873,6 +7985,8 @@ def validate_gap_rendered_trend_cells(path: str, metric_rows: list[object], fail
                 continue
             column = text_value(cell, "column")
             if column.lower() in {"metric", ""}:
+                continue
+            if column.lower() == "threat" and not active_threat_present:
                 continue
             text = text_value(cell, "text")
             if not text or text == "--":
@@ -7978,9 +8092,9 @@ def validate_gap_v102_feedback_contract(
             failures.append(f"{path}: V102-018 Gap {label.upper()} ready value lacks completed-reference-lap evidence >= {expected_laps}, got {completed_laps!r}")
 
     active_threat = typed_dict(graph.get("activeThreat"))
-    if not active_threat:
+    if not active_threat and variant_key != ("gap-to-leader", "long-tail-real-data"):
         failures.append(f"{path}: V102-025/V102-026 Gap validation fixture does not expose an active same-lap threat to prove label and red-line semantics")
-    else:
+    elif active_threat:
         chaser = typed_dict(active_threat.get("chaser"))
         label = text_value(chaser, "label")
         if label.startswith("#"):

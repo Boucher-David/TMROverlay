@@ -621,7 +621,7 @@ public sealed class SimpleTelemetryOverlayViewModelTests
         Assert.Contains(input.Rows, row => row.Label == "Gear / RPM" && row.Value.Contains("4", StringComparison.Ordinal));
         Assert.Contains(weather.Rows, row => row.Label == "Temps" && row.Value.Contains("30", StringComparison.Ordinal));
         Assert.True(radar.IsAvailable);
-        Assert.True(radar.HasCarLeft);
+        Assert.False(radar.HasCarLeft);
         Assert.Contains(pit.Rows, row => row.Label == "Fuel request" && row.Value.Contains("45.5 L", StringComparison.Ordinal));
     }
 

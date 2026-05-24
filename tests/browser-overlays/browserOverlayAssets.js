@@ -2249,24 +2249,6 @@ function carRadarDisplayModel(page, live, settings = {}) {
   const multiclassWarningSeconds = clampInteger(settings?.multiclassWarningSeconds, 5, 3, 10);
   const radarVisibilitySeconds = clampInteger(settings?.radarVisibilitySeconds, 2, 2, 5);
   const strongestMulticlassApproach = carRadarMulticlassApproach(spatial, multiclassWarningSeconds);
-  const hasCurrentSignal = Boolean(
-    spatial.hasCarLeft
-    || spatial.hasCarRight
-    || (showMulticlassWarning && strongestMulticlassApproach)
-    || spatial.cars?.some((car) => isInRadarRange(car, radarVisibilitySeconds)));
-  const status = !inCar
-    ? 'waiting for player in car'
-    : spatial.hasData === false
-      ? 'waiting for radar'
-      : spatial.hasCarLeft && spatial.hasCarRight
-        ? 'cars both sides'
-        : spatial.hasCarLeft
-        ? 'car left'
-        : spatial.hasCarRight
-          ? 'car right'
-            : showMulticlassWarning && strongestMulticlassApproach
-              ? 'faster class'
-              : 'clear';
   const renderModel = carRadarRenderModelFromState({
     isAvailable: inCar,
     hasCarLeft: spatial.hasCarLeft === true,
@@ -2277,9 +2259,29 @@ function carRadarDisplayModel(page, live, settings = {}) {
     multiclassWarningSeconds,
     radarVisibilitySeconds,
     previewVisible: false,
-    hasCurrentSignal,
+    hasCurrentSignal: true,
     referenceCarClassColorHex: spatial.referenceCarClassColorHex
   });
+  const hasEffectiveLeft = renderModel.cars?.some((car) => car.kind === 'side-left') === true;
+  const hasEffectiveRight = renderModel.cars?.some((car) => car.kind === 'side-right') === true;
+  const hasCurrentSignal = Boolean(
+    hasEffectiveLeft
+    || hasEffectiveRight
+    || (showMulticlassWarning && strongestMulticlassApproach)
+    || spatial.cars?.some((car) => isInRadarRange(car, radarVisibilitySeconds)));
+  const status = !inCar
+    ? 'waiting for player in car'
+    : spatial.hasData === false
+      ? 'waiting for radar'
+      : hasEffectiveLeft && hasEffectiveRight
+        ? 'cars both sides'
+        : hasEffectiveLeft
+        ? 'car left'
+        : hasEffectiveRight
+          ? 'car right'
+            : showMulticlassWarning && strongestMulticlassApproach
+              ? 'faster class'
+              : 'clear';
   return {
     ...emptyDisplayModel(page.page.id, page.title),
     status,
@@ -2289,8 +2291,8 @@ function carRadarDisplayModel(page, live, settings = {}) {
     shouldRender: renderModel.shouldRender,
     carRadar: {
       isAvailable: inCar,
-      hasCarLeft: spatial.hasCarLeft === true,
-      hasCarRight: spatial.hasCarRight === true,
+      hasCarLeft: hasEffectiveLeft,
+      hasCarRight: hasEffectiveRight,
       cars: spatial.cars || [],
       strongestMulticlassApproach: showMulticlassWarning ? strongestMulticlassApproach : null,
       showMulticlassWarning,
@@ -2336,7 +2338,6 @@ export function carRadarRenderModelFromState({
   hasCurrentSignal = false,
   referenceCarClassColorHex = null
 } = {}) {
-  const shouldRender = (isAvailable && hasCurrentSignal) || previewVisible;
   const empty = () => ({
     shouldRender: false,
     width: 300,
@@ -2350,23 +2351,31 @@ export function carRadarRenderModelFromState({
     labels: [],
     multiclassArc: null
   });
-  if (!shouldRender) return empty();
 
   const currentCars = uniqueRadarCars(
     (Array.isArray(cars) ? cars : []).filter((car) => isInRadarRange(car, radarVisibilitySeconds)),
     radarVisibilitySeconds);
   const sideAttachments = sideWarningAttachments(hasCarLeft, hasCarRight, currentCars, radarVisibilitySeconds);
-  const renderCars = [
-    ...radarCarPlacements(currentCars, sideAttachments, radarVisibilitySeconds).map((placement) => nearbyCarRectangle(placement, radarVisibilitySeconds)),
-    ...sideWarningRectangles(hasCarLeft, hasCarRight, sideAttachments, radarVisibilitySeconds),
-    playerCarRectangle(referenceCarClassColorHex)
-  ];
-  const rings = [distanceRing(1), distanceRing(2)];
-  const labels = rings.map((ring) => ring.label).filter(Boolean);
+  const effectiveHasCarLeft = hasCarLeft && Boolean(sideAttachments.left);
+  const effectiveHasCarRight = hasCarRight && Boolean(sideAttachments.right);
   const multiclassArc = showMulticlassWarning && strongestMulticlassApproach
     && isInCarRadarMulticlassWarningRange(strongestMulticlassApproach, multiclassWarningSeconds)
     ? multiclassApproachArc(strongestMulticlassApproach)
     : null;
+  const hasRenderableSignal = currentCars.length > 0
+    || effectiveHasCarLeft
+    || effectiveHasCarRight
+    || Boolean(multiclassArc);
+  const shouldRender = previewVisible || (isAvailable && hasRenderableSignal);
+  if (!shouldRender) return empty();
+
+  const renderCars = [
+    ...radarCarPlacements(currentCars, sideAttachments, radarVisibilitySeconds).map((placement) => nearbyCarRectangle(placement, radarVisibilitySeconds)),
+    ...sideWarningRectangles(effectiveHasCarLeft, effectiveHasCarRight, sideAttachments, radarVisibilitySeconds),
+    playerCarRectangle(referenceCarClassColorHex)
+  ];
+  const rings = [distanceRing(1), distanceRing(2)];
+  const labels = rings.map((ring) => ring.label).filter(Boolean);
   if (multiclassArc?.label) labels.push(multiclassArc.label);
 
   return {
@@ -3279,7 +3288,7 @@ function trackMapRenderMarker(marker, trackMap) {
     isPlayerFocus: marker.isPlayerFocus === true,
     fill: marker.alertKind === 'off-track'
       ? rgba(255, 218, 89, 255)
-      : marker.isFocus && marker.isPlayerFocus === true ? rgba(0, 232, 255, 255) : classBorderColor(marker.classColorHex, 1),
+      : classBorderColor(marker.classColorHex, 1),
     stroke: rgba(8, 14, 18, 230),
     strokeWidth: marker.isFocus ? 2 : 1.4,
     label,

@@ -336,54 +336,114 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
         var aheadCarIdx = Int(timing, "aheadCarIdx");
         var behindCarIdx = Int(timing, "behindCarIdx");
         var focusLapDistPct = Double(spatial, "focusLapDistPct");
-        var aheadGap = Math.Abs(Double(Get(fixture, "expected", "rows").EnumerateArray().First(row => String(row, "role") == "ahead"), "gapSeconds"));
-        var behindGap = Math.Abs(Double(Get(fixture, "expected", "rows").EnumerateArray().First(row => String(row, "role") == "behind"), "gapSeconds"));
-        var rows = new[]
+        var context = new HistoricalSessionContext
         {
-            RelativeRow(aheadCarIdx, isAhead: true, relativeSeconds: aheadGap, relativeLaps: Double(spatial, "aheadLapDistPct") - focusLapDistPct),
-            RelativeRow(behindCarIdx, isBehind: true, relativeSeconds: behindGap, relativeLaps: Double(spatial, "behindLapDistPct") - focusLapDistPct)
-        };
-        var focusTiming = TimingRow(
-            focusCarIdx,
-            isPlayer: true,
-            isFocus: true,
-            lapDistPct: focusLapDistPct,
-            estimatedTimeSeconds: Double(timing, "focusSeconds"),
-            classColorHex: "#00AEEF",
-            hasTakenGrid: true);
-        var snapshot = FreshSnapshot(now, "Practice");
-        return snapshot with
-        {
-            Models = snapshot.Models with
+            Car = new HistoricalCarIdentity
             {
-                Reference = snapshot.Models.Reference with
-                {
-                    FocusCarIdx = focusCarIdx,
-                    LapDistPct = focusLapDistPct,
-                    EstimatedTimeSeconds = Double(timing, "focusSeconds")
-                },
-                Timing = LiveTimingModel.Empty with
-                {
-                    HasData = true,
-                    Quality = LiveModelQuality.Reliable,
-                    PlayerCarIdx = focusCarIdx,
-                    FocusCarIdx = focusCarIdx,
-                    PlayerRow = focusTiming,
-                    FocusRow = focusTiming,
-                    OverallRows =
-                    [
-                        TimingRow(aheadCarIdx, lapDistPct: Double(spatial, "aheadLapDistPct"), estimatedTimeSeconds: Double(timing, "aheadSeconds")),
-                        focusTiming,
-                        TimingRow(behindCarIdx, lapDistPct: Double(spatial, "behindLapDistPct"), estimatedTimeSeconds: Double(timing, "behindSeconds"))
-                    ],
-                    ClassRows = []
-                },
-                Relative = new LiveRelativeModel(
-                    HasData: true,
-                    Quality: LiveModelQuality.Reliable,
-                    ReferenceCarIdx: focusCarIdx,
-                    Rows: rows)
-            }
+                DriverCarEstLapTimeSeconds = 90d,
+                CarClassId = 4098,
+                CarClassShortName = "GT3"
+            },
+            Track = new HistoricalTrackIdentity
+            {
+                TrackLengthKm = 5d
+            },
+            Session = new HistoricalSessionIdentity
+            {
+                SessionType = "Practice",
+                SessionName = "Practice",
+                EventType = "Practice"
+            },
+            Conditions = new HistoricalSessionInfoConditions(),
+            Drivers =
+            [
+                Driver(focusCarIdx, "Focus Driver", "10", "#00AEEF"),
+                Driver(aheadCarIdx, "Ahead Driver", "21", "#FFDA59"),
+                Driver(behindCarIdx, "Behind Driver", "32", "#FF4FD8")
+            ]
+        };
+        var sample = new HistoricalTelemetrySample(
+            CapturedAtUtc: now,
+            SessionTime: 120d,
+            SessionTick: 100,
+            SessionInfoUpdate: 1,
+            IsOnTrack: true,
+            IsInGarage: false,
+            OnPitRoad: false,
+            PitstopActive: false,
+            PlayerCarInPitStall: false,
+            FuelLevelLiters: 40d,
+            FuelLevelPercent: 0.4d,
+            FuelUsePerHourKg: 90d,
+            SpeedMetersPerSecond: 45d,
+            Lap: 5,
+            LapCompleted: 5,
+            LapDistPct: focusLapDistPct,
+            LapLastLapTimeSeconds: 90d,
+            LapBestLapTimeSeconds: 88d,
+            AirTempC: 20d,
+            TrackTempCrewC: 28d,
+            TrackWetness: 1,
+            WeatherDeclaredWet: false,
+            PlayerTireCompound: 0,
+            SessionTimeRemain: 1_200d,
+            SessionTimeTotal: 3_600d,
+            SessionState: 4,
+            PlayerCarIdx: focusCarIdx,
+            FocusCarIdx: focusCarIdx,
+            FocusLapCompleted: 5,
+            FocusLapDistPct: focusLapDistPct,
+            FocusEstimatedTimeSeconds: Double(timing, "focusSeconds"),
+            FocusLastLapTimeSeconds: 90d,
+            FocusBestLapTimeSeconds: 88d,
+            FocusPosition: 6,
+            FocusClassPosition: 6,
+            FocusCarClass: 4098,
+            TeamLapCompleted: 5,
+            TeamLapDistPct: focusLapDistPct,
+            TeamEstimatedTimeSeconds: Double(timing, "focusSeconds"),
+            TeamLastLapTimeSeconds: 90d,
+            TeamBestLapTimeSeconds: 88d,
+            TeamPosition: 6,
+            TeamClassPosition: 6,
+            TeamCarClass: 4098,
+            NearbyCars:
+            [
+                new HistoricalCarProximity(
+                    aheadCarIdx,
+                    5,
+                    Double(spatial, "aheadLapDistPct"),
+                    F2TimeSeconds: null,
+                    EstimatedTimeSeconds: Double(timing, "aheadSeconds"),
+                    Position: 5,
+                    ClassPosition: 5,
+                    CarClass: 4098,
+                    TrackSurface: 3,
+                    OnPitRoad: false),
+                new HistoricalCarProximity(
+                    behindCarIdx,
+                    5,
+                    Double(spatial, "behindLapDistPct"),
+                    F2TimeSeconds: null,
+                    EstimatedTimeSeconds: Double(timing, "behindSeconds"),
+                    Position: 7,
+                    ClassPosition: 7,
+                    CarClass: 4098,
+                    TrackSurface: 3,
+                    OnPitRoad: false)
+            ]);
+        var fuel = LiveFuelSnapshot.From(context, sample);
+        var proximity = LiveProximitySnapshot.Unavailable;
+        var leaderGap = LiveLeaderGapSnapshot.Unavailable;
+        return FreshSnapshot(now, "Practice") with
+        {
+            Context = context,
+            Combo = HistoricalComboIdentity.From(context),
+            LatestSample = sample,
+            Fuel = fuel,
+            Proximity = proximity,
+            LeaderGap = leaderGap,
+            Models = LiveRaceModelBuilder.From(context, sample, fuel, proximity, leaderGap)
         };
     }
 
@@ -441,32 +501,6 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
         };
     }
 
-    private static LiveRelativeRow RelativeRow(
-        int carIdx,
-        bool isAhead = false,
-        bool isBehind = false,
-        double? relativeSeconds = null,
-        double? relativeLaps = null)
-    {
-        return new LiveRelativeRow(
-            CarIdx: carIdx,
-            Quality: LiveModelQuality.Reliable,
-            Source: "model-v2 timing fallback",
-            IsAhead: isAhead,
-            IsBehind: isBehind,
-            IsSameClass: false,
-            TimingEvidence: LiveSignalEvidence.Reliable("CarIdxEstTime"),
-            PlacementEvidence: LiveSignalEvidence.Reliable("CarIdxLapDistPct"),
-            DriverName: null,
-            OverallPosition: null,
-            ClassPosition: null,
-            CarClass: null,
-            RelativeSeconds: relativeSeconds,
-            RelativeLaps: relativeLaps,
-            RelativeMeters: null,
-            OnPitRoad: false);
-    }
-
     private static LiveTimingRow TimingRow(
         int carIdx,
         bool isPlayer = false,
@@ -515,6 +549,20 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
             TrackSurface: 3,
             OnPitRoad: false,
             HasTakenGrid: hasTakenGrid);
+    }
+
+    private static HistoricalSessionDriver Driver(int carIdx, string driverName, string carNumber, string classColorHex)
+    {
+        return new HistoricalSessionDriver
+        {
+            CarIdx = carIdx,
+            UserName = driverName,
+            CarNumber = carNumber,
+            CarClassId = 4098,
+            CarClassShortName = "GT3",
+            CarClassColorHex = classColorHex,
+            IsSpectator = false
+        };
     }
 
     private static LiveIncidentPressureModel IncidentPressure(int playerCarIdx, int? sessionFlags)

@@ -73,7 +73,7 @@ Whole-lap relationships are visual text states, not extra columns. A car one lap
 
 Relative seconds come from live proximity timing when available. If proximity has only lap-distance placement, the model-v2 relative row can infer a display seconds gap from live lap-distance delta multiplied by the current local/focus lap-time signal. Radar does not consume that inferred seconds value; it remains stricter and uses only live proximity seconds or physical distance for proximity placement.
 
-Race `SessionState == 3` can use model-v2 timing fallback from positive `CarIdxEstTime` plus valid `CarIdxLapDistPct` so Relative can update during the pre-green roll to the line. This fallback is not created from grid rows alone. It also remains useful when the local player tows or sits in pit lane with valid timing/progress facts, because iRacing itself continues showing estimated relative gaps in those contexts. Radar remains stricter and still requires local in-car spatial context.
+Race `SessionState == 3` can use model-v2 timing fallback from positive `CarIdxEstTime` plus valid `CarIdxLapDistPct` so Relative can update during the pre-green roll to the line. Practice and race estimated Relative rows use lap-distance direction for ahead/behind and `CarIdxEstTime` for magnitude, because observed practice telemetry can expose iRacing-style seconds with an estimated-time sign opposite the lap-distance direction. This fallback is not created from grid rows alone. It also remains useful when the local player tows or sits in pit lane with valid timing/progress facts, because iRacing itself continues showing estimated relative gaps in those contexts. Radar remains stricter and still requires local in-car spatial context.
 
 ## Source And Status Text
 

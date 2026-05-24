@@ -1484,7 +1484,7 @@ internal static class LiveRaceModelBuilder
                 if (row.LapDistPct is not { } rowLapDistPct
                     || RelativeLapsFromLapDistance(rowLapDistPct, referenceLapDistPct) is not { } relativeLaps
                     || Math.Abs(relativeLaps) <= 0.00001d
-                    || EstimatedRelativeSeconds(row, referenceEstimatedTimeSeconds, referenceLapDistPct, lapTimeSeconds) is not { } relativeSeconds)
+                    || EstimatedRelativeSecondsForRelative(row, referenceEstimatedTimeSeconds, referenceLapDistPct, lapTimeSeconds) is not { } relativeSeconds)
                 {
                     return null;
                 }
@@ -1511,6 +1511,42 @@ internal static class LiveRaceModelBuilder
             .Where(row => row is not null)
             .Select(row => row!)
             .ToArray();
+    }
+
+    private static double? EstimatedRelativeSecondsForRelative(
+        LiveTimingRow row,
+        double? referenceEstimatedTimeSeconds,
+        double? referenceLapDistPct,
+        double? lapTimeSeconds)
+    {
+        var rowEstimated = ValidPositive(row.EstimatedTimeSeconds);
+        var referenceEstimated = ValidPositive(referenceEstimatedTimeSeconds);
+        if (rowEstimated is null
+            || referenceEstimated is null
+            || row.LapDistPct is not { } rowLapDistPct
+            || RelativeLapsFromLapDistance(rowLapDistPct, referenceLapDistPct) is not { } relativeLaps
+            || Math.Abs(relativeLaps) <= 0.00001d)
+        {
+            return null;
+        }
+
+        var delta = rowEstimated.Value - referenceEstimated.Value;
+        if (lapTimeSeconds is { } lapSeconds && ValidPositive(lapSeconds) is not null)
+        {
+            if (delta > lapSeconds / 2d)
+            {
+                delta -= lapSeconds;
+            }
+            else if (delta < -lapSeconds / 2d)
+            {
+                delta += lapSeconds;
+            }
+        }
+
+        var signedSeconds = Math.Abs(delta) * Math.Sign(relativeLaps);
+        return IsPlausibleEstimatedTiming(signedSeconds, relativeLaps, lapTimeSeconds)
+            ? signedSeconds
+            : null;
     }
 
     private static double? RelativeLapsFromLapDistance(double carLapDistPct, double? referenceLapDistPct)

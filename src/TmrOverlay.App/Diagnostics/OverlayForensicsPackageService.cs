@@ -296,20 +296,35 @@ internal sealed class OverlayForensicsPackageService
                         ModelRenderEventCount: 0,
                         ModelHiddenEventCount: 0,
                         ModelNullEventCount: 0,
-                        ModelErrorEventCount: 0),
+                        ModelErrorEventCount: 0,
+                        HtmlClientCounts: new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
+                        ModelClientCounts: new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
+                        SourceUrlCounts: new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
+                        SourceUrlClientCounts: new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
+                        SourceLifecycle: SourceLifecycleState.Unknown(overlayId)),
                     StringComparer.OrdinalIgnoreCase));
         }
 
         var pathCounts = ReadStringIntMap(localhostDocument, "pathCounts");
         var pageEventCounts = ReadStringIntMap(localhostDocument, "pageEventOverlayCounts");
         var clientCounts = ReadStringIntMap(localhostDocument, "clientCounts");
+        var pathClientCounts = ReadStringIntMap(localhostDocument, "pathClientCounts");
+        var sourceUrlCounts = ReadStringIntMap(localhostDocument, "sourceUrlCounts");
+        var sourceUrlClientCounts = ReadStringIntMap(localhostDocument, "sourceUrlClientCounts");
         var modelPageCounts = ReadModelPageCounts(localhostModelsDocument);
         var obsProcessPresent = HasObsWindow(windowDocument) || clientCounts.GetValueOrDefault("obs") > 0
             ? true
             : (bool?)null;
         var overlays = BrowserOverlayIds.ToDictionary(
             overlayId => overlayId,
-            overlayId => BuildOverlayReadinessState(overlayId, pathCounts, pageEventCounts, modelPageCounts),
+            overlayId => BuildOverlayReadinessState(
+                overlayId,
+                pathCounts,
+                pageEventCounts,
+                pathClientCounts,
+                sourceUrlCounts,
+                sourceUrlClientCounts,
+                modelPageCounts),
             StringComparer.OrdinalIgnoreCase);
 
         return new OverlayReadinessDocument(
@@ -324,17 +339,29 @@ internal sealed class OverlayForensicsPackageService
         string overlayId,
         IReadOnlyDictionary<string, int> pathCounts,
         IReadOnlyDictionary<string, int> pageEventCounts,
+        IReadOnlyDictionary<string, int> pathClientCounts,
+        IReadOnlyDictionary<string, int> sourceUrlCounts,
+        IReadOnlyDictionary<string, int> sourceUrlClientCounts,
         IReadOnlyDictionary<string, OverlayRouteCounts> modelPageCounts)
     {
-        var html = BrowserOverlayRoutesById.TryGetValue(overlayId, out var htmlRoutes)
+        var htmlRoutes = BrowserOverlayRoutesById.TryGetValue(overlayId, out var configuredHtmlRoutes)
+            ? configuredHtmlRoutes
+            : [$"/overlays/{overlayId}"];
+        var modelApiPath = $"/api/overlay-model/{overlayId}";
+        var sourcePaths = htmlRoutes.Append(modelApiPath).ToArray();
+        var html = BrowserOverlayRoutesById.ContainsKey(overlayId)
             ? htmlRoutes.Sum(route => pathCounts.GetValueOrDefault(route))
             : pathCounts.GetValueOrDefault($"/overlays/{overlayId}");
-        var model = pathCounts.GetValueOrDefault($"/api/overlay-model/{overlayId}");
+        var model = pathCounts.GetValueOrDefault(modelApiPath);
         var pageLoaded = pageEventCounts.GetValueOrDefault($"{overlayId}|page-loaded");
         var render = pageEventCounts.GetValueOrDefault($"{overlayId}|model-render");
         var hidden = pageEventCounts.GetValueOrDefault($"{overlayId}|model-hidden");
         var modelNull = pageEventCounts.GetValueOrDefault($"{overlayId}|model-null");
         var error = pageEventCounts.GetValueOrDefault($"{overlayId}|model-error");
+        var overlaySourceUrlCounts = SourceUrlCountsForPaths(sourceUrlCounts, sourcePaths);
+        var overlaySourceUrlClientCounts = SourceUrlClientCountsForPaths(sourceUrlClientCounts, sourcePaths);
+        var htmlClientCounts = ClientCountsForPaths(pathClientCounts, htmlRoutes);
+        var modelClientCounts = ClientCountsForPaths(pathClientCounts, [modelApiPath]);
 
         if (modelPageCounts.TryGetValue(overlayId, out var pageCounts))
         {
@@ -345,6 +372,8 @@ internal sealed class OverlayForensicsPackageService
             hidden = Math.Max(hidden, pageCounts.ModelHiddenEventCount);
             modelNull = Math.Max(modelNull, pageCounts.ModelNullEventCount);
             error = Math.Max(error, pageCounts.ModelErrorEventCount);
+            overlaySourceUrlCounts = MergeMaxCounts(overlaySourceUrlCounts, pageCounts.SourceUrlCounts);
+            overlaySourceUrlClientCounts = MergeMaxCounts(overlaySourceUrlClientCounts, pageCounts.SourceUrlClientCounts);
         }
 
         string state;
@@ -393,7 +422,12 @@ internal sealed class OverlayForensicsPackageService
             ModelRenderEventCount: render,
             ModelHiddenEventCount: hidden,
             ModelNullEventCount: modelNull,
-            ModelErrorEventCount: error);
+            ModelErrorEventCount: error,
+            HtmlClientCounts: htmlClientCounts,
+            ModelClientCounts: modelClientCounts,
+            SourceUrlCounts: overlaySourceUrlCounts,
+            SourceUrlClientCounts: overlaySourceUrlClientCounts,
+            SourceLifecycle: BuildSourceLifecycleState(overlayId, html, model, pageLoaded, render, hidden, modelNull, error, overlaySourceUrlCounts));
     }
 
     private static object BuildEvidenceGaps(OverlayReadinessDocument obsReadiness)
@@ -568,10 +602,194 @@ internal sealed class OverlayForensicsPackageService
                 ModelRenderEventCount: ReadInt(page, "modelRenderEventCount"),
                 ModelHiddenEventCount: ReadInt(page, "modelHiddenEventCount"),
                 ModelNullEventCount: ReadInt(page, "modelNullEventCount"),
-                ModelErrorEventCount: ReadInt(page, "modelErrorEventCount"));
+                ModelErrorEventCount: ReadInt(page, "modelErrorEventCount"),
+                SourceUrlCounts: ReadStringIntMap(page, "sourceUrlCounts"),
+                SourceUrlClientCounts: ReadStringIntMap(page, "sourceUrlClientCounts"));
         }
 
         return result;
+    }
+
+    private static IReadOnlyDictionary<string, int> ReadStringIntMap(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property)
+            || property.ValueKind != JsonValueKind.Object)
+        {
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in property.EnumerateObject())
+        {
+            result[item.Name] = item.Value.ValueKind == JsonValueKind.Number && item.Value.TryGetInt32(out var value)
+                ? value
+                : 0;
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyDictionary<string, int> ClientCountsForPaths(
+        IReadOnlyDictionary<string, int> pathClientCounts,
+        IEnumerable<string> paths)
+    {
+        var normalizedPaths = paths
+            .Select(NormalizeRoute)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in pathClientCounts)
+        {
+            if (!TrySplitClientKey(item.Key, out var path, out var clientKind)
+                || !normalizedPaths.Contains(NormalizeRoute(path)))
+            {
+                continue;
+            }
+
+            result[clientKind] = Math.Max(result.GetValueOrDefault(clientKind), item.Value);
+        }
+
+        return result
+            .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, int> SourceUrlCountsForPaths(
+        IReadOnlyDictionary<string, int> sourceUrlCounts,
+        IEnumerable<string> paths)
+    {
+        var normalizedPaths = paths
+            .Select(NormalizeRoute)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return sourceUrlCounts
+            .Where(item => normalizedPaths.Contains(NormalizeRoute(SourceUrlPath(item.Key))))
+            .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, int> SourceUrlClientCountsForPaths(
+        IReadOnlyDictionary<string, int> sourceUrlClientCounts,
+        IEnumerable<string> paths)
+    {
+        var normalizedPaths = paths
+            .Select(NormalizeRoute)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return sourceUrlClientCounts
+            .Where(item => TrySplitClientKey(item.Key, out var sourceUrl, out _)
+                && normalizedPaths.Contains(NormalizeRoute(SourceUrlPath(sourceUrl))))
+            .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, int> MergeMaxCounts(
+        IReadOnlyDictionary<string, int> first,
+        IReadOnlyDictionary<string, int> second)
+    {
+        var result = new Dictionary<string, int>(first, StringComparer.OrdinalIgnoreCase);
+        foreach (var item in second)
+        {
+            result[item.Key] = Math.Max(result.GetValueOrDefault(item.Key), item.Value);
+        }
+
+        return result
+            .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static SourceLifecycleState BuildSourceLifecycleState(
+        string overlayId,
+        int htmlRequests,
+        int modelRequests,
+        int pageLoadedEvents,
+        int renderEvents,
+        int hiddenEvents,
+        int nullEvents,
+        int errorEvents,
+        IReadOnlyDictionary<string, int> sourceUrlCounts)
+    {
+        string state;
+        string detail;
+        if (errorEvents > 0)
+        {
+            state = "source-error";
+            detail = "Browser source reported model-error events.";
+        }
+        else if (renderEvents > 0)
+        {
+            state = "source-rendering";
+            detail = "Browser source loaded, polled the model API, and reported rendered frames.";
+        }
+        else if (hiddenEvents > 0 || nullEvents > 0)
+        {
+            state = "source-hidden";
+            detail = "Browser source loaded and polled the model API, but the model was hidden or null.";
+        }
+        else if (modelRequests > 0)
+        {
+            state = "source-polling";
+            detail = "Model API was requested, but no render/hidden/null/error page event was observed.";
+        }
+        else if (pageLoadedEvents > 0 || htmlRequests > 0)
+        {
+            state = "source-loaded";
+            detail = "Overlay source loaded, but no model API polling was observed.";
+        }
+        else
+        {
+            state = "not-seen";
+            detail = "No source load, model poll, render, hidden, null, or error evidence was observed.";
+        }
+
+        var limitations = new List<string>
+        {
+            "modelPollsNotCorrelatedByClientId",
+            "sourceViewportNotCaptured",
+            "pollDurationNotCaptured"
+        };
+        if (sourceUrlCounts.Count == 0)
+        {
+            limitations.Insert(0, "sourceUrlQueryNotCaptured");
+        }
+
+        return new SourceLifecycleState(
+            SchemaVersion: 1,
+            OverlayId: overlayId,
+            State: state,
+            Detail: detail,
+            SourceUrlCounts: sourceUrlCounts,
+            EvidenceLimitations: limitations);
+    }
+
+    private static string NormalizeRoute(string route)
+    {
+        var queryIndex = route.IndexOf('?', StringComparison.Ordinal);
+        var path = queryIndex >= 0 ? route[..queryIndex] : route;
+        if (!path.StartsWith("/", StringComparison.Ordinal))
+        {
+            path = "/" + path.TrimStart('/');
+        }
+
+        return path.TrimEnd('/');
+    }
+
+    private static string SourceUrlPath(string sourceUrl)
+    {
+        var queryIndex = sourceUrl.IndexOf('?', StringComparison.Ordinal);
+        return queryIndex >= 0 ? sourceUrl[..queryIndex] : sourceUrl;
+    }
+
+    private static bool TrySplitClientKey(string key, out string path, out string clientKind)
+    {
+        var separator = key.LastIndexOf('|');
+        if (separator <= 0 || separator >= key.Length - 1)
+        {
+            path = key;
+            clientKind = string.Empty;
+            return false;
+        }
+
+        path = key[..separator];
+        clientKind = key[(separator + 1)..];
+        return true;
     }
 
     private static int ReadInt(JsonElement element, string propertyName)
@@ -696,7 +914,12 @@ internal sealed class OverlayForensicsPackageService
         int ModelRenderEventCount,
         int ModelHiddenEventCount,
         int ModelNullEventCount,
-        int ModelErrorEventCount);
+        int ModelErrorEventCount,
+        IReadOnlyDictionary<string, int> HtmlClientCounts,
+        IReadOnlyDictionary<string, int> ModelClientCounts,
+        IReadOnlyDictionary<string, int> SourceUrlCounts,
+        IReadOnlyDictionary<string, int> SourceUrlClientCounts,
+        SourceLifecycleState SourceLifecycle);
 
     private sealed record OverlayRouteCounts(
         int HtmlRouteRequestCount,
@@ -705,5 +928,33 @@ internal sealed class OverlayForensicsPackageService
         int ModelRenderEventCount,
         int ModelHiddenEventCount,
         int ModelNullEventCount,
-        int ModelErrorEventCount);
+        int ModelErrorEventCount,
+        IReadOnlyDictionary<string, int> SourceUrlCounts,
+        IReadOnlyDictionary<string, int> SourceUrlClientCounts);
+
+    private sealed record SourceLifecycleState(
+        int SchemaVersion,
+        string OverlayId,
+        string State,
+        string Detail,
+        IReadOnlyDictionary<string, int> SourceUrlCounts,
+        IReadOnlyList<string> EvidenceLimitations)
+    {
+        public static SourceLifecycleState Unknown(string overlayId)
+        {
+            return new SourceLifecycleState(
+                SchemaVersion: 1,
+                OverlayId: overlayId,
+                State: "unknown",
+                Detail: "Route readiness cannot be classified until diagnostics metadata or offline enrichment is available.",
+                SourceUrlCounts: new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
+                EvidenceLimitations:
+                [
+                    "sourceUrlQueryNotCaptured",
+                    "modelPollsNotCorrelatedByClientId",
+                    "sourceViewportNotCaptured",
+                    "pollDurationNotCaptured"
+                ]);
+        }
+    }
 }

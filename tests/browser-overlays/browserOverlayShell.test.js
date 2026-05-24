@@ -187,13 +187,15 @@ describe('browser overlay shell', () => {
         event: 'page-loaded',
         overlayId: 'standings',
         clientId: 'obs-test',
-        clientKind: 'obs'
+        clientKind: 'obs',
+        sourceUrl: '/overlays/standings?client=obs-test&clientKind=obs'
       }),
       expect.objectContaining({
         event: 'model-hidden',
         overlayId: 'standings',
         clientId: 'obs-test',
         clientKind: 'obs',
+        sourceUrl: '/overlays/standings?client=obs-test&clientKind=obs',
         shouldRender: false,
         status: 'hidden | telemetry unavailable'
       })

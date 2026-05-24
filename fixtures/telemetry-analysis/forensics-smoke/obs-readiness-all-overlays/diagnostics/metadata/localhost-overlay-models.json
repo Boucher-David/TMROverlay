@@ -14,7 +14,16 @@
       "pageLoadedEventCount": 1,
       "modelRenderEventCount": 0,
       "modelHiddenEventCount": 2,
+      "modelNullEventCount": 0,
       "modelErrorEventCount": 0,
+      "sourceUrlCounts": {
+        "/overlays/input-state?clientKind=obs": 1,
+        "/api/overlay-model/input-state?clientKind=obs": 4
+      },
+      "sourceUrlClientCounts": {
+        "/overlays/input-state?clientKind=obs|obs": 1,
+        "/api/overlay-model/input-state?clientKind=obs|obs": 4
+      },
       "current": {
         "snapshotSource": "live",
         "buildStatus": "built",

@@ -42,13 +42,13 @@ public sealed class LocalhostOverlayHostedServiceTests
             };
 
             await SendGetAsync(client, $"{options.Prefix}health", "Mozilla/5.0 Chrome/124.0.0.0 Safari/537.36");
-            await SendGetAsync(client, $"{options.Prefix}overlays/standings", "Mozilla/5.0 Chrome/124.0.0.0 Safari/537.36");
-            await SendGetAsync(client, $"{options.Prefix}api/overlay-model/standings", "Mozilla/5.0 OBS Studio/32.1.2");
+            await SendGetAsync(client, $"{options.Prefix}overlays/standings?clientKind=chrome", "Mozilla/5.0 Chrome/124.0.0.0 Safari/537.36");
+            await SendGetAsync(client, $"{options.Prefix}api/overlay-model/standings?clientKind=obs", "Mozilla/5.0 OBS Studio/32.1.2");
             await SendPostJsonAsync(
                 client,
                 $"{options.Prefix}api/browser-source-event",
                 """
-                {"event":"model-hidden","overlayId":"standings","clientId":"obs-test","clientKind":"obs","shouldRender":false,"status":"hidden | telemetry unavailable"}
+                {"event":"model-hidden","overlayId":"standings","clientId":"obs-test","clientKind":"obs","sourceUrl":"/overlays/standings?clientKind=obs","shouldRender":false,"status":"hidden | telemetry unavailable"}
                 """,
                 "Mozilla/5.0 OBS Studio/32.1.2");
 
@@ -70,13 +70,17 @@ public sealed class LocalhostOverlayHostedServiceTests
             Assert.Equal(1L, snapshot.PathCounts["/overlays/standings"]);
             Assert.Equal(1L, snapshot.PathCounts["/api/overlay-model/standings"]);
             Assert.Equal(1L, snapshot.PathClientCounts["/api/overlay-model/standings|obs"]);
+            Assert.Equal(1L, snapshot.SourceUrlCounts["/api/overlay-model/standings?clientKind=obs"]);
+            Assert.Equal(1L, snapshot.SourceUrlClientCounts["/api/overlay-model/standings?clientKind=obs|obs"]);
             Assert.Contains(snapshot.RecentRequests, item =>
                 string.Equals(item.Path, "/api/browser-source-event", StringComparison.Ordinal)
+                && string.Equals(item.SourceUrl, "/api/browser-source-event", StringComparison.Ordinal)
                 && string.Equals(item.Route, "browser_source_event", StringComparison.Ordinal)
                 && string.Equals(item.ClientKind, "obs", StringComparison.Ordinal)
                 && item.StatusCode == 200);
             Assert.Contains(snapshot.RecentRequests, item =>
                 string.Equals(item.Path, "/api/overlay-model/standings", StringComparison.Ordinal)
+                && string.Equals(item.SourceUrl, "/api/overlay-model/standings?clientKind=obs", StringComparison.Ordinal)
                 && string.Equals(item.Route, "overlay_model", StringComparison.Ordinal)
                 && string.Equals(item.ClientKind, "obs", StringComparison.Ordinal)
                 && item.StatusCode == 200);
@@ -84,8 +88,10 @@ public sealed class LocalhostOverlayHostedServiceTests
             Assert.Equal("standings", snapshot.LastPageEventOverlayId);
             Assert.Equal("obs-test", snapshot.LastPageEventClientId);
             Assert.Equal("obs", snapshot.LastPageEventClientKind);
+            Assert.Equal("/overlays/standings?clientKind=obs", snapshot.LastPageEventSourceUrl);
             Assert.False(snapshot.LastPageEventShouldRender);
             Assert.Equal(1L, snapshot.PageEventOverlayCounts["standings|model-hidden"]);
+            Assert.Equal(1L, snapshot.PageEventSourceUrlCounts["/overlays/standings?clientKind=obs"]);
         }
         finally
         {

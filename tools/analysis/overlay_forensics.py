@@ -1534,6 +1534,8 @@ def classify_obs_readiness(
             "modelError": error_events,
         },
         "clientCounts": route.get("clientCounts") or {},
+        "sourceUrlCounts": route.get("sourceUrlCounts") or {},
+        "sourceUrlClientCounts": route.get("sourceUrlClientCounts") or {},
         "recentRequests": route.get("recentRequests") or [],
         "recentPageEvents": route.get("recentPageEvents") or [],
     }
@@ -1567,6 +1569,14 @@ def classify_source_lifecycle(overlay_id: str, route: dict[str, Any]) -> dict[st
         state = "not-seen"
         detail = "No source load, model poll, render, hidden, null, or error evidence was observed."
 
+    evidence_limitations = [
+        "modelPollsNotCorrelatedByClientId",
+        "sourceViewportNotCaptured",
+        "pollDurationNotCaptured",
+    ]
+    if not route.get("sourceUrlCounts"):
+        evidence_limitations.insert(0, "sourceUrlQueryNotCaptured")
+
     return {
         "schemaVersion": 1,
         "overlayId": overlay_id,
@@ -1586,14 +1596,11 @@ def classify_source_lifecycle(overlay_id: str, route: dict[str, Any]) -> dict[st
             "modelError": error_events,
         },
         "clientCounts": route.get("clientCounts") or {},
+        "sourceUrlCounts": route.get("sourceUrlCounts") or {},
+        "sourceUrlClientCounts": route.get("sourceUrlClientCounts") or {},
         "recentRequests": route.get("recentRequests") or [],
         "recentPageEvents": route.get("recentPageEvents") or [],
-        "evidenceLimitations": [
-            "sourceUrlQueryNotCaptured",
-            "modelPollsNotCorrelatedByClientId",
-            "sourceViewportNotCaptured",
-            "pollDurationNotCaptured",
-        ],
+        "evidenceLimitations": evidence_limitations,
     }
 
 
@@ -2101,12 +2108,15 @@ def build_route_stats(localhost: dict[str, Any] | None, localhost_models: dict[s
     stats = {overlay_id: default_route_stats(overlay_id) for overlay_id in ALL_OVERLAYS}
     path_counts = (localhost or {}).get("pathCounts") or {}
     path_client_counts = (localhost or {}).get("pathClientCounts") or {}
+    source_url_counts = (localhost or {}).get("sourceUrlCounts") or {}
+    source_url_client_counts = (localhost or {}).get("sourceUrlClientCounts") or {}
     page_event_counts = (localhost or {}).get("pageEventOverlayCounts") or {}
     recent_requests = (localhost or {}).get("recentRequests") or []
     recent_page_events = (localhost or {}).get("recentPageEvents") or []
     for overlay_id in ALL_OVERLAYS:
         html_path = f"/overlays/{overlay_id}"
         model_path = f"/api/overlay-model/{overlay_id}"
+        overlay_paths = {html_path, model_path}
         stats[overlay_id].update(
             {
                 "htmlRouteRequestCount": int(path_counts.get(html_path, 0) or 0),
@@ -2120,6 +2130,8 @@ def build_route_stats(localhost: dict[str, Any] | None, localhost_models: dict[s
                     "html": client_counts_for_path(path_client_counts, html_path),
                     "model": client_counts_for_path(path_client_counts, model_path),
                 },
+                "sourceUrlCounts": source_url_counts_for_paths(source_url_counts, overlay_paths),
+                "sourceUrlClientCounts": source_url_client_counts_for_paths(source_url_client_counts, overlay_paths),
                 "recentRequests": [
                     request
                     for request in recent_requests
@@ -2144,6 +2156,8 @@ def build_route_stats(localhost: dict[str, Any] | None, localhost_models: dict[s
                     "modelNullEventCount": int(page.get("modelNullEventCount") or stats[overlay_id]["modelNullEventCount"]),
                     "modelErrorEventCount": int(page.get("modelErrorEventCount") or stats[overlay_id]["modelErrorEventCount"]),
                     "pageLoadedEventCount": int(page.get("pageLoadedEventCount") or stats[overlay_id]["pageLoadedEventCount"]),
+                    "sourceUrlCounts": max_count_maps(stats[overlay_id].get("sourceUrlCounts") or {}, page.get("sourceUrlCounts") or {}),
+                    "sourceUrlClientCounts": max_count_maps(stats[overlay_id].get("sourceUrlClientCounts") or {}, page.get("sourceUrlClientCounts") or {}),
                     "refreshIntervalMilliseconds": page.get("refreshIntervalMilliseconds"),
                     "requiresTelemetry": page.get("requiresTelemetry"),
                     "currentStatus": (page.get("current") or {}).get("status"),
@@ -2151,6 +2165,39 @@ def build_route_stats(localhost: dict[str, Any] | None, localhost_models: dict[s
                 }
             )
     return stats
+
+
+def source_url_counts_for_paths(source_url_counts: dict[str, Any], paths: set[str]) -> dict[str, int]:
+    normalized_paths = {source_url_path(path) for path in paths}
+    return {
+        source_url: int(count or 0)
+        for source_url, count in sorted(source_url_counts.items())
+        if source_url_path(source_url) in normalized_paths
+    }
+
+
+def source_url_client_counts_for_paths(source_url_client_counts: dict[str, Any], paths: set[str]) -> dict[str, int]:
+    normalized_paths = {source_url_path(path) for path in paths}
+    result: dict[str, int] = {}
+    for key, count in sorted(source_url_client_counts.items()):
+        if not isinstance(key, str) or "|" not in key:
+            continue
+        source_url = key.rsplit("|", 1)[0]
+        if source_url_path(source_url) in normalized_paths:
+            result[key] = int(count or 0)
+    return result
+
+
+def source_url_path(source_url: str) -> str:
+    return str(source_url or "").split("?", 1)[0].rstrip("/") or "/"
+
+
+def max_count_maps(first: dict[str, Any], second: dict[str, Any]) -> dict[str, int]:
+    result = {str(key): int(value or 0) for key, value in first.items()}
+    for key, value in second.items():
+        key_string = str(key)
+        result[key_string] = max(result.get(key_string, 0), int(value or 0))
+    return dict(sorted(result.items()))
 
 
 def client_counts_for_path(path_client_counts: dict[str, Any], path: str) -> dict[str, int]:

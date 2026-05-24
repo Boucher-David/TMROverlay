@@ -410,6 +410,7 @@
         overlayId: page.id || 'unknown',
         clientId: browserSourceClientId.id,
         clientKind: browserSourceClientId.kind,
+        sourceUrl: `${window.location.pathname}${window.location.search}`,
         shouldRender: model ? model.shouldRender !== false : null,
         status: model?.status || null,
         error: error?.message || null

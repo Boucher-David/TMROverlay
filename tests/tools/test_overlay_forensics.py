@@ -101,7 +101,16 @@ class OverlayForensicsSmokeTests(unittest.TestCase):
                 self.assertEqual(state, lifecycle["state"])
                 self.assertEqual(f"/overlays/{overlay_id}", lifecycle["expected"]["htmlRoute"])
                 self.assertEqual(f"/api/overlay-model/{overlay_id}", lifecycle["expected"]["modelApiPath"])
-                self.assertIn("sourceUrlQueryNotCaptured", lifecycle["evidenceLimitations"])
+                if state == "not-seen":
+                    self.assertIn("sourceUrlQueryNotCaptured", lifecycle["evidenceLimitations"])
+                else:
+                    self.assertNotIn("sourceUrlQueryNotCaptured", lifecycle["evidenceLimitations"])
+
+        relative_lifecycle = report["overlays"]["relative"]["sourceLifecycle"]
+        self.assertEqual(1, relative_lifecycle["sourceUrlCounts"]["/overlays/relative?clientKind=obs"])
+        flags_readiness = report["overlays"]["flags"]["obsReadiness"]
+        self.assertEqual(6, flags_readiness["sourceUrlCounts"]["/api/overlay-model/flags?clientKind=obs"])
+        self.assertEqual(6, flags_readiness["sourceUrlClientCounts"]["/api/overlay-model/flags?clientKind=obs|obs"])
 
     def test_garage_cover_hidden_without_visible_signal_is_warn_only(self):
         result, report = run_forensics("garage-cover-hidden-no-visible-signal")

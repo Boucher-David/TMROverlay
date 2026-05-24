@@ -323,12 +323,13 @@ public sealed class ReplayTelemetryHostedServiceTests
 
             const string sessionInfoYaml = """
 SessionInfo:
-  Sessions:
-  - SessionNum: 0
-    SessionName: Race
-    SessionType: Race
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionName: Race
+   SessionType: Race
 DriverInfo:
-  DriverCarIdx: 17
+ DriverCarIdx: 17
 """;
             File.WriteAllText(Path.Combine(captureDirectory, "latest-session.yaml"), sessionInfoYaml);
             File.WriteAllText(Path.Combine(sessionInfoDirectory, "session-0001.yaml"), sessionInfoYaml);

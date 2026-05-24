@@ -119,8 +119,8 @@ public sealed class DiagnosticsBundleServiceTests
             Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["updateApplyHandoffReturnedCount"]) ?? -1);
             Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["applicationExitRequestedForUpdateCount"]) ?? -1);
             Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["hostStopStartedCount"]) ?? -1);
-            Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["hostStopCompletedCount"]) ?? -1);
-            Assert.Equal(1, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["appStoppedCount"]) ?? -1);
+            Assert.Equal(0, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["hostStopCompletedCount"]) ?? -1);
+            Assert.Equal(0, ((int?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["appStoppedCount"]) ?? -1);
             Assert.False(((bool?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["hostStopCompletedAfterApplyStart"]) ?? true);
             Assert.False(((bool?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["appStoppedAfterApplyStart"]) ?? true);
             Assert.False(((bool?)evidenceQualityJson?["updateFlow"]?["applyShutdown"]?["runtimeStoppedCleanly"]) ?? true);

@@ -6669,9 +6669,9 @@ def validate_track_map_variant(path: str, values: dict[str, object], slug: str, 
             failures.append(f"{path}: track-map player-focus class color expected one focus marker, got {len(focus_markers)}")
         else:
             marker = focus_markers[0]
-            if marker.get("fill") != "rgba(255, 255, 255, 0.961)":
+            if not color_matches_rgb_alpha(marker.get("fill"), (255, 255, 255), 245 / 255):
                 failures.append(f"{path}: track-map player-focus marker expected white fill, got {marker.get('fill')!r}")
-            if marker.get("fill") == "rgba(0, 232, 255, 1)":
+            if color_matches_rgb_alpha(marker.get("fill"), (0, 232, 255), None):
                 failures.append(f"{path}: track-map player-focus marker must not use focus cyan fill")
             if text_value(marker, "label") != "1":
                 failures.append(f"{path}: track-map player-focus marker expected position label '1', got {marker.get('label')!r}")
@@ -8164,9 +8164,11 @@ def is_gap_threat_red(color: str) -> bool:
 
 def parse_css_color_rgb(color: str) -> tuple[Optional[int], Optional[int], Optional[int]]:
     normalized = color.strip()
-    hex_match = re.fullmatch(r"#([0-9a-fA-F]{6})(?:[0-9a-fA-F]{2})?", normalized)
+    hex_match = re.fullmatch(r"#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})", normalized)
     if hex_match:
         token = hex_match.group(1)
+        if len(token) == 8:
+            token = token[2:]
         return int(token[0:2], 16), int(token[2:4], 16), int(token[4:6], 16)
 
     rgb_match = re.search(r"rgba?\((\d+),\s*(\d+),\s*(\d+)", normalized)
@@ -8191,9 +8193,25 @@ def parse_css_color_alpha(color: str) -> Optional[float]:
     hex_match = re.fullmatch(r"#([0-9a-fA-F]{8})", normalized)
     if hex_match:
         token = hex_match.group(1)
-        return int(token[6:8], 16) / 255.0
+        return int(token[0:2], 16) / 255.0
 
     return None
+
+
+def color_matches_rgb_alpha(
+    actual: object,
+    expected_rgb: tuple[int, int, int],
+    expected_alpha: Optional[float],
+) -> bool:
+    if not isinstance(actual, str):
+        return False
+    red, green, blue = parse_css_color_rgb(actual)
+    if (red, green, blue) != expected_rgb:
+        return False
+    if expected_alpha is None:
+        return True
+    alpha = parse_css_color_alpha(actual)
+    return alpha is not None and abs(alpha - expected_alpha) <= 0.004
 
 
 def validate_track_map_contract(path: str, values: dict[str, object], failures: list[str]) -> None:

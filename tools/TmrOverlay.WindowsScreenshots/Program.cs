@@ -2138,10 +2138,11 @@ internal static class Program
 
     private static DesignV2OverlayModel ReviewTrackMapPlayerFocusClassColorModel()
     {
+        var document = ReviewTrackMapDocument();
         var viewModel = new TrackMapOverlayViewModel(
             Title: "Track Map",
-            Status: "track map player focus class color",
-            Source: "source: compact GR86 player-focus class color",
+            Status: "live",
+            Source: "source: IBT-derived Nurburgring 24h track map | live position telemetry",
             IsAvailable: true,
             Markers:
             [
@@ -2158,12 +2159,12 @@ internal static class Program
             ShowSectorBoundaries: false,
             InternalOpacity: TrackMapBrowserSettings.Default.InternalOpacity,
             IncludeUserMaps: true,
-            TrackMap: null);
+            TrackMap: document);
 
         return new DesignV2OverlayModel(
             "Track Map",
-            "track map player focus class color",
-            "source: compact GR86 player-focus class color",
+            "live",
+            "source: IBT-derived Nurburgring 24h track map | live position telemetry",
             DesignV2Evidence.Live,
             new DesignV2TrackMapBody(TrackMapRenderModel.FromViewModel(viewModel)),
             HeaderText: "06:37:08",
@@ -2938,9 +2939,7 @@ internal static class Program
             RelativeSeconds: -2.4d,
             ClosingRateSecondsPerSecond: null,
             Urgency: 0d);
-        IReadOnlyList<LiveSpatialCar> cars = hasRight
-            ? [ReviewRadarCar(91, 2d, 0.2d, "#FFAA00")]
-            : [];
+        IReadOnlyList<LiveSpatialCar> cars = [ReviewRadarCar(91, 2d, 0.2d, "#FFAA00")];
         var renderModel = CarRadarRenderModel.FromState(
             isAvailable: true,
             hasCarLeft: false,
@@ -7742,28 +7741,7 @@ internal static class Program
             return null;
         }
 
-        if ((metadata.ShouldRender ?? NativeShouldRender(metadata)) is false)
-        {
-            return new
-            {
-                contract = "overlay-model-layout-evidence/v1",
-                bodyKind = NormalizedBodyKind(body.Kind),
-                nativeBodyKind = body.Kind,
-                unitSystem = metadata.UnitSystem ?? "Metric",
-                state = body.State,
-                columns = Array.Empty<object>(),
-                rows = Array.Empty<object>(),
-                metrics = Array.Empty<object>(),
-                metricSections = Array.Empty<object>(),
-                gridSections = Array.Empty<object>(),
-                graph = (object?)null,
-                inputs = (object?)null,
-                flags = (object?)null,
-                carRadar = (object?)null,
-                trackMap = (object?)null,
-                streamChat = (object?)null
-            };
-        }
+        var shouldRender = metadata.ShouldRender ?? NativeShouldRender(metadata);
 
         return new
         {
@@ -7772,11 +7750,11 @@ internal static class Program
             nativeBodyKind = body.Kind,
             unitSystem = metadata.UnitSystem ?? "Metric",
             state = body.State,
-            columns = body.Columns.Select(ColumnEvidence).ToArray(),
-            rows = body.Rows.Take(80).Select(RowEvidence).ToArray(),
-            metrics = body.MetricRows.Select(MetricEvidence).ToArray(),
-            metricSections = MetricSectionEvidence(body),
-            gridSections = body.MetricGrids.Select(GridSectionEvidence).ToArray(),
+            columns = shouldRender is false ? Array.Empty<object>() : body.Columns.Select(ColumnEvidence).ToArray(),
+            rows = shouldRender is false ? Array.Empty<object>() : body.Rows.Take(80).Select(RowEvidence).ToArray(),
+            metrics = shouldRender is false ? Array.Empty<object>() : body.MetricRows.Select(MetricEvidence).ToArray(),
+            metricSections = shouldRender is false ? Array.Empty<object>() : MetricSectionEvidence(body),
+            gridSections = shouldRender is false ? Array.Empty<object>() : body.MetricGrids.Select(GridSectionEvidence).ToArray(),
             graph = GraphEvidence(body.Graph),
             inputs = InputsEvidence(body.Inputs),
             flags = body.FlagCells.Count > 0
@@ -8631,6 +8609,12 @@ internal static class Program
 
     private static string? NativeUnavailableContentPolicy(ScreenshotMetadata metadata)
     {
+        if (string.Equals(metadata.OverlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(metadata.FixtureVariant, "no-results-chrome-on", StringComparison.OrdinalIgnoreCase))
+        {
+            return "chrome-only-placeholder";
+        }
+
         if (string.Equals(metadata.OverlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             && string.Equals(metadata.FixtureVariant, "missing", StringComparison.OrdinalIgnoreCase))
         {

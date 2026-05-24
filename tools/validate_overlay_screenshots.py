@@ -458,11 +458,13 @@ OVERLAY_VARIANT_SPECS = (
     ("car-radar", "min-scale", "fixture=car-radar-min-scale", True, None),
     ("gap-to-leader", "no-cars", "fixture=gap-no-cars", True, None),
     ("gap-to-leader", "long-tail-real-data", "fixture=gap-long-tail-real-data", False, None),
+    ("gap-to-leader", "pit-window-real-data", "fixture=gap-pit-window-real-data", False, None),
     ("gap-to-leader", "trend-row-off", "fixture=gap-trend-row-off", True, None),
     ("gap-to-leader", "trend-off", "fixture=gap-trend-off", True, None),
     ("gap-to-leader", "graph-off", "fixture=gap-graph-off", True, None),
     ("track-map", "circle-fallback", "trackMap=fallback", True, "track-map-fallback"),
     ("track-map", "no-markers", "fixture=track-map-no-markers", True, None),
+    ("track-map", "focus-practice-real-data", "fixture=track-map-focus-practice-real-data", False, None),
     ("track-map", "player-focus-class-color", "fixture=track-map-player-focus-class-color", True, None),
     ("track-map", "min-scale", "fixture=track-map-min-scale", True, None),
     ("flags", "all-kinds", "fixture=flags-all-kinds", True, None),
@@ -6542,7 +6544,8 @@ def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, 
         failures.append(f"{path}: car-radar {slug} expected shouldRender={expected_should_render}, got {radar.get('shouldRender')!r}")
     if values.get("radarShouldRender") != expected_should_render:
         failures.append(f"{path}: car-radar {slug} expected radarShouldRender={expected_should_render}, got {values.get('radarShouldRender')!r}")
-    item_kinds = [text_value(item, "kind") for item in evidence_list(radar, "items")]
+    items = evidence_list(radar, "items")
+    item_kinds = [text_value(item, "kind") for item in items]
     expected_items = {
         "left": ["side-left"],
         "right": ["side-right"],
@@ -6553,6 +6556,11 @@ def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, 
     for kind in expected_items:
         if kind not in item_kinds:
             failures.append(f"{path}: car-radar {slug} missing {kind} item in {item_kinds!r}")
+    if expected_should_render:
+        focus_item = first_evidence_item_by_kind(items, "focus")
+        if not focus_item:
+            failures.append(f"{path}: car-radar {slug} missing focus item in {item_kinds!r}")
+        validate_car_radar_rendered_item_geometry(path, radar, items, focus_item, failures)
     if slug == "clear" and any(kind.startswith("side-") or kind == "focus" for kind in item_kinds):
         failures.append(f"{path}: car-radar clear should not expose side/focus items, got {item_kinds!r}")
     if slug == "clear":
@@ -6564,6 +6572,53 @@ def validate_car_radar_variant(path: str, values: dict[str, object], slug: str, 
     primitive_kinds = [text_value(item, "kind") for item in evidence_list(radar, "primitives")]
     if "arc" in primitive_kinds:
         failures.append(f"{path}: car-radar {slug} should not expose multiclass arc primitive")
+
+
+def validate_car_radar_rendered_item_geometry(
+    path: str,
+    radar: dict[str, object],
+    items: list[object],
+    focus_item: object,
+    failures: list[str],
+) -> None:
+    target_bounds = typed_dict(radar.get("targetBounds"))
+    if not target_bounds:
+        failures.append(f"{path}: car-radar rendered item evidence missing targetBounds")
+
+    for index, item in enumerate(items):
+        item_dict = typed_dict(item)
+        kind = text_value(item_dict, "kind") or f"item-{index}"
+        bounds = get_manifest_value(item_dict, "bounds")
+        if target_bounds:
+            require_rect_within(path, f"car-radar {kind} item bounds", bounds, target_bounds, "car-radar targetBounds", failures, tolerance=1.0)
+        else:
+            require_rect(path, bounds, f"car-radar {kind} item bounds", failures)
+
+        if kind.startswith("side-"):
+            validate_car_radar_side_item_geometry(path, item_dict, focus_item, kind, failures)
+
+
+def validate_car_radar_side_item_geometry(
+    path: str,
+    side_item: dict[str, object],
+    focus_item: object,
+    kind: str,
+    failures: list[str],
+) -> None:
+    if get_manifest_value(side_item, "carIdx") is None:
+        failures.append(f"{path}: car-radar {kind} warning missing attached carIdx evidence")
+
+    focus_bounds = get_manifest_value(typed_dict(focus_item), "bounds")
+    side_bounds = get_manifest_value(side_item, "bounds")
+    focus_x = rect_center_x(focus_bounds)
+    side_x = rect_center_x(side_bounds)
+    if focus_x is None or side_x is None:
+        return
+
+    if kind == "side-left" and side_x >= focus_x:
+        failures.append(f"{path}: car-radar side-left warning must render left of focus car")
+    if kind == "side-right" and side_x <= focus_x:
+        failures.append(f"{path}: car-radar side-right warning must render right of focus car")
 
 
 def validate_gap_no_cars_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
@@ -6660,6 +6715,43 @@ def validate_track_map_variant(path: str, values: dict[str, object], slug: str, 
         if visible_header_items(values):
             failures.append(f"{path}: track-map no-markers should not expose visible header items")
         reject_hidden_overlay_text(path, values.get("textSample"), "track-map no-markers textSample", failures)
+    elif slug == "focus-practice-real-data":
+        require_equal(path, "track-map focus-practice real-data shouldRender", values.get("shouldRender"), True, failures)
+        require_equal(path, "track-map focus-practice real-data markerCount", track_map.get("markerCount"), 3, failures)
+        markers = [typed_dict(marker) for marker in evidence_list(track_map, "items")]
+        markers_by_id = {marker.get("id"): marker for marker in markers}
+        for car_idx in (10, 22, 33):
+            if car_idx not in markers_by_id:
+                failures.append(f"{path}: track-map focus-practice real-data missing marker carIdx {car_idx}")
+        focus = markers_by_id.get(22)
+        player = markers_by_id.get(10)
+        opponent = markers_by_id.get(33)
+        if focus:
+            require_equal(path, "track-map focus-practice marker 22 kind", focus.get("kind"), "focus-marker", failures)
+            if not color_matches_rgb_alpha(focus.get("fill"), (255, 218, 89), 245 / 255):
+                failures.append(f"{path}: track-map focus-practice marker 22 expected GT3 yellow fill, got {focus.get('fill')!r}")
+            if focus.get("label") is not None:
+                failures.append(f"{path}: track-map focus-practice marker 22 should not invent a position label, got {focus.get('label')!r}")
+        for car_idx, marker, expected_rgb in (
+            (10, player, (0, 174, 239)),
+            (33, opponent, (255, 218, 89)),
+        ):
+            if not marker:
+                continue
+            require_equal(path, f"track-map focus-practice marker {car_idx} kind", marker.get("kind"), "car-marker", failures)
+            if not color_matches_rgb_alpha(marker.get("fill"), expected_rgb, 245 / 255):
+                failures.append(
+                    f"{path}: track-map focus-practice marker {car_idx} expected class fill {expected_rgb!r}, got {marker.get('fill')!r}"
+                )
+            if marker.get("label") is not None:
+                failures.append(f"{path}: track-map focus-practice marker {car_idx} should not invent a position label, got {marker.get('label')!r}")
+        if focus and player:
+            focus_width = numeric(typed_dict(focus.get("bounds")).get("width"))
+            player_width = numeric(typed_dict(player.get("bounds")).get("width"))
+            if focus_width <= player_width:
+                failures.append(
+                    f"{path}: track-map focus-practice focus marker radius evidence not larger than player marker ({focus_width:g} <= {player_width:g})"
+                )
     elif slug == "player-focus-class-color":
         require_equal(path, "track-map player-focus class color shouldRender", values.get("shouldRender"), True, failures)
         require_equal(path, "track-map player-focus class color markerCount", track_map.get("markerCount"), 1, failures)
@@ -8376,6 +8468,14 @@ def evidence_list(values: dict[str, object], key: str) -> list[object]:
     return value if isinstance(value, list) else []
 
 
+def first_evidence_item_by_kind(items: list[object], kind: str) -> dict[str, object]:
+    for item in items:
+        item_dict = typed_dict(item)
+        if text_value(item_dict, "kind") == kind:
+            return item_dict
+    return {}
+
+
 def text_value(values: object, key: str) -> str:
     if not isinstance(values, dict):
         return ""
@@ -8786,6 +8886,14 @@ def rect_number(rect: object, key: str) -> float | None:
         return None
     value = get_manifest_value(rect, key)
     return float(value) if isinstance(value, (int, float)) else None
+
+
+def rect_center_x(rect: object) -> float | None:
+    x = rect_number(rect, "x")
+    width = rect_number(rect, "width")
+    if x is None or width is None:
+        return None
+    return x + width / 2
 
 
 def rects_intersect(first: dict[str, object], second: dict[str, object]) -> bool:
@@ -10248,6 +10356,21 @@ def validate_validator_mutations(failures: list[str], include_source_contracts: 
         mutate=lambda screenshot: set_nested_value(screenshot, ("url",), "/review/overlays/relative?preview=race&fixture=rightmost-evidence"),
         validate=require_explicit_fixture_variant_for_fixture_query,
         expected_tokens=("fixture query without explicit fixtureVariant",),
+        failures=failures,
+    )
+    expect_mutation_failure(
+        name="car radar side-no-placement renders side warning geometry",
+        path="browser-overlays/car-radar/side-no-placement.png",
+        base=mutation_car_radar_side_no_placement_screenshot(),
+        mutate=lambda screenshot: typed_dict(typed_dict(screenshot["modelEvidence"])["carRadar"])["items"].append(
+            {
+                "kind": "side-left",
+                "carIdx": 44,
+                "bounds": {"x": 98, "y": 132, "width": 20, "height": 36},
+            }
+        ),
+        validate=validate_overlay_variant_contract,
+        expected_tokens=("side-no-placement should not expose side items",),
         failures=failures,
     )
     expect_mutation_failure(
@@ -12068,6 +12191,48 @@ def mutate_overlay_chrome_radius_flat(screenshot: dict[str, object]) -> None:
 def mutate_overlay_chrome_backing_transparent(screenshot: dict[str, object]) -> None:
     styles = typed_dict(typed_dict(evidence_list(typed_dict(screenshot.get("layout")), "elements")[5]).get("styles"))
     styles["backgroundColor"] = "rgba(0, 0, 0, 0)"
+
+
+def mutation_car_radar_side_no_placement_screenshot() -> dict[str, object]:
+    return {
+        "overlayId": "car-radar",
+        "fixtureVariant": "side-no-placement",
+        "previewMode": "race",
+        "bodyKind": "car-radar",
+        "status": "clear",
+        "shouldRender": True,
+        "radarShouldRender": True,
+        "scenarioEvidence": mutation_scenario_evidence(
+            slug="side-no-placement",
+            query="fixture=car-radar-side-no-placement",
+            body_kind="car-radar",
+            status="clear",
+            should_render=True,
+        ),
+        "modelEvidence": {
+            "carRadar": {
+                "shouldRender": True,
+                "targetBounds": {"x": 0, "y": 0, "width": 300, "height": 300},
+                "items": [
+                    {
+                        "kind": "nearby",
+                        "carIdx": 44,
+                        "bounds": {"x": 142, "y": 92, "width": 16, "height": 36},
+                    },
+                    {
+                        "kind": "focus",
+                        "carIdx": 12,
+                        "bounds": {"x": 136, "y": 130, "width": 28, "height": 42},
+                    },
+                ],
+                "primitives": [
+                    {"kind": "background", "bounds": {"x": 0, "y": 0, "width": 300, "height": 300}},
+                    {"kind": "ring-1", "bounds": {"x": 32, "y": 32, "width": 236, "height": 236}},
+                ],
+                "labels": [],
+            },
+        },
+    }
 
 
 def mutation_input_waiting_screenshot() -> dict[str, object]:

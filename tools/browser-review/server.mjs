@@ -27,6 +27,12 @@ const reviewNurburgringTrackMap = JSON.parse(readFileSync(
 const gapLongTailRealDataSnapshot = JSON.parse(readFileSync(
   resolve(repoRoot, 'fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-long-tail-real-data.json'),
   'utf8'));
+const gapPitWindowRealDataSnapshot = JSON.parse(readFileSync(
+  resolve(repoRoot, 'fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-pit-window-real-data.json'),
+  'utf8'));
+const trackMapFocusPracticeSnapshot = JSON.parse(readFileSync(
+  resolve(repoRoot, 'fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-focus-and-practice-marker-policy.json'),
+  'utf8'));
 const trackMapPlayerFocusClassColorSnapshot = JSON.parse(readFileSync(
   resolve(repoRoot, 'fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-player-focus-class-color-real-data.json'),
   'utf8'));
@@ -975,6 +981,71 @@ function applyReviewFixtureToLiveSnapshot(live, fixture) {
       trackSurface: 1,
       onPitRoad: true,
       playerOnPitRoad: true
+    };
+    return live;
+  }
+
+  if (fixture === 'track-map-focus-practice-real-data') {
+    const raw = trackMapFocusPracticeSnapshot.rawEvidence;
+    const rowsByCarIdx = new Map(raw.timingRows.map((row) => [row.carIdx, row]));
+    const toTimingRow = (row) => reviewTimingRow(
+      row.carIdx,
+      null,
+      null,
+      row.lapDistPct,
+      row.classColor,
+      {
+        isFocus: row.role === 'focus',
+        isPlayer: row.role === 'player',
+        hasTakenGrid: row.hasTakenGrid === true,
+        carClassName: row.carClass,
+        trackSurface: 3
+      });
+    const focusRaw = rowsByCarIdx.get(raw.focusCarIdx);
+    const playerRaw = rowsByCarIdx.get(raw.playerCarIdx);
+    const timingRows = raw.timingRows.map(toTimingRow);
+    models.session = {
+      ...(models.session || {}),
+      hasData: true,
+      sessionType: raw.sessionType,
+      eventType: raw.sessionType,
+      sessionName: `${raw.sessionType} compact real-data marker policy`
+    };
+    models.reference = {
+      ...(models.reference || {}),
+      hasData: true,
+      playerCarIdx: raw.playerCarIdx,
+      focusCarIdx: raw.focusCarIdx,
+      focusIsPlayer: false,
+      hasExplicitNonPlayerFocus: true,
+      lapDistPct: focusRaw?.lapDistPct ?? null,
+      playerLapDistPct: playerRaw?.lapDistPct ?? null,
+      trackSurface: 3,
+      playerTrackSurface: 3,
+      onPitRoad: false,
+      playerOnPitRoad: false,
+      classPosition: null,
+      overallPosition: null
+    };
+    models.driverDirectory = {
+      ...(models.driverDirectory || {}),
+      hasData: true,
+      playerCarIdx: raw.playerCarIdx,
+      focusCarIdx: raw.focusCarIdx
+    };
+    models.timing = {
+      ...(models.timing || {}),
+      hasData: true,
+      focusCarIdx: raw.focusCarIdx,
+      playerCarIdx: raw.playerCarIdx,
+      focusRow: focusRaw ? toTimingRow(focusRaw) : null,
+      playerRow: playerRaw ? toTimingRow(playerRaw) : null,
+      overallRows: timingRows,
+      classRows: []
+    };
+    models.scoring = {
+      ...(models.scoring || {}),
+      rows: []
     };
     return live;
   }
@@ -2943,6 +3014,9 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
       if (fixture === 'gap-long-tail-real-data') {
         return withChrome(reviewGapLongTailRealDataModel());
       }
+      if (fixture === 'gap-pit-window-real-data') {
+        return withChrome(reviewGapPitWindowRealDataModel());
+      }
       if (session !== 'race') {
         return withChrome({
           overlayId,
@@ -3261,6 +3335,122 @@ function reviewGapLongTailTrendMetrics() {
     { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, comparisonText: '3L', threatText: '--' },
     { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null, primaryTire: dryTire, comparisonTire: dryTire, threatTire: null },
     { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track', threatText: '--' }
+  ];
+}
+
+function reviewGapPitWindowRealDataModel() {
+  const snapshot = gapPitWindowRealDataSnapshot;
+  const rawFrames = snapshot.rawEvidence.orderedFrames || [];
+  const pitWindow = snapshot.rawEvidence.pitWindow || {};
+  const firstFrame = rawFrames[0] || { sessionTimeSeconds: 0, focusGapToClassLeaderSeconds: 0 };
+  const lastFrame = rawFrames[rawFrames.length - 1] || firstFrame;
+  const orderedFrames = [
+    ...rawFrames,
+    {
+      ...lastFrame,
+      role: 'post-exit-render-stable',
+      sessionTimeSeconds: Number(lastFrame.sessionTimeSeconds || 0) + 6,
+      focusGapToClassLeaderSeconds: Number(lastFrame.focusGapToClassLeaderSeconds || 0) + 0.1
+    }
+  ];
+  const point = (frame, gapSeconds) => ({
+    axisSeconds: Number(frame.sessionTimeSeconds),
+    gapSeconds,
+    startsSegment: frame === orderedFrames[0]
+  });
+  const focusPoints = orderedFrames.map((frame) =>
+    point(frame, Math.max(0, Number(frame.focusGapToClassLeaderSeconds || 0))));
+  const leaderPoints = orderedFrames.map((frame) => point(frame, 0));
+  const aheadPoints = orderedFrames.map((frame) =>
+    point(frame, Math.max(0.3, Number(frame.focusGapToClassLeaderSeconds || 0) - 1.1)));
+  const threatCarIdx = 16;
+  const series = [
+    reviewGapSeries(13, false, true, 1, leaderPoints, 0, threatCarIdx),
+    reviewGapSeries(threatCarIdx, false, false, 4, aheadPoints, 1, threatCarIdx),
+    reviewGapSeries(snapshot.rawEvidence.focusCar.carIdx, true, false, snapshot.rawEvidence.focusCar.classPosition, focusPoints, 2, threatCarIdx)
+  ];
+  const maxFocusGap = Math.max(...focusPoints.map((item) => item.gapSeconds).filter(Number.isFinite), 1);
+  const axisPaddingSeconds = 4;
+  return {
+    overlayId: 'gap-to-leader',
+    title: 'Gap To Leader',
+    status: 'live | Dallara pit-window policy',
+    source: 'source: compact Dallara pit-window capture',
+    bodyKind: 'graph',
+    columns: [],
+    rows: [],
+    metrics: [],
+    points: [],
+    graph: {
+      series,
+      weather: [],
+      leaderChanges: [],
+      driverChanges: [],
+      startSeconds: Number(firstFrame.sessionTimeSeconds || 0) - axisPaddingSeconds,
+      endSeconds: Number(orderedFrames[orderedFrames.length - 1]?.sessionTimeSeconds || firstFrame.sessionTimeSeconds || 0) + axisPaddingSeconds,
+      maxGapSeconds: Math.ceil(maxFocusGap + 2),
+      lapReferenceSeconds: 525.8,
+      selectedSeriesCount: series.length,
+      trendMetrics: reviewGapPitWindowTrendMetrics(snapshot),
+      activeThreat: {
+        label: '5L',
+        state: 'ready',
+        chaser: {
+          carIdx: threatCarIdx,
+          label: 'P4',
+          gainSeconds: 0.4
+        }
+      },
+      threatCarIdx,
+      metricDeadbandSeconds: 0.25,
+      comparisonLabel: 'P4',
+      showGraph: true,
+      showTrendMetrics: true,
+      scale: {
+        maxGapSeconds: Math.ceil(maxFocusGap + 2),
+        isFocusRelative: true,
+        aheadSeconds: Math.ceil(maxFocusGap + 1),
+        behindSeconds: 3,
+        referencePoints: focusPoints,
+        latestReferenceGapSeconds: focusPoints[focusPoints.length - 1]?.gapSeconds ?? null
+      }
+    },
+    headerItems: [
+      { key: 'timeRemaining', value: '00:37:19' }
+    ],
+    shouldRender: true
+  };
+}
+
+function reviewGapPitWindowTrendMetrics(snapshot) {
+  const expected = snapshot.expected?.pitMetrics || {};
+  const seconds = Number(expected.lastDurationSeconds);
+  const lap = Number(expected.lastPitLap);
+  const primaryPit = {
+    seconds: Number.isFinite(seconds) ? seconds : 42.6,
+    lap: Number.isFinite(lap) ? lap : 24,
+    isActive: false
+  };
+  const comparisonPit = {
+    seconds: 39.8,
+    lap: Math.max(1, (primaryPit.lap || 1) - 1),
+    isActive: false
+  };
+  const threatPit = {
+    seconds: 41.2,
+    lap: primaryPit.lap,
+    isActive: false
+  };
+  const dryTire = { label: 'Dry', shortLabel: 'D', isWet: false };
+  return [
+    { label: 'Last', focusGapChangeSeconds: null, chaser: null, state: 'last', stateLabel: null, primaryText: '0.0', comparisonText: '-0.2', threatText: '-0.4' },
+    { label: '5L', focusGapChangeSeconds: -0.3, chaser: { carIdx: 16, label: 'P4', gainSeconds: 0.4 }, state: 'ready', stateLabel: null, completedReferenceLaps: 5, comparisonText: '-0.3', threatText: '-0.4' },
+    { label: '10L', focusGapChangeSeconds: -0.6, chaser: { carIdx: 16, label: 'P4', gainSeconds: 0.7 }, state: 'ready', stateLabel: null, completedReferenceLaps: 10, comparisonText: '-0.7', threatText: '-0.7' },
+    { label: 'Pit', focusGapChangeSeconds: null, chaser: null, state: 'pit', stateLabel: null, primaryPit, comparisonPit, threatPit },
+    { label: 'PLap', focusGapChangeSeconds: null, chaser: null, state: 'pitLap', stateLabel: null, primaryPit, comparisonPit, threatPit },
+    { label: 'Stint', focusGapChangeSeconds: null, chaser: null, state: 'stint', stateLabel: null, comparisonText: '8L', threatText: '7L' },
+    { label: 'Tire', focusGapChangeSeconds: null, chaser: null, state: 'tire', stateLabel: null, primaryTire: dryTire, comparisonTire: dryTire, threatTire: dryTire },
+    { label: 'Status', focusGapChangeSeconds: null, chaser: null, state: 'status', stateLabel: null, comparisonText: 'Track', threatText: 'Track' }
   ];
 }
 

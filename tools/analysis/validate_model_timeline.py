@@ -98,6 +98,7 @@ def validate_overlay_timeline(overlay_id: str, rows: list[dict[str, Any]]) -> li
         check_relative_timing_policy(rows, issues)
     elif overlay_id == "car-radar":
         check_radar_actual_alongside_policy(rows, issues)
+        check_radar_multiclass_timing_policy(rows, issues)
     elif overlay_id == "track-map":
         check_track_map_focus_policy(rows, issues)
     elif overlay_id == "fuel-calculator":
@@ -256,10 +257,68 @@ def check_relative_timing_policy(rows: list[dict[str, Any]], issues: list[dict[s
 def check_radar_actual_alongside_policy(rows: list[dict[str, Any]], issues: list[dict[str, Any]]) -> None:
     for row in rows:
         semantic = row.get("semantic") or {}
-        if semantic.get("actualAlongside") is not False:
+        placement_rejects_side_warning = (
+            semantic.get("actualAlongside") is False
+            or semantic.get("placementCandidate") is False
+            or semantic.get("hasPlacementCandidate") is False
+        )
+        if not placement_rejects_side_warning:
             continue
-        if semantic.get("warningVisible") is True or semantic.get("sideWarningVisible") is True:
+        side_warning_kinds = as_string_array(semantic.get("sideWarningKinds"))
+        if semantic.get("warningVisible") is True or semantic.get("sideWarningVisible") is True or side_warning_kinds:
             add_issue(issues, "car-radar", row, "fail", "radar-side-warning-without-actual-alongside", "Radar side warning rendered when evidence says no car is actually alongside")
+
+
+def check_radar_multiclass_timing_policy(rows: list[dict[str, Any]], issues: list[dict[str, Any]]) -> None:
+    for row in rows:
+        semantic = row.get("semantic") or {}
+        timing = dict_value(semantic.get("multiclassTiming"))
+        if not timing:
+            continue
+
+        f2_seconds = number_or_none(timing.get("f2RelativeSeconds"))
+        estimated_seconds = number_or_none(timing.get("estimatedRelativeSeconds"))
+        expected_source = string_or_none(timing.get("expectedSource"))
+        if expected_source is None and f2_seconds is not None and estimated_seconds is not None and abs(f2_seconds - estimated_seconds) > 0.05:
+            expected_source = "CarIdxF2Time"
+
+        actual_source = string_or_none(timing.get("actualSource") or timing.get("source"))
+        if expected_source is not None and actual_source != expected_source:
+            add_issue(
+                issues,
+                "car-radar",
+                row,
+                "fail",
+                "radar-multiclass-timing-source-precedence",
+                f"multiclass warning expected {expected_source} timing source, got {actual_source or 'missing'}",
+            )
+
+        expected_seconds = number_or_none(timing.get("expectedRelativeSeconds"))
+        if expected_seconds is None:
+            expected_seconds = f2_seconds if expected_source == "CarIdxF2Time" else estimated_seconds
+        rendered_seconds = number_or_none(timing.get("renderedRelativeSeconds"))
+        if expected_seconds is not None and rendered_seconds is not None and abs(expected_seconds - rendered_seconds) > 0.05:
+            add_issue(
+                issues,
+                "car-radar",
+                row,
+                "fail",
+                "radar-multiclass-countdown-source-mismatch",
+                f"multiclass countdown expected {expected_seconds:g}s from source precedence, got {rendered_seconds:g}s",
+            )
+
+        label = string_or_none(timing.get("labelText"))
+        if expected_seconds is not None and label:
+            expected_token = f"{abs(expected_seconds):.1f}s"
+            if expected_token not in label:
+                add_issue(
+                    issues,
+                    "car-radar",
+                    row,
+                    "fail",
+                    "radar-multiclass-countdown-label",
+                    f"multiclass warning label {label!r} does not include expected countdown {expected_token}",
+                )
 
 
 def check_track_map_focus_policy(rows: list[dict[str, Any]], issues: list[dict[str, Any]]) -> None:
@@ -326,6 +385,10 @@ def normalize_row(default_overlay_id: str, row: dict[str, Any]) -> dict[str, Any
         semantic.setdefault("focusMarkerCarIdxs", focus_marker_car_indices)
         if len(focus_marker_car_indices) == 1:
             semantic.setdefault("focusMarkerCarIdx", focus_marker_car_indices[0])
+    elif overlay_id == "car-radar":
+        side_warning_kinds = car_radar_side_warning_kinds(model)
+        semantic.setdefault("sideWarningKinds", side_warning_kinds)
+        semantic.setdefault("sideWarningVisible", bool(side_warning_kinds))
 
     normalized = {
         "overlayId": overlay_id,
@@ -399,6 +462,18 @@ def track_map_focus_marker_car_indices(model: dict[str, Any]) -> list[int]:
         if car_idx is not None:
             car_indices.append(int(car_idx))
     return car_indices
+
+
+def car_radar_side_warning_kinds(model: dict[str, Any]) -> list[str]:
+    radar = dict_value(model.get("carRadar"))
+    render_model = dict_value(radar.get("renderModel"))
+    cars = list_value(render_model.get("cars")) or list_value(render_model.get("items"))
+    kinds: list[str] = []
+    for car in cars:
+        kind = string_or_none(dict_value(car).get("kind"))
+        if kind and kind.startswith("side-"):
+            kinds.append(kind)
+    return kinds
 
 
 def explicit_row_keys(row: dict[str, Any], model: dict[str, Any]) -> list[str]:
@@ -541,6 +616,17 @@ def first_present(values: dict[str, Any], keys: tuple[str, ...]) -> Any:
         if values.get(key) is not None:
             return values.get(key)
     return None
+
+
+def as_string_array(value: Any) -> list[str]:
+    return [str(item) for item in value] if isinstance(value, list) else []
+
+
+def string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def number_or_none(value: Any) -> float | None:

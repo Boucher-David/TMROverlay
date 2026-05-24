@@ -29,6 +29,9 @@ internal sealed class LocalhostOverlayState
     private readonly Dictionary<string, long> _pageEventOverlayCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, long> _pageEventClientCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, long> _pageEventSourceUrlCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _pageEventOverlayClientCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _pageEventClientIdCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _pageEventSourceUrlClientCounts = new(StringComparer.OrdinalIgnoreCase);
     private string _status;
     private DateTimeOffset? _startAttemptedAtUtc;
     private DateTimeOffset? _startedAtUtc;
@@ -203,14 +206,16 @@ internal sealed class LocalhostOverlayState
     {
         lock (_sync)
         {
+            var capturedAtUtc = DateTimeOffset.UtcNow;
             var lastRequestAgeSeconds = _lastRequestAtUtc is { } lastRequestAtUtc
-                ? Math.Max(0d, (DateTimeOffset.UtcNow - lastRequestAtUtc).TotalSeconds)
+                ? Math.Max(0d, (capturedAtUtc - lastRequestAtUtc).TotalSeconds)
                 : (double?)null;
             return new LocalhostOverlaySnapshot(
                 Enabled: _options.Enabled,
                 Port: _options.Port,
                 Prefix: _options.Prefix,
                 Status: _status,
+                CapturedAtUtc: capturedAtUtc,
                 StartAttemptedAtUtc: _startAttemptedAtUtc,
                 StartedAtUtc: _startedAtUtc,
                 StoppedAtUtc: _stoppedAtUtc,
@@ -255,6 +260,9 @@ internal sealed class LocalhostOverlayState
                 PageEventOverlayCounts: CopyCounts(_pageEventOverlayCounts),
                 PageEventClientCounts: CopyCounts(_pageEventClientCounts),
                 PageEventSourceUrlCounts: CopyCounts(_pageEventSourceUrlCounts),
+                PageEventOverlayClientCounts: CopyCounts(_pageEventOverlayClientCounts),
+                PageEventClientIdCounts: CopyCounts(_pageEventClientIdCounts),
+                PageEventSourceUrlClientCounts: CopyCounts(_pageEventSourceUrlClientCounts),
                 RecentPageEvents: _recentPageEvents.ToArray());
         }
     }
@@ -264,6 +272,7 @@ internal sealed class LocalhostOverlayState
         var eventKind = NormalizeKey(pageEvent.Event, "unknown");
         var overlayId = NormalizeKey(pageEvent.OverlayId, "unknown");
         var clientKind = NormalizeClientKind(pageEvent.ClientKind);
+        var clientId = NormalizeClientId(pageEvent.ClientId);
         var sourceUrl = NormalizeSourceUrlKey(pageEvent.SourceUrl);
         var recordedAtUtc = DateTimeOffset.UtcNow;
         lock (_sync)
@@ -271,7 +280,7 @@ internal sealed class LocalhostOverlayState
             _lastPageEventAtUtc = recordedAtUtc;
             _lastPageEventKind = eventKind;
             _lastPageEventOverlayId = overlayId;
-            _lastPageEventClientId = NormalizeOptional(pageEvent.ClientId);
+            _lastPageEventClientId = clientId;
             _lastPageEventClientKind = clientKind;
             _lastPageEventSourceUrl = sourceUrl;
             _lastPageEventShouldRender = pageEvent.ShouldRender;
@@ -279,19 +288,29 @@ internal sealed class LocalhostOverlayState
             _lastPageEventError = NormalizeOptional(pageEvent.Error);
             var overlayEventKey = $"{overlayId}|{eventKind}";
             var clientEventKey = $"{clientKind}|{eventKind}";
+            var overlayClientKey = $"{overlayId}|{clientKind}";
             _pageEventCounts[eventKind] = _pageEventCounts.GetValueOrDefault(eventKind) + 1;
             _pageEventOverlayCounts[overlayEventKey] = _pageEventOverlayCounts.GetValueOrDefault(overlayEventKey) + 1;
             _pageEventClientCounts[clientEventKey] = _pageEventClientCounts.GetValueOrDefault(clientEventKey) + 1;
+            _pageEventOverlayClientCounts[overlayClientKey] = _pageEventOverlayClientCounts.GetValueOrDefault(overlayClientKey) + 1;
+            if (clientId is not null)
+            {
+                var clientIdKey = $"{overlayId}|{clientId}";
+                _pageEventClientIdCounts[clientIdKey] = _pageEventClientIdCounts.GetValueOrDefault(clientIdKey) + 1;
+            }
+
             if (sourceUrl is not null)
             {
                 _pageEventSourceUrlCounts[sourceUrl] = _pageEventSourceUrlCounts.GetValueOrDefault(sourceUrl) + 1;
+                var sourceUrlClientKey = $"{sourceUrl}|{clientKind}";
+                _pageEventSourceUrlClientCounts[sourceUrlClientKey] = _pageEventSourceUrlClientCounts.GetValueOrDefault(sourceUrlClientKey) + 1;
             }
 
             _recentPageEvents.Enqueue(new LocalhostOverlayPageEventSample(
                 AtUtc: recordedAtUtc,
                 Event: eventKind,
                 OverlayId: overlayId,
-                ClientId: _lastPageEventClientId,
+                ClientId: clientId,
                 ClientKind: clientKind,
                 SourceUrl: sourceUrl,
                 ShouldRender: pageEvent.ShouldRender,
@@ -327,6 +346,12 @@ internal sealed class LocalhostOverlayState
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? NormalizeClientId(string? value)
+    {
+        var normalized = NormalizeOptional(value);
+        return normalized is null || normalized.Length <= 80 ? normalized : normalized[..80];
     }
 
     private static string? NormalizeSourceUrlKey(string? sourceUrl)
@@ -418,6 +443,7 @@ internal sealed record LocalhostOverlaySnapshot(
     int Port,
     string Prefix,
     string Status,
+    DateTimeOffset CapturedAtUtc,
     DateTimeOffset? StartAttemptedAtUtc,
     DateTimeOffset? StartedAtUtc,
     DateTimeOffset? StoppedAtUtc,
@@ -462,6 +488,9 @@ internal sealed record LocalhostOverlaySnapshot(
     IReadOnlyDictionary<string, long> PageEventOverlayCounts,
     IReadOnlyDictionary<string, long> PageEventClientCounts,
     IReadOnlyDictionary<string, long> PageEventSourceUrlCounts,
+    IReadOnlyDictionary<string, long> PageEventOverlayClientCounts,
+    IReadOnlyDictionary<string, long> PageEventClientIdCounts,
+    IReadOnlyDictionary<string, long> PageEventSourceUrlClientCounts,
     IReadOnlyList<LocalhostOverlayPageEventSample> RecentPageEvents);
 
 internal sealed record LocalhostOverlayRequestSample(

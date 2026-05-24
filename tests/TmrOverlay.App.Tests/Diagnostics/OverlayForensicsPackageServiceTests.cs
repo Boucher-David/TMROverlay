@@ -178,6 +178,26 @@ public sealed class OverlayForensicsPackageServiceTests
                     "stream-chat|page-loaded": 1,
                     "stream-chat|model-render": 1
                   },
+                  "sourceUrlCounts": {
+                    "/overlays/track-map?clientKind=obs": 1,
+                    "/api/overlay-model/track-map?clientKind=obs": 3
+                  },
+                  "sourceUrlClientCounts": {
+                    "/overlays/track-map?clientKind=obs|obs": 1,
+                    "/api/overlay-model/track-map?clientKind=obs|obs": 3
+                  },
+                  "pageEventSourceUrlCounts": {
+                    "/overlays/track-map?clientKind=obs": 2
+                  },
+                  "pageEventSourceUrlClientCounts": {
+                    "/overlays/track-map?clientKind=obs|obs": 2
+                  },
+                  "pageEventOverlayClientCounts": {
+                    "track-map|obs": 2
+                  },
+                  "pageEventClientIdCounts": {
+                    "track-map|obs-track": 2
+                  },
                   "clientCounts": {
                     "obs": 42
                   }
@@ -238,6 +258,17 @@ public sealed class OverlayForensicsPackageServiceTests
         AssertOverlayReadiness(overlays, "pit-service", "model-polled-hidden");
         AssertOverlayReadiness(overlays, "flags", "model-rendered");
         AssertOverlayReadiness(overlays, "track-map", "browser-source-error");
+        var trackMap = overlays.GetProperty("track-map");
+        Assert.Equal(2, trackMap.GetProperty("pageEventSourceUrlCounts").GetProperty("/overlays/track-map?clientKind=obs").GetInt32());
+        Assert.Equal(2, trackMap.GetProperty("pageEventSourceUrlClientCounts").GetProperty("/overlays/track-map?clientKind=obs|obs").GetInt32());
+        Assert.Equal(2, trackMap.GetProperty("pageEventClientCounts").GetProperty("obs").GetInt32());
+        Assert.Equal(2, trackMap.GetProperty("pageEventClientIdCounts").GetProperty("obs-track").GetInt32());
+        var sourceLifecycle = trackMap.GetProperty("sourceLifecycle");
+        Assert.Equal("reported", sourceLifecycle.GetProperty("sourceError").GetProperty("status").GetString());
+        Assert.Equal("missing-evidence", sourceLifecycle.GetProperty("sourceStale").GetProperty("status").GetString());
+        Assert.Contains(
+            sourceLifecycle.GetProperty("evidenceLimitations").EnumerateArray(),
+            limitation => string.Equals(limitation.GetString(), "sourceStaleNotClassifiable", StringComparison.Ordinal));
         AssertOverlayReadiness(overlays, "stream-chat", "model-rendered");
     }
 

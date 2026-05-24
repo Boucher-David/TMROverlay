@@ -1,0 +1,38 @@
+{
+  "aggregateVersion": 3,
+  "combo": {
+    "carKey": "car-161-toyotagr86",
+    "trackKey": "track-264-nurburgring-combinedlong",
+    "sessionKey": "race"
+  },
+  "car": {
+    "carId": 161,
+    "carPath": "toyotagr86",
+    "carScreenName": "Toyota GR86",
+    "driverCarFuelMaxLiters": 50.0,
+    "driverCarFuelKgPerLiter": 0.75,
+    "driverCarEstLapTimeSeconds": 610.0
+  },
+  "track": {
+    "trackId": 264,
+    "trackName": "nurburgring-combinedlong",
+    "trackDisplayName": "Nurburgring Combined",
+    "trackConfigName": "Gesamtstrecke Long",
+    "trackLengthKm": 25.947
+  },
+  "session": {
+    "sessionType": "Race",
+    "sessionName": "Race",
+    "sessionTime": "14400 sec",
+    "sessionLaps": "unlimited"
+  },
+  "updatedAtUtc": "2026-05-22T20:48:47Z",
+  "sessionCount": 4,
+  "baselineSessionCount": 4,
+  "fuelPerLapLiters": {
+    "sampleCount": 4,
+    "mean": 8.25,
+    "minimum": 8.1,
+    "maximum": 8.4
+  }
+}

@@ -5,6 +5,7 @@ using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.Content;
 using TmrOverlay.App.Overlays.PitService;
 using TmrOverlay.App.Overlays.TrackMap;
+using TmrOverlay.Core.Fuel;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
@@ -285,14 +286,76 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
         }
     }
 
+    [Fact]
+    public void FuelDallaraHistoryIngestionFixture_BuildsProductionModelFromMatchingUserAggregate()
+    {
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "fuel-calculator");
+        var fixtureRoot = HistoryFixtureRoot();
+        var history = new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = true,
+            ResolvedUserHistoryRoot = Path.Combine(fixtureRoot, "user"),
+            ResolvedBaselineHistoryRoot = Path.Combine(fixtureRoot, "baseline")
+        });
+        var now = DateTimeOffset.Parse("2026-05-23T20:48:47Z", CultureInfo.InvariantCulture);
+        var snapshot = DallaraFuelHistoryFallbackSnapshot(now);
+
+        var lookup = history.Lookup(snapshot.Combo);
+
+        Assert.Equal("car-128-dallarap217", snapshot.Combo.CarKey);
+        Assert.Equal("track-264-nurburgring-combinedlong", snapshot.Combo.TrackKey);
+        Assert.Equal("race", snapshot.Combo.SessionKey);
+        Assert.NotNull(lookup.UserAggregate);
+        Assert.Equal("user", lookup.PreferredAggregateSource);
+        Assert.Equal(5, lookup.UserAggregate.FuelPerLapLiters.SampleCount);
+        Assert.Equal(13.622505095177294d, lookup.UserAggregate.FuelPerLapLiters.Mean!.Value, precision: 12);
+
+        var gr86Lookup = history.Lookup(new HistoricalComboIdentity
+        {
+            CarKey = "car-161-toyotagr86",
+            TrackKey = snapshot.Combo.TrackKey,
+            SessionKey = snapshot.Combo.SessionKey
+        });
+        Assert.NotNull(gr86Lookup.UserAggregate);
+        Assert.Equal(8.25d, gr86Lookup.UserAggregate.FuelPerLapLiters.Mean!.Value);
+        Assert.NotEqual(
+            gr86Lookup.UserAggregate.FuelPerLapLiters.Mean,
+            lookup.UserAggregate.FuelPerLapLiters.Mean);
+
+        var strategyModel = LiveFuelStrategyModel.From(snapshot, now, history.Lookup);
+
+        Assert.True(strategyModel.IsAvailable);
+        Assert.NotNull(strategyModel.Strategy);
+        Assert.NotNull(strategyModel.History.UserAggregate);
+        Assert.Equal(5, strategyModel.History.UserAggregate.FuelPerLapLiters.SampleCount);
+        Assert.Equal("user history", strategyModel.Strategy.FuelPerLapSource);
+        Assert.Equal(13.622505095177294d, strategyModel.Strategy.FuelPerLapLiters!.Value, precision: 12);
+        Assert.Equal(0, strategyModel.Strategy.MeasuredFuelPerLapSampleCount);
+        Assert.Equal(44.0d, strategyModel.Strategy.CurrentFuelLiters);
+
+        var built = Factory(history).TryBuild("fuel-calculator", snapshot, settings, now, out var response);
+
+        Assert.True(built);
+        Assert.True(response.Model.ShouldRender);
+        Assert.Contains("user history", response.Model.Source, StringComparison.Ordinal);
+        Assert.Contains("history user", response.Model.Source, StringComparison.Ordinal);
+        Assert.Equal("unavailable", response.Model.FuelStrategyEvidence!.AdditionalFuelNeedState);
+    }
+
     private static BrowserOverlayModelFactory Factory()
     {
-        return new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        return Factory(new SessionHistoryQueryService(new SessionHistoryOptions
         {
             Enabled = false,
             ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
             ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
         }));
+    }
+
+    private static BrowserOverlayModelFactory Factory(SessionHistoryQueryService history)
+    {
+        return new BrowserOverlayModelFactory(history);
     }
 
     private static OverlaySettings EnableOverlay(ApplicationSettings settings, string overlayId)
@@ -347,6 +410,118 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
                     IsOnTrack = true
                 }
             }
+        };
+    }
+
+    private static LiveTelemetrySnapshot DallaraFuelHistoryFallbackSnapshot(DateTimeOffset now)
+    {
+        var context = new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity
+            {
+                CarId = 128,
+                CarPath = "dallarap217",
+                CarScreenName = "Dallara P217",
+                CarScreenNameShort = "Dallara P217",
+                CarClassId = 67,
+                CarClassShortName = "LMP2",
+                DriverCarFuelMaxLiters = 106.0d,
+                DriverCarFuelKgPerLiter = 0.75d,
+                DriverCarEstLapTimeSeconds = 482.092804d
+            },
+            Track = new HistoricalTrackIdentity
+            {
+                TrackId = 264,
+                TrackName = "nurburgring-combinedlong",
+                TrackDisplayName = "Nurburgring Combined",
+                TrackConfigName = "Gesamtstrecke Long",
+                TrackLengthKm = 25.947d
+            },
+            Session = new HistoricalSessionIdentity
+            {
+                SessionType = "Race",
+                SessionName = "Race",
+                SessionTime = "14400 sec",
+                SessionLaps = "unlimited",
+                TeamRacing = true
+            },
+            Conditions = new HistoricalSessionInfoConditions()
+        };
+        var sample = new HistoricalTelemetrySample(
+            CapturedAtUtc: now,
+            SessionTime: 1_800d,
+            SessionTick: 54_000,
+            SessionInfoUpdate: 7,
+            IsOnTrack: true,
+            IsInGarage: false,
+            OnPitRoad: false,
+            PitstopActive: false,
+            PlayerCarInPitStall: false,
+            FuelLevelLiters: 44.0d,
+            FuelLevelPercent: 44.0d / 106.0d,
+            FuelUsePerHourKg: 0d,
+            SpeedMetersPerSecond: 70d,
+            Lap: 4,
+            LapCompleted: 4,
+            LapDistPct: 0.25d,
+            LapLastLapTimeSeconds: 482.092804d,
+            LapBestLapTimeSeconds: 480.4d,
+            AirTempC: 20d,
+            TrackTempCrewC: 25d,
+            TrackWetness: 1,
+            WeatherDeclaredWet: false,
+            PlayerTireCompound: 0,
+            SessionTimeRemain: 7_200d,
+            SessionTimeTotal: 14_400d,
+            SessionLapsRemainEx: 32_767,
+            SessionLapsTotal: 32_767,
+            SessionState: 4,
+            RaceLaps: 4,
+            PlayerCarIdx: 12,
+            FocusCarIdx: 12,
+            FocusLapCompleted: 4,
+            FocusLapDistPct: 0.25d,
+            FocusLastLapTimeSeconds: 482.092804d,
+            FocusBestLapTimeSeconds: 480.4d,
+            FocusPosition: 7,
+            FocusClassPosition: 2,
+            FocusCarClass: 67,
+            FocusTrackSurface: 3,
+            TeamLapCompleted: 4,
+            TeamLapDistPct: 0.25d,
+            TeamLastLapTimeSeconds: 482.092804d,
+            TeamBestLapTimeSeconds: 480.4d,
+            TeamPosition: 7,
+            TeamClassPosition: 2,
+            TeamCarClass: 67,
+            LeaderCarIdx: 1,
+            LeaderLapCompleted: 4,
+            LeaderLapDistPct: 0.4d,
+            LeaderLastLapTimeSeconds: 480.4d,
+            ClassLeaderCarIdx: 1,
+            ClassLeaderLapCompleted: 4,
+            ClassLeaderLapDistPct: 0.4d,
+            ClassLeaderLastLapTimeSeconds: 480.4d,
+            PlayerTrackSurface: 3);
+        var fuel = LiveFuelSnapshot.From(context, sample);
+        var proximity = LiveProximitySnapshot.Unavailable;
+        var leaderGap = LiveLeaderGapSnapshot.From(sample);
+
+        return new LiveTelemetrySnapshot(
+            IsConnected: true,
+            IsCollecting: true,
+            SourceId: "fuel-dallara-history-ingestion-fixture",
+            StartedAtUtc: now.AddMinutes(-30),
+            LastUpdatedAtUtc: now,
+            Sequence: 1,
+            Context: context,
+            Combo: HistoricalComboIdentity.From(context),
+            LatestSample: sample,
+            Fuel: fuel,
+            Proximity: proximity,
+            LeaderGap: leaderGap)
+        {
+            Models = LiveRaceModelBuilder.From(context, sample, fuel, proximity, leaderGap)
         };
     }
 
@@ -679,6 +854,28 @@ public sealed class OverlayRealDataSnapshotProductionModelTests
         }
 
         throw new DirectoryNotFoundException("fixtures/telemetry-analysis/overlay-real-data-snapshots");
+    }
+
+    private static string HistoryFixtureRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(
+                directory.FullName,
+                "fixtures",
+                "telemetry-analysis",
+                "appdata-history",
+                "fuel-dallara-history-ingestion");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("fixtures/telemetry-analysis/appdata-history/fuel-dallara-history-ingestion");
     }
 
     private static JsonElement Get(JsonElement element, params string[] path)

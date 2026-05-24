@@ -3085,12 +3085,13 @@ function trackMapMarkers(live) {
   const referenceCarIdx = live?.models?.reference?.focusCarIdx
     ?? live?.models?.timing?.focusCarIdx
     ?? live?.models?.driverDirectory?.focusCarIdx;
+  const allowNonGridTimingMarkers = trackMapAllowsNonGridTimingMarkers(live);
   const markers = new Map();
   for (const row of rows) {
     if (row.hasSpatialProgress === false || !Number.isFinite(row.lapDistPct) || row.lapDistPct < 0) continue;
     const scoringRow = scoringByCarIdx.get(row.carIdx) || null;
     const isFocus = row.isFocus === true || row.carIdx === referenceCarIdx || scoringRow?.isFocus === true;
-    if (!isFocus && row.hasTakenGrid !== true) continue;
+    if (!isFocus && row.hasTakenGrid !== true && !allowNonGridTimingMarkers) continue;
     markers.set(row.carIdx, {
       carIdx: row.carIdx,
       lapDistPct: normalizeProgress(row.lapDistPct),
@@ -3150,6 +3151,16 @@ function trackMapMarkers(live) {
   }
 
   return [...markers.values()].sort((left, right) => Number(left.isFocus) - Number(right.isFocus) || left.carIdx - right.carIdx);
+}
+
+function trackMapAllowsNonGridTimingMarkers(live) {
+  const sessionType = String(live?.models?.session?.sessionType
+    || live?.models?.session?.eventType
+    || live?.models?.session?.sessionName
+    || '').toLowerCase();
+  return sessionType.includes('practice')
+    || sessionType.includes('qualif')
+    || sessionType.includes('offline testing');
 }
 
 function trackMapIsPlayerFocus(reference, carIdx, isFocus, fallback) {

@@ -1,0 +1,58 @@
+{
+  "aggregateVersion": 3,
+  "combo": {
+    "carKey": "car-128-dallarap217",
+    "trackKey": "track-264-nurburgring-combinedlong",
+    "sessionKey": "race"
+  },
+  "car": {
+    "carId": 128,
+    "carPath": "dallarap217",
+    "carScreenName": "Dallara P217",
+    "carScreenNameShort": "Dallara P217",
+    "driverCarFuelMaxLiters": 106.0,
+    "driverCarFuelKgPerLiter": 0.75,
+    "driverCarEstLapTimeSeconds": 482.092804
+  },
+  "track": {
+    "trackId": 264,
+    "trackName": "nurburgring-combinedlong",
+    "trackDisplayName": "Nurburgring Combined",
+    "trackConfigName": "Gesamtstrecke Long",
+    "trackLengthKm": 25.947
+  },
+  "session": {
+    "sessionType": "Race",
+    "sessionName": "Race",
+    "sessionTime": "14400 sec",
+    "sessionLaps": "unlimited",
+    "teamRacing": true
+  },
+  "updatedAtUtc": "2026-05-22T20:48:47Z",
+  "sessionCount": 5,
+  "baselineSessionCount": 5,
+  "fuelPerLapLiters": {
+    "sampleCount": 5,
+    "mean": 13.622505095177294,
+    "minimum": 13.3843,
+    "maximum": 13.855579263140761
+  },
+  "fuelPerHourLiters": {
+    "sampleCount": 2,
+    "mean": 101.5,
+    "minimum": 96.3,
+    "maximum": 106.7
+  },
+  "medianLapSeconds": {
+    "sampleCount": 5,
+    "mean": 482.092804,
+    "minimum": 480.4,
+    "maximum": 486.1
+  },
+  "observedFuelFillRateLitersPerSecond": {
+    "sampleCount": 1,
+    "mean": 1.6979180502470843,
+    "minimum": 1.6979180502470843,
+    "maximum": 1.6979180502470843
+  }
+}

@@ -125,6 +125,22 @@ class OverlayRealDataSnapshotTests(unittest.TestCase):
         self.assertIn(timing_by_role["opponent-open-session"]["carIdx"], policy["visibleCarIdxs"])
         self.assertIn(raw["focusCarIdx"], policy["visibleCarIdxs"])
 
+        rendered = expected["renderedManifest"]
+        self.assertEqual(3, rendered["markerCount"])
+        self.assertEqual("generated", rendered["mapKind"])
+        self.assertFalse(rendered["labelsInventedBeforeOfficialPositions"])
+        self.assertEqual(raw["focusCarIdx"], rendered["focusMarker"]["carIdx"])
+        self.assertEqual("focus-marker", rendered["focusMarker"]["kind"])
+        self.assertEqual(timing_by_role["focus"]["classColor"], rendered["focusMarker"]["fill"])
+        self.assertIn(raw["playerCarIdx"], rendered["focusMarker"]["radiusGreaterThanCarIdxs"])
+        self.assertEqual(
+            [
+                "browser-overlays/track-map/focus-practice-real-data.png",
+                "localhost-overlays/track-map/focus-practice-real-data.png",
+            ],
+            expected["screenshots"],
+        )
+
     def test_track_map_player_focus_class_color_snapshot_keeps_white_class_fill(self):
         snapshot = snapshot_by_id("track-map-player-focus-class-color-real-data")
         raw = snapshot["rawEvidence"]

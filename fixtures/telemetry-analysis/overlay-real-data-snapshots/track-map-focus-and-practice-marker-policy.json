@@ -65,6 +65,32 @@
       "keepFocusWithoutTakenGrid": true,
       "hiddenCarIdxs": [],
       "visibleCarIdxs": [10, 22, 33]
-    }
+    },
+    "renderedManifest": {
+      "markerCount": 3,
+      "mapKind": "generated",
+      "labelsInventedBeforeOfficialPositions": false,
+      "focusMarker": {
+        "carIdx": 22,
+        "kind": "focus-marker",
+        "fill": "#FFDA59",
+        "radiusGreaterThanCarIdxs": [10, 33]
+      },
+      "nonFocusMarkers": [
+        {
+          "carIdx": 10,
+          "fill": "#00AEEF"
+        },
+        {
+          "carIdx": 33,
+          "fill": "#FFDA59",
+          "hasTakenGrid": false
+        }
+      ]
+    },
+    "screenshots": [
+      "browser-overlays/track-map/focus-practice-real-data.png",
+      "localhost-overlays/track-map/focus-practice-real-data.png"
+    ]
   }
 }

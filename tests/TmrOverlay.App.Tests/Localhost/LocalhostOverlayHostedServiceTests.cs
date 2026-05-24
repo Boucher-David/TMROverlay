@@ -92,6 +92,10 @@ public sealed class LocalhostOverlayHostedServiceTests
             Assert.False(snapshot.LastPageEventShouldRender);
             Assert.Equal(1L, snapshot.PageEventOverlayCounts["standings|model-hidden"]);
             Assert.Equal(1L, snapshot.PageEventSourceUrlCounts["/overlays/standings?clientKind=obs"]);
+            Assert.Equal(1L, snapshot.PageEventOverlayClientCounts["standings|obs"]);
+            Assert.Equal(1L, snapshot.PageEventClientIdCounts["standings|obs-test"]);
+            Assert.Equal(1L, snapshot.PageEventSourceUrlClientCounts["/overlays/standings?clientKind=obs|obs"]);
+            Assert.True(snapshot.CapturedAtUtc <= DateTimeOffset.UtcNow);
         }
         finally
         {

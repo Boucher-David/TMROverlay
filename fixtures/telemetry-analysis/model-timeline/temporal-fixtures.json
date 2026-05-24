@@ -8,6 +8,7 @@
       "scenarioIds": [
         "standings-chrome-on-telemetry-no-data",
         "radar-side-signal-placement-real-data",
+        "radar-multiclass-timing-real-data",
         "gap-pit-and-long-tail-real-data",
         "fuel-compact-rendered-height"
       ]
@@ -18,6 +19,7 @@
       "scenarioIds": [
         "standings-practice-no-results-stability",
         "radar-side-signal-placement-real-data",
+        "radar-multiclass-timing-real-data",
         "gap-pit-and-long-tail-real-data",
         "fuel-compact-rendered-height",
         "relative-practice-timing-real-data",

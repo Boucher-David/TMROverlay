@@ -678,8 +678,13 @@
           "id": "fuel-dallara-history-ingestion",
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
-          "status": "missing",
+          "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
+          "fixtures": [
+            "fixtures/telemetry-analysis/appdata-history/fuel-dallara-history-ingestion/user/cars/car-128-dallarap217/tracks/track-264-nurburgring-combinedlong/sessions/race/aggregate.json",
+            "fixtures/telemetry-analysis/appdata-history/fuel-dallara-history-ingestion/user/cars/car-161-toyotagr86/tracks/track-264-nurburgring-combinedlong/sessions/race/aggregate.json"
+          ],
+          "testFiles": ["tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs:FuelDallaraHistoryIngestionFixture_BuildsProductionModelFromMatchingUserAggregate"],
           "captureTargets": ["v1.1.1-latest-test Dallara P217 AppData history with car-128-dallarap217 track-264-nurburgring-combinedlong race/practice aggregates", "dallara-p217-lmp2-gesamtstrecke-long-20260522-* AppData folders with fuel history"],
           "assertions": [
             "Fuel Calculator history lookup selects matching car/track/session Dallara fuel aggregates when live measured burn is unavailable",
@@ -687,7 +692,7 @@
             "Dallara evidence is preferred over GR86 evidence for Gesamtstrecke Long fuel fallback debugging"
           ],
           "gaps": [
-            "uploaded Dallara AppData fuel history is inventoried locally, but no compact committed fixture yet proves production Fuel Calculator consumes the matching aggregate"
+            "browser review, localhost/OBS, and Windows-native rendered evidence are still missing for the Dallara history fallback"
           ]
         },
         {
@@ -954,15 +959,19 @@
           "validatorRules": ["tools/analysis/validate_model_timeline.py:radar-side-warning-without-actual-alongside"],
           "captureTargets": ["Race 2 sideSignalWithoutPlacementFrames", "v1.1.0 race sideSignalWithoutPlacementFrames"],
           "assertions": ["CarLeftRight-only, placement-only, and both-source states are classified", "side warning must not render unless evidence says a car is actually alongside"],
-          "gaps": ["temporal model fixture proves the policy, but compact real-data side-signal/placement replay and rendered warning geometry are still missing"]
+          "gaps": ["temporal model fixture and synthetic side-no-placement renderer evidence prove the policy, but compact capture-derived side-signal/placement replay and real rendered warning geometry are still missing"]
         },
         {
           "id": "radar-multiclass-timing-real-data",
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
-          "status": "missing",
+          "status": "partial",
           "surfaces": ["compactReplay"],
-          "assertions": ["F2 timing is preferred when F2 and estimated timing disagree", "estimated timing is fallback only", "approach countdown matches faster-class car timing"]
+          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
+          "testFiles": ["tests/tools/test_model_timeline_validator.py"],
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:radar-multiclass-timing-source-precedence", "tools/analysis/validate_model_timeline.py:radar-multiclass-countdown-source-mismatch", "tools/analysis/validate_model_timeline.py:radar-multiclass-countdown-label"],
+          "assertions": ["F2 timing is preferred when F2 and estimated timing disagree", "estimated timing is fallback only", "approach countdown matches faster-class car timing"],
+          "gaps": ["temporal policy fixture proves source precedence and countdown labels, but compact capture-derived multiclass replay and rendered warning geometry are still missing"]
         },
         {
           "id": "radar-settings-preview-lifetime",
@@ -1039,11 +1048,11 @@
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
           "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-long-tail-real-data.json", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-pit-window-real-data.json"],
-          "artifacts": ["browser-overlays/gap-to-leader/long-tail-real-data.png", "localhost-overlays/gap-to-leader/long-tail-real-data.png"],
+          "artifacts": ["browser-overlays/gap-to-leader/long-tail-real-data.png", "localhost-overlays/gap-to-leader/long-tail-real-data.png", "browser-overlays/gap-to-leader/pit-window-real-data.png", "localhost-overlays/gap-to-leader/pit-window-real-data.png"],
           "testFiles": ["tests/tools/test_model_timeline_validator.py", "tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js"],
           "validatorRules": ["tools/analysis/validate_model_timeline.py:gap-long-tail-dominates-scale", "tools/validate_overlay_screenshots.py:validate_gap_long_tail_real_data_variant"],
           "assertions": ["pit entry/exit windows preserve selected series and scale mode", "far trailing selected line cannot flatten useful top-car range without explicit warning", "initial long-tail rule hides or compresses the furthest behind car when its gap to the focused car is greater than the focused car's gap to the leader", "Dallara-derived graph screenshots exclude far-behind class positions while preserving leader/focus/ahead context"],
-          "gaps": ["compact real pit entry/exit replay now proves production model pit-window policy; browser/localhost screenshot replay and Windows native render replay from this compact snapshot are still missing"]
+          "gaps": ["compact real pit entry/exit replay and browser/localhost screenshots now prove pit-window and long-tail behavior; Windows native render replay from these compact snapshots is still missing"]
         },
         {
           "id": "gap-minimum-scale",
@@ -1107,10 +1116,11 @@
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-focus-and-practice-marker-policy.json", "fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
+          "artifacts": ["browser-overlays/track-map/focus-practice-real-data.png", "localhost-overlays/track-map/focus-practice-real-data.png"],
           "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs", "tests/tools/test_model_timeline_validator.py"],
-          "validatorRules": ["tools/analysis/validate_model_timeline.py:track-map-focus-marker-mismatch", "tools/analysis/validate_model_timeline.py:track-map-focus-marker-radius"],
+          "validatorRules": ["tools/analysis/validate_model_timeline.py:track-map-focus-marker-mismatch", "tools/analysis/validate_model_timeline.py:track-map-focus-marker-radius", "tools/validate_overlay_screenshots.py:focus-practice-real-data"],
           "captureTargets": ["v1.1.0 practice focus switch CamCarIdx 0 -> 4 -> 5 -> 4"],
-          "assertions": ["focused GT3 marker becomes isFocus=true with focus radius", "non-player focus uses correct marker tone", "stale LMP2 focus is rejected"],
+          "assertions": ["focused GT3 marker becomes isFocus=true with focus radius", "non-player focus uses correct marker tone", "stale LMP2 focus is rejected", "rendered browser/localhost manifest identifies focus carIdx 22 with a larger GT3 marker and no invented position label"],
           "gaps": ["Windows native rendered marker geometry from this compact snapshot is still missing"]
         },
     {
@@ -1152,10 +1162,12 @@
       "family": "real-data-window",
       "tier": "tier2-capture-derived-replay",
           "status": "partial",
-          "surfaces": ["compactReplay", "localhostObs"],
+          "surfaces": ["compactReplay", "browserReview", "localhostObs"],
           "fixtures": ["fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-focus-and-practice-marker-policy.json"],
+          "artifacts": ["browser-overlays/track-map/focus-practice-real-data.png", "localhost-overlays/track-map/focus-practice-real-data.png"],
           "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs", "tests/TmrOverlay.App.Tests/Overlays/TrackMapMarkerPolicyTests.cs"],
-          "assertions": ["practice/open-session valid lap-distance markers do not depend on HasTakenGrid", "race pre-grid pending-grid policy remains separate"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:focus-practice-real-data"],
+          "assertions": ["practice/open-session valid lap-distance markers do not depend on HasTakenGrid", "race pre-grid pending-grid policy remains separate", "rendered browser/localhost manifest keeps open-session carIdx 33 visible before grid state or official positions populate"],
           "gaps": ["Windows native render replay comparing hidden pending-grid markers against visible focus markers is still missing"]
         },
         {

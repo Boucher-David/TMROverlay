@@ -2114,12 +2114,7 @@ internal static class Program
                 new TrackMapOverlayMarker(42, 0.42d, IsFocus: true, ClassColorHex: "#00E8FF", Position: 24, TrackSurface: 3)
             ]
                 : [],
-            Sectors:
-            [
-                new LiveTrackSectorSegment(0, 0d, 0.32d, LiveTrackSectorHighlights.PersonalBest),
-                new LiveTrackSectorSegment(1, 0.32d, 0.68d, LiveTrackSectorHighlights.None),
-                new LiveTrackSectorSegment(2, 0.68d, 1d, LiveTrackSectorHighlights.BestLap)
-            ],
+            Sectors: ReviewTrackMapSectors(),
             ShowSectorBoundaries: true,
             InternalOpacity: TrackMapBrowserSettings.Default.InternalOpacity,
             IncludeUserMaps: true,
@@ -2155,8 +2150,8 @@ internal static class Program
                     TrackSurface: 3,
                     IsPlayerFocus: true)
             ],
-            Sectors: [],
-            ShowSectorBoundaries: false,
+            Sectors: ReviewTrackMapSectors(),
+            ShowSectorBoundaries: true,
             InternalOpacity: TrackMapBrowserSettings.Default.InternalOpacity,
             IncludeUserMaps: true,
             TrackMap: document);
@@ -2184,6 +2179,16 @@ internal static class Program
             File.ReadAllText(path),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException($"Could not load review track map document: {path}");
+    }
+
+    private static IReadOnlyList<LiveTrackSectorSegment> ReviewTrackMapSectors()
+    {
+        return
+        [
+            new LiveTrackSectorSegment(0, 0d, 0.32d, LiveTrackSectorHighlights.PersonalBest),
+            new LiveTrackSectorSegment(1, 0.32d, 0.68d, LiveTrackSectorHighlights.None),
+            new LiveTrackSectorSegment(2, 0.68d, 1d, LiveTrackSectorHighlights.BestLap)
+        ];
     }
 
     private static DesignV2OverlayModel ReviewSessionWeatherModel(OverlaySessionKind previewMode)
@@ -9335,6 +9340,7 @@ internal static class Program
         {
             kind = item.Kind,
             id = item.Id,
+            carIdx = item.Id,
             bounds = RectEvidence(item.Bounds),
             fill = item.Fill,
             stroke = item.Stroke,

@@ -659,7 +659,7 @@ internal sealed class OverlayManager : IDisposable
         Form? activeSettingsForm = null;
         ReconcileSettingsOverlayActiveWithVisibility();
         RefreshRadarSettingsPreviewVisibility(applySettings: false);
-        var keepSettingsActive = _settingsOverlayActive
+        var restoreSettingsActiveAfterApply = _settingsOverlayActive
             && _forms.TryGetValue(SettingsOverlayDefinition.Definition.Id, out activeSettingsForm)
             && activeSettingsForm.Visible
             && !activeSettingsForm.IsDisposed;
@@ -783,7 +783,9 @@ internal sealed class OverlayManager : IDisposable
                     contextAvailability);
             }
 
-            if (keepSettingsActive && activeSettingsForm is not null && !activeSettingsForm.IsDisposed)
+            if (restoreSettingsActiveAfterApply
+                && activeSettingsForm is not null
+                && IsSettingsFormActiveAndVisible(activeSettingsForm))
             {
                 _settingsOverlayActive = true;
             }
@@ -1636,6 +1638,22 @@ internal sealed class OverlayManager : IDisposable
             RefreshRadarSettingsPreviewVisibility(applySettings: true);
             ApplyEmergencyOverlayZOrder();
         };
+        form.VisibleChanged += (_, _) =>
+        {
+            if (!form.Visible || form.IsDisposed)
+            {
+                _settingsOverlayActive = false;
+            }
+
+            RefreshRadarSettingsPreviewVisibility(applySettings: true);
+            ApplyEmergencyOverlayZOrder();
+        };
+        form.FormClosed += (_, _) =>
+        {
+            _settingsOverlayActive = false;
+            RefreshRadarSettingsPreviewVisibility(applySettings: true);
+            ApplyEmergencyOverlayZOrder();
+        };
     }
 
     private void ApplyManagedOverlayTopMost(OverlayDefinition definition)
@@ -1715,6 +1733,11 @@ internal sealed class OverlayManager : IDisposable
     private bool IsSettingsWindowActiveAndVisible()
     {
         return _settingsOverlayActive && TryGetVisibleSettingsForm(out _);
+    }
+
+    private static bool IsSettingsFormActiveAndVisible(Form form)
+    {
+        return !form.IsDisposed && form.Visible && form.ContainsFocus;
     }
 
     private bool ShouldProtectSettingsWindowInput(Form form)

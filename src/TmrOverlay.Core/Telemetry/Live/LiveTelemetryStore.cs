@@ -443,7 +443,9 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
 
     private static bool IsCloseEnoughForEarlyWarning(LiveProximityCar car)
     {
-        return IsInMulticlassWarningRange(car);
+        return car.HasReliableRelativeSeconds
+            && car.RelativeSeconds!.Value < -CloseRadarRangeSeconds
+            && car.RelativeSeconds!.Value >= -MulticlassWarningDefaultRangeSeconds;
     }
 
     private static double CalculateUrgency(LiveProximityCar car, double? closingRate)

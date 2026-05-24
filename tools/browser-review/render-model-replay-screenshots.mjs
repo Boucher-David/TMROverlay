@@ -161,10 +161,18 @@ async function captureOverlay(page, overlayId, rows) {
 
     manifest.screenshots.push({
       status: captureStatus,
+      captureId: row.captureId ?? null,
+      source: row.source ?? null,
+      modelSource: row.modelSource ?? null,
+      cadence: row.cadence ?? null,
+      replayProvenance: replayProvenanceEvidence(row),
       frameIndex: row.frameIndex,
       capturedAtUtc: row.capturedAtUtc,
+      capturedUnixMs: row.capturedUnixMs ?? null,
       sessionTimeSeconds: row.sessionTimeSeconds,
+      sessionTick: row.sessionTick ?? null,
       sessionInfoUpdate: row.sessionInfoUpdate,
+      samplePlan: samplePlanEvidence(row.samplePlan),
       modelHash: sha256(JSON.stringify(row.response)),
       imageHash,
       path: relativePath,
@@ -182,6 +190,42 @@ async function captureOverlay(page, overlayId, rows) {
     modelRowCount: rows.length,
     selectedRowCount: selectedRows.length,
     manifestPath: `overlays/${overlayId}/screenshot-manifest.json`
+  };
+}
+
+function replayProvenanceEvidence(row) {
+  if (row?.replayProvenance && typeof row.replayProvenance === 'object') {
+    return row.replayProvenance;
+  }
+
+  return {
+    schemaVersion: 1,
+    sourceKind: 'production-model-replay',
+    modelSource: row?.modelSource ?? null,
+    captureId: row?.captureId ?? null,
+    overlayId: row?.overlayId ?? null,
+    frameIndex: row?.frameIndex ?? null,
+    capturedAtUtc: row?.capturedAtUtc ?? null,
+    capturedUnixMs: row?.capturedUnixMs ?? null,
+    sessionTimeSeconds: row?.sessionTimeSeconds ?? null,
+    sessionTick: row?.sessionTick ?? null,
+    sessionInfoUpdate: row?.sessionInfoUpdate ?? null,
+    cadence: row?.cadence ?? null,
+    sampleReasons: Array.isArray(row?.samplePlan?.reasons) ? row.samplePlan.reasons : [],
+    sampleEventIds: Array.isArray(row?.samplePlan?.eventIds) ? row.samplePlan.eventIds : [],
+    sampleOverlayIds: Array.isArray(row?.samplePlan?.overlayIds) ? row.samplePlan.overlayIds : []
+  };
+}
+
+function samplePlanEvidence(samplePlan) {
+  if (!samplePlan || typeof samplePlan !== 'object') {
+    return null;
+  }
+
+  return {
+    reasons: Array.isArray(samplePlan.reasons) ? samplePlan.reasons : [],
+    eventIds: Array.isArray(samplePlan.eventIds) ? samplePlan.eventIds : [],
+    overlayIds: Array.isArray(samplePlan.overlayIds) ? samplePlan.overlayIds : []
   };
 }
 

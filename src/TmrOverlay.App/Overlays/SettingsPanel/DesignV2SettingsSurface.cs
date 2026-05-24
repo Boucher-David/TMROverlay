@@ -2648,10 +2648,23 @@ internal sealed class DesignV2SettingsSurface : Control
                 ? $"Downloading v{snapshot.LatestVersion}: {progress}%."
                 : $"Downloading v{snapshot.LatestVersion}.",
             ReleaseUpdateStatus.PendingRestart => $"v{snapshot.LatestVersion} pending restart.",
-            ReleaseUpdateStatus.Applying => $"Restarting for v{snapshot.LatestVersion}.",
+            ReleaseUpdateStatus.Applying => ApplyingUpdateText(snapshot),
             ReleaseUpdateStatus.Failed => string.IsNullOrWhiteSpace(snapshot.LastError) ? "Check failed." : snapshot.LastError,
             _ => "Unknown."
         };
+    }
+
+    private static string ApplyingUpdateText(ReleaseUpdateSnapshot snapshot)
+    {
+        if (snapshot.LastApplyStartedAtUtc is not { } startedAtUtc)
+        {
+            return $"Restarting for v{snapshot.LatestVersion}.";
+        }
+
+        var elapsedSeconds = Math.Max(0, (int)Math.Round((DateTimeOffset.UtcNow - startedAtUtc).TotalSeconds));
+        return elapsedSeconds < 15
+            ? $"Restarting for v{snapshot.LatestVersion}."
+            : $"Restart still waiting {elapsedSeconds}s.";
     }
 
     private static string LatestBundleValueText(string? bundlePath)

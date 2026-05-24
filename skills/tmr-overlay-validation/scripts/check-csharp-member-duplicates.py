@@ -886,7 +886,7 @@ def collect_csharp_files(paths: list[Path]) -> list[Path]:
 
 
 def default_roots() -> list[Path]:
-    roots = [Path("src"), Path("tests")]
+    roots = [Path("src"), Path("tests"), Path("tools")]
     return [root for root in roots if root.exists()] or [Path(".")]
 
 
@@ -998,7 +998,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "paths",
         nargs="*",
         type=Path,
-        help="Files or directories to scan. Defaults to src/ and tests/.",
+        help="Files or directories to scan. Defaults to src/, tests/, and tools/.",
     )
     parser.add_argument(
         "--self-test",

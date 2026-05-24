@@ -77,3 +77,64 @@ session-info/session-0002.yaml
 ```
 
 Those snapshots let us reconstruct session metadata changes over time without parsing the binary stream.
+
+## Semantic Replay And Import
+
+Raw replay is a development/evidence path, not a production collector mode. The
+shared semantic replay reader composes:
+
+- `capture-manifest.json`
+- `telemetry-schema.json`
+- `telemetry.bin`
+- `latest-session.yaml`
+- `session-info/session-*.yaml`
+
+into frame rows containing the raw frame envelope, matching session YAML when
+`SessionInfoUpdate` changes, and a decoded `HistoricalTelemetrySample`. Runtime
+app replay and production overlay model replay should use this semantic reader
+instead of each replay path rebuilding raw-frame decoding and session-info
+lookup.
+
+Replay consumers must keep these constraints:
+
+- read only an explicit capture directory selected by developer/test
+  configuration or tooling arguments
+- do not mutate raw capture directories or copy source `.ibt` files into replay
+  artifacts
+- keep raw `telemetry.bin` and full private session YAML out of committed
+  fixtures, diagnostics bundles, and ordinary screenshot artifacts
+- record replay provenance in derived artifacts: capture id, source files,
+  sample plan, frame index, session time, session tick, session-info update,
+  session-info match source, model source, focused car, and renderer surface
+- treat `latest-session.yaml` fallback for missing historical snapshots as
+  degraded provenance, because early frames may be interpreted with later
+  session metadata
+
+The semantic reader now supports bounded replay windows and import inspection.
+Frame index, session-time, session-type, and focus-car filters are additive and
+can be used by the runtime replay provider, production model replay, and compact
+export tooling without changing the raw capture. Import inspection compares the
+binary header against the manifest, reports observed frame count and first/last
+frame/session times, flags payload lengths that differ from manifest
+`bufferLength`, detects unsupported schema type names, lists observed
+`SessionInfoUpdate` values, and warns when exact `session-info/session-*.yaml`
+snapshots are missing.
+
+For a compact import gate without rendering overlays:
+
+```powershell
+dotnet run --project .\tools\TmrOverlay.RawCaptureReplayExport\TmrOverlay.RawCaptureReplayExport.csproj -- `
+  --capture C:\path\to\capture-YYYYMMDD-HHMMSS-fff `
+  --output C:\tmp\tmr-replay-import `
+  --strict
+```
+
+The tool writes `import-summary.json`. Add `--emit-samples` to also write a
+bounded `decoded-samples.jsonl` containing compact semantic rows only: frame
+metadata, session-info provenance, session context, focused/local/team/leader
+progress, local fuel/speed/input fields, and row counts for decoded car lists.
+Use `--start-frame`, `--end-frame`, `--start-session-time`,
+`--end-session-time`, `--session-types`, `--focus-car-idx`,
+`--sample-frames`, `--sample-every`, and `--max-samples` to keep exports small.
+The tool does not copy `telemetry.bin` or full private session YAML into the
+output.

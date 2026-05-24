@@ -15,6 +15,14 @@ internal sealed class RuntimeState
 
     public DateTimeOffset? LastHeartbeatAtUtc { get; set; }
 
+    public DateTimeOffset? ShutdownStartedAtUtc { get; set; }
+
+    public DateTimeOffset? ShutdownCompletedAtUtc { get; set; }
+
+    public string? ShutdownPhase { get; set; }
+
+    public string? ShutdownReason { get; set; }
+
     public DateTimeOffset? StoppedAtUtc { get; set; }
 
     public bool StoppedCleanly { get; set; }

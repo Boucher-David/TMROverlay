@@ -63,6 +63,9 @@ internal static class Program
         var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("TmrOverlay.App");
         var storageOptions = host.Services.GetRequiredService<AppStorageOptions>();
         var captureState = host.Services.GetRequiredService<TelemetryCaptureState>();
+        var events = host.Services.GetRequiredService<AppEventRecorder>();
+        var runtimeState = host.Services.GetRequiredService<RuntimeStateService>();
+        var releaseUpdates = host.Services.GetRequiredService<ReleaseUpdateService>();
 
         RegisterUnhandledExceptionLogging(logger);
         LoadSharedContract(logger);
@@ -80,7 +83,22 @@ internal static class Program
         var applicationContext = host.Services.GetRequiredService<NotifyIconApplicationContext>();
         Application.Run(applicationContext);
 
-        host.StopAsync().GetAwaiter().GetResult();
+        runtimeState.MarkHostStopStarted("application_run_completed");
+        releaseUpdates.RunPendingApplyUpdateHandoff();
+        try
+        {
+            host.StopAsync().GetAwaiter().GetResult();
+            events.Record("host_stop_completed");
+        }
+        catch (Exception exception)
+        {
+            events.Record("host_stop_failed", new Dictionary<string, string?>
+            {
+                ["error"] = exception.GetType().Name
+            });
+            throw;
+        }
+
         logger.LogInformation("TmrOverlay stopped.");
     }
 
@@ -165,7 +183,8 @@ internal static class Program
                 services.AddSingleton<ILiveTelemetrySink>(services => services.GetRequiredService<LiveTelemetryStore>());
                 services.AddSingleton<OverlayManager>();
                 services.AddSingleton<NotifyIconApplicationContext>();
-                services.AddHostedService<RuntimeStateService>();
+                services.AddSingleton<RuntimeStateService>();
+                services.AddHostedService(services => services.GetRequiredService<RuntimeStateService>());
                 services.AddHostedService(services => services.GetRequiredService<ForegroundWindowTracker>());
                 services.AddHostedService<HistoryMaintenanceService>();
                 services.AddHostedService<AppPerformanceHostedService>();

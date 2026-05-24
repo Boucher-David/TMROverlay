@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>TmrOverlay.RawCaptureReplayExport</AssemblyName>
+    <RootNamespace>TmrOverlay.RawCaptureReplayExport</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TmrOverlay.App\TmrOverlay.App.csproj" />
+    <ProjectReference Include="..\..\src\TmrOverlay.Core\TmrOverlay.Core.csproj" />
+  </ItemGroup>
+</Project>

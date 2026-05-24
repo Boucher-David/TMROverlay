@@ -127,18 +127,80 @@ checks basic render/model invariants, and writes screenshots plus
 asserts that `/api/snapshot` is serving capture-derived live models with timing,
 driver-directory, scoring, and input data.
 
+Production model replay screenshots write per-frame provenance into each
+overlay `screenshot-manifest.json`: capture id, model source, cadence, frame
+index, captured time, session time, session tick, session-info update, and the
+session-info match source, session label, focused car, and sample-plan
+reasons/event ids that selected the frame. Screenshot consumers should use
+those fields to line pixels back up with raw telemetry and model rows instead
+of relying on file names alone.
+
 Gap To Leader validation rejects sparse replay streams whose graph points are
 more than 10 seconds apart unless the segment is explicitly marked as intended
 missing telemetry. A sparse failure means the replay should be re-exported from
 denser raw capture frames; it is not a reason to change production/native graph
 segmentation or to force sparse browser review samples into connected lines.
 
+## Runtime Replay Provider
+
+The Windows app also has a development-only runtime replay provider behind
+`Replay:Enabled=true`. It reads an explicit raw capture directory, decodes
+`telemetry.bin` with `telemetry-schema.json`, applies matching session YAML, and
+writes normalized samples through `ILiveTelemetrySink`. During active playback,
+frame timestamps are remapped to wall clock so native and localhost overlays see
+fresh telemetry rather than stale historical capture times.
+
+```powershell
+$env:TMR_Replay__Enabled = "true"
+$env:TMR_Replay__CaptureDirectory = "C:\path\to\capture-YYYYMMDD-HHMMSS-fff"
+$env:TMR_Replay__SpeedMultiplier = "10"
+$env:TMR_Replay__StartFrameIndex = "120000"
+$env:TMR_Replay__EndFrameIndex = "122000"
+$env:TMR_Replay__StartSessionTimeSeconds = "3600"
+$env:TMR_Replay__EndSessionTimeSeconds = "3630"
+$env:TMR_Replay__SessionTypes = "race"
+$env:TMR_Replay__FocusCarIdx = "17"
+dotnet run --project .\src\TmrOverlay.App\TmrOverlay.App.csproj
+```
+
+Use this provider for app/runtime smoke validation from a known local capture.
+Keep it isolated from production collection: it is enabled only by explicit
+configuration and replaces the live iRacing telemetry provider for that run.
+The controllable replay shape is intentionally narrow: bounded frame/session
+time windows, session-type filtering, optional focus-car override, and playback
+speed. It is not a general capture browser and it does not scan arbitrary user
+capture roots.
+
+## Compact Import And Sample Export
+
+Use `TmrOverlay.RawCaptureReplayExport` when the first question is "can this raw
+capture be trusted and what compact semantic rows does it contain?" rather than
+"what did the overlay render?"
+
+```powershell
+dotnet run --project .\tools\TmrOverlay.RawCaptureReplayExport\TmrOverlay.RawCaptureReplayExport.csproj -- `
+  --capture C:\path\to\capture-YYYYMMDD-HHMMSS-fff `
+  --output C:\tmp\tmr-replay-import `
+  --emit-samples `
+  --start-frame 120000 `
+  --end-frame 122000 `
+  --session-types race `
+  --focus-car-idx 17 `
+  --sample-every 60 `
+  --max-samples 200
+```
+
+The export writes `import-summary.json` with manifest/header/schema/frame
+inspection and, when requested, `decoded-samples.jsonl` with compact derived
+facts. It intentionally omits raw payload bytes and full private session YAML.
+Use `--strict` when import warnings should fail a quality gate.
+
 ## Limits
 
-This is not a full app/runtime replay provider. It does not write through the
-Windows `ILiveTelemetrySink`, does not exercise native WinForms windows, and
-does not prove iRacing SDK connection, focus/topmost/click-through behavior, or
-settings persistence.
+Browser capture replay is still separate from runtime replay. The browser
+server streams exported JSON frames into browser review and localhost routes; it
+does not exercise native WinForms windows and does not prove iRacing SDK
+connection, focus/topmost/click-through behavior, or settings persistence.
 
 Replay frames with embedded per-overlay display models are served as-is, which
 keeps browser review replay aligned with production-shaped native/localhost view models.

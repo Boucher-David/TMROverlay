@@ -19,6 +19,8 @@ internal sealed class ReleaseUpdateService : IHostedService, IDisposable
     private UpdateManager? _updateManager;
     private bool _updateManagerCreated;
     private bool _disposed;
+    private PendingUpdateApplyHandoff? _pendingApplyHandoff;
+    private bool _applyHandoffStarted;
     private ReleaseUpdateSnapshot _snapshot;
 
     public ReleaseUpdateService(
@@ -384,6 +386,12 @@ internal sealed class ReleaseUpdateService : IHostedService, IDisposable
             return SetSnapshot(ReleaseUpdateSnapshot.Disabled(_options.RepositoryUrl));
         }
 
+        var currentSnapshot = Snapshot();
+        if (currentSnapshot.Status == ReleaseUpdateStatus.Applying)
+        {
+            return currentSnapshot;
+        }
+
         if (!_checkLock.Wait(0))
         {
             return Snapshot();
@@ -446,7 +454,17 @@ internal sealed class ReleaseUpdateService : IHostedService, IDisposable
                 ["latestVersion"] = pendingRestart.Version?.ToString(),
                 ["latestFileName"] = pendingRestart.FileName
             });
-            manager.WaitExitThenApplyUpdates(pendingRestart, false, true, Array.Empty<string>());
+
+            lock (_sync)
+            {
+                _pendingApplyHandoff = new PendingUpdateApplyHandoff(
+                    manager,
+                    pendingRestart,
+                    pendingRestart.Version?.ToString(),
+                    pendingRestart.FileName);
+                _applyHandoffStarted = false;
+            }
+
             return Snapshot();
         }
         catch (Exception exception)
@@ -482,6 +500,50 @@ internal sealed class ReleaseUpdateService : IHostedService, IDisposable
         finally
         {
             _checkLock.Release();
+        }
+    }
+
+    public void RunPendingApplyUpdateHandoff()
+    {
+        PendingUpdateApplyHandoff? handoff;
+        lock (_sync)
+        {
+            if (_applyHandoffStarted || _pendingApplyHandoff is null)
+            {
+                return;
+            }
+
+            _applyHandoffStarted = true;
+            handoff = _pendingApplyHandoff;
+        }
+
+        RunApplyUpdateHandoff(handoff);
+    }
+
+    private void RunApplyUpdateHandoff(PendingUpdateApplyHandoff handoff)
+    {
+        try
+        {
+            _events.Record("update_apply_handoff_requested", new Dictionary<string, string?>
+            {
+                ["latestVersion"] = handoff.LatestVersion,
+                ["latestFileName"] = handoff.LatestFileName,
+                ["restart"] = "true"
+            });
+            handoff.Manager.WaitExitThenApplyUpdates(handoff.PendingRestart, false, true, Array.Empty<string>());
+            _events.Record("update_apply_handoff_returned", new Dictionary<string, string?>
+            {
+                ["latestVersion"] = handoff.LatestVersion,
+                ["latestFileName"] = handoff.LatestFileName
+            });
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Failed during TmrOverlay update apply handoff.");
+            _events.Record("update_apply_failed", new Dictionary<string, string?>
+            {
+                ["error"] = exception.GetType().Name
+            });
         }
     }
 
@@ -713,4 +775,10 @@ internal sealed class ReleaseUpdateService : IHostedService, IDisposable
             ? $"{baseUrl}/releases"
             : $"{baseUrl}/releases/tag/v{version}";
     }
+
+    private sealed record PendingUpdateApplyHandoff(
+        UpdateManager Manager,
+        VelopackAsset PendingRestart,
+        string? LatestVersion,
+        string? LatestFileName);
 }

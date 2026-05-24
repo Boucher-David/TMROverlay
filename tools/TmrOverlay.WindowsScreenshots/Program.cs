@@ -8651,7 +8651,7 @@ internal static class Program
             : FontStyle.Regular;
         return DrawStringTextMetricsEvidence(
             cell.Text,
-            textBounds,
+            textBounds.Value,
             cell.TextFontPointSize ?? 9f,
             fontStyle,
             cell.Alignment);

@@ -277,6 +277,46 @@ class OverlayRealDataSnapshotTests(unittest.TestCase):
             expected["screenshots"],
         )
 
+    def test_gap_pit_window_snapshot_preserves_ordered_pit_metric_policy(self):
+        snapshot = snapshot_by_id("gap-to-leader-pit-window-real-data")
+        raw = snapshot["rawEvidence"]
+        expected = snapshot["expected"]
+
+        self.assertEqual("gap-to-leader", snapshot["overlayId"])
+        self.assertIn("gap-pit-and-long-tail-real-data", snapshot["scenarioIds"])
+        self.assertEqual("Race", raw["sessionType"])
+
+        frames = raw["orderedFrames"]
+        roles = [frame["role"] for frame in frames]
+        self.assertEqual(["pre-entry", "pit-entry", "in-stall", "pit-exit", "post-exit-stable"], roles)
+        self.assertFalse(frames[0]["focusOnPitRoad"])
+        self.assertTrue(frames[1]["focusOnPitRoad"])
+        self.assertTrue(frames[2]["focusOnPitRoad"])
+        self.assertFalse(frames[3]["focusOnPitRoad"])
+        self.assertLess(frames[0]["focusGapToClassLeaderSeconds"], frames[3]["focusGapToClassLeaderSeconds"])
+
+        pit_window = raw["pitWindow"]
+        self.assertAlmostEqual(
+            pit_window["durationSeconds"],
+            pit_window["exitSessionTimeSeconds"] - pit_window["entrySessionTimeSeconds"],
+            places=3,
+        )
+
+        pit_metrics = expected["pitMetrics"]
+        self.assertTrue(pit_metrics["activeDuringPitRoad"])
+        self.assertTrue(pit_metrics["inactiveAfterExit"])
+        self.assertEqual(["Pit", "PLap"], pit_metrics["labels"])
+        self.assertAlmostEqual(pit_window["durationSeconds"], pit_metrics["lastDurationSeconds"], places=3)
+        self.assertEqual(pit_window["displayLap"], pit_metrics["lastPitLap"])
+
+        selected = expected["graph"]["selectedClassPositions"]
+        for frame in frames:
+            self.assertEqual(selected, frame["selectedClassPositions"])
+        self.assertTrue(expected["graph"]["mustKeepFocusAndLeaderDuringPitWindow"])
+        self.assertTrue(expected["graph"]["mustNotSelectFarBehindOutlierDuringPitWindow"])
+        for forbidden in expected["graph"]["forbiddenFarBehindClassPositions"]:
+            self.assertNotIn(forbidden, selected)
+
     def test_pit_service_refuel_snapshot_preserves_pit_request_and_window_evidence(self):
         snapshot = snapshot_by_id("pit-service-refuel-pit-window-real-data")
         raw = snapshot["rawEvidence"]

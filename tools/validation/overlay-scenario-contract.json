@@ -1038,12 +1038,12 @@
           "tier": "tier2-capture-derived-replay",
           "status": "partial",
           "surfaces": ["compactReplay", "browserReview", "localhostObs", "windowsNative"],
-          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-long-tail-real-data.json"],
+          "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-long-tail-real-data.json", "fixtures/telemetry-analysis/overlay-real-data-snapshots/gap-to-leader-pit-window-real-data.json"],
           "artifacts": ["browser-overlays/gap-to-leader/long-tail-real-data.png", "localhost-overlays/gap-to-leader/long-tail-real-data.png"],
           "testFiles": ["tests/tools/test_model_timeline_validator.py", "tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js"],
           "validatorRules": ["tools/analysis/validate_model_timeline.py:gap-long-tail-dominates-scale", "tools/validate_overlay_screenshots.py:validate_gap_long_tail_real_data_variant"],
           "assertions": ["pit entry/exit windows preserve selected series and scale mode", "far trailing selected line cannot flatten useful top-car range without explicit warning", "initial long-tail rule hides or compresses the furthest behind car when its gap to the focused car is greater than the focused car's gap to the leader", "Dallara-derived graph screenshots exclude far-behind class positions while preserving leader/focus/ahead context"],
-          "gaps": ["real pit entry/exit replay is still aggregate evidence; Windows native render replay from this compact snapshot is still missing"]
+          "gaps": ["compact real pit entry/exit replay now proves production model pit-window policy; browser/localhost screenshot replay and Windows native render replay from this compact snapshot are still missing"]
         },
         {
           "id": "gap-minimum-scale",

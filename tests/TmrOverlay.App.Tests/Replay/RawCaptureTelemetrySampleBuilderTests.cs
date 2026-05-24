@@ -47,12 +47,14 @@ public sealed class RawCaptureTelemetrySampleBuilderTests
         Assert.Equal(-1, sample.TeamLapCompleted);
         Assert.Equal(0.15d, sample.TeamLapDistPct);
 
-        var focusClassCars = Assert.NotNull(sample.FocusClassCars);
+        Assert.NotNull(sample.FocusClassCars);
+        var focusClassCars = sample.FocusClassCars!;
         var focusCar = Assert.Single(focusClassCars, car => car.CarIdx == 12);
         Assert.Equal(-1, focusCar.LapCompleted);
         Assert.Equal(0.42d, focusCar.LapDistPct);
 
-        var allCars = Assert.NotNull(sample.AllCars);
+        Assert.NotNull(sample.AllCars);
+        var allCars = sample.AllCars!;
         var spatialOpponent = Assert.Single(allCars, car => car.CarIdx == 14);
         Assert.Equal(-1, spatialOpponent.LapCompleted);
         Assert.Equal(0.70d, spatialOpponent.LapDistPct);

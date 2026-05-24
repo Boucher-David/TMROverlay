@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "id": "gap-to-leader-pit-window-real-data",
+  "overlayId": "gap-to-leader",
+  "scenarioIds": ["gap-pit-and-long-tail-real-data"],
+  "source": {
+    "captureId": "capture-20260522-204847-774",
+    "sourceCategory": "full-race-gap-pit-window",
+    "redaction": "compact-ordered-window",
+    "note": "Dallara race capture window around the focused car's pit entry, active stop, and exit. Values are compacted to policy evidence instead of raw telemetry rows."
+  },
+  "provenance": {
+    "sessionType": "Race",
+    "trackKey": "nurburgring-combinedlong",
+    "focusRelation": "player",
+    "sampleWindowSessionTimeSeconds": [2116.8, 2160.2]
+  },
+  "rawEvidence": {
+    "sessionType": "Race",
+    "focusCar": {
+      "carIdx": 19,
+      "classPosition": 5
+    },
+    "orderedFrames": [
+      {
+        "role": "pre-entry",
+        "sessionTimeSeconds": 2116.8,
+        "focusOnPitRoad": false,
+        "focusTrackSurface": 3,
+        "focusGapToClassLeaderSeconds": 8.2,
+        "selectedClassPositions": [1, 4, 5]
+      },
+      {
+        "role": "pit-entry",
+        "sessionTimeSeconds": 2117.2,
+        "focusOnPitRoad": true,
+        "focusTrackSurface": 1,
+        "focusGapToClassLeaderSeconds": 8.8,
+        "selectedClassPositions": [1, 4, 5]
+      },
+      {
+        "role": "in-stall",
+        "sessionTimeSeconds": 2137.4,
+        "focusOnPitRoad": true,
+        "focusTrackSurface": 1,
+        "focusGapToClassLeaderSeconds": 24.6,
+        "selectedClassPositions": [1, 4, 5]
+      },
+      {
+        "role": "pit-exit",
+        "sessionTimeSeconds": 2159.8,
+        "focusOnPitRoad": false,
+        "focusTrackSurface": 3,
+        "focusGapToClassLeaderSeconds": 34.5,
+        "selectedClassPositions": [1, 4, 5]
+      },
+      {
+        "role": "post-exit-stable",
+        "sessionTimeSeconds": 2160.2,
+        "focusOnPitRoad": false,
+        "focusTrackSurface": 3,
+        "focusGapToClassLeaderSeconds": 34.2,
+        "selectedClassPositions": [1, 4, 5]
+      }
+    ],
+    "pitWindow": {
+      "entrySessionTimeSeconds": 2117.2,
+      "exitSessionTimeSeconds": 2159.8,
+      "durationSeconds": 42.6,
+      "displayLap": 24
+    }
+  },
+  "expected": {
+    "pitMetrics": {
+      "activeDuringPitRoad": true,
+      "inactiveAfterExit": true,
+      "lastDurationSeconds": 42.6,
+      "lastPitLap": 24,
+      "labels": ["Pit", "PLap"]
+    },
+    "graph": {
+      "scaleMode": "focus-relative",
+      "selectedClassPositions": [1, 4, 5],
+      "forbiddenFarBehindClassPositions": [6, 9],
+      "mustKeepFocusAndLeaderDuringPitWindow": true,
+      "mustNotSelectFarBehindOutlierDuringPitWindow": true
+    },
+    "productionModelAssertions": [
+      "BrowserOverlayModelFactory tracks focused-car pit entry, active duration, exit duration, and pit lap across ordered frames",
+      "selected series remains leader/ahead/focus while far-behind outliers are excluded during the pit window"
+    ]
+  }
+}

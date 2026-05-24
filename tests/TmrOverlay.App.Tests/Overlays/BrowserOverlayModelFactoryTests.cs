@@ -1336,6 +1336,71 @@ public sealed class BrowserOverlayModelFactoryTests
     }
 
     [Fact]
+    public void GapToLeaderTrendMetrics_TrackFocusedCarPitWindowAcrossPolling()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        EnableOverlay(settings, "gap-to-leader");
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.True(factory.TryBuild("gap-to-leader", CompletedLapGapSnapshot(
+            now,
+            sequence: 1,
+            sessionTimeSeconds: 100d,
+            focusGapSeconds: 12d,
+            aheadGapSeconds: 8d,
+            behindGapSeconds: 16d,
+            lapCompleted: 10,
+            focusOnPitRoad: false), settings, now, out _));
+        Assert.True(factory.TryBuild("gap-to-leader", CompletedLapGapSnapshot(
+            now.AddSeconds(10d),
+            sequence: 2,
+            sessionTimeSeconds: 110d,
+            focusGapSeconds: 14d,
+            aheadGapSeconds: 9d,
+            behindGapSeconds: 18d,
+            lapCompleted: 10,
+            focusOnPitRoad: true), settings, now.AddSeconds(10d), out var activePit));
+        Assert.True(factory.TryBuild("gap-to-leader", CompletedLapGapSnapshot(
+            now.AddSeconds(30d),
+            sequence: 3,
+            sessionTimeSeconds: 130d,
+            focusGapSeconds: 18d,
+            aheadGapSeconds: 10d,
+            behindGapSeconds: 22d,
+            lapCompleted: 10,
+            focusOnPitRoad: true), settings, now.AddSeconds(30d), out _));
+        Assert.True(factory.TryBuild("gap-to-leader", CompletedLapGapSnapshot(
+            now.AddSeconds(50d),
+            sequence: 4,
+            sessionTimeSeconds: 150d,
+            focusGapSeconds: 20d,
+            aheadGapSeconds: 11d,
+            behindGapSeconds: 24d,
+            lapCompleted: 10,
+            focusOnPitRoad: false), settings, now.AddSeconds(50d), out var afterExit));
+
+        var activePitMetric = activePit.Model.Graph!.TrendMetrics.Single(metric => metric.Label == "Pit");
+        Assert.NotNull(activePitMetric.PrimaryPit);
+        Assert.True(activePitMetric.PrimaryPit!.IsActive);
+        Assert.Equal(0d, activePitMetric.PrimaryPit.Seconds);
+        Assert.Equal(11, activePitMetric.PrimaryPit.Lap);
+
+        var exitPitMetric = afterExit.Model.Graph!.TrendMetrics.Single(metric => metric.Label == "Pit");
+        var exitPitLapMetric = afterExit.Model.Graph.TrendMetrics.Single(metric => metric.Label == "PLap");
+        Assert.NotNull(exitPitMetric.PrimaryPit);
+        Assert.False(exitPitMetric.PrimaryPit!.IsActive);
+        Assert.Equal(40d, exitPitMetric.PrimaryPit.Seconds);
+        Assert.Equal(11, exitPitMetric.PrimaryPit.Lap);
+        Assert.Equal(exitPitMetric.PrimaryPit, exitPitLapMetric.PrimaryPit);
+    }
+
+    [Fact]
     public void GapToLeaderTrendMetrics_WaitWhenCompletedLapEvidenceIsMissing()
     {
         var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
@@ -1645,7 +1710,10 @@ public sealed class BrowserOverlayModelFactoryTests
         int? lapCompleted = null,
         double? lastLapTimeSeconds = null,
         double? bestLapTimeSeconds = null,
-        bool? isPlayer = null)
+        bool? isPlayer = null,
+        bool onPitRoad = false,
+        int? trackSurface = null,
+        bool hasTakenGrid = false)
     {
         return new LiveTimingRow(
             CarIdx: carIdx,
@@ -1682,8 +1750,9 @@ public sealed class BrowserOverlayModelFactoryTests
             IntervalSecondsToPreviousClassRow: null,
             IntervalLapsToPreviousClassRow: null,
             DeltaSecondsToFocus: deltaSeconds,
-            TrackSurface: null,
-            OnPitRoad: false);
+            TrackSurface: trackSurface,
+            OnPitRoad: onPitRoad,
+            HasTakenGrid: hasTakenGrid);
     }
 
     private static LiveTelemetrySnapshot CompletedLapGapSnapshot(
@@ -1693,7 +1762,8 @@ public sealed class BrowserOverlayModelFactoryTests
         double focusGapSeconds,
         double aheadGapSeconds,
         double behindGapSeconds,
-        int? lapCompleted)
+        int? lapCompleted,
+        bool focusOnPitRoad = false)
     {
         var leader = TimingRow(
             carIdx: 11,
@@ -1720,7 +1790,9 @@ public sealed class BrowserOverlayModelFactoryTests
             deltaSeconds: 0d,
             gapEvidence: LiveSignalEvidence.Reliable("CarIdxF2Time"),
             lapCompleted: lapCompleted,
-            lastLapTimeSeconds: 90.4d);
+            lastLapTimeSeconds: 90.4d,
+            onPitRoad: focusOnPitRoad,
+            trackSurface: focusOnPitRoad ? 1 : 3);
         var behind = TimingRow(
             carIdx: 23,
             classPosition: 4,

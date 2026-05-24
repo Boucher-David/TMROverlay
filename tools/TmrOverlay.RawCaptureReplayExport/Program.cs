@@ -344,7 +344,7 @@ internal sealed class RawCaptureReplayExportOptions
             || flags.Contains("emit-samples")
             || ParseBoolean(values, "emit-samples");
         var sampleEvery = ParsePositiveInt(values, "sample-every") ?? 1;
-        var maxSamples = values.TryGetValue("max-samples", out var configuredMaxSamples)
+        int? maxSamples = values.TryGetValue("max-samples", out var configuredMaxSamples)
             && string.Equals(configuredMaxSamples, "none", StringComparison.OrdinalIgnoreCase)
                 ? null
                 : ParsePositiveInt(values, "max-samples") ?? 1000;

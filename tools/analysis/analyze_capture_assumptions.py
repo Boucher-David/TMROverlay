@@ -530,20 +530,24 @@ def analyze_raw_capture(capture_dir: Path, max_sample_frames: int) -> dict[str, 
             car_last_lap = arrays.get("CarIdxLastLapTime") or []
             car_best_lap = arrays.get("CarIdxBestLapTime") or []
 
+            def car_has_track_surface_evidence(idx: int) -> bool:
+                return idx >= len(car_surface) or not isinstance(car_surface[idx], int) or car_surface[idx] > 0
+
             def car_has_progress(idx: int) -> bool:
                 return (
                     idx < len(car_laps)
                     and idx < len(car_pct)
                     and finite_non_negative(car_laps[idx])
                     and finite_non_negative(car_pct[idx])
+                    and car_has_track_surface_evidence(idx)
                 )
 
             def car_has_standing_or_timing(idx: int) -> bool:
                 return (
                     (idx < len(car_pos) and isinstance(car_pos[idx], int) and car_pos[idx] > 0)
                     or (idx < len(car_class_pos) and isinstance(car_class_pos[idx], int) and car_class_pos[idx] > 0)
-                    or (idx < len(car_f2) and finite_non_negative(car_f2[idx]))
-                    or (idx < len(car_est) and finite_non_negative(car_est[idx]))
+                    or (idx < len(car_f2) and finite_positive(car_f2[idx]))
+                    or (idx < len(car_est) and finite_positive(car_est[idx]))
                 )
 
             def car_progress(idx: int, require_progress: bool = False) -> dict[str, Any] | None:

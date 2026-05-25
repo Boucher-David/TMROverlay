@@ -195,10 +195,12 @@ public sealed class OverlayContentSizingTests
 
         Assert.Equal(
             expected,
-            OverlayContentSizing.BaseSizeFor(PitServiceOverlayDefinition.Definition, settings, OverlaySessionKind.Practice));
-        Assert.Equal(
-            expected,
-            BrowserOverlayRecommendedSize.For(PitServiceOverlayDefinition.Definition, settings, OverlaySessionKind.Practice));
+            OverlayContentSizing.SimpleTelemetrySizeForRenderedSections(
+                PitServiceOverlayDefinition.Definition,
+                settings,
+                OverlaySessionKind.Practice,
+                viewModel.MetricSections,
+                viewModel.Sections));
     }
 
     [Fact]
@@ -234,10 +236,12 @@ public sealed class OverlayContentSizingTests
 
         Assert.Equal(
             expected,
-            OverlayContentSizing.BaseSizeFor(SessionWeatherOverlayDefinition.Definition, settings, OverlaySessionKind.Practice));
-        Assert.Equal(
-            expected,
-            BrowserOverlayRecommendedSize.For(SessionWeatherOverlayDefinition.Definition, settings, OverlaySessionKind.Practice));
+            OverlayContentSizing.SimpleTelemetrySizeForRenderedSections(
+                SessionWeatherOverlayDefinition.Definition,
+                settings,
+                OverlaySessionKind.Practice,
+                viewModel.MetricSections,
+                viewModel.Sections));
     }
 
     private static OverlaySettings NewOverlay(string id, int defaultWidth, int defaultHeight)

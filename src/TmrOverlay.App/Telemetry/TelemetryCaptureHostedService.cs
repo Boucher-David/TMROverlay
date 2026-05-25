@@ -992,12 +992,13 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
     {
         var lapCompleted = ReadInt32ArrayElement(sdk, "CarIdxLapCompleted", carIdx);
         var lapDistPct = ReadDoubleArrayElement(sdk, "CarIdxLapDistPct", carIdx);
+        var trackSurface = ReadInt32ArrayElement(sdk, "CarIdxTrackSurface", carIdx);
         var f2TimeSeconds = ReadNullableDoubleArrayElement(sdk, "CarIdxF2Time", carIdx);
         var estimatedTimeSeconds = ReadNullableDoubleArrayElement(sdk, "CarIdxEstTime", carIdx);
         var position = ReadInt32ArrayElement(sdk, "CarIdxPosition", carIdx);
         var classPosition = ReadInt32ArrayElement(sdk, "CarIdxClassPosition", carIdx);
-        var hasLapDistance = HasLapDistance(lapDistPct);
-        var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
+        var hasLapDistance = HasLapDistance(lapDistPct, trackSurface);
+        var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct, trackSurface);
         if (!hasLapProgress && requireLapProgress)
         {
             return null;
@@ -1039,10 +1040,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
 
             var lapCompleted = ReadInt32ArrayElement(sdk, "CarIdxLapCompleted", carIdx);
             var lapDistPct = ReadDoubleArrayElement(sdk, "CarIdxLapDistPct", carIdx);
-            if (lapDistPct is null
-                || double.IsNaN(lapDistPct.Value)
-                || double.IsInfinity(lapDistPct.Value)
-                || lapDistPct < 0d)
+            var trackSurface = ReadInt32ArrayElement(sdk, "CarIdxTrackSurface", carIdx);
+            if (!HasLapDistance(lapDistPct, trackSurface))
             {
                 continue;
             }
@@ -1056,7 +1055,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 Position: ReadInt32ArrayElement(sdk, "CarIdxPosition", carIdx),
                 ClassPosition: ReadInt32ArrayElement(sdk, "CarIdxClassPosition", carIdx),
                 CarClass: ReadInt32ArrayElement(sdk, "CarIdxClass", carIdx),
-                TrackSurface: ReadInt32ArrayElement(sdk, "CarIdxTrackSurface", carIdx),
+                TrackSurface: trackSurface,
                 OnPitRoad: ReadBooleanArrayElement(sdk, "CarIdxOnPitRoad", carIdx),
                 TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx),
                 SessionFlags: ReadInt32ArrayElement(sdk, "CarIdxSessionFlags", carIdx)));
@@ -1089,12 +1088,13 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
 
             var lapCompleted = ReadInt32ArrayElement(sdk, "CarIdxLapCompleted", carIdx);
             var lapDistPct = ReadDoubleArrayElement(sdk, "CarIdxLapDistPct", carIdx);
+            var trackSurface = ReadInt32ArrayElement(sdk, "CarIdxTrackSurface", carIdx);
             var f2TimeSeconds = ReadNullableDoubleArrayElement(sdk, "CarIdxF2Time", carIdx);
             var estimatedTimeSeconds = ReadNullableDoubleArrayElement(sdk, "CarIdxEstTime", carIdx);
             var position = ReadInt32ArrayElement(sdk, "CarIdxPosition", carIdx);
             var classPosition = ReadInt32ArrayElement(sdk, "CarIdxClassPosition", carIdx);
-            var hasLapDistance = HasLapDistance(lapDistPct);
-            var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
+            var hasLapDistance = HasLapDistance(lapDistPct, trackSurface);
+            var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct, trackSurface);
             if (!hasLapDistance && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
             {
                 continue;
@@ -1109,7 +1109,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 Position: position,
                 ClassPosition: classPosition,
                 CarClass: carClass,
-                TrackSurface: ReadInt32ArrayElement(sdk, "CarIdxTrackSurface", carIdx),
+                TrackSurface: trackSurface,
                 OnPitRoad: ReadBooleanArrayElement(sdk, "CarIdxOnPitRoad", carIdx),
                 TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx),
                 SessionFlags: ReadInt32ArrayElement(sdk, "CarIdxSessionFlags", carIdx)));
@@ -1125,12 +1125,13 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         {
             var lapCompleted = ReadInt32ArrayElement(sdk, "CarIdxLapCompleted", carIdx);
             var lapDistPct = ReadDoubleArrayElement(sdk, "CarIdxLapDistPct", carIdx);
+            var trackSurface = ReadInt32ArrayElement(sdk, "CarIdxTrackSurface", carIdx);
             var f2TimeSeconds = ReadNullableDoubleArrayElement(sdk, "CarIdxF2Time", carIdx);
             var estimatedTimeSeconds = ReadNullableDoubleArrayElement(sdk, "CarIdxEstTime", carIdx);
             var position = ReadInt32ArrayElement(sdk, "CarIdxPosition", carIdx);
             var classPosition = ReadInt32ArrayElement(sdk, "CarIdxClassPosition", carIdx);
-            var hasLapDistance = HasLapDistance(lapDistPct);
-            var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
+            var hasLapDistance = HasLapDistance(lapDistPct, trackSurface);
+            var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct, trackSurface);
             if (!hasLapDistance && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
             {
                 continue;
@@ -1145,7 +1146,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 Position: position,
                 ClassPosition: classPosition,
                 CarClass: ReadInt32ArrayElement(sdk, "CarIdxClass", carIdx),
-                TrackSurface: ReadInt32ArrayElement(sdk, "CarIdxTrackSurface", carIdx),
+                TrackSurface: trackSurface,
                 OnPitRoad: ReadBooleanArrayElement(sdk, "CarIdxOnPitRoad", carIdx),
                 TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx),
                 SessionFlags: ReadInt32ArrayElement(sdk, "CarIdxSessionFlags", carIdx)));
@@ -1154,18 +1155,24 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return cars;
     }
 
-    private static bool HasLapProgress(int? lapCompleted, double? lapDistPct)
+    private static bool HasLapProgress(int? lapCompleted, double? lapDistPct, int? trackSurface)
     {
         return lapCompleted is >= 0
-            && HasLapDistance(lapDistPct);
+            && HasLapDistance(lapDistPct, trackSurface);
     }
 
-    private static bool HasLapDistance(double? lapDistPct)
+    private static bool HasLapDistance(double? lapDistPct, int? trackSurface)
     {
         return lapDistPct is { } pct
             && !double.IsNaN(pct)
             && !double.IsInfinity(pct)
-            && pct >= 0d;
+            && pct >= 0d
+            && HasTrackSurfaceEvidence(trackSurface);
+    }
+
+    private static bool HasTrackSurfaceEvidence(int? trackSurface)
+    {
+        return trackSurface is null or > 0;
     }
 
     private static bool HasStandingOrTiming(
@@ -1176,8 +1183,16 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
     {
         return position is > 0
             || classPosition is > 0
-            || f2TimeSeconds is not null
-            || estimatedTimeSeconds is not null;
+            || IsPositiveFinite(f2TimeSeconds)
+            || IsPositiveFinite(estimatedTimeSeconds);
+    }
+
+    private static bool IsPositiveFinite(double? value)
+    {
+        return value is { } numeric
+            && !double.IsNaN(numeric)
+            && !double.IsInfinity(numeric)
+            && numeric > 0d;
     }
 
     private static bool ReadBoolean(IRacingSDK sdk, string variableName)

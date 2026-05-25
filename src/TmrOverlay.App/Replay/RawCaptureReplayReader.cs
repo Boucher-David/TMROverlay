@@ -983,12 +983,13 @@ internal sealed class RawCaptureTelemetrySampleBuilder
     {
         var lapCompleted = reader.ReadInt32ArrayElement("CarIdxLapCompleted", carIdx);
         var lapDistPct = reader.ReadDoubleArrayElement("CarIdxLapDistPct", carIdx);
+        var trackSurface = reader.ReadInt32ArrayElement("CarIdxTrackSurface", carIdx);
         var f2TimeSeconds = reader.ReadNullableDoubleArrayElement("CarIdxF2Time", carIdx);
         var estimatedTimeSeconds = reader.ReadNullableDoubleArrayElement("CarIdxEstTime", carIdx);
         var position = reader.ReadInt32ArrayElement("CarIdxPosition", carIdx);
         var classPosition = reader.ReadInt32ArrayElement("CarIdxClassPosition", carIdx);
-        var hasLapDistance = HasLapDistance(lapDistPct);
-        var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
+        var hasLapDistance = HasLapDistance(lapDistPct, trackSurface);
+        var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct, trackSurface);
         if (!hasLapProgress && requireLapProgress)
         {
             return null;
@@ -1030,10 +1031,8 @@ internal sealed class RawCaptureTelemetrySampleBuilder
 
             var lapCompleted = reader.ReadInt32ArrayElement("CarIdxLapCompleted", carIdx);
             var lapDistPct = reader.ReadDoubleArrayElement("CarIdxLapDistPct", carIdx);
-            if (lapDistPct is null
-                || double.IsNaN(lapDistPct.Value)
-                || double.IsInfinity(lapDistPct.Value)
-                || lapDistPct < 0d)
+            var trackSurface = reader.ReadInt32ArrayElement("CarIdxTrackSurface", carIdx);
+            if (!HasLapDistance(lapDistPct, trackSurface))
             {
                 continue;
             }
@@ -1047,7 +1046,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
                 Position: reader.ReadInt32ArrayElement("CarIdxPosition", carIdx),
                 ClassPosition: reader.ReadInt32ArrayElement("CarIdxClassPosition", carIdx),
                 CarClass: reader.ReadInt32ArrayElement("CarIdxClass", carIdx),
-                TrackSurface: reader.ReadInt32ArrayElement("CarIdxTrackSurface", carIdx),
+                TrackSurface: trackSurface,
                 OnPitRoad: reader.ReadBooleanArrayElement("CarIdxOnPitRoad", carIdx),
                 TireCompound: reader.ReadInt32ArrayElement("CarIdxTireCompound", carIdx),
                 SessionFlags: reader.ReadInt32ArrayElement("CarIdxSessionFlags", carIdx)));
@@ -1080,12 +1079,13 @@ internal sealed class RawCaptureTelemetrySampleBuilder
 
             var lapCompleted = reader.ReadInt32ArrayElement("CarIdxLapCompleted", carIdx);
             var lapDistPct = reader.ReadDoubleArrayElement("CarIdxLapDistPct", carIdx);
+            var trackSurface = reader.ReadInt32ArrayElement("CarIdxTrackSurface", carIdx);
             var f2TimeSeconds = reader.ReadNullableDoubleArrayElement("CarIdxF2Time", carIdx);
             var estimatedTimeSeconds = reader.ReadNullableDoubleArrayElement("CarIdxEstTime", carIdx);
             var position = reader.ReadInt32ArrayElement("CarIdxPosition", carIdx);
             var classPosition = reader.ReadInt32ArrayElement("CarIdxClassPosition", carIdx);
-            var hasLapDistance = HasLapDistance(lapDistPct);
-            var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
+            var hasLapDistance = HasLapDistance(lapDistPct, trackSurface);
+            var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct, trackSurface);
             if (!hasLapDistance && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
             {
                 continue;
@@ -1100,7 +1100,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
                 Position: position,
                 ClassPosition: classPosition,
                 CarClass: carClass,
-                TrackSurface: reader.ReadInt32ArrayElement("CarIdxTrackSurface", carIdx),
+                TrackSurface: trackSurface,
                 OnPitRoad: reader.ReadBooleanArrayElement("CarIdxOnPitRoad", carIdx),
                 TireCompound: reader.ReadInt32ArrayElement("CarIdxTireCompound", carIdx),
                 SessionFlags: reader.ReadInt32ArrayElement("CarIdxSessionFlags", carIdx)));
@@ -1116,12 +1116,13 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         {
             var lapCompleted = reader.ReadInt32ArrayElement("CarIdxLapCompleted", carIdx);
             var lapDistPct = reader.ReadDoubleArrayElement("CarIdxLapDistPct", carIdx);
+            var trackSurface = reader.ReadInt32ArrayElement("CarIdxTrackSurface", carIdx);
             var f2TimeSeconds = reader.ReadNullableDoubleArrayElement("CarIdxF2Time", carIdx);
             var estimatedTimeSeconds = reader.ReadNullableDoubleArrayElement("CarIdxEstTime", carIdx);
             var position = reader.ReadInt32ArrayElement("CarIdxPosition", carIdx);
             var classPosition = reader.ReadInt32ArrayElement("CarIdxClassPosition", carIdx);
-            var hasLapDistance = HasLapDistance(lapDistPct);
-            var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct);
+            var hasLapDistance = HasLapDistance(lapDistPct, trackSurface);
+            var hasLapProgress = HasLapProgress(lapCompleted, lapDistPct, trackSurface);
             if (!hasLapDistance && !HasStandingOrTiming(position, classPosition, f2TimeSeconds, estimatedTimeSeconds))
             {
                 continue;
@@ -1136,7 +1137,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
                 Position: position,
                 ClassPosition: classPosition,
                 CarClass: reader.ReadInt32ArrayElement("CarIdxClass", carIdx),
-                TrackSurface: reader.ReadInt32ArrayElement("CarIdxTrackSurface", carIdx),
+                TrackSurface: trackSurface,
                 OnPitRoad: reader.ReadBooleanArrayElement("CarIdxOnPitRoad", carIdx),
                 TireCompound: reader.ReadInt32ArrayElement("CarIdxTireCompound", carIdx),
                 SessionFlags: reader.ReadInt32ArrayElement("CarIdxSessionFlags", carIdx)));
@@ -1145,18 +1146,24 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         return cars;
     }
 
-    private static bool HasLapProgress(int? lapCompleted, double? lapDistPct)
+    private static bool HasLapProgress(int? lapCompleted, double? lapDistPct, int? trackSurface)
     {
         return lapCompleted is >= 0
-            && HasLapDistance(lapDistPct);
+            && HasLapDistance(lapDistPct, trackSurface);
     }
 
-    private static bool HasLapDistance(double? lapDistPct)
+    private static bool HasLapDistance(double? lapDistPct, int? trackSurface)
     {
         return lapDistPct is { } pct
             && !double.IsNaN(pct)
             && !double.IsInfinity(pct)
-            && pct >= 0d;
+            && pct >= 0d
+            && HasTrackSurfaceEvidence(trackSurface);
+    }
+
+    private static bool HasTrackSurfaceEvidence(int? trackSurface)
+    {
+        return trackSurface is null or > 0;
     }
 
     private static bool HasStandingOrTiming(
@@ -1167,8 +1174,16 @@ internal sealed class RawCaptureTelemetrySampleBuilder
     {
         return position is > 0
             || classPosition is > 0
-            || f2TimeSeconds is not null
-            || estimatedTimeSeconds is not null;
+            || IsPositiveFinite(f2TimeSeconds)
+            || IsPositiveFinite(estimatedTimeSeconds);
+    }
+
+    private static bool IsPositiveFinite(double? value)
+    {
+        return value is { } numeric
+            && !double.IsNaN(numeric)
+            && !double.IsInfinity(numeric)
+            && numeric > 0d;
     }
 
     private sealed record FocusCarSelection(

@@ -18,85 +18,85 @@ const sourceManifestPath = join(sourceRoot, 'manifest.json');
 
 const appItems = [
   {
-    source: 'settings/general.png',
+    source: 'settings/app/general.png',
     output: 'app/01-settings-general.png',
     title: 'Settings - General',
     description: 'Shared units, update status, and deterministic preview controls.'
   },
   {
-    source: 'settings/standings.png',
+    source: 'settings/standings/general.png',
     output: 'app/02-settings-standings.png',
     title: 'Settings - Standings',
     description: 'Standings overlay visibility, sizing, browser source, and preview controls.'
   },
   {
-    source: 'settings/relative.png',
+    source: 'settings/relative/general.png',
     output: 'app/03-settings-relative.png',
     title: 'Settings - Relative',
     description: 'Relative overlay visibility, row count, sizing, browser source, and preview controls.'
   },
   {
-    source: 'settings/gap-to-leader.png',
+    source: 'settings/gap-to-leader/general.png',
     output: 'app/04-settings-gap-to-leader.png',
     title: 'Settings - Gap To Leader',
     description: 'Gap trend overlay visibility, sizing, browser source, and preview controls.'
   },
   {
-    source: 'settings/track-map.png',
+    source: 'settings/track-map/general.png',
     output: 'app/05-settings-track-map.png',
     title: 'Settings - Track Map',
     description: 'Track map visibility, opacity, map-building, sector boundaries, and browser source controls.'
   },
   {
-    source: 'settings/stream-chat.png',
+    source: 'settings/stream-chat/general.png',
     output: 'app/06-settings-stream-chat.png',
     title: 'Settings - Stream Chat',
     description: 'Stream chat provider, visibility, sizing, and preview controls.'
   },
   {
-    source: 'settings/garage-cover.png',
+    source: 'settings/garage-cover/general.png',
     output: 'app/07-settings-garage-cover.png',
     title: 'Settings - Garage Cover',
     description: 'Garage cover image import, preview, clear, visibility, and sizing controls.'
   },
   {
-    source: 'settings/fuel-calculator.png',
+    source: 'settings/fuel-calculator/general.png',
     output: 'app/08-settings-fuel-calculator.png',
     title: 'Settings - Fuel Calculator',
     description: 'Fuel calculator visibility, sizing, browser source, and preview controls.'
   },
   {
-    source: 'settings/inputs.png',
+    source: 'settings/input-state/general.png',
     output: 'app/09-settings-inputs.png',
     title: 'Settings - Inputs',
     description: 'Input state visibility, trace/readout content, sizing, browser source, and preview controls.'
   },
   {
-    source: 'settings/car-radar.png',
+    source: 'settings/car-radar/general.png',
     output: 'app/10-settings-car-radar.png',
     title: 'Settings - Car Radar',
     description: 'Car radar visibility, multiclass warning, sizing, browser source, and preview controls.'
   },
   {
-    source: 'settings/flags.png',
+    source: 'settings/flags/general.png',
     output: 'app/11-settings-flags.png',
     title: 'Settings - Flags',
     description: 'Flags overlay visibility, sizing, browser source, and preview controls.'
   },
   {
-    source: 'settings/session-weather.png',
+    source: 'settings/session-weather/general.png',
     output: 'app/12-settings-session-weather.png',
     title: 'Settings - Session / Weather',
     description: 'Session and weather overlay visibility, content, sizing, browser source, and preview controls.'
   },
   {
-    source: 'settings/pit-service.png',
+    source: 'settings/pit-service/general.png',
     output: 'app/13-settings-pit-service.png',
     title: 'Settings - Pit Service',
     description: 'Pit service overlay visibility, tire grid content, sizing, browser source, and preview controls.'
   },
   {
-    source: 'settings/support.png',
+    source: 'settings/support/diagnostics.png',
     output: 'app/14-settings-diagnostics.png',
     title: 'Settings - Diagnostics',
     description: 'Enhanced iRacing telemetry capture, bundle actions, and data analysis opt-out controls.'
@@ -105,86 +105,86 @@ const appItems = [
 
 const overlayItems = [
   {
-    source: 'browser-overlays/standings-race.png',
+    source: 'browser-overlays/standings/race.png',
     output: 'overlays/01-standings-race.png',
     title: 'Standings',
     description: 'Multi-class race standings with class headers, focus row, gaps, laps, and pit state.'
   },
   {
-    source: 'browser-overlays/relative-race.png',
+    source: 'browser-overlays/relative/race.png',
     output: 'overlays/02-relative-race.png',
     title: 'Relative',
     description: 'Nearby cars around the focus driver with lap relationship coloring and compact empty-row spacing.'
   },
   {
-    source: 'browser-overlays/fuel-calculator-race.png',
+    source: 'browser-overlays/fuel-calculator/race.png',
     output: 'overlays/03-fuel-calculator-race.png',
     title: 'Fuel Calculator',
     description: 'Race stint plan, current fuel, stop count, and measured/history-backed burn evidence.'
   },
   {
-    source: 'browser-overlays/gap-to-leader-race.png',
+    source: 'browser-overlays/gap-to-leader/race.png',
     output: 'overlays/04-gap-to-leader-race.png',
     title: 'Gap To Leader',
     description: 'Live gap trend with connected history lines, intervals, and race-context summary rows.'
   },
   {
-    source: 'browser-overlays/track-map-race.png',
+    source: 'browser-overlays/track-map/race.png',
     output: 'overlays/05-track-map-race.png',
     title: 'Track Map',
     description: 'IBT-derived Nurburgring 24h track shape with car markers and focus-car highlighting.',
     curation: 'real-derived Nurburgring 24h track-map scenario'
   },
   {
-    source: 'browser-overlays/track-map-fallback.png',
+    source: 'browser-overlays/track-map/fallback.png',
     output: 'overlays/06-track-map-circle-fallback.png',
     title: 'Track Map Fallback',
     description: 'Circular fallback map used when generated geometry is unavailable.'
   },
   {
-    source: 'browser-overlays/session-weather-race.png',
+    source: 'browser-overlays/session-weather/race.png',
     output: 'overlays/07-session-weather-race.png',
     title: 'Session / Weather',
     description: 'Session, clock, lap, track, weather, wind, temperature, and atmosphere metrics.'
   },
   {
-    source: 'browser-overlays/pit-service-race.png',
+    source: 'browser-overlays/pit-service/race.png',
     output: 'overlays/08-pit-service-active.png',
     title: 'Pit Service - Active',
     description: 'Pit signal, service status, fuel/repair requests, and per-tire service grid.'
   },
   {
-    source: 'browser-overlays/pit-service-idle.png',
+    source: 'browser-overlays/pit-service/idle.png',
     output: 'overlays/09-pit-service-idle.png',
     title: 'Pit Service - Idle',
     description: 'Pit-ready idle state with safe placeholders for unavailable tire and service values.'
   },
   {
-    source: 'browser-overlays/input-state-race.png',
+    source: 'browser-overlays/input-state/race.png',
     output: 'overlays/10-input-state-race.png',
     title: 'Input / Car State',
     description: 'Throttle, brake, steering, gear, speed, ABS, and trace graph evidence.'
   },
   {
-    source: 'browser-overlays/car-radar-both-sides.png',
+    source: 'browser-overlays/car-radar/both-sides.png',
     output: 'overlays/11-car-radar-both-sides.png',
     title: 'Car Radar',
     description: 'Both-sides proximity warning with radar rings and side-pressure arcs.'
   },
   {
-    source: 'browser-overlays/flags-all-kinds.png',
+    source: 'browser-overlays/flags/all-kinds.png',
     output: 'overlays/12-flags-all-kinds.png',
     title: 'Flags',
     description: 'Full flag palette: green, blue, yellow, caution, red, black, repair, white, and checkered.'
   },
   {
-    source: 'browser-overlays/stream-chat-twitch-rich.png',
+    source: 'browser-overlays/stream-chat/twitch-rich.png',
     output: 'overlays/13-stream-chat-twitch-rich.png',
     title: 'Stream Chat',
     description: 'Twitch-style chat with badges, emotes, names, timestamps, and message text.'
   },
   {
-    source: 'browser-overlays/garage-cover-garage-visible.png',
+    source: 'browser-overlays/garage-cover/garage-visible.png',
     output: 'overlays/14-garage-cover-visible.png',
     title: 'Garage Cover',
     description: 'Garage-visible full-canvas cover image used for broadcast or stream masking.'

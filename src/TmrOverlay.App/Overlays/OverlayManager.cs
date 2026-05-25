@@ -700,7 +700,8 @@ internal sealed class OverlayManager : IDisposable
                         sessionAllowed,
                         settingsPreview,
                         liveTelemetryAvailable: overlayLiveTelemetryAvailable,
-                        currentSession);
+                        currentSession,
+                        liveSnapshot);
                     continue;
                 }
 
@@ -945,28 +946,58 @@ internal sealed class OverlayManager : IDisposable
         LiveTelemetrySnapshot snapshot,
         OverlaySessionKind? sessionKind)
     {
-        if (!string.Equals(definition.Id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.Ordinal))
+        var now = DateTimeOffset.UtcNow;
+        if (string.Equals(definition.Id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.Ordinal))
         {
-            return null;
+            var strategyModel = LiveFuelStrategyModel.From(snapshot, now, LookupFuelSizingHistory);
+            if (!strategyModel.IsAvailable)
+            {
+                return null;
+            }
+
+            var viewModel = FuelCalculatorViewModel.From(
+                strategyModel,
+                showAdvice: false,
+                SelectedUnitSystem,
+                maximumRows: 6,
+                contentSettings: settings);
+            return OverlayContentSizing.FuelCalculatorSizeForMetricSections(
+                definition,
+                settings,
+                sessionKind,
+                viewModel.MetricSections);
         }
 
-        var strategyModel = LiveFuelStrategyModel.From(snapshot, DateTimeOffset.UtcNow, LookupFuelSizingHistory);
-        if (!strategyModel.IsAvailable)
+        if (string.Equals(definition.Id, PitServiceOverlayDefinition.Definition.Id, StringComparison.Ordinal))
         {
-            return null;
+            var viewModel = PitServiceOverlayViewModel.From(snapshot, now, SelectedUnitSystem, settings);
+            return SimpleTelemetryModelDrivenBaseSize(definition, settings, sessionKind, viewModel);
         }
 
-        var viewModel = FuelCalculatorViewModel.From(
-            strategyModel,
-            showAdvice: false,
-            SelectedUnitSystem,
-            maximumRows: 6,
-            contentSettings: settings);
-        return OverlayContentSizing.FuelCalculatorSizeForMetricSections(
-            definition,
-            settings,
-            sessionKind,
-            viewModel.MetricSections);
+        if (string.Equals(definition.Id, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.Ordinal))
+        {
+            var viewModel = SessionWeatherOverlayViewModel.From(snapshot, now, SelectedUnitSystem, settings);
+            return SimpleTelemetryModelDrivenBaseSize(definition, settings, sessionKind, viewModel);
+        }
+
+        return null;
+    }
+
+    private static Size? SimpleTelemetryModelDrivenBaseSize(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind,
+        SimpleTelemetryOverlayViewModel viewModel)
+    {
+        return viewModel.MetricSections.Any(section => section.Rows.Count > 0)
+            || viewModel.Sections.Any(section => section.Rows.Count > 0)
+            ? OverlayContentSizing.SimpleTelemetrySizeForRenderedSections(
+                definition,
+                settings,
+                sessionKind,
+                viewModel.MetricSections,
+                viewModel.Sections)
+            : null;
     }
 
     private SessionHistoryLookupResult LookupFuelSizingHistory(HistoricalComboIdentity combo)
@@ -1461,6 +1492,17 @@ internal sealed class OverlayManager : IDisposable
         var hadFullScreenSize = settings.Width > FlagsOverlayDefinition.MaximumWidth
             || settings.Height > FlagsOverlayDefinition.MaximumHeight
             || (settings.Width >= 900 && settings.Height >= 500);
+        var hadLegacyDefaultSize = settings.Width == 360
+            && settings.Height == 170
+            && Math.Abs(settings.Scale - 1d) < 0.001d;
+
+        if (hadLegacyDefaultSize)
+        {
+            settings.Width = definition.DefaultWidth;
+            settings.Height = definition.DefaultHeight;
+            settings.ScreenId = null;
+            return;
+        }
 
         if (!hadPrimaryScreenDefault && !hadFullScreenSize)
         {
@@ -1493,7 +1535,8 @@ internal sealed class OverlayManager : IDisposable
         bool sessionAllowed,
         bool settingsPreview,
         bool liveTelemetryAvailable,
-        OverlaySessionKind? sessionKind)
+        OverlaySessionKind? sessionKind,
+        LiveTelemetrySnapshot liveSnapshot)
     {
         if (!managedEnabled)
         {
@@ -1538,7 +1581,7 @@ internal sealed class OverlayManager : IDisposable
             form,
             sessionPreviewActive: _sessionPreviewState.Snapshot().Active,
             sessionKind,
-            modelDrivenBaseSize: null);
+            FlagsModelDrivenBaseSize(settings, liveSnapshot));
         ApplyOpacityIfChanged(registration.Definition, settings, form);
         ApplySettingsWindowInputProtection(form);
         var fadeAllowsVisible = ApplyLiveTelemetryFade(
@@ -1608,6 +1651,35 @@ internal sealed class OverlayManager : IDisposable
         {
             ApplySettingsWindowTopMost(settingsForm);
         }
+    }
+
+    private static Size? FlagsModelDrivenBaseSize(
+        OverlaySettings settings,
+        LiveTelemetrySnapshot snapshot)
+    {
+        var viewModel = FlagsOverlayViewModel.ForDisplay(snapshot, DateTimeOffset.UtcNow);
+        if (viewModel.IsWaiting)
+        {
+            return null;
+        }
+
+        var displayedCount = viewModel.Flags.Count(flag => IsFlagCategoryEnabled(settings, flag.Category));
+        return displayedCount > 0
+            ? FlagsOverlaySizing.SizeForDisplayedFlagCount(displayedCount)
+            : null;
+    }
+
+    private static bool IsFlagCategoryEnabled(OverlaySettings settings, FlagDisplayCategory category)
+    {
+        return category switch
+        {
+            FlagDisplayCategory.Green => settings.GetBooleanOption(OverlayOptionKeys.FlagsShowGreen, defaultValue: true),
+            FlagDisplayCategory.Blue => settings.GetBooleanOption(OverlayOptionKeys.FlagsShowBlue, defaultValue: true),
+            FlagDisplayCategory.Yellow => settings.GetBooleanOption(OverlayOptionKeys.FlagsShowYellow, defaultValue: true),
+            FlagDisplayCategory.Critical => settings.GetBooleanOption(OverlayOptionKeys.FlagsShowCritical, defaultValue: true),
+            FlagDisplayCategory.Finish => settings.GetBooleanOption(OverlayOptionKeys.FlagsShowFinish, defaultValue: true),
+            _ => true
+        };
     }
 
     private void ReconcileSettingsOverlayActiveWithVisibility()

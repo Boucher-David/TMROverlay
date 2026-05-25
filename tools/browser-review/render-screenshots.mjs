@@ -58,6 +58,10 @@ const v102EvidenceByFixture = new Map([
   ['input-no-content', ['V102-008']],
   ['input-min-scale', ['V102-043']],
   ['flags-all-kinds', ['V102-042', 'V102-048']],
+  ['flags-six-kinds', ['V102-042', 'V102-048']],
+  ['flags-race-start-pseudo', ['V102-042', 'V102-048']],
+  ['flags-practice-pseudo-suppressed', ['V102-042', 'V102-048']],
+  ['flags-practice-local-yellow', ['V102-042', 'V102-048']],
   ['circle-fallback', ['V102-012', 'V102-044']]
 ]);
 const v102EvidenceBySettingsTab = new Map([
@@ -75,8 +79,8 @@ const configuredCanvasOverlaySizes = new Map([
     height: geometryNumber(canvasOverlayGeometry.trackMapHeight, overlaySizesGeometry.trackMapHeight, 360)
   }],
   ['flags', {
-    width: geometryNumber(overlaySizesGeometry.flagsWidth, 360),
-    height: geometryNumber(overlaySizesGeometry.flagsHeight, 170)
+    width: geometryNumber(overlaySizesGeometry.flagsWidth, 270),
+    height: geometryNumber(overlaySizesGeometry.flagsHeight, 128)
   }]
 ]);
 const configuredCanvasCaptureBackdrop = {
@@ -106,12 +110,14 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'standings', slug: 'no-content', query: 'fixture=standings-no-content' },
   { overlayId: 'standings', slug: 'content-off-chrome-on', query: 'fixture=standings-content-off-chrome-on' },
   { overlayId: 'standings', slug: 'no-results-chrome-on', query: 'fixture=standings-no-results-chrome-on' },
+  { overlayId: 'standings', slug: 'zero-default-timing', query: 'fixture=standings-zero-default-timing' },
   { overlayId: 'standings', slug: 'min-scale', query: 'fixture=standings-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'relative', slug: 'chrome-off', query: 'fixture=chrome-off' },
   { overlayId: 'relative', slug: 'rightmost-evidence', query: 'fixture=rightmost-evidence' },
   { overlayId: 'relative', slug: 'driver-only', query: 'fixture=relative-driver-only' },
   { overlayId: 'relative', slug: 'position-driver', query: 'fixture=relative-position-driver' },
   { overlayId: 'relative', slug: 'rows-2', query: 'fixture=relative-rows-2' },
+  { overlayId: 'relative', slug: 'empty-rows', query: 'fixture=relative-empty-rows' },
   { overlayId: 'relative', slug: 'no-content', query: 'fixture=relative-no-content' },
   { overlayId: 'relative', slug: 'min-scale', query: 'fixture=relative-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'fuel-calculator', slug: 'chrome-off', query: 'fixture=chrome-off' },
@@ -130,6 +136,7 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'pit-service', slug: 'session-off', query: 'fixture=pit-service-session-off' },
   { overlayId: 'pit-service', slug: 'signal-off', query: 'fixture=pit-service-signal-off' },
   { overlayId: 'pit-service', slug: 'service-off', query: 'fixture=pit-service-service-off' },
+  { overlayId: 'pit-service', slug: 'grid-only', query: 'fixture=pit-service-grid-only' },
   { overlayId: 'pit-service', slug: 'tire-analysis-off', query: 'fixture=pit-service-tire-analysis-off' },
   { overlayId: 'pit-service', slug: 'no-data', query: 'fixture=pit-service-no-data' },
   { overlayId: 'input-state', slug: 'mock-data', query: 'fixture=input-state-mock-data' },
@@ -158,6 +165,10 @@ const nonHappyPathOverlayVariants = [
   { overlayId: 'track-map', slug: 'player-focus-class-color', query: 'fixture=track-map-player-focus-class-color' },
   { overlayId: 'track-map', slug: 'min-scale', query: 'fixture=track-map-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'flags', slug: 'all-kinds', query: 'fixture=flags-all-kinds' },
+  { overlayId: 'flags', slug: 'six-kinds', query: 'fixture=flags-six-kinds' },
+  { overlayId: 'flags', slug: 'race-start-pseudo', query: 'fixture=flags-race-start-pseudo' },
+  { overlayId: 'flags', slug: 'practice-pseudo-suppressed', query: 'fixture=flags-practice-pseudo-suppressed', previewMode: 'practice' },
+  { overlayId: 'flags', slug: 'practice-local-yellow', query: 'fixture=flags-practice-local-yellow', previewMode: 'practice' },
   { overlayId: 'flags', slug: 'min-scale', query: 'fixture=flags-min-scale', minScale: 0.6, scaleTransform: 0.6 },
   { overlayId: 'garage-cover', slug: 'hidden', query: 'fixture=garage-hidden' },
   { overlayId: 'garage-cover', slug: 'garage-visible', query: 'fixture=garage-visible' },
@@ -323,10 +334,11 @@ function screenshotRoutes(surface) {
           { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: 'circle-fallback' }));
       }
       for (const variant of nonHappyPathOverlayVariants.filter((item) => item.overlayId === overlayId)) {
+        const variantPreviewMode = variant.previewMode || 'race';
         routes.push(overlayRoute(
           webOverlayScreenshotPath('browser-overlays', overlayId, variant.slug),
-          `${withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
-          { surface: 'browser-review-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null, scaleTransform: variant.scaleTransform || null, exactClip: variant.scaleTransform ? true : null }));
+          `${withPreview(`/review/overlays/${encodeURIComponent(overlayId)}`, variantPreviewMode)}&${variant.query}`,
+          { surface: 'browser-review-overlay', overlayId, previewMode: variantPreviewMode, fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null, scaleTransform: variant.scaleTransform || null, exactClip: variant.scaleTransform ? true : null }));
       }
     }
     if (surface === 'localhost' || surface === 'all') {
@@ -341,10 +353,11 @@ function screenshotRoutes(surface) {
           { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: 'circle-fallback' }));
       }
       for (const variant of nonHappyPathOverlayVariants.filter((item) => item.overlayId === overlayId)) {
+        const variantPreviewMode = variant.previewMode || 'race';
         routes.push(overlayRoute(
           webOverlayScreenshotPath('localhost-overlays', overlayId, variant.slug),
-          `${withPreview(`/overlays/${encodeURIComponent(overlayId)}`, 'race')}&${variant.query}`,
-          { surface: 'localhost-overlay', overlayId, previewMode: 'race', fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null, scaleTransform: variant.scaleTransform || null, exactClip: variant.scaleTransform ? true : null }));
+          `${withPreview(`/overlays/${encodeURIComponent(overlayId)}`, variantPreviewMode)}&${variant.query}`,
+          { surface: 'localhost-overlay', overlayId, previewMode: variantPreviewMode, fixtureVariant: variant.slug, minBytes: variantMinBytes(variant), viewport: variant.viewport, minScale: variant.minScale || null, scaleTransform: variant.scaleTransform || null, exactClip: variant.scaleTransform ? true : null }));
       }
       for (const alias of localhostAliasesForOverlay(overlayId)) {
         routes.push(overlayRoute(
@@ -551,7 +564,7 @@ function isSettingsComponentRoute(route) {
 
 function overlayRoute(relativePath, urlPath, metadata = {}) {
   const { viewport, ...metadataWithoutViewport } = metadata;
-  const configuredCanvasSize = metadata.overlayId ? configuredCanvasOverlaySizes.get(metadata.overlayId) : null;
+  const configuredCanvasSize = configuredCanvasOverlaySizeForRoute(metadata);
   const garageCoverRoute = metadata.overlayId === 'garage-cover';
   return {
     relativePath,
@@ -572,6 +585,60 @@ function overlayRoute(relativePath, urlPath, metadata = {}) {
     minScale: metadata.minScale || null,
     ...metadataWithoutViewport
   };
+}
+
+function configuredCanvasOverlaySizeForRoute(metadata = {}) {
+  if (metadata.overlayId === 'flags') {
+    return flagsConfiguredSizeForRoute(metadata.previewMode, metadata.fixtureVariant);
+  }
+
+  return metadata.overlayId ? configuredCanvasOverlaySizes.get(metadata.overlayId) : null;
+}
+
+function flagsConfiguredSizeForRoute(previewMode = 'race', fixtureVariant = null) {
+  const normalizedFixture = String(fixtureVariant || '').trim().toLowerCase();
+  const normalizedPreview = String(previewMode || '').trim().toLowerCase();
+  const count = {
+    'all-kinds': 10,
+    'six-kinds': 6,
+    'race-start-pseudo': 2,
+    'practice-pseudo-suppressed': 1,
+    'practice-local-yellow': 2,
+    'min-scale': 3
+  }[normalizedFixture]
+    ?? (normalizedPreview === 'race' ? 3 : 1);
+  return flagsSizeForDisplayedFlagCount(count);
+}
+
+function flagsSizeForDisplayedFlagCount(count) {
+  const minimumWidth = geometryNumber(flagsGeometry.minimumWidth, 180);
+  const minimumHeight = geometryNumber(flagsGeometry.minimumHeight, 96);
+  if (count <= 1) {
+    return { width: minimumWidth, height: minimumHeight };
+  }
+
+  const { columns, rows } = flagsGridForCount(count);
+  const padding = geometryNumber(flagsGeometry.outerPadding, 8);
+  const gap = geometryNumber(flagsGeometry.cellGap, 8);
+  const defaultWidth = geometryNumber(overlaySizesGeometry.flagsWidth, 270);
+  const defaultHeight = geometryNumber(overlaySizesGeometry.flagsHeight, 128);
+  const defaultCellWidth = (defaultWidth - 2 * padding - gap) / 2;
+  const defaultCellHeight = (defaultHeight - 2 * padding - gap) / 2;
+  const width = Math.round(columns * defaultCellWidth + Math.max(0, columns - 1) * gap + 2 * padding);
+  const height = Math.round(rows * defaultCellHeight + Math.max(0, rows - 1) * gap + 2 * padding);
+  return {
+    width: Math.max(minimumWidth, Math.min(geometryNumber(flagsGeometry.maximumWidth, 960), width)),
+    height: Math.max(minimumHeight, Math.min(geometryNumber(flagsGeometry.maximumHeight, 420), height))
+  };
+}
+
+function flagsGridForCount(count) {
+  if (count <= 1) return { columns: 1, rows: 1 };
+  if (count <= geometryNumber(flagsGeometry.gridTwoCountMaximum, 2)) return { columns: 2, rows: 1 };
+  if (count <= geometryNumber(flagsGeometry.gridFourCountMaximum, 4)) return { columns: 2, rows: 2 };
+  if (count <= geometryNumber(flagsGeometry.gridSixCountMaximum, 6)) return { columns: 3, rows: 2 };
+  const columns = geometryNumber(flagsGeometry.gridMaximumColumns, 4);
+  return { columns, rows: Math.ceil(count / columns) };
 }
 
 function installerReviewRoute(relativePath, urlPath, metadata = {}) {

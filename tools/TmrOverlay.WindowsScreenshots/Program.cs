@@ -619,14 +619,14 @@ internal static class Program
                 $"Native {overlay.Definition.DisplayName} - {variant.Label}",
                 () => CreateDesignV2LiveOverlayForm(
                     overlay,
-                    OverlaySessionKind.Race,
+                    variant.PreviewMode,
                     settings),
                 postProcess: overlay.UsesTransparentBackdrop
                     ? bitmap => ReplaceColorWithReviewBackdrop(bitmap, Color.FromArgb(1, 2, 3))
                     : null,
                 refreshPasses: NativeRefreshPassesFor(overlay.Kind),
                 relativeDirectory: "native-overlays",
-                metadata: NativeOverlayMetadata(variant.OverlayId, "race", variant.Slug) with
+                metadata: NativeOverlayMetadata(variant.OverlayId, PreviewModeFileStem(variant.PreviewMode), variant.Slug) with
                 {
                     Settings = settings
                 },
@@ -634,8 +634,15 @@ internal static class Program
                 {
                     if (form is DesignV2LiveOverlayForm designV2)
                     {
-                        ApplyNativeVariantCaptureSize(designV2, variant.OverlayId, variant.Slug);
-                        SetDesignV2Model(designV2, ReviewNativeVariantModel(variant.OverlayId, variant.Slug));
+                        var model = ReviewNativeVariantModel(variant.OverlayId, variant.Slug);
+                        SetDesignV2Model(designV2, model);
+                        ApplyNativeVariantCaptureSize(
+                            designV2,
+                            overlay.Definition,
+                            settings,
+                            variant.PreviewMode,
+                            variant.Slug,
+                            model);
                     }
                 }));
         }
@@ -1124,6 +1131,7 @@ internal static class Program
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "driver-only", "Driver Only"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "position-driver", "Position Driver"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "rows-2", "Rows 2 Each Side"),
+            new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "empty-rows", "Empty Rows"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "no-content", "No Content"),
             new NativeOverlayVariantSpec(RelativeOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(FuelCalculatorOverlayDefinition.Definition.Id, "chrome-off", "Chrome Off"),
@@ -1140,6 +1148,7 @@ internal static class Program
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "session-off", "Session Off"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "signal-off", "Signal Off"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "service-off", "Service Off"),
+            new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "grid-only", "Grid Only"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "tire-analysis-off", "Tire Analysis Off"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "no-data", "No Data"),
             new NativeOverlayVariantSpec(PitServiceOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
@@ -1165,6 +1174,18 @@ internal static class Program
             new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "player-focus-class-color", "Player Focus Class Color"),
             new NativeOverlayVariantSpec(TrackMapOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(FlagsOverlayDefinition.Definition.Id, "all-kinds", "All Kinds"),
+            new NativeOverlayVariantSpec(FlagsOverlayDefinition.Definition.Id, "six-kinds", "Six Kinds"),
+            new NativeOverlayVariantSpec(FlagsOverlayDefinition.Definition.Id, "race-start-pseudo", "Race Start Pseudo"),
+            new NativeOverlayVariantSpec(
+                FlagsOverlayDefinition.Definition.Id,
+                "practice-pseudo-suppressed",
+                "Practice Pseudo Suppressed",
+                OverlaySessionKind.Practice),
+            new NativeOverlayVariantSpec(
+                FlagsOverlayDefinition.Definition.Id,
+                "practice-local-yellow",
+                "Practice Local Yellow",
+                OverlaySessionKind.Practice),
             new NativeOverlayVariantSpec(FlagsOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(StreamChatOverlayDefinition.Definition.Id, "min-scale", "Minimum Scale"),
             new NativeOverlayVariantSpec(StreamChatOverlayDefinition.Definition.Id, "twitch-rich", "Twitch Rich"),
@@ -1206,6 +1227,16 @@ internal static class Program
         }
 
         SetDesignV2Model(designV2, model);
+        if (DefinitionForOverlayId(overlayId) is { } definition)
+        {
+            ApplyNativeModelDrivenCaptureSize(
+                designV2,
+                definition,
+                OverlaySettingsFor(definition),
+                previewMode,
+                model,
+                applyFlags: true);
+        }
     }
 
     private static DesignV2OverlayModel? ReviewAlignedNativeModel(string overlayId, OverlaySessionKind previewMode)
@@ -1258,6 +1289,11 @@ internal static class Program
         if (string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
             return ReviewGapModel();
+        }
+
+        if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewFlagsModel(previewMode);
         }
 
         return null;
@@ -1405,6 +1441,12 @@ internal static class Program
         }
 
         if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slug, "empty-rows", StringComparison.OrdinalIgnoreCase))
+        {
+            return ReviewRelativeModel(OverlaySessionKind.Race, includePitColumn: false, focusOnly: true);
+        }
+
+        if (string.Equals(overlayId, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
             && string.Equals(slug, "no-content", StringComparison.OrdinalIgnoreCase))
         {
             return ReviewRelativeModel(
@@ -1522,6 +1564,18 @@ internal static class Program
             return ReviewFlagsAllKindsModel();
         }
 
+        if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return slug.ToLowerInvariant() switch
+            {
+                "six-kinds" => ReviewFlagsSixKindsModel(),
+                "race-start-pseudo" => ReviewFlagsRaceStartPseudoModel(),
+                "practice-pseudo-suppressed" => ReviewFlagsPracticePseudoSuppressedModel(),
+                "practice-local-yellow" => ReviewFlagsPracticeLocalYellowModel(),
+                _ => throw new InvalidOperationException($"Unknown flags native overlay fixture variant {slug}.")
+            };
+        }
+
         if (string.Equals(overlayId, StreamChatOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
             return slug switch
@@ -1546,6 +1600,7 @@ internal static class Program
         return string.Equals(slug, "session-off", StringComparison.OrdinalIgnoreCase)
             || string.Equals(slug, "signal-off", StringComparison.OrdinalIgnoreCase)
             || string.Equals(slug, "service-off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(slug, "grid-only", StringComparison.OrdinalIgnoreCase)
             || string.Equals(slug, "tire-analysis-off", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -1567,8 +1622,15 @@ internal static class Program
         form.Invalidate();
     }
 
-    private static void ApplyNativeVariantCaptureSize(DesignV2LiveOverlayForm form, string overlayId, string slug)
+    private static void ApplyNativeVariantCaptureSize(
+        DesignV2LiveOverlayForm form,
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind previewMode,
+        string slug,
+        DesignV2OverlayModel model)
     {
+        var overlayId = definition.Id;
         if (string.Equals(overlayId, StandingsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
             form.ClientSize = slug.ToLowerInvariant() switch
@@ -1583,12 +1645,63 @@ internal static class Program
             return;
         }
 
-        if (string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(slug, "missing", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))
         {
-            form.ClientSize = new Size(464, 496);
-            form.PerformLayout();
+            ApplyNativeFlagsCaptureSize(form, model);
+            return;
         }
+
+        ApplyNativeModelDrivenCaptureSize(form, definition, settings, previewMode, model, applyFlags: false);
+    }
+
+    private static void ApplyNativeFlagsCaptureSize(DesignV2LiveOverlayForm form, DesignV2OverlayModel model)
+    {
+        if (model.Body is not DesignV2FlagsBody { IsWaiting: false } flags
+            || flags.Flags.Count <= 0)
+        {
+            return;
+        }
+
+        form.ClientSize = FlagsOverlaySizing.SizeForDisplayedFlagCount(flags.Flags.Count);
+        form.PerformLayout();
+    }
+
+    private static void ApplyNativeModelDrivenCaptureSize(
+        DesignV2LiveOverlayForm form,
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind previewMode,
+        DesignV2OverlayModel model,
+        bool applyFlags)
+    {
+        if (applyFlags
+            && string.Equals(definition.Id, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            ApplyNativeFlagsCaptureSize(form, model);
+            return;
+        }
+
+        if (!string.Equals(definition.Id, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(definition.Id, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (model.Body is not DesignV2MetricRowsBody body
+            || (!body.MetricSections.Any(section => section.Rows.Count > 0)
+                && !body.Sections.Any(section => section.Rows.Count > 0)))
+        {
+            return;
+        }
+
+        form.ClientSize = OverlayContentSizing.SimpleTelemetrySizeForRenderedRowCounts(
+            definition,
+            settings,
+            previewMode,
+            body.MetricSections.Select(section => section.Rows.Count).ToArray(),
+            body.Sections.Select(section => section.Rows.Count).ToArray());
+        form.PerformLayout();
     }
 
     private static string? ReadDesignV2ModelFooter(DesignV2LiveOverlayForm form)
@@ -1869,7 +1982,8 @@ internal static class Program
         OverlaySessionKind previewMode,
         bool includePitColumn,
         int carsEachSide = 3,
-        string[]? includedColumnIds = null)
+        string[]? includedColumnIds = null,
+        bool focusOnly = false)
     {
         if (OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) is OverlaySessionKind.Qualifying)
         {
@@ -1925,13 +2039,13 @@ internal static class Program
         }
 
         var rows = Enumerable.Repeat(ReviewBlankTableRow(selectedColumnIds.Length), rowCount).ToArray();
-        if (referenceIndex > 0)
+        if (!focusOnly && referenceIndex > 0)
         {
             rows[referenceIndex - 1] = ReviewTableRow(RelativeReviewValues("3", "#34 Near Ahead", "-2.350", ""), "#33CEFF", relativeLapDelta: showLapRelationship ? (int?)1 : null);
         }
 
         rows[referenceIndex] = ReviewTableRow(RelativeReviewValues("5", "#55 Focus Driver", "0.000", ""), "#FFDA59", isReference: true, relativeLapDelta: showLapRelationship ? (int?)0 : null);
-        if (referenceIndex + 1 < rows.Length)
+        if (!focusOnly && referenceIndex + 1 < rows.Length)
         {
             rows[referenceIndex + 1] = ReviewTableRow(RelativeReviewValues("6", "#61 Near Behind", "+1.200", "IN"), "#FF4FD8", relativeLapDelta: showLapRelationship ? (int?)-2 : null);
         }
@@ -2648,13 +2762,16 @@ internal static class Program
             "session-off" => "Session",
             "signal-off" => "Pit Signal",
             "service-off" => "Service Request",
+            "grid-only" => "__all_metric_sections__",
             _ => string.Empty
         };
-        var sections = string.IsNullOrEmpty(removedTitle)
-            ? body.MetricSections
-            : body.MetricSections
-                .Where(section => !string.Equals(section.Title, removedTitle, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
+        IReadOnlyList<DesignV2MetricSection> sections = string.Equals(removedTitle, "__all_metric_sections__", StringComparison.Ordinal)
+            ? []
+            : string.IsNullOrEmpty(removedTitle)
+                ? body.MetricSections
+                : body.MetricSections
+                    .Where(section => !string.Equals(section.Title, removedTitle, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
         IReadOnlyList<DesignV2MetricGridSection> grid = string.Equals(slug, "tire-analysis-off", StringComparison.OrdinalIgnoreCase)
             ? []
             : body.Sections;
@@ -3112,6 +3229,56 @@ internal static class Program
             ShowFooter: false);
     }
 
+    private static DesignV2OverlayModel ReviewFlagsSixKindsModel()
+    {
+        var flags = new[]
+        {
+            new FlagOverlayDisplayItem(FlagDisplayKind.Green, FlagDisplayCategory.Green, "Green", null, SimpleTelemetryTone.Success),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Blue, FlagDisplayCategory.Blue, "Blue", null, SimpleTelemetryTone.Info),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Yellow, FlagDisplayCategory.Yellow, "Yellow", null, SimpleTelemetryTone.Warning),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Debris, FlagDisplayCategory.Yellow, "Debris", null, SimpleTelemetryTone.Warning),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Caution, FlagDisplayCategory.Yellow, "Caution", "waving", SimpleTelemetryTone.Warning),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Red, FlagDisplayCategory.Critical, "Red", null, SimpleTelemetryTone.Error)
+        };
+        return ReviewFlagsModel(flags, "green + blue + yellow + debris + caution + red");
+    }
+
+    private static DesignV2OverlayModel ReviewFlagsRaceStartPseudoModel()
+    {
+        var flags = new[]
+        {
+            new FlagOverlayDisplayItem(FlagDisplayKind.Yellow, FlagDisplayCategory.Yellow, "One to green", null, SimpleTelemetryTone.Warning),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Green, FlagDisplayCategory.Green, "Start", null, SimpleTelemetryTone.Success)
+        };
+        return ReviewFlagsModel(flags, "one to green + start");
+    }
+
+    private static DesignV2OverlayModel ReviewFlagsPracticePseudoSuppressedModel()
+    {
+        var flags = new[]
+        {
+            new FlagOverlayDisplayItem(FlagDisplayKind.Blue, FlagDisplayCategory.Blue, "Blue", null, SimpleTelemetryTone.Info)
+        };
+        return ReviewFlagsModel(flags, "blue");
+    }
+
+    private static DesignV2OverlayModel ReviewFlagsPracticeLocalYellowModel()
+    {
+        var flags = new[]
+        {
+            new FlagOverlayDisplayItem(FlagDisplayKind.Yellow, FlagDisplayCategory.Yellow, "Yellow", "local", SimpleTelemetryTone.Warning),
+            new FlagOverlayDisplayItem(FlagDisplayKind.Blue, FlagDisplayCategory.Blue, "Blue", null, SimpleTelemetryTone.Info)
+        };
+        return ReviewFlagsModel(flags, "yellow + blue");
+    }
+
+    private static DesignV2OverlayModel ReviewFlagsModel(OverlaySessionKind previewMode)
+    {
+        return previewMode == OverlaySessionKind.Race
+            ? ReviewFlagsModel()
+            : ReviewFlagsPracticePseudoSuppressedModel();
+    }
+
     private static DesignV2OverlayModel ReviewFlagsModel()
     {
         var flags = new[]
@@ -3120,9 +3287,14 @@ internal static class Program
             new FlagOverlayDisplayItem(FlagDisplayKind.Blue, FlagDisplayCategory.Blue, "Blue", null, SimpleTelemetryTone.Info),
             new FlagOverlayDisplayItem(FlagDisplayKind.Checkered, FlagDisplayCategory.Finish, "Checkered", null, SimpleTelemetryTone.Info)
         };
+        return ReviewFlagsModel(flags, "yellow + blue + checkered");
+    }
+
+    private static DesignV2OverlayModel ReviewFlagsModel(IReadOnlyList<FlagOverlayDisplayItem> flags, string status)
+    {
         return new DesignV2OverlayModel(
             "Flags",
-            "yellow + blue + checkered",
+            status,
             "source: session flags telemetry",
             DesignV2Evidence.Live,
             new DesignV2FlagsBody(flags, IsWaiting: false, ManagedEnabled: true, SettingsOverlayActive: false),
@@ -3444,6 +3616,17 @@ internal static class Program
             new PreviewModeSpec(OverlaySessionKind.Qualifying, "qualifying", "Qualifying"),
             new PreviewModeSpec(OverlaySessionKind.Race, "race", "Race")
         ];
+    }
+
+    private static string PreviewModeFileStem(OverlaySessionKind kind)
+    {
+        return kind switch
+        {
+            OverlaySessionKind.Practice => "practice",
+            OverlaySessionKind.Qualifying => "qualifying",
+            OverlaySessionKind.Race => "race",
+            _ => "test"
+        };
     }
 
     private static IReadOnlyList<PreviewModeSpec> PreviewModesForOverlay(string overlayId)
@@ -10025,6 +10208,20 @@ internal static class Program
                     "Fast repair selected",
                     "Fast repairs available"
                 ],
+                "grid-only" =>
+                [
+                    "Session time",
+                    "Session laps",
+                    "Release",
+                    "Pit status",
+                    "Fuel requested",
+                    "Fuel selected",
+                    "Tearoff requested",
+                    "Required repair",
+                    "Optional repair",
+                    "Fast repair selected",
+                    "Fast repairs available"
+                ],
                 "tire-analysis-off" =>
                 [
                     "Compound",
@@ -10203,7 +10400,8 @@ internal static class Program
     private sealed record NativeOverlayVariantSpec(
         string OverlayId,
         string Slug,
-        string Label);
+        string Label,
+        OverlaySessionKind PreviewMode = OverlaySessionKind.Race);
 
     private sealed record ScreenshotRunOptions(
         string OutputRoot,

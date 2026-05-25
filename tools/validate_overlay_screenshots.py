@@ -109,7 +109,7 @@ WINDOWS_EXPECTED_PNGS = {
     "states/relative-live.png": (360, 308),
     "states/standings-live.png": (665, 313),
     "states/track-map-placeholder.png": (360, 360),
-    "states/flags-blue.png": (360, 170),
+    "states/flags-blue.png": (270, 128),
     "states/session-weather-live.png": (464, 496),
     "states/pit-service-active.png": (530, 707),
     "states/input-state-trace.png": (520, 260),
@@ -137,6 +137,7 @@ WINDOWS_NATIVE_OVERLAY_CONTENT_SIZE_SOURCES = {
     "standings": "src/TmrOverlay.App/Overlays/Content/OverlayContentColumnSettings.cs",
     "fuel-calculator": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json",
     "relative": "src/TmrOverlay.App/Overlays/Content/OverlayContentColumnSettings.cs",
+    "session-weather": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json",
 }
 
 def overlay_geometry_contract_for_constants() -> dict[str, object]:
@@ -298,8 +299,8 @@ WINDOWS_NATIVE_OVERLAY_SIZES = {
     "relative": (392, 308),
     "track-map": (360, 360),
     "stream-chat": (380, 520),
-    "flags": (360, 170),
-    "session-weather": (464, 496),
+    "flags": (270, 128),
+    "session-weather": (464, 493),
     "pit-service": (530, 707),
     "input-state": (520, 260),
     "car-radar": (300, 300),
@@ -311,8 +312,10 @@ OVERLAY_PREVIEW_EXPECTED_SIZES = {
     ("fuel-calculator", "qualifying"): (503, 178),
     ("standings", "practice"): (557, 313),
     ("standings", "qualifying"): (557, 313),
-    ("session-weather", "practice"): (464, 456),
-    ("session-weather", "qualifying"): (464, 456),
+    ("flags", "practice"): (180, 96),
+    ("flags", "qualifying"): (180, 96),
+    ("session-weather", "practice"): (464, 453),
+    ("session-weather", "qualifying"): (464, 453),
 }
 
 WEB_OVERLAY_EXPECTED_SIZES = {
@@ -383,8 +386,8 @@ MIN_SCALE_EXPECTED_SIZES = {
     ("relative", "min-scale"): (235, 185),
     ("track-map", "min-scale"): (216, 216),
     ("stream-chat", "min-scale"): (228, 312),
-    ("flags", "min-scale"): (216, 102),
-    ("session-weather", "min-scale"): (278, 298),
+    ("flags", "min-scale"): (162, 77),
+    ("session-weather", "min-scale"): (278, 296),
     ("pit-service", "min-scale"): (318, 424),
     ("input-state", "min-scale"): (312, 156),
     ("car-radar", "min-scale"): (180, 180),
@@ -417,12 +420,14 @@ OVERLAY_VARIANT_SPECS = (
     ("standings", "no-content", "fixture=standings-no-content", True, None),
     ("standings", "content-off-chrome-on", "fixture=standings-content-off-chrome-on", True, None),
     ("standings", "no-results-chrome-on", "fixture=standings-no-results-chrome-on", True, None),
+    ("standings", "zero-default-timing", "fixture=standings-zero-default-timing", False, None),
     ("standings", "min-scale", "fixture=standings-min-scale", True, None),
     ("relative", "chrome-off", "fixture=chrome-off", True, None),
     ("relative", "rightmost-evidence", "fixture=rightmost-evidence", True, None),
     ("relative", "driver-only", "fixture=relative-driver-only", True, None),
     ("relative", "position-driver", "fixture=relative-position-driver", True, None),
     ("relative", "rows-2", "fixture=relative-rows-2", True, None),
+    ("relative", "empty-rows", "fixture=relative-empty-rows", True, None),
     ("relative", "no-content", "fixture=relative-no-content", True, None),
     ("relative", "min-scale", "fixture=relative-min-scale", True, None),
     ("fuel-calculator", "chrome-off", "fixture=chrome-off", True, None),
@@ -441,6 +446,7 @@ OVERLAY_VARIANT_SPECS = (
     ("pit-service", "session-off", "fixture=pit-service-session-off", True, None),
     ("pit-service", "signal-off", "fixture=pit-service-signal-off", True, None),
     ("pit-service", "service-off", "fixture=pit-service-service-off", True, None),
+    ("pit-service", "grid-only", "fixture=pit-service-grid-only", True, None),
     ("pit-service", "tire-analysis-off", "fixture=pit-service-tire-analysis-off", True, None),
     ("pit-service", "no-data", "fixture=pit-service-no-data", True, None),
     ("input-state", "mock-data", "fixture=input-state-mock-data", True, None),
@@ -470,6 +476,10 @@ OVERLAY_VARIANT_SPECS = (
     ("track-map", "player-focus-class-color", "fixture=track-map-player-focus-class-color", True, None),
     ("track-map", "min-scale", "fixture=track-map-min-scale", True, None),
     ("flags", "all-kinds", "fixture=flags-all-kinds", True, None),
+    ("flags", "six-kinds", "fixture=flags-six-kinds", True, None),
+    ("flags", "race-start-pseudo", "fixture=flags-race-start-pseudo", True, None),
+    ("flags", "practice-pseudo-suppressed", "fixture=flags-practice-pseudo-suppressed", True, None),
+    ("flags", "practice-local-yellow", "fixture=flags-practice-local-yellow", True, None),
     ("flags", "min-scale", "fixture=flags-min-scale", True, None),
     ("garage-cover", "hidden", "fixture=garage-hidden", False, None),
     ("garage-cover", "garage-visible", "fixture=garage-visible", False, None),
@@ -648,12 +658,14 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("standings", "no-content"): (284, 28),
     ("standings", "content-off-chrome-on"): (284, 40),
     ("standings", "no-results-chrome-on"): (677, 40),
+    ("standings", "zero-default-timing"): (677, 40),
     ("standings", "min-scale"): (406, 188),
     ("relative", "chrome-off"): (392, 274),
     ("relative", "rightmost-evidence"): (440, 308),
     ("relative", "driver-only"): (274, 308),
     ("relative", "position-driver"): (322, 308),
     ("relative", "rows-2"): (392, 246),
+    ("relative", "empty-rows"): (392, 308),
     ("relative", "no-content"): (360, 274),
     ("gap-to-leader", "chrome-off"): (654, 298),
     ("gap-to-leader", "long-tail-real-data"): (654, 336),
@@ -663,8 +675,14 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("gap-to-leader", "tire-trend-off"): (654, 336),
     ("gap-to-leader", "trend-off"): (444, 336),
     ("gap-to-leader", "graph-off"): (360, 336),
-    ("session-weather", "chrome-off"): (464, 458),
+    ("session-weather", "chrome-off"): (464, 455),
     ("pit-service", "chrome-off"): (530, 669),
+    ("pit-service", "grid-only"): (530, 387),
+    ("flags", "all-kinds"): (532, 188),
+    ("flags", "six-kinds"): (401, 128),
+    ("flags", "race-start-pseudo"): (270, 96),
+    ("flags", "practice-pseudo-suppressed"): (180, 96),
+    ("flags", "practice-local-yellow"): (270, 96),
     ("input-state", "graph-only"): (380, 260),
     ("input-state", "rail-only"): (276, 260),
 }
@@ -696,6 +714,7 @@ WINDOWS_NATIVE_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("standings", "no-content"): (284, 28),
     ("standings", "content-off-chrome-on"): (284, 40),
     ("standings", "no-results-chrome-on"): (677, 40),
+    ("session-weather", "no-data"): (464, 496),
     ("relative", "chrome-off"): (392, 274),
     ("relative", "rightmost-evidence"): (440, 308),
     ("relative", "driver-only"): (274, 308),
@@ -2013,6 +2032,7 @@ def allows_empty_table_evidence(path: str) -> bool:
         ("standings", "no-content"),
         ("standings", "content-off-chrome-on"),
         ("standings", "no-results-chrome-on"),
+        ("standings", "zero-default-timing"),
     }
 
 
@@ -5775,6 +5795,8 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
         validate_relative_contract(path, values, failures)
     elif overlay_id == "relative" and slug == "rightmost-evidence":
         validate_relative_rightmost_variant(path, values, failures)
+    elif overlay_id == "relative" and slug == "empty-rows":
+        validate_relative_empty_rows_variant(path, values, failures)
     elif overlay_id == "standings":
         validate_standings_variant(path, values, slug, failures)
     elif overlay_id == "relative" and slug == "no-content":
@@ -5787,7 +5809,7 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
         validate_session_weather_no_data_variant(path, values, failures)
     elif overlay_id == "pit-service" and slug == "idle":
         validate_pit_service_idle_variant(path, values, failures)
-    elif overlay_id == "pit-service" and slug in {"session-off", "signal-off", "service-off", "tire-analysis-off"}:
+    elif overlay_id == "pit-service" and slug in {"session-off", "signal-off", "service-off", "grid-only", "tire-analysis-off"}:
         validate_pit_service_section_off_variant(path, values, slug, failures)
     elif overlay_id == "pit-service" and slug == "no-data":
         validate_pit_service_no_data_variant(path, values, failures)
@@ -5822,8 +5844,8 @@ def validate_overlay_variant_contract(path: str, values: dict[str, object], fail
             validate_gap_to_leader_contract(path, values, failures)
     elif overlay_id == "track-map":
         validate_track_map_variant(path, values, slug, failures)
-    elif overlay_id == "flags" and slug == "all-kinds":
-        validate_flags_all_kinds_variant(path, values, failures)
+    elif overlay_id == "flags":
+        validate_flags_variant(path, values, slug, failures)
     elif overlay_id == "garage-cover":
         validate_garage_cover_variant(path, values, slug, failures)
     elif overlay_id == "stream-chat":
@@ -6040,6 +6062,35 @@ def validate_relative_no_content_variant(path: str, values: dict[str, object], f
     require_effective_setting_value(path, settings, "chrome.header.time-remaining.race", False, failures)
 
 
+def validate_relative_empty_rows_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
+    require_equal(path, "relative empty-rows bodyKind", values.get("bodyKind"), "table", failures)
+    require_equal(path, "relative empty-rows shouldRender", values.get("shouldRender"), True, failures)
+    model = model_evidence(values)
+    rows = evidence_list(model, "rows")
+    if len(rows) != 7:
+        failures.append(f"{path}: relative empty-rows expected 7 stable rows, got {len(rows)}")
+        return
+
+    reference_indices = [index for index, row in enumerate(rows) if get_manifest_value(row, "isReference") is True]
+    if reference_indices != [3]:
+        failures.append(f"{path}: relative empty-rows expected reference row at index 3, got {reference_indices}")
+    if "#55 Focus Driver" not in combined_row_text(typed_dict(rows[3])):
+        failures.append(f"{path}: relative empty-rows reference row missing focus driver text")
+
+    for index, row in enumerate(rows):
+        row_dict = typed_dict(row)
+        if index == 3:
+            continue
+        if not table_row_is_placeholder(row_dict):
+            failures.append(f"{path}: relative empty-rows row {index} expected placeholder evidence")
+        cells = row_cells(row_dict)
+        if any(str(cell).strip() for cell in cells):
+            failures.append(f"{path}: relative empty-rows placeholder row {index} has non-empty cells {cells!r}")
+
+    validate_relative_placeholder_fade(path, rows, failures)
+    validate_rows_monotonic(path, rows, failures)
+
+
 def validate_session_weather_missing_variant(path: str, values: dict[str, object], failures: list[str]) -> None:
     require_equal(path, "session weather missing bodyKind", values.get("bodyKind"), "metrics", failures)
     require_equal(path, "session weather missing status", values.get("status"), "weather unavailable", failures)
@@ -6085,10 +6136,10 @@ def validate_session_weather_missing_variant(path: str, values: dict[str, object
         tone = text_value(row, "tone").lower() if isinstance(row, dict) else ""
         if tone not in ("waiting", "unavailable"):
             failures.append(f"{path}: expected {section_title}/{row_label} unavailable tone, got {tone!r}")
-    require_equal(path, "session weather missing screenshot height", values.get("height"), 496, failures)
+    require_equal(path, "session weather missing screenshot height", values.get("height"), 493, failures)
     browser_source = typed_dict(rendered.get("browserSource"))
-    require_equal(path, "session weather missing browser source baseHeight", browser_source.get("baseHeight"), 496, failures)
-    require_equal(path, "session weather missing browser source height", browser_source.get("height"), 496, failures)
+    require_equal(path, "session weather missing browser source baseHeight", browser_source.get("baseHeight"), 493, failures)
+    require_equal(path, "session weather missing browser source height", browser_source.get("height"), 493, failures)
 
 
 def validate_session_weather_section_off_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
@@ -6153,6 +6204,7 @@ def validate_pit_service_section_off_variant(path: str, values: dict[str, object
         "session-off": ["Pit Signal", "Service Request"],
         "signal-off": ["Session", "Service Request"],
         "service-off": ["Session", "Pit Signal"],
+        "grid-only": [],
         "tire-analysis-off": ["Session", "Pit Signal", "Service Request"],
     }[slug]
     expected_grid_sections = [] if slug == "tire-analysis-off" else ["Tire Analysis"]
@@ -6160,6 +6212,7 @@ def validate_pit_service_section_off_variant(path: str, values: dict[str, object
         "session-off": ["Time / Laps"],
         "signal-off": ["Release", "Pit status"],
         "service-off": ["Fuel request", "Tearoff", "Repair", "Fast repair"],
+        "grid-only": ["Time / Laps", "Release", "Pit status", "Fuel request", "Tearoff", "Repair", "Fast repair"],
         "tire-analysis-off": ["Compound", "Change request", "Set limit", "Sets available", "Sets used", "Pressure", "Temperature", "Wear", "Distance"],
     }[slug]
     model = model_evidence(values)
@@ -6969,6 +7022,9 @@ def validate_flags_all_kinds_variant(path: str, values: dict[str, object], failu
     flags = typed_dict(model_evidence(values).get("flags"))
     expected = ["green", "blue", "yellow", "debris", "caution", "red", "black", "meatball", "white", "checkered"]
     expected_columns, expected_rows = expected_flag_grid(len(expected))
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        expected_width, expected_height = expected_flag_size(len(expected))
+        require_configured_canvas_backing_contract(path, values, "flags", expected_width, expected_height, failures)
     require_equal(path, "flags all-kinds bodyKind", values.get("bodyKind"), "flags", failures)
     require_equal(path, "flags all-kinds flagCount", values.get("flagCount"), len(expected), failures)
     require_sequence(path, "flags all-kinds visual kinds", [normalize_flag_kind(kind) for kind in evidence_list(flags, "visualKinds")], expected, failures)
@@ -7000,6 +7056,98 @@ def validate_flags_all_kinds_variant(path: str, values: dict[str, object], failu
             f"flags all-kinds cell {index} bounds",
             failures,
             tolerance=1.0)
+
+
+def validate_flags_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
+    if slug == "all-kinds":
+        validate_flags_all_kinds_variant(path, values, failures)
+    elif slug == "six-kinds":
+        validate_flags_variant_cells(
+            path,
+            values,
+            slug,
+            ["green", "blue", "yellow", "debris", "caution", "red"],
+            None,
+            failures)
+    elif slug == "race-start-pseudo":
+        validate_flags_variant_cells(
+            path,
+            values,
+            slug,
+            ["yellow", "green"],
+            ["One to green", "Start"],
+            failures)
+    elif slug == "practice-pseudo-suppressed":
+        validate_flags_variant_cells(path, values, slug, ["blue"], ["Blue"], failures)
+        text = str(values.get("textSample") or "")
+        for hidden in ("One to green", "Ready", "Start", "Yellow"):
+            if hidden.lower() in text.lower():
+                failures.append(f"{path}: flags practice-pseudo-suppressed leaked hidden pseudo/yellow text {hidden!r}")
+    elif slug == "practice-local-yellow":
+        validate_flags_variant_cells(path, values, slug, ["yellow", "blue"], ["Yellow", "Blue"], failures)
+    else:
+        failures.append(f"{path}: unknown flags fixture variant {slug!r}")
+
+
+def validate_flags_variant_cells(
+    path: str,
+    values: dict[str, object],
+    slug: str,
+    expected_kinds: list[str],
+    expected_labels: Optional[list[str]],
+    failures: list[str],
+) -> None:
+    flags = typed_dict(model_evidence(values).get("flags"))
+    expected_columns, expected_rows = expected_flag_grid(len(expected_kinds))
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        expected_width, expected_height = expected_flag_size(len(expected_kinds))
+        require_configured_canvas_backing_contract(path, values, "flags", expected_width, expected_height, failures)
+
+    require_equal(path, f"flags {slug} bodyKind", values.get("bodyKind"), "flags", failures)
+    require_equal(path, f"flags {slug} shouldRender", values.get("shouldRender"), True, failures)
+    require_equal(path, f"flags {slug} flagCount", values.get("flagCount"), len(expected_kinds), failures)
+    require_sequence(path, f"flags {slug} kinds", [normalize_flag_kind(kind) for kind in evidence_list(flags, "kinds")], expected_kinds, failures)
+    require_sequence(path, f"flags {slug} visualKinds", [normalize_flag_kind(kind) for kind in evidence_list(flags, "visualKinds")], expected_kinds, failures)
+    for field, expected_value in (("gridColumns", expected_columns), ("gridRows", expected_rows), ("count", len(expected_kinds))):
+        if flags.get(field) != expected_value:
+            failures.append(f"{path}: flags {slug} expected {field} {expected_value}, got {flags.get(field)!r}")
+    grid = typed_dict(flags.get("grid"))
+    if grid.get("columns") != expected_columns or grid.get("rows") != expected_rows:
+        failures.append(f"{path}: flags {slug} expected grid {expected_columns}x{expected_rows}, got {grid.get('columns')!r}x{grid.get('rows')!r}")
+
+    labels = expected_labels or [expected_flag_label(kind) for kind in expected_kinds]
+    cells = evidence_list(flags, "cells")
+    if len(cells) != len(expected_kinds):
+        failures.append(f"{path}: flags {slug} expected {len(expected_kinds)} cells, got {len(cells)}")
+    for index, cell in enumerate(cells):
+        cell_dict = typed_dict(cell)
+        kind = expected_kinds[index] if index < len(expected_kinds) else ""
+        expected_label = labels[index] if index < len(labels) else expected_flag_label(kind)
+        expected_bounds, expected_cloth = expected_flag_rects_for_values(values, index, len(expected_kinds))
+        if cell_dict.get("index") != index:
+            failures.append(f"{path}: flags {slug} cell {index} expected index {index}, got {cell_dict.get('index')!r}")
+        if cell_dict.get("row") != index // max(1, expected_columns) or cell_dict.get("column") != index % max(1, expected_columns):
+            failures.append(f"{path}: flags {slug} cell {index} grid position mismatch")
+        if normalize_flag_kind(cell_dict.get("kind")) != kind:
+            failures.append(f"{path}: flags {slug} cell {index} expected kind {kind!r}, got {cell_dict.get('kind')!r}")
+        if normalize_flag_kind(cell_dict.get("visualKind")) != kind:
+            failures.append(f"{path}: flags {slug} cell {index} expected visualKind {kind!r}, got {cell_dict.get('visualKind')!r}")
+        if text_value(cell_dict, "label").lower() != expected_label.lower():
+            failures.append(f"{path}: flags {slug} cell {index} expected visible label {expected_label!r}, got {cell_dict.get('label')!r}")
+        if cell_dict.get("fill") != expected_flag_fill(kind):
+            failures.append(f"{path}: flags {slug} cell {index} expected fill {expected_flag_fill(kind)!r}, got {cell_dict.get('fill')!r}")
+        require_rect(path, get_manifest_value(cell_dict, "bounds"), f"flags {slug} cell {index} bounds", failures)
+        require_rect(path, get_manifest_value(cell_dict, "clothBounds"), f"flags {slug} cell {index} cloth bounds", failures)
+        require_rect_within(
+            path,
+            f"flags {slug} cell {index} visible label bounds",
+            get_manifest_value(cell_dict, "labelBounds"),
+            get_manifest_value(cell_dict, "bounds"),
+            f"flags {slug} cell {index} bounds",
+            failures,
+            tolerance=1.0)
+        assert_rect_close(path, f"flags {slug} cell {index} bounds", get_manifest_value(cell_dict, "bounds"), expected_bounds, 0.75, failures)
+        assert_rect_close(path, f"flags {slug} cell {index} cloth bounds", get_manifest_value(cell_dict, "clothBounds"), expected_cloth, 0.75, failures)
 
 
 def validate_garage_cover_variant(path: str, values: dict[str, object], slug: str, failures: list[str]) -> None:
@@ -7094,8 +7242,10 @@ def validate_standings_contract(path: str, values: dict[str, object], failures: 
     if slug == "content-off-chrome-on":
         validate_standings_content_off_chrome_on_variant(path, values, failures)
         return
-    if slug == "no-results-chrome-on":
+    if slug in {"no-results-chrome-on", "zero-default-timing"}:
         validate_standings_no_results_chrome_on_variant(path, values, failures)
+        if slug == "zero-default-timing" and "zero/default timing placeholders filtered" not in str(values.get("source") or ""):
+            failures.append(f"{path}: standings zero-default-timing source did not prove placeholder filtering")
         return
 
     expected_labels, expected_widths, expected_alignments = expected_standings_columns(mode, slug)
@@ -7188,6 +7338,7 @@ def validate_standings_variant(path: str, values: dict[str, object], slug: str, 
         "no-content",
         "content-off-chrome-on",
         "no-results-chrome-on",
+        "zero-default-timing",
         "min-scale",
     }:
         failures.append(f"{path}: unknown standings fixture variant {slug!r}")
@@ -8555,24 +8706,24 @@ def validate_track_map_contract(path: str, values: dict[str, object], failures: 
 def validate_flags_contract(path: str, values: dict[str, object], failures: list[str]) -> None:
     flags = typed_dict(model_evidence(values).get("flags"))
     require_equal(path, "flags bodyKind", values.get("bodyKind"), "flags", failures)
-    if path.startswith(("browser-overlays/", "localhost-overlays/")):
-        overlay_sizes = overlay_geometry_section_for_constants("overlaySizes")
-        require_configured_canvas_backing_contract(
-            path,
-            values,
-            "flags",
-            int(geometry_number(overlay_sizes, "flagsWidth", 360)),
-            int(geometry_number(overlay_sizes, "flagsHeight", 170)),
-            failures)
     if values.get("shouldRender") is not True:
         failures.append(f"{path}: flags expected shouldRender=true, got {values.get('shouldRender')!r}")
     kinds = [normalize_flag_kind(kind) for kind in evidence_list(flags, "kinds")]
     if values.get("previewMode") == "practice":
         expected = ["blue"]
     elif values.get("previewMode") == "qualifying":
-        expected = ["yellow", "blue"]
+        expected = ["blue"]
     else:
         expected = ["yellow", "blue", "checkered"]
+    if path.startswith(("browser-overlays/", "localhost-overlays/")):
+        expected_width, expected_height = expected_flag_size(len(expected))
+        require_configured_canvas_backing_contract(
+            path,
+            values,
+            "flags",
+            expected_width,
+            expected_height,
+            failures)
     expected_columns, expected_rows = expected_flag_grid(len(expected))
     if values.get("flagCount") != len(expected):
         failures.append(f"{path}: flags expected flagCount {len(expected)}, got {values.get('flagCount')!r}")
@@ -9320,6 +9471,29 @@ def expected_flag_grid(count: int) -> tuple[int, int]:
         return 3, 2
     columns = max(1, int(geometry_number(flags_geometry, "gridMaximumColumns", 4)))
     return columns, (count + columns - 1) // columns
+
+
+def expected_flag_size(count: int) -> tuple[int, int]:
+    flags_geometry = overlay_geometry_section_for_constants("flags")
+    overlay_sizes = overlay_geometry_section_for_constants("overlaySizes")
+    minimum_width = int(geometry_number(flags_geometry, "minimumWidth", 180))
+    minimum_height = int(geometry_number(flags_geometry, "minimumHeight", 96))
+    if count <= 1:
+        return minimum_width, minimum_height
+
+    columns, rows = expected_flag_grid(count)
+    padding = geometry_number(flags_geometry, "outerPadding", 8.0)
+    gap = geometry_number(flags_geometry, "cellGap", 8.0)
+    default_width = geometry_number(overlay_sizes, "flagsWidth", 270.0)
+    default_height = geometry_number(overlay_sizes, "flagsHeight", 128.0)
+    default_cell_width = (default_width - padding * 2 - gap) / 2
+    default_cell_height = (default_height - padding * 2 - gap) / 2
+    width = round(columns * default_cell_width + max(0, columns - 1) * gap + padding * 2)
+    height = round(rows * default_cell_height + max(0, rows - 1) * gap + padding * 2)
+    return (
+        int(max(minimum_width, min(geometry_number(flags_geometry, "maximumWidth", 960.0), width))),
+        int(max(minimum_height, min(geometry_number(flags_geometry, "maximumHeight", 420.0), height))),
+    )
 
 
 def expected_flag_fill(kind: str) -> str:
@@ -11568,6 +11742,7 @@ def mutation_track_map_variant_screenshot() -> dict[str, object]:
 def mutation_flags_all_kinds_screenshot() -> dict[str, object]:
     kinds = ["green", "blue", "yellow", "debris", "caution", "red", "black", "meatball", "white", "checkered"]
     columns, rows = expected_flag_grid(len(kinds))
+    width, height = expected_flag_size(len(kinds))
     cells: list[dict[str, object]] = []
     for index, kind in enumerate(kinds):
         bounds, cloth_bounds = expected_flag_rects(index, len(kinds))
@@ -11597,6 +11772,12 @@ def mutation_flags_all_kinds_screenshot() -> dict[str, object]:
         "flagCount": len(kinds),
         "status": "all flags",
         "shouldRender": True,
+        "width": width,
+        "height": height,
+        "captureMode": "configured-browser-source-canvas",
+        "configuredOverlaySize": {"width": width, "height": height},
+        "compositingMode": "solid-review-backdrop",
+        "captureBackdrop": {"kind": "solid-color", "color": "rgb(12, 16, 22)"},
         "scenarioEvidence": mutation_scenario_evidence(
             slug="all-kinds",
             query="fixture=flags-all-kinds",
@@ -13212,6 +13393,16 @@ def expected_native_overlay_content_size(
     if overlay_id in {"standings", "relative"}:
         return expected_table_overlay_content_size(overlay_id, definition_size, repo_root, contract_path, failures)
 
+    if overlay_id == "session-weather":
+        return expected_simple_telemetry_overlay_content_size(
+            overlay_id,
+            definition_size,
+            repo_root,
+            contract_path,
+            failures,
+            metric_row_counts=[5, 5],
+            grid_row_counts=[])
+
     if overlay_id != "fuel-calculator":
         failures.append(f"{overlay_id}: missing native content-size contract implementation")
         return None
@@ -13265,6 +13456,79 @@ def expected_native_overlay_content_size(
         + numeric(metric_rows["collapsedFooterReserveHeight"])
     )
     height = max(numeric(metric_rows["minimumFuelCalculatorHeight"]), min(height, definition_size[1]))
+    return definition_size[0], round(height)
+
+
+def expected_simple_telemetry_overlay_content_size(
+    overlay_id: str,
+    definition_size: tuple[int, int],
+    repo_root: Path,
+    contract_path: str,
+    failures: list[str],
+    *,
+    metric_row_counts: list[int],
+    grid_row_counts: list[int],
+) -> Optional[tuple[int, int]]:
+    path = repo_root / contract_path
+    try:
+        contract = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        failures.append(f"{contract_path}: {exc}")
+        return None
+
+    metric_rows = typed_dict(contract.get("metricRows")) if isinstance(contract, dict) else {}
+    required_keys = {
+        "minimumSimpleTelemetryHeight",
+        "sectionTitleHeight",
+        "sectionTitleBottomGap",
+        "segmentedRowHeight",
+        "rowGap",
+        "pitServiceSectionGap",
+        "metricGridGap",
+        "metricGridHeaderHeight",
+        "metricGridHeaderBottomGap",
+        "metricGridRowHeight",
+        "metricGridRowGap",
+        "pitServiceContentChromeHeight",
+    }
+    missing = sorted(key for key in required_keys if not is_numeric_value(metric_rows.get(key)))
+    if missing:
+        failures.append(f"{contract_path}: missing numeric simple telemetry contract keys {missing}")
+        return None
+
+    sizing_source = repo_root / "src/TmrOverlay.App/Overlays/Content/OverlayContentSizing.cs"
+    try:
+        sizing_content = sizing_source.read_text(encoding="utf-8")
+    except OSError as exc:
+        failures.append(f"{sizing_source}: {exc}")
+        return None
+
+    for token in ("SimpleTelemetrySizeForRenderedRowCounts", "SimpleTelemetryRenderedHeight", "PitServiceContentChromeHeight"):
+        if token not in sizing_content:
+            failures.append(f"{sizing_source}: missing simple telemetry content-size contract token {token!r}")
+            return None
+
+    metric_heights = [
+        numeric(metric_rows["sectionTitleHeight"])
+        + numeric(metric_rows["sectionTitleBottomGap"])
+        + row_count * numeric(metric_rows["segmentedRowHeight"])
+        + max(0, row_count - 1) * numeric(metric_rows["rowGap"])
+        for row_count in metric_row_counts
+        if row_count > 0
+    ]
+    grid_heights = [
+        numeric(metric_rows["metricGridHeaderHeight"])
+        + numeric(metric_rows["metricGridHeaderBottomGap"])
+        + row_count * numeric(metric_rows["metricGridRowHeight"])
+        + max(0, row_count - 1) * numeric(metric_rows["metricGridRowGap"])
+        for row_count in grid_row_counts
+        if row_count > 0
+    ]
+    metric_height = sum(metric_heights) + max(0, len(metric_heights) - 1) * numeric(metric_rows["pitServiceSectionGap"])
+    grid_height = sum(grid_heights) + max(0, len(grid_heights) - 1) * numeric(metric_rows["metricGridGap"])
+    content_gap = numeric(metric_rows["metricGridGap"]) if metric_height > 0 and grid_height > 0 else 0
+    height = metric_height + content_gap + grid_height + numeric(metric_rows["pitServiceContentChromeHeight"])
+    height = max(numeric(metric_rows["minimumSimpleTelemetryHeight"]), min(height, definition_size[1]))
     return definition_size[0], round(height)
 
 

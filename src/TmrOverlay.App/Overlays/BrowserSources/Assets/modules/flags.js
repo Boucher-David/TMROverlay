@@ -40,8 +40,9 @@ function clearFlagsSurface() {
 }
 
 function flagsSvg(flags) {
-  const width = Math.max(flagGeometryNumber('minimumWidth', 180), window.innerWidth || 360);
-  const height = Math.max(flagGeometryNumber('minimumHeight', 96), window.innerHeight || 170);
+  const size = sizeForDisplayedFlagCount(flags.length);
+  const width = size.width;
+  const height = size.height;
   const padding = flagGeometryNumber('outerPadding', 8);
   const gap = flagGeometryNumber('cellGap', 8);
   const { columns, rows } = gridFor(flags.length);
@@ -230,9 +231,33 @@ function gridFor(count) {
   return { columns, rows: Math.ceil(count / columns) };
 }
 
+function sizeForDisplayedFlagCount(count) {
+  const minimumWidth = flagGeometryNumber('minimumWidth', 180);
+  const minimumHeight = flagGeometryNumber('minimumHeight', 96);
+  if (count <= 1) {
+    return { width: minimumWidth, height: minimumHeight };
+  }
+
+  const { columns, rows } = gridFor(count);
+  const padding = flagGeometryNumber('outerPadding', 8);
+  const gap = flagGeometryNumber('cellGap', 8);
+  const defaultWidth = flagGeometryNumber('defaultWidth', geometry?.overlaySizes?.flagsWidth || 270);
+  const defaultHeight = flagGeometryNumber('defaultHeight', geometry?.overlaySizes?.flagsHeight || 128);
+  const defaultCellWidth = (defaultWidth - padding * 2 - gap) / 2;
+  const defaultCellHeight = (defaultHeight - padding * 2 - gap) / 2;
+  return {
+    width: clampDimension(columns * defaultCellWidth + Math.max(0, columns - 1) * gap + padding * 2, minimumWidth, flagGeometryNumber('maximumWidth', 960)),
+    height: clampDimension(rows * defaultCellHeight + Math.max(0, rows - 1) * gap + padding * 2, minimumHeight, flagGeometryNumber('maximumHeight', 420))
+  };
+}
+
 function flagGeometryNumber(key, fallback) {
   const value = Number(flagsGeometry?.[key]);
   return Number.isFinite(value) ? value : fallback;
+}
+
+function clampDimension(value, min, max) {
+  return Math.max(min, Math.min(max, Math.round(value)));
 }
 
 function className(value) {

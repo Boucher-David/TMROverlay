@@ -19,12 +19,12 @@ public sealed class FlagsOverlayViewModelTests
     private const int StartGoFlag = unchecked((int)0x80000000);
 
     [Theory]
-    [InlineData(OneToGreenFlag, FlagDisplayKind.Yellow, "One to green")]
-    [InlineData(StartReadyFlag, FlagDisplayKind.Green, "Ready")]
-    [InlineData(StartGoFlag, FlagDisplayKind.Green, "Start")]
+    [InlineData(OneToGreenFlag, nameof(FlagDisplayKind.Yellow), "One to green")]
+    [InlineData(StartReadyFlag, nameof(FlagDisplayKind.Green), "Ready")]
+    [InlineData(StartGoFlag, nameof(FlagDisplayKind.Green), "Start")]
     public void ForDisplay_RaceStartWithRaceEventMetadata_ShowsRaceStartPseudoFlags(
         int sessionFlags,
-        FlagDisplayKind expectedKind,
+        string expectedKind,
         string expectedLabel)
     {
         var now = DateTimeOffset.UtcNow;
@@ -38,7 +38,7 @@ public sealed class FlagsOverlayViewModelTests
         var viewModel = FlagsOverlayViewModel.ForDisplay(snapshot, now);
 
         var flag = Assert.Single(viewModel.Flags);
-        Assert.Equal(expectedKind, flag.Kind);
+        Assert.Equal(expectedKind, flag.Kind.ToString());
         Assert.Equal(expectedLabel, flag.Label);
     }
 

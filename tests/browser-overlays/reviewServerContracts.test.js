@@ -348,7 +348,7 @@ describe('browser review server validation contracts', () => {
     expect.soft(metricRowLabels(missing, 'Weather')).toEqual(['Surface', 'Sky', 'Wind', 'Temps', 'Atmosphere']);
     expect.soft(missing.source).toMatch(/weather source unavailable/i);
     expect.soft(missing.effectiveSettings.rendered.unavailableContentPolicy).toBe('section-aware-placeholders');
-    expect.soft(missing.effectiveSettings.rendered.browserSource.baseHeight).toBe(496);
+    expect.soft(missing.effectiveSettings.rendered.browserSource.baseHeight).toBe(493);
 
     const weatherRows = (missing.metricSections || []).find((section) => section.title === 'Weather')?.rows || [];
     expect.soft(weatherRows).toHaveLength(5);

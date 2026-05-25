@@ -83,7 +83,7 @@ internal static class FlagsOverlayViewModel
 
         var flags = session.SessionFlags;
         var localDriverFlags = LocalDriverSessionFlags(snapshot);
-        var displayFlags = BuildDisplayFlags(flags, session.SessionState, localDriverFlags);
+        var displayFlags = BuildDisplayFlags(flags, session, localDriverFlags);
         return new FlagOverlayDisplayViewModel(
             IsWaiting: false,
             Status: displayFlags.Count == 0 ? "none" : string.Join(" + ", displayFlags.Select(flag => flag.Label)),
@@ -377,14 +377,21 @@ internal static class FlagsOverlayViewModel
 
     private static IReadOnlyList<FlagOverlayDisplayItem> BuildDisplayFlags(
         int? flags,
-        int? sessionState,
+        LiveSessionModel session,
         int? localDriverFlags = null)
     {
         var items = new List<PrioritizedFlagDisplayItem>();
+        var isRaceSession = IsRaceSession(session);
+        var suppressGlobalYellowFamily = IsPracticeOrQualifyingSession(session)
+            && !HasLocalYellowFamilyEvidence(localDriverFlags);
         if (flags is { } value)
         {
             AddCriticalFlags(value, localDriverFlags, items);
-            AddYellowFlags(value, items);
+            AddYellowFlags(
+                value,
+                items,
+                allowRaceStartPseudoFlags: isRaceSession,
+                allowGlobalYellowFamily: !suppressGlobalYellowFamily);
             AddIf(
                 value,
                 BlueFlag,
@@ -397,10 +404,10 @@ internal static class FlagsOverlayViewModel
                     null,
                     SimpleTelemetryTone.Info));
             AddFinishFlags(value, items);
-            AddGreenFlags(value, items);
+            AddGreenFlags(value, items, allowRaceStartPseudoFlags: isRaceSession);
         }
 
-        if (sessionState == 5 && !items.Any(item => item.Item.Kind == FlagDisplayKind.Checkered))
+        if (session.SessionState == 5 && !items.Any(item => item.Item.Kind == FlagDisplayKind.Checkered))
         {
             items.Add(new PrioritizedFlagDisplayItem(
                 60,
@@ -416,6 +423,31 @@ internal static class FlagsOverlayViewModel
             .OrderBy(item => item.Order)
             .Select(item => item.Item)
             .ToArray();
+    }
+
+    private static bool IsPracticeOrQualifyingSession(LiveSessionModel session)
+    {
+        return ContainsAny(session.SessionType, "practice", "qualify", "qualifying")
+            || ContainsAny(session.SessionName, "practice", "qualify", "qualifying")
+            || ContainsAny(session.EventType, "practice", "qualify", "qualifying");
+    }
+
+    private static bool ContainsAny(string? value, params string[] needles)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+            && needles.Any(needle => value.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
+    private static bool HasLocalYellowFamilyEvidence(int? localDriverFlags)
+    {
+        return localDriverFlags is { } flags
+            && (HasFlag(flags, YellowFlag)
+                || HasFlag(flags, WavingYellowFlag)
+                || HasFlag(flags, OneToGreenFlag)
+                || HasFlag(flags, DebrisFlag)
+                || HasFlag(flags, RandomWavingFlag)
+                || HasFlag(flags, CautionFlag)
+                || HasFlag(flags, WavingCautionFlag));
     }
 
     private static void AddCriticalFlags(
@@ -491,8 +523,17 @@ internal static class FlagsOverlayViewModel
             ?.SessionFlags;
     }
 
-    private static void AddYellowFlags(int flags, List<PrioritizedFlagDisplayItem> items)
+    private static void AddYellowFlags(
+        int flags,
+        List<PrioritizedFlagDisplayItem> items,
+        bool allowRaceStartPseudoFlags,
+        bool allowGlobalYellowFamily)
     {
+        if (!allowGlobalYellowFamily)
+        {
+            return;
+        }
+
         if (HasFlag(flags, WavingCautionFlag) || HasFlag(flags, CautionFlag))
         {
             items.Add(new PrioritizedFlagDisplayItem(
@@ -508,7 +549,7 @@ internal static class FlagsOverlayViewModel
 
         var label = "Yellow";
         string? detail = null;
-        if (HasFlag(flags, OneToGreenFlag))
+        if (allowRaceStartPseudoFlags && HasFlag(flags, OneToGreenFlag))
         {
             label = "One to green";
         }
@@ -532,7 +573,7 @@ internal static class FlagsOverlayViewModel
 
         if (HasFlag(flags, YellowFlag)
             || HasFlag(flags, WavingYellowFlag)
-            || HasFlag(flags, OneToGreenFlag)
+            || (allowRaceStartPseudoFlags && HasFlag(flags, OneToGreenFlag))
             || HasFlag(flags, DebrisFlag)
             || HasFlag(flags, RandomWavingFlag))
         {
@@ -584,21 +625,25 @@ internal static class FlagsOverlayViewModel
         }
     }
 
-    private static void AddGreenFlags(int flags, List<PrioritizedFlagDisplayItem> items)
+    private static void AddGreenFlags(
+        int flags,
+        List<PrioritizedFlagDisplayItem> items,
+        bool allowRaceStartPseudoFlags)
     {
         if (!HasFlag(flags, GreenHeldFlag)
-            && !HasFlag(flags, StartReadyFlag)
-            && !HasFlag(flags, StartSetFlag)
-            && !HasFlag(flags, StartGoFlag))
+            && !(allowRaceStartPseudoFlags
+                && (HasFlag(flags, StartReadyFlag)
+                    || HasFlag(flags, StartSetFlag)
+                    || HasFlag(flags, StartGoFlag))))
         {
             return;
         }
 
-        var label = HasFlag(flags, StartGoFlag)
+        var label = allowRaceStartPseudoFlags && HasFlag(flags, StartGoFlag)
             ? "Start"
-            : HasFlag(flags, StartSetFlag)
+            : allowRaceStartPseudoFlags && HasFlag(flags, StartSetFlag)
                 ? "Set"
-                : HasFlag(flags, StartReadyFlag)
+                : allowRaceStartPseudoFlags && HasFlag(flags, StartReadyFlag)
                     ? "Ready"
                     : "Green";
         items.Add(new PrioritizedFlagDisplayItem(

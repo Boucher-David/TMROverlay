@@ -237,6 +237,188 @@ The same capture's stationary clutch-in WOT phase collapsed to about `3.8 kg/h`,
 so those moving correlations should only be used in a loaded, clutch-engaged,
 distance-valid context.
 
+## Daytona Dallara Oval Fuel Test V2
+
+Source:
+
+```text
+fuel test v2/captures/capture-20260525-182213-419
+```
+
+Context:
+
+- Dallara P217 LMP2
+- Daytona International Speedway, 2011 Oval
+- Offline Testing
+- Track length: `3.9927 km`
+- `DriverCarFuelKgPerLtr = 0.750`
+- 95,760 frames at 60 Hz
+- Capture duration: about 1,596 seconds / 26.6 minutes
+
+The test added the missing controlled cases from the previous capture:
+
+1. Same speed, different gear.
+2. Same gear, different throttle/load.
+3. WOT acceleration pulls.
+4. Coast / lift tests.
+
+Derived evidence lives in:
+
+```text
+docs/assets/fuel-burn/
+```
+
+![Fuel test phase timeline](assets/fuel-burn/dallara-daytona-v2-phase-timeline.svg)
+
+![Fuel flow versus RPM times throttle](assets/fuel-burn/dallara-daytona-v2-rpm-throttle-flow.svg)
+
+No manual phase labels were present in the metadata, so these windows are
+inferred from speed, gear, throttle, pit-road, and fuel-flow patterns:
+
+| Phase | Session Time | Observation |
+| --- | ---: | --- |
+| Pit/out staging | 28.7-77.1s | Initial pit window; fuel level becomes reliable |
+| 100 kph gear sweep | 96.0-435.0s | G1-G6 same-speed/different-gear comparison |
+| 150 kph gear sweep | 444.0-565.0s | G2-G6 same-speed/different-gear comparison |
+| 195/224/250 kph sweeps | 575.0-754.0s | Higher-speed gear comparisons with some WOT segments |
+| 120 kph gear sweep | 792.0-842.0s | Short G2-G6 comparison |
+| WOT/coast staircase | 920.0-1488.0s | Repeated WOT pulls and coast-downs |
+| 96 kph WOT sweep | 1515.0-1566.0s | G1-G6 100% throttle at pit-limiter speed |
+| End pit/garage | 1619.8-1624.9s | Final pit/garage state |
+
+### Flow Integration Cross-Check
+
+Across valid moving, on-track intervals:
+
+| Metric | Value |
+| --- | ---: |
+| Valid distance | 64.1725 km |
+| Flow-integrated burn | 27.2230 L |
+| Tank delta | 27.2915 L |
+| Difference | -0.0685 L |
+| Mean burn | 0.4242 L/km |
+| Daytona oval equivalent | 1.6938 L/lap |
+
+The history summary for the same capture reported `15` completed valid laps,
+`16.1` valid distance laps, `27.15 L` used, and `1.69 L/lap` average, which is
+consistent with the frame-level integration.
+
+This is stronger than the v1.2.1 segment check because it spans the whole v2
+test capture. `FuelUsePerHour` is still instantaneous `kg/h`, but integrating it
+over valid time agrees very closely with `FuelLevel` movement.
+
+Moving, clutch-engaged, positive-flow correlation in this capture:
+
+| Signal | Corr With `FuelUsePerHour` |
+| --- | ---: |
+| `Throttle` | 0.868 |
+| `RPM` | 0.708 |
+| `RPM * throttle` | 0.990 |
+| `Speed` | 0.666 |
+| `Gear` | 0.195 |
+| `ManifoldPress` | 0.865 |
+
+The same warning from the clutch-in test still applies: this relationship is
+valid only for loaded, moving samples. Stationary free-revving and coasting are
+separate regimes.
+
+### Same Speed, Different Gear
+
+![Same speed fuel flow by gear](assets/fuel-burn/dallara-daytona-v2-same-speed.svg)
+
+Stable same-speed windows show that gear/RPM matter when speed is controlled:
+
+| Scenario | Gear | Speed | Throttle | RPM | FuelUsePerHour | L/km |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 kph partial | 1 | 100.2 kph | 17.5% | 6202 | 18.01 kg/h | 0.2397 |
+| 100 kph partial | 2 | 100.0 kph | 17.1% | 4787 | 14.27 kg/h | 0.1903 |
+| 100 kph partial | 3 | 100.4 kph | 17.7% | 4095 | 13.77 kg/h | 0.1830 |
+| 100 kph partial | 4 | 100.0 kph | 14.2% | 3536 | 11.55 kg/h | 0.1541 |
+| 100 kph partial | 5 | 100.1 kph | 12.3% | 3094 | 10.41 kg/h | 0.1387 |
+| 100 kph partial | 6 | 99.9 kph | 11.9% | 2765 | 10.21 kg/h | 0.1364 |
+| 150 kph partial | 2 | 150.3 kph | 25.3% | 7204 | 31.75 kg/h | 0.2817 |
+| 150 kph partial | 3 | 149.9 kph | 26.2% | 6120 | 27.38 kg/h | 0.2436 |
+| 150 kph partial | 4 | 149.9 kph | 25.4% | 5308 | 25.55 kg/h | 0.2272 |
+| 150 kph partial | 5 | 149.8 kph | 30.0% | 4635 | 24.36 kg/h | 0.2168 |
+| 150 kph partial | 6 | 149.7 kph | 32.4% | 4150 | 24.24 kg/h | 0.2160 |
+| 96 kph WOT | 1 | 95.9 kph | 100.0% | 5958 | 82.40 kg/h | 1.1454 |
+| 96 kph WOT | 2 | 96.0 kph | 100.0% | 4608 | 58.00 kg/h | 0.8053 |
+| 96 kph WOT | 3 | 96.0 kph | 100.0% | 3929 | 47.90 kg/h | 0.6650 |
+| 96 kph WOT | 4 | 96.0 kph | 100.0% | 3403 | 40.39 kg/h | 0.5608 |
+| 96 kph WOT | 5 | 96.1 kph | 100.0% | 2975 | 34.50 kg/h | 0.4788 |
+| 96 kph WOT | 6 | 96.1 kph | 100.0% | 2667 | 30.37 kg/h | 0.4215 |
+
+The partial-throttle 100 and 150 kph samples show the expected pattern: higher
+gear usually means lower RPM and lower fuel flow at the same speed. The effect
+is not a pure "gear" input; it is mostly the engine/load state created by
+choosing that gear.
+
+The 96 kph WOT comparison is the clearest proof that `RPM * throttle` is still a
+good loaded-flow explanation after excluding clutch-in free-revving. Same speed
+and same throttle produce very different fuel flow because RPM changes from
+about `5958` in gear 1 to `2667` in gear 6.
+
+### Same Gear, Different Throttle
+
+![Throttle bin fuel flow by gear](assets/fuel-burn/dallara-daytona-v2-throttle-bins.svg)
+
+The throttle-bin graph is not speed-controlled, so it should not be read as a
+strategy map. It is still useful shape evidence: once the car is moving and the
+clutch is engaged, fuel flow climbs strongly with throttle/load, with RPM and
+speed explaining much of the spread inside each throttle band.
+
+For product logic this argues against using gear alone for any live advice.
+Throttle/load/RPM explain instantaneous flow; distance and track position decide
+whether that flow matters for stint strategy.
+
+### WOT Acceleration Pulls
+
+![WOT fuel efficiency by gear](assets/fuel-burn/dallara-daytona-v2-wot-efficiency.svg)
+
+Near limiter, raw WOT fuel flow is almost flat across gears:
+
+| Gear | Speed | RPM | FuelUsePerHour | L/km |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 127.8 kph | 7958 | 114.85 kg/h | 1.1986 |
+| 2 | 165.2 kph | 7955 | 114.83 kg/h | 0.9268 |
+| 3 | 194.2 kph | 7949 | 114.76 kg/h | 0.7879 |
+| 4 | 223.7 kph | 7940 | 114.70 kg/h | 0.6836 |
+| 5 | 255.2 kph | 7933 | 114.66 kg/h | 0.5991 |
+| 6 | 286.2 kph | 7975 | 115.07 kg/h | 0.5361 |
+
+This matches the earlier Nurburgring findings: WOT near limiter does not become
+meaningfully lower-flow just because the car is in a higher gear. The efficiency
+improvement is distance per unit time. At the same raw flow, gear 6 covers much
+more ground than gear 1, so `L/km` drops hard.
+
+The clean through-gears WOT pull appears around `920.7-975.7s` and runs from
+about `118 kph` to `293 kph`. The individual WOT gear pulls from low speed
+appear around `993.7-1168.4s`. These are the loaded comparisons that the earlier
+clutch-in WOT test could not provide.
+
+### Coast Tests
+
+![Coast fuel cut summary](assets/fuel-burn/dallara-daytona-v2-coast-fuel-cut.svg)
+
+| Regime | Duration | Speed Mean | FuelUsePerHour Mean | P50 | P90 | Max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Lift in gear | 146.1s | 150.1 kph | 0.275 kg/h | 0.000 | 0.909 | 3.920 |
+| Clutch/neutral coast | 8.3s | 181.0 kph | 0.008 kg/h | 0.000 | 0.000 | 3.897 |
+| Tiny throttle | 15.8s | 111.5 kph | 6.432 kg/h | 7.190 | 8.835 | 10.531 |
+
+Lift-and-coast is visible as a fuel-cut regime. Median flow is zero for
+in-gear lift and for the clutch/neutral coast samples. Tiny maintenance throttle
+is not fuel cut; even the small throttle bucket averaged `6.4 kg/h`.
+
+This should be modeled separately from normal race-speed burn. If coast samples
+are mixed into a normal lap average without labeling the regime, they can make a
+driver look more fuel-efficient than their powered segments actually are.
+
+The strongest single coast window appears around `1443.3-1453.2s`: gear 6,
+roughly `285 kph` down to `177 kph`, and `0 L/h` fuel flow. That is useful live
+evidence for lift-and-coast behavior, but it is not evidence that powered fuel
+burn changed.
+
 ## Product-Relevant Lessons
 
 - `FuelUsePerHour` should be a flow-integration input, not a direct strategy
@@ -244,62 +426,80 @@ distance-valid context.
 - Valid flow-derived sector/lap burn should require moving, clutch-engaged,
   on-track, non-pit context with usable time and distance.
 - Flow integration should be calibrated against `FuelLevel` deltas before it can
-  influence fuel strategy.
+  influence fuel strategy. The v2 Daytona capture matched within `0.069 L` over
+  about `27.3 L` of observed burn.
 - Tank deltas remain the strongest completed-lap truth source.
 - Gear/RPM/speed can explain fuel behavior, but they should not become strategy
   commands until repeated captures prove the advice is stable and useful.
 - Formation/caution burn and race-speed burn should remain separate families.
   Fixed-speed pacing can care about target speed and gear; race-speed strategy
   cares about integrated sector/lap burn under real driving conditions.
+- Coast / fuel-cut samples should be classified separately from powered burn.
+  They are real fuel usage, but they are not evidence that the driver's normal
+  powered lap burn has improved.
 
-## Next Oval Tests
+## Further Oval Tests
 
-The next useful tests should isolate load, speed, gear, and coasting more
-carefully.
+The v2 capture covered the first useful isolation tests. The next useful tests
+should repeat the surprising cases and add lap/sector shapes that look more like
+race usage.
 
-### Same Speed, Different Gear
+### Same-Speed Repeat / A-B-A
 
-Hold steady target speeds and repeat across usable gears:
+Repeat the fixed-speed comparisons in A-B-A shape so the result is less exposed
+to fuel load, tire state, wind, and line variation:
+
+```text
+gear 5 at 150 kph
+gear 6 at 150 kph
+gear 5 at 150 kph again
+```
+
+Useful targets:
 
 | Target Speed | Candidate Gears |
 | ---: | --- |
-| 100 kph | 1 / 2 / 3 |
-| 150 kph | 2 / 3 / 4 |
+| 100 kph | 1 / 2 / 3 / 4 / 5 / 6 |
+| 150 kph | 2 / 3 / 4 / 5 / 6 |
 | 200 kph | 3 / 4 / 5 / 6 |
 | 240 kph | 4 / 5 / 6 |
 
-This is the most valuable next test because it asks whether gear/RPM changes
-fuel burn when the car is doing roughly the same distance work.
+The v2 capture has good 100 and 150 kph evidence. More 200 and 240 kph repeats
+would help decide whether the low-speed pattern persists at race-like Daytona
+speeds.
 
-### Same Gear, Different Throttle
+### Same-Gear Throttle Ladders
 
-For each chosen gear, hold long segments at:
+For each chosen gear, hold longer clean segments at:
 
 - 25% throttle
 - 50% throttle
 - 75% throttle
 - 100% throttle
 
-The Daytona capture already has the 50% case. Additional throttle bands would
-give a cleaner load curve.
+The v2 capture has enough mixed throttle data to prove the shape, but longer
+deliberate holds would give a cleaner load curve because speed and RPM move less
+inside each bucket.
 
-### WOT Acceleration Pulls
+### WOT Pull Repeats
 
 In gears 3-6, start from lower RPM and go WOT to near shift light / limiter.
-These samples should show loaded WOT fuel flow across RPM, unlike the clutch-in
-test.
+The v2 capture already shows the high-RPM plateau near `115 kg/h`; repeats would
+mostly improve confidence and expose whether draft, wind, or setup changes move
+the plateau.
 
-### Coast Tests
+### Race-Lap Coast Shapes
 
-At high speed, compare:
+At high speed, compare longer lap-shaped patterns:
 
-- lift completely while staying in gear;
+- normal lift-and-coast at corner entry;
 - clutch in, no throttle;
 - neutral, no throttle if practical;
-- tiny maintenance throttle, such as 5-10%.
+- tiny maintenance throttle, such as 5-10%;
+- powered corner exit after each coast pattern.
 
-This would show whether lift-and-coast fuel saving is visible in telemetry and
-whether clutch-in coasting burns more or less than in-gear overrun.
+This would show how much fuel-cut behavior should be allowed into sector-level
+live estimates without making the historical powered-burn model too optimistic.
 
 ### Formation / Pace-Speed Tests
 
@@ -312,19 +512,6 @@ Hold low-speed targets in different gears:
 | 120 kph | 2 / 3 / 4 |
 
 This directly supports formation-lap and caution-lap fuel learning.
-
-### Repeat A-B-A
-
-Repeat important comparisons in an A-B-A shape:
-
-```text
-gear 5 at 240 kph
-gear 6 at 240 kph
-gear 5 at 240 kph again
-```
-
-This helps separate real gear effects from tire temp, fuel load, wind, line, or
-driver variation.
 
 ## Capture Guidance
 

@@ -3898,7 +3898,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         if (metrics.Sections.Count > 0)
         {
             var geometry = MetricGeometry;
-            var sectionTop = Math.Min(rect.Bottom - geometry.MetricGridTopReserve, metricBottom + geometry.MetricGridGap);
+            var gridTopGap = metricRows.Count > 0 ? geometry.MetricGridGap : 0f;
+            var sectionTop = Math.Min(rect.Bottom - geometry.MetricGridTopReserve, metricBottom + gridTopGap);
             foreach (var section in metrics.Sections)
             {
                 if (sectionTop >= rect.Bottom - geometry.MetricGridBottomReserve)
@@ -5449,7 +5450,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         }
 
         var geometry = MetricGeometry;
-        var sectionTop = Math.Min(rect.Bottom - geometry.MetricGridTopReserve, metricBottom + geometry.MetricGridGap);
+        var gridTopGap = metricBottom > rowsRect.Top ? geometry.MetricGridGap : 0f;
+        var sectionTop = Math.Min(rect.Bottom - geometry.MetricGridTopReserve, metricBottom + gridTopGap);
         foreach (var section in sections)
         {
             if (sectionTop >= rect.Bottom - geometry.MetricGridBottomReserve)

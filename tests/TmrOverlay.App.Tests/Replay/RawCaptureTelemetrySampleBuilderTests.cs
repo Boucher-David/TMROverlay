@@ -38,7 +38,8 @@ public sealed class RawCaptureTelemetrySampleBuilderTests
 
         Assert.Null(sample.FocusCarIdx);
         Assert.Equal("cam_car_progress_unavailable", sample.FocusUnavailableReason);
-        Assert.Null(sample.FocusClassCars);
+        Assert.NotNull(sample.FocusClassCars);
+        Assert.Empty(sample.FocusClassCars!);
         Assert.NotNull(sample.AllCars);
         Assert.Empty(sample.AllCars!);
     }

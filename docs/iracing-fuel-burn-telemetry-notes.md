@@ -268,6 +268,8 @@ Derived evidence lives in:
 docs/assets/fuel-burn/
 ```
 
+![Fuel save teammate summary](assets/fuel-burn/dallara-daytona-fuel-save-summary.svg)
+
 ![Fuel test phase timeline](assets/fuel-burn/dallara-daytona-v2-phase-timeline.svg)
 
 ![Fuel flow versus RPM times throttle](assets/fuel-burn/dallara-daytona-v2-rpm-throttle-flow.svg)

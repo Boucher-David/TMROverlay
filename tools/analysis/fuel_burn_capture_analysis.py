@@ -119,6 +119,17 @@ PHASES = [
     },
 ]
 
+V1_CLUTCH_IN_WOT_KG_PER_HOUR = 3.8
+
+V1_50_PERCENT_GEAR_LAPS = [
+    {"gear": 1, "speedKph": 128.1, "fuelKgPerHour": 65.9, "litersPerLap": 2.740},
+    {"gear": 2, "speedKph": 165.3, "fuelKgPerHour": 70.1, "litersPerLap": 2.261},
+    {"gear": 3, "speedKph": 194.1, "fuelKgPerHour": 71.1, "litersPerLap": 1.954},
+    {"gear": 4, "speedKph": 223.2, "fuelKgPerHour": 71.6, "litersPerLap": 1.710},
+    {"gear": 5, "speedKph": 242.4, "fuelKgPerHour": 72.9, "litersPerLap": 1.603},
+    {"gear": 6, "speedKph": 235.8, "fuelKgPerHour": 64.6, "litersPerLap": 1.459},
+]
+
 
 def read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -927,6 +938,215 @@ def render_coast_svg(rows: list[dict[str, Any]], path: Path) -> None:
     path.write_text(svg_document(width, height, "\n".join(parts)), encoding="utf-8")
 
 
+def panel(parts: list[str], x: float, y: float, width: float, height: float, title: str, subtitle: str) -> None:
+    parts.append(
+        f'<rect x="{x}" y="{y}" width="{width}" height="{height}" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>'
+    )
+    parts.append(f'<text class="panel-title" x="{x + 24}" y="{y + 34}">{html.escape(title)}</text>')
+    parts.append(f'<text class="panel-subtitle" x="{x + 24}" y="{y + 56}">{html.escape(subtitle)}</text>')
+
+
+def row_for_scenario(rows: list[dict[str, Any]], scenario: str, gear: int) -> dict[str, Any] | None:
+    for row in rows:
+        if str(row.get("scenario")) == scenario and int(row.get("gear", 0)) == gear:
+            return row
+    return None
+
+
+def render_share_summary_svg(
+    summary: dict[str, Any],
+    same_speed: list[dict[str, Any]],
+    wot_high_rpm: list[dict[str, Any]],
+    coast: list[dict[str, Any]],
+    path: Path,
+) -> None:
+    width, height = 1440, 960
+    parts = [
+        '<rect width="1440" height="960" fill="#f8fafc"/>',
+        '<text class="hero" x="52" y="58">Fuel saving is load over distance</text>',
+        (
+            '<text class="hero-subtitle" x="52" y="88">'
+            'Throttle and RPM drive flow; gear changes RPM/load; speed decides distance per fuel.'
+            '</text>'
+        ),
+        '<text class="source" x="1388" y="58" text-anchor="end">Dallara P217 - Daytona Oval fuel tests</text>',
+        '<text class="source" x="1388" y="82" text-anchor="end">v1 clutch/gear laps + v2 controlled runs</text>',
+    ]
+
+    panel(parts, 52, 124, 640, 300, "Short-shift at fixed speed", "Same speed: higher gear lowers RPM and fuel flow")
+    x0, y0, x1, y1 = 108, 208, 642, 372
+    for tick in range(0, 91, 15):
+        y = scale(tick, 0.0, 90.0, y1, y0)
+        parts.append(f'<line x1="{x0}" y1="{y:.1f}" x2="{x1}" y2="{y:.1f}" stroke="#e2e8f0" stroke-width="1"/>')
+        parts.append(f'<text class="tiny" x="{x0 - 10}" y="{y + 4:.1f}" text-anchor="end">{tick}</text>')
+    parts.append(f'<line x1="{x0}" y1="{y1}" x2="{x1}" y2="{y1}" stroke="#0f172a" stroke-width="1"/>')
+    parts.append(f'<line x1="{x0}" y1="{y0}" x2="{x0}" y2="{y1}" stroke="#0f172a" stroke-width="1"/>')
+    gear_x = {gear: scale(gear, 1.0, 6.0, x0, x1) for gear in range(1, 7)}
+    for gear, x in gear_x.items():
+        parts.append(f'<text class="tiny" x="{x:.1f}" y="{y1 + 20}" text-anchor="middle">G{gear}</text>')
+
+    series = [
+        ("100 kph partial", "#0f766e", "100 kph partial"),
+        ("96 kph WOT", "#dc2626", "96 kph WOT"),
+    ]
+    for scenario, color, label in series:
+        points = []
+        for gear in range(1, 7):
+            row = row_for_scenario(same_speed, scenario, gear)
+            if not row:
+                continue
+            x = gear_x[gear]
+            y = scale(float(row["fuelKgPerHour"]), 0.0, 90.0, y1, y0)
+            points.append(f"{x:.1f},{y:.1f}")
+            parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" fill="{color}"/>')
+        if points:
+            parts.append(f'<polyline points="{" ".join(points)}" fill="none" stroke="{color}" stroke-width="3"/>')
+    parts.append('<text class="axis-label" x="86" y="196" text-anchor="end">kg/h</text>')
+    parts.append('<circle cx="498" cy="176" r="5" fill="#0f766e"/><text class="legend" x="512" y="180">100 kph partial</text>')
+    parts.append('<circle cx="498" cy="198" r="5" fill="#dc2626"/><text class="legend" x="512" y="202">96 kph WOT</text>')
+    parts.append('<text class="callout" x="122" y="404">G1 -> G6 at 96 kph WOT: 82.4 -> 30.4 kg/h</text>')
+
+    panel(parts, 748, 124, 640, 300, "Distance matters as much as flow", "At high RPM, flow is flat but burn per distance falls")
+    x0, y0, x1, y1 = 804, 208, 1338, 372
+    for tick in range(40, 121, 20):
+        y = scale(tick, 40.0, 120.0, y1, y0)
+        parts.append(f'<line x1="{x0}" y1="{y:.1f}" x2="{x1}" y2="{y:.1f}" stroke="#e2e8f0" stroke-width="1"/>')
+        parts.append(f'<text class="tiny" x="{x0 - 10}" y="{y + 4:.1f}" text-anchor="end">{tick}%</text>')
+    parts.append(f'<line x1="{x0}" y1="{y1}" x2="{x1}" y2="{y1}" stroke="#0f172a" stroke-width="1"/>')
+    parts.append(f'<line x1="{x0}" y1="{y0}" x2="{x0}" y2="{y1}" stroke="#0f172a" stroke-width="1"/>')
+    gear_x = {gear: scale(gear, 1.0, 6.0, x0, x1) for gear in range(1, 7)}
+    v1_base = V1_50_PERCENT_GEAR_LAPS[0]["litersPerLap"]
+    wot_base = float(wot_high_rpm[0]["fuelLitersPerKm"]) if wot_high_rpm else 1.0
+    normalized_series = [
+        (
+            "v1 50% lap L/lap",
+            "#2563eb",
+            [(int(row["gear"]), float(row["litersPerLap"]) / v1_base * 100.0) for row in V1_50_PERCENT_GEAR_LAPS],
+        ),
+        (
+            "v2 high-RPM WOT L/km",
+            "#ea580c",
+            [(int(row["gear"]), float(row["fuelLitersPerKm"]) / wot_base * 100.0) for row in wot_high_rpm],
+        ),
+    ]
+    for label, color, rows in normalized_series:
+        points = []
+        for gear, value in rows:
+            x = gear_x[gear]
+            y = scale(value, 40.0, 120.0, y1, y0)
+            points.append(f"{x:.1f},{y:.1f}")
+            parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" fill="{color}"/>')
+        if points:
+            parts.append(f'<polyline points="{" ".join(points)}" fill="none" stroke="{color}" stroke-width="3"/>')
+    for gear, x in gear_x.items():
+        parts.append(f'<text class="tiny" x="{x:.1f}" y="{y1 + 20}" text-anchor="middle">G{gear}</text>')
+    parts.append('<circle cx="1120" cy="176" r="5" fill="#2563eb"/><text class="legend" x="1134" y="180">v1 50% lap burn</text>')
+    parts.append('<circle cx="1120" cy="198" r="5" fill="#ea580c"/><text class="legend" x="1134" y="202">v2 WOT distance burn</text>')
+    parts.append('<text class="callout" x="818" y="404">Indexed to G1: G6 used 53% of v1 L/lap and 45% of v2 WOT L/km</text>')
+
+    panel(parts, 52, 472, 408, 300, "Full lift is fuel cut", "Tiny throttle is not the same thing")
+    coast_by_name = {str(row["regime"]): row for row in coast}
+    coast_rows = [
+        ("lift", coast_by_name.get("lift in gear"), "#16a34a"),
+        ("clutch", coast_by_name.get("clutch/neutral coast"), "#7c3aed"),
+        ("tiny throttle", coast_by_name.get("tiny throttle"), "#ea580c"),
+    ]
+    x0, y0, y1 = 102, 556, 700
+    bar_width = 58
+    for tick in range(0, 8, 2):
+        y = scale(tick, 0.0, 7.0, y1, y0)
+        parts.append(f'<line x1="{x0}" y1="{y:.1f}" x2="410" y2="{y:.1f}" stroke="#e2e8f0" stroke-width="1"/>')
+        parts.append(f'<text class="tiny" x="{x0 - 10}" y="{y + 4:.1f}" text-anchor="end">{tick}</text>')
+    for index, (label, row, color) in enumerate(coast_rows):
+        if not row:
+            continue
+        value = float(row["fuelKgPerHourMean"])
+        cx = 138 + index * 102
+        y = scale(value, 0.0, 7.0, y1, y0)
+        parts.append(f'<rect x="{cx - bar_width / 2:.1f}" y="{y:.1f}" width="{bar_width}" height="{y1 - y:.1f}" fill="{color}" opacity="0.82"/>')
+        parts.append(f'<text class="tiny" x="{cx}" y="{y - 8:.1f}" text-anchor="middle">{value:.2f}</text>')
+        parts.append(f'<text class="tiny" x="{cx}" y="{y1 + 20}" text-anchor="middle">{html.escape(label)}</text>')
+    parts.append('<text class="axis-label" x="82" y="546" text-anchor="end">kg/h</text>')
+    parts.append('<text class="callout" x="82" y="744">Advice: lift fully in gear; do not feather throttle for fuel save.</text>')
+
+    panel(parts, 516, 472, 408, 300, "The flow signal checks out", "FuelUsePerHour integration matched tank delta")
+    flow = float((summary.get("flowVsTank") or {}).get("flowIntegratedLiters") or 0.0)
+    tank = float((summary.get("flowVsTank") or {}).get("tankDeltaLiters") or 0.0)
+    max_liters = max(flow, tank, 1.0) * 1.12
+    x0, y0, y1 = 588, 568, 684
+    for index, (label, value, color) in enumerate([("flow", flow, "#0f766e"), ("tank", tank, "#2563eb")]):
+        cx = 650 + index * 118
+        y = scale(value, 0.0, max_liters, y1, y0)
+        parts.append(f'<rect x="{cx - 38}" y="{y:.1f}" width="76" height="{y1 - y:.1f}" fill="{color}" opacity="0.82"/>')
+        parts.append(f'<text class="metric" x="{cx}" y="{y - 12:.1f}" text-anchor="middle">{value:.2f} L</text>')
+        parts.append(f'<text class="tiny" x="{cx}" y="{y1 + 20}" text-anchor="middle">{label}</text>')
+    diff_pct = abs(flow - tank) / tank * 100.0 if tank else 0.0
+    correlations = summary.get("correlations") or {}
+    parts.append(f'<text class="callout" x="548" y="728">Difference: {diff_pct:.2f}% over {(summary.get("flowVsTank") or {}).get("distanceKm", 0):.1f} km</text>')
+    parts.append(
+        f'<text class="tiny" x="548" y="752">Corr: RPM x throttle {float(correlations.get("RPM * throttle") or 0):.3f}; '
+        f'throttle {float(correlations.get("Throttle") or 0):.3f}; gear {float(correlations.get("Gear") or 0):.3f}</text>'
+    )
+
+    panel(parts, 980, 472, 408, 300, "Context matters", "Clutch-in revving is not loaded fuel burn")
+    loaded_wot = mean(float(row["fuelKgPerHour"]) for row in wot_high_rpm) or 0.0
+    bars = [
+        ("clutch-in WOT", V1_CLUTCH_IN_WOT_KG_PER_HOUR, "#64748b"),
+        ("loaded WOT", loaded_wot, "#dc2626"),
+    ]
+    x0, y0, y1 = 1060, 556, 700
+    for tick in range(0, 141, 35):
+        y = scale(tick, 0.0, 130.0, y1, y0)
+        parts.append(f'<line x1="{x0}" y1="{y:.1f}" x2="1338" y2="{y:.1f}" stroke="#e2e8f0" stroke-width="1"/>')
+        parts.append(f'<text class="tiny" x="{x0 - 10}" y="{y + 4:.1f}" text-anchor="end">{tick}</text>')
+    for index, (label, value, color) in enumerate(bars):
+        cx = 1132 + index * 124
+        y = scale(value, 0.0, 130.0, y1, y0)
+        parts.append(f'<rect x="{cx - 40}" y="{y:.1f}" width="80" height="{y1 - y:.1f}" fill="{color}" opacity="0.84"/>')
+        parts.append(f'<text class="metric" x="{cx}" y="{y - 12:.1f}" text-anchor="middle">{value:.1f}</text>')
+        parts.append(f'<text class="tiny" x="{cx}" y="{y1 + 20}" text-anchor="middle">{html.escape(label)}</text>')
+    parts.append('<text class="axis-label" x="1038" y="546" text-anchor="end">kg/h</text>')
+    parts.append('<text class="callout" x="1012" y="744">Only learn strategy from moving, clutch-engaged, distance-valid samples.</text>')
+
+    parts.extend(
+        [
+            '<rect x="52" y="824" width="1336" height="84" rx="8" fill="#0f172a"/>',
+            '<text class="advice-title" x="84" y="858">Teammate one-liner</text>',
+            (
+                '<text class="advice" x="84" y="888">'
+                'Short-shift at slow speed, avoid low-gear limiter abuse in pit lane, and fuel-save with a full in-gear lift instead of tiny throttle.'
+                '</text>'
+            ),
+        ]
+    )
+
+    body = "\n".join(parts)
+    document = "\n".join(
+        [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+            "<style>",
+            "text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#0f172a}",
+            ".hero{font-size:34px;font-weight:800}",
+            ".hero-subtitle{font-size:17px;fill:#334155}",
+            ".source{font-size:13px;fill:#64748b}",
+            ".panel-title{font-size:20px;font-weight:750}",
+            ".panel-subtitle{font-size:13px;fill:#64748b}",
+            ".tiny{font-size:11px;fill:#475569}",
+            ".legend{font-size:12px;fill:#334155}",
+            ".axis-label{font-size:12px;fill:#334155;font-weight:700}",
+            ".metric{font-size:15px;font-weight:750}",
+            ".callout{font-size:14px;font-weight:700;fill:#0f172a}",
+            ".advice-title{font-size:15px;font-weight:800;fill:#ffffff}",
+            ".advice{font-size:18px;font-weight:650;fill:#ffffff}",
+            "</style>",
+            body,
+            "</svg>",
+            "",
+        ]
+    )
+    path.write_text(document, encoding="utf-8")
+
+
 def write_outputs(capture_dir: Path, output_root: Path) -> None:
     context = extract_context(capture_dir)
     car = context.get("car") or {}
@@ -968,6 +1188,7 @@ def write_outputs(capture_dir: Path, output_root: Path) -> None:
     render_throttle_bins_svg(throttle_bins, output_root / "dallara-daytona-v2-throttle-bins.svg")
     render_wot_efficiency_svg(wot_high_rpm, output_root / "dallara-daytona-v2-wot-efficiency.svg")
     render_coast_svg(coast, output_root / "dallara-daytona-v2-coast-fuel-cut.svg")
+    render_share_summary_svg(summary, same_speed, wot_high_rpm, coast, output_root / "dallara-daytona-fuel-save-summary.svg")
 
 
 def main() -> int:

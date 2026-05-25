@@ -643,6 +643,7 @@ internal static class Program
                             variant.PreviewMode,
                             variant.Slug,
                             model);
+                        SetDesignV2Model(designV2, model);
                     }
                 }));
         }

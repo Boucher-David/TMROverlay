@@ -198,6 +198,115 @@ internal static class OverlayContentSizing
         return ApplyChromeHeight(definition, settings, sessionKind, baseSize);
     }
 
+    public static Size SimpleTelemetrySizeForRenderedSections(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind,
+        IReadOnlyList<SimpleTelemetryMetricSectionViewModel> metricSections,
+        IReadOnlyList<SimpleTelemetryGridSectionViewModel> gridSections)
+    {
+        if (!UsesSimpleTelemetryContentSizing(definition.Id)
+            || !OverlayContentColumnSettings.TryGetContentDefinition(definition.Id, out var contentDefinition))
+        {
+            return BaseSizeFor(definition, settings, sessionKind);
+        }
+
+        var visibleMetricSections = metricSections
+            .Where(section => section.Rows.Count > 0)
+            .ToArray();
+        var visibleGridSections = gridSections
+            .Where(section => section.Rows.Count > 0)
+            .ToArray();
+        if (visibleMetricSections.Length == 0 && visibleGridSections.Length == 0)
+        {
+            return BaseSizeFor(definition, settings, sessionKind);
+        }
+
+        var width = SimpleTelemetryRenderedWidth(
+            definition,
+            settings,
+            contentDefinition,
+            sessionKind,
+            visibleGridSections.Length > 0);
+        var baseSize = new Size(
+            width,
+            SimpleTelemetryRenderedHeight(
+                visibleMetricSections.Select(section => section.Rows.Count).ToArray(),
+                visibleGridSections.Select(section => section.Rows.Count).ToArray(),
+                definition.DefaultHeight));
+        return EnsureFullSessionWeatherChromeOffHeight(
+            definition,
+            settings,
+            sessionKind,
+            visibleMetricSections.Select(section => section.Rows.Count).ToArray(),
+            visibleGridSections.Select(section => section.Rows.Count).ToArray(),
+            ApplyChromeHeight(definition, settings, sessionKind, baseSize));
+    }
+
+    public static Size SimpleTelemetrySizeForRenderedRowCounts(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind,
+        IReadOnlyList<int> metricRowCounts,
+        IReadOnlyList<int> gridRowCounts)
+    {
+        if (!UsesSimpleTelemetryContentSizing(definition.Id)
+            || !OverlayContentColumnSettings.TryGetContentDefinition(definition.Id, out var contentDefinition))
+        {
+            return BaseSizeFor(definition, settings, sessionKind);
+        }
+
+        var visibleMetricRowCounts = metricRowCounts.Where(rowCount => rowCount > 0).ToArray();
+        var visibleGridRowCounts = gridRowCounts.Where(rowCount => rowCount > 0).ToArray();
+        if (visibleMetricRowCounts.Length == 0 && visibleGridRowCounts.Length == 0)
+        {
+            return BaseSizeFor(definition, settings, sessionKind);
+        }
+
+        var width = SimpleTelemetryRenderedWidth(
+            definition,
+            settings,
+            contentDefinition,
+            sessionKind,
+            visibleGridRowCounts.Length > 0);
+        var baseSize = new Size(
+            width,
+            SimpleTelemetryRenderedHeight(visibleMetricRowCounts, visibleGridRowCounts, definition.DefaultHeight));
+        return EnsureFullSessionWeatherChromeOffHeight(
+            definition,
+            settings,
+            sessionKind,
+            visibleMetricRowCounts,
+            visibleGridRowCounts,
+            ApplyChromeHeight(definition, settings, sessionKind, baseSize));
+    }
+
+    private static Size EnsureFullSessionWeatherChromeOffHeight(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind,
+        IReadOnlyList<int> metricRowCounts,
+        IReadOnlyList<int> gridRowCounts,
+        Size size)
+    {
+        if (!string.Equals(definition.Id, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.Ordinal)
+            || HasSelectedHeaderChrome(definition.Id, settings, sessionKind)
+            || gridRowCounts.Any(rowCount => rowCount > 0)
+            || metricRowCounts.Where(rowCount => rowCount > 0).Sum() < 10)
+        {
+            return size;
+        }
+
+        var fullChromeOffSize = ApplyChromeHeight(
+            definition,
+            settings,
+            sessionKind,
+            new Size(size.Width, SimpleTelemetryDefaultHeightForSession(definition, sessionKind)));
+        return size.Height >= fullChromeOffSize.Height
+            ? size
+            : new Size(size.Width, fullChromeOffSize.Height);
+    }
+
     private static int TableOverlayWidth(
         OverlayDefinition definition,
         OverlaySettings settings,
@@ -282,6 +391,70 @@ internal static class OverlayContentSizing
         var height = MetricGeometry.MinimumSimpleTelemetryHeight
             + (int)Math.Round((sessionDefaultHeight - MetricGeometry.MinimumSimpleTelemetryHeight) * progress);
         return Math.Clamp(height, MetricGeometry.MinimumSimpleTelemetryHeight, sessionDefaultHeight);
+    }
+
+    private static int SimpleTelemetryRenderedWidth(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlayContentDefinition contentDefinition,
+        OverlaySessionKind? sessionKind,
+        bool hasGridSections)
+    {
+        if (string.Equals(definition.Id, PitServiceOverlayDefinition.Definition.Id, StringComparison.Ordinal))
+        {
+            return hasGridSections
+                ? definition.DefaultWidth
+                : Math.Min(definition.DefaultWidth, MetricGeometry.PitServiceMetricOnlyWidth);
+        }
+
+        return SimpleTelemetryWidth(definition, settings, contentDefinition, sessionKind);
+    }
+
+    private static int SimpleTelemetryRenderedHeight(
+        IReadOnlyList<int> metricRowCounts,
+        IReadOnlyList<int> gridRowCounts,
+        int maximumHeight)
+    {
+        var metricHeight = MetricSectionsHeight(metricRowCounts);
+        var gridHeight = GridSectionsHeight(gridRowCounts);
+        var contentHeight = metricHeight
+            + (metricHeight > 0 && gridHeight > 0 ? (int)Math.Round(MetricGeometry.MetricGridGap) : 0)
+            + gridHeight;
+        var height = contentHeight + (int)Math.Round(MetricGeometry.PitServiceContentChromeHeight);
+        return Math.Clamp(height, MetricGeometry.MinimumSimpleTelemetryHeight, maximumHeight);
+    }
+
+    private static int MetricSectionsHeight(IReadOnlyList<int> rowCounts)
+    {
+        var sectionHeights = new List<int>();
+        foreach (var rowCount in rowCounts)
+        {
+            AddMetricSectionHeight(sectionHeights, rowCount, segmentedRows: rowCount);
+        }
+
+        return sectionHeights.Sum()
+            + (int)Math.Round(Math.Max(0, sectionHeights.Count - 1) * MetricGeometry.PitServiceSectionGap);
+    }
+
+    private static int GridSectionsHeight(IReadOnlyList<int> rowCounts)
+    {
+        var sectionHeights = rowCounts
+            .Where(rowCount => rowCount > 0)
+            .Select(GridSectionHeight)
+            .ToArray();
+        return sectionHeights.Sum()
+            + (int)Math.Round(Math.Max(0, sectionHeights.Length - 1) * MetricGeometry.MetricGridGap);
+    }
+
+    private static int GridSectionHeight(int rowCount)
+    {
+        return rowCount <= 0
+            ? 0
+            : (int)Math.Round(
+                MetricGeometry.MetricGridHeaderHeight
+                + MetricGeometry.MetricGridHeaderBottomGap
+                + rowCount * MetricGeometry.MetricGridRowHeight
+                + Math.Max(0, rowCount - 1) * MetricGeometry.MetricGridRowGap);
     }
 
     private static int EnabledSimpleTelemetryBlockCount(

@@ -13,26 +13,26 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.2.1 - Replay Foundation Hardening
+### v1.2.2 - Overlay Regression Fixes
 
-Status: active implementation on branch `v1.2.1-replay-foundation-improvement`.
+Status: active implementation on branch `v1.2.2-small-fixes`.
 
 Suggested squash title:
 
 ```text
-[v1.2.1] Harden raw-capture replay foundations
+[v1.2.2] Fix overlay regressions
 ```
 
 Suggested squash body:
 
 ```text
-- Expanded runtime raw-capture replay from linear playback into controllable frame/session-time windows, session-type filtering, playback speed, optional focus-car override, session YAML provenance, and wall-clock remapped live telemetry samples.
-- Added semantic raw-capture import inspection for manifest/header/schema/frame-count quality, payload-length mismatches, unsupported schema types, observed session-info updates, and missing exact session-info snapshots.
-- Added `TmrOverlay.RawCaptureReplayExport` for compact import summaries and optional bounded decoded-sample JSONL exports without copying raw telemetry payloads or full private session YAML.
-- Updated production overlay model replay to use the shared semantic reader and carry replay provenance into model rows and screenshot manifests, including capture/source files, frame/session time, session-info match source, session label, focus car, sample-plan hash, and selected-frame reasons.
-- Hardened update-apply diagnostics after teammate GR86 support evidence by moving apply handoff to the post-UI shutdown path, adding apply handoff/app-exit/host-shutdown breadcrumbs, and adding a current-runtime evidence-quality `update_apply_shutdown_incomplete` classifier for restart/shutdown limbo.
-- Added focused replay-provider tests, update-apply shutdown regression coverage, and forensics screenshot-manifest validation coverage for replay provenance, and documented the runtime replay controls, compact import gate, privacy boundary, and remaining Windows/native replay screenshot plus installed-update smoke validation gaps.
-- User-data compatibility: no durable raw-capture format or released data-contract snapshot change is intended. Replay outputs are additive developer/evidence artifacts, and high-fidelity capture remains opt-in through Enhanced iRacing Telemetry Capture.
+- Filter zero/default timing and spatial placeholders from replay, export, live capture, and analysis paths so Standings does not flash eligible-looking rows before real timing or scoring evidence exists.
+- Drive Pit Service and Session / Weather browser-source and native sizing from rendered metric/grid sections; add grid-only and missing/weather placeholder evidence so disabled or unavailable sections do not leave oversized windows.
+- Keep Relative fixed-slot rows stable when only the focus car has live data, with empty rows dimmed and validated across browser review, localhost, and native screenshots.
+- Refine Flags session policy so race-start pseudo flags remain visible in race contexts, while test/practice/qualifying suppress one-to-green/start and global yellow-family signals unless local yellow evidence exists.
+- Move Flags to shared count-driven sizing across Windows native, browser review, and localhost/OBS, including the reduced default size, compact single-flag surface, and multi-flag variants.
+- Add browser/localhost/native screenshot scenarios, validators, and focused C#/JS/Python tests for the changed behavior.
+- User-data compatibility: no durable raw-capture format or released user-data schema change is intended; generated replay/screenshot evidence is additive, and high-fidelity capture remains opt-in through Enhanced iRacing Telemetry Capture.
 ```
 
 ## Merged Mainline Milestones

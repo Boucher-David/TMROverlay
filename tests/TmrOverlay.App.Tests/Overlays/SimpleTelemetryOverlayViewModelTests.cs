@@ -117,6 +117,7 @@ public sealed class SimpleTelemetryOverlayViewModelTests
             {
                 HasData = true,
                 Quality = LiveModelQuality.Reliable,
+                SessionType = "Race",
                 SessionState = 4,
                 SessionFlags = unchecked((int)0x80000000)
             }

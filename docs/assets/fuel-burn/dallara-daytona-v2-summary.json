@@ -1,0 +1,95 @@
+{
+  "frameCount": 95760,
+  "durationSeconds": 1596.183,
+  "trackLengthKm": 3.9927,
+  "kgPerLiter": 0.75,
+  "sampleSets": {
+    "loadedMoving": 84381,
+    "positiveFlow": 75617,
+    "wotLoaded": 26548,
+    "partialLoaded": 48891,
+    "coastInGear": 8764,
+    "clutchOrNeutralCoast": 495
+  },
+  "flowVsTank": {
+    "intervalCount": 91207,
+    "flowIntegratedLiters": 27.223,
+    "tankDeltaLiters": 27.2915,
+    "differenceLiters": -0.0685,
+    "distanceKm": 64.1725,
+    "litersPerKm": 0.4242,
+    "litersPerLap": 1.6938
+  },
+  "correlations": {
+    "Throttle": 0.868,
+    "RPM": 0.7077,
+    "RPM * throttle": 0.9895,
+    "Speed": 0.6659,
+    "Gear": 0.1952,
+    "ManifoldPress": 0.865
+  },
+  "fuelUseKgPerHour": {
+    "all": {
+      "count": 95760,
+      "min": 0.0,
+      "p10": 0.0,
+      "p50": 26.8204,
+      "p90": 114.6098,
+      "max": 117.9057,
+      "mean": 46.1933
+    },
+    "loadedMoving": {
+      "count": 84381,
+      "min": 0.0,
+      "p10": 2.5265,
+      "p50": 29.596,
+      "p90": 114.1925,
+      "max": 117.9057,
+      "mean": 47.6748
+    },
+    "wotLoaded": {
+      "count": 26548,
+      "min": 22.012,
+      "p10": 40.0956,
+      "p50": 109.1852,
+      "p90": 114.8904,
+      "max": 117.9057,
+      "mean": 91.3023
+    },
+    "partialLoaded": {
+      "count": 48891,
+      "min": 3.0813,
+      "p10": 11.7057,
+      "p50": 22.115,
+      "p90": 78.3039,
+      "max": 113.7811,
+      "mean": 32.6478
+    },
+    "coastInGear": {
+      "count": 8764,
+      "min": 0.0,
+      "p10": 0.0,
+      "p50": 0.0,
+      "p90": 0.909,
+      "max": 3.9204,
+      "mean": 0.2748
+    },
+    "clutchOrNeutralCoast": {
+      "count": 495,
+      "min": 0.0,
+      "p10": 0.0,
+      "p50": 0.0,
+      "p90": 0.0,
+      "max": 3.8965,
+      "mean": 0.0079
+    }
+  },
+  "source": {
+    "capturePath": "fuel test v2/captures/capture-20260525-182213-419",
+    "captureId": "capture-20260525-182213-419",
+    "car": "Dallara P217 LMP2",
+    "track": "Daytona International Speedway",
+    "trackConfig": "Oval",
+    "sessionType": "Offline Testing"
+  }
+}

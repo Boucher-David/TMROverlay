@@ -48,6 +48,15 @@ describe('browser review server validation contracts', () => {
     expect.soft(settings.relativeSettings.reviewOverlayState.carsEachSide).toBe(2);
     expect.soft(settings.relativeSettings.reviewOverlayState.content['Pit status.race']).toBe(false);
     expect.soft(model.rows).toHaveLength(5);
+    expect.soft(relativeRowKinds(model)).toEqual(['placeholder', 'car', 'reference', 'car', 'placeholder']);
+    expect.soft(model.effectiveSettings.rendered.placeholderRowCount).toBe(2);
+    expect.soft(model.effectiveSettings.rendered.rowIdentities).toEqual([
+      'placeholder|/||',
+      'row|3/#34 Near Ahead||',
+      'row|5/#55 Focus Driver||reference',
+      'row|6/#61 Near Behind||',
+      'placeholder|/||'
+    ]);
 
     expect.soft(model.effectiveSettings).toMatchObject({
       overlayId: 'relative',
@@ -330,8 +339,19 @@ describe('browser review server validation contracts', () => {
   });
 
   it('keeps Session Weather missing data distinct from user-disabled weather content', async () => {
+    const chromeOff = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=chrome-off')).model;
     const missing = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-missing')).model;
     const weatherOff = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-weather-off')).model;
+
+    expect.soft(metricSectionTitles(chromeOff)).toEqual(['Session', 'Weather']);
+    expect.soft(metricRowLabels(chromeOff, 'Session')).toHaveLength(5);
+    expect.soft(metricRowLabels(chromeOff, 'Weather')).toEqual(['Surface', 'Sky', 'Wind', 'Temps', 'Atmosphere']);
+    expect.soft(chromeOff.effectiveSettings.rendered.browserSource.baseHeight).toBe(
+      overlayGeometry.overlaySizes.sessionWeatherHeight - overlayGeometry.metricRows.headerChromeHeight
+    );
+    expect.soft(chromeOff.effectiveSettings.rendered.browserSource.height).toBe(
+      overlayGeometry.overlaySizes.sessionWeatherHeight - overlayGeometry.metricRows.headerChromeHeight
+    );
 
     expect.soft(missing.status).toBe('weather unavailable');
     expect.soft(metricSectionTitles(missing)).toEqual(['Session', 'Weather']);
@@ -339,7 +359,7 @@ describe('browser review server validation contracts', () => {
     expect.soft(metricRowLabels(missing, 'Weather')).toEqual(['Surface', 'Sky', 'Wind', 'Temps', 'Atmosphere']);
     expect.soft(missing.source).toMatch(/weather source unavailable/i);
     expect.soft(missing.effectiveSettings.rendered.unavailableContentPolicy).toBe('section-aware-placeholders');
-    expect.soft(missing.effectiveSettings.rendered.browserSource.baseHeight).toBe(496);
+    expect.soft(missing.effectiveSettings.rendered.browserSource.baseHeight).toBe(493);
 
     const weatherRows = (missing.metricSections || []).find((section) => section.title === 'Weather')?.rows || [];
     expect.soft(weatherRows).toHaveLength(5);
@@ -788,6 +808,16 @@ function tableText(model) {
     ])
     .filter(Boolean)
     .join(' ');
+}
+
+function relativeRowKinds(model) {
+  return (model.rows || []).map((row) => {
+    if (row.isPlaceholder) {
+      return 'placeholder';
+    }
+
+    return row.isReference ? 'reference' : 'car';
+  });
 }
 
 function metricSectionTitles(model) {

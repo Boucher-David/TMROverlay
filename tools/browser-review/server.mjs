@@ -201,6 +201,19 @@ const sectionOffContentLabelsByFixture = new Map([
     'Fast repair selected',
     'Fast repairs available'
   ]],
+  ['pit-service-grid-only', [
+    'Session time',
+    'Session laps',
+    'Release',
+    'Pit status',
+    'Fuel requested',
+    'Fuel selected',
+    'Tearoff requested',
+    'Required repair',
+    'Optional repair',
+    'Fast repair selected',
+    'Fast repairs available'
+  ]],
   ['pit-service-tire-analysis-off', [
     'Compound',
     'Change request',
@@ -1284,6 +1297,52 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
         showFinish: true
       };
     }
+    if (fixtureMatches(searchParams, 'flags-six-kinds')) {
+      return {
+        flags: reviewAllFlags().slice(0, 6),
+        showGreen: true,
+        showBlue: true,
+        showYellow: true,
+        showCritical: true,
+        showFinish: true
+      };
+    }
+    if (fixtureMatches(searchParams, 'flags-race-start-pseudo')) {
+      return {
+        flags: [
+          { kind: 'yellow', category: 'yellow', label: 'One to green', detail: null, tone: 'warning' },
+          { kind: 'green', category: 'green', label: 'Start', detail: null, tone: 'success' }
+        ],
+        showGreen: true,
+        showBlue: true,
+        showYellow: true,
+        showCritical: true,
+        showFinish: true
+      };
+    }
+    if (fixtureMatches(searchParams, 'flags-practice-pseudo-suppressed')) {
+      return {
+        flags: reviewFlagsForSession('practice'),
+        showGreen: true,
+        showBlue: true,
+        showYellow: true,
+        showCritical: true,
+        showFinish: true
+      };
+    }
+    if (fixtureMatches(searchParams, 'flags-practice-local-yellow')) {
+      return {
+        flags: [
+          { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: 'local', tone: 'warning' },
+          { kind: 'blue', category: 'blue', label: 'Blue', detail: null, tone: 'info' }
+        ],
+        showGreen: true,
+        showBlue: true,
+        showYellow: true,
+        showCritical: true,
+        showFinish: true
+      };
+    }
     return {
       flags: reviewFlagsForSession(session),
       showGreen: contentEnabled(overlayState, 'Green / start / ready', true, ['Green']),
@@ -1323,13 +1382,6 @@ function reviewFlagsForSession(session) {
       { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: null, tone: 'warning' },
       blue,
       { kind: 'checkered', category: 'finish', label: 'Checkered', detail: null, tone: 'info' }
-    ];
-  }
-
-  if (session === 'qualifying') {
-    return [
-      { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: null, tone: 'warning' },
-      blue
     ];
   }
 
@@ -1853,6 +1905,17 @@ function reviewEffectiveBrowserSource(overlayId, overlayState, previewMode, mode
     const baseHeight = fuelBrowserSourceHeightForModel(model, sourceSize.baseHeight);
     sourceSize.baseHeight = baseHeight;
     sourceSize.height = Math.round(baseHeight * sourceSize.scale);
+  } else if (isSimpleTelemetryModelDrivenSizeOverlay(overlayId)) {
+    applySourceSize(
+      sourceSize,
+      simpleTelemetryBrowserSourceSizeForModel(
+        overlayId,
+        overlayState,
+        previewMode,
+        model,
+        sourceSize));
+  } else if (overlayId === 'flags') {
+    applySourceSize(sourceSize, flagsBrowserSourceSizeForModel(model, sourceSize));
   }
 
   const opacityPercent = opacityExcludedOverlayIds.has(overlayId)
@@ -1945,8 +2008,199 @@ function fuelContentHeight(rowCount, sectionCount) {
   return Math.round(Math.max(minimumHeight, Math.min(315, height)));
 }
 
+function isSimpleTelemetryModelDrivenSizeOverlay(overlayId) {
+  return overlayId === 'pit-service' || overlayId === 'session-weather';
+}
+
+function simpleTelemetryBrowserSourceSizeForModel(overlayId, overlayState, previewMode, model, sourceSize) {
+  const metricRowCounts = (model?.metricSections || [])
+    .map((section) => Array.isArray(section?.rows) ? section.rows.length : 0)
+    .filter((count) => count > 0);
+  const gridRowCounts = (model?.gridSections || [])
+    .map((section) => Array.isArray(section?.rows) ? section.rows.length : 0)
+    .filter((count) => count > 0);
+  if (metricRowCounts.length === 0 && gridRowCounts.length === 0) {
+    return sourceSize;
+  }
+
+  const fullWidth = overlayId === 'pit-service'
+    ? overlaySizeNumber('pitServiceWidth', 530)
+    : overlaySizeNumber('sessionWeatherWidth', 464);
+  const fullHeight = overlayId === 'pit-service'
+    ? overlaySizeNumber('pitServiceHeight', 707)
+    : overlaySizeNumber('sessionWeatherHeight', 496);
+  const geometry = overlayGeometry().metricRows || {};
+  const hasGridSections = gridRowCounts.length > 0;
+  const baseWidth = overlayId === 'pit-service'
+    ? hasGridSections
+      ? fullWidth
+      : Math.min(fullWidth, metricGeometryNumber(geometry, 'pitServiceMetricOnlyWidth', 360))
+    : sourceSize.baseWidth;
+  const baseHeight = reviewChromeAdjustedBaseHeight(
+    overlayId,
+    overlayState,
+    fullSessionWeatherChromeOffHeight(
+      overlayId,
+      overlayState,
+      previewMode,
+      metricRowCounts,
+      gridRowCounts,
+      fullHeight)
+      ?? simpleTelemetryRenderedHeight(metricRowCounts, gridRowCounts, fullHeight),
+    previewMode);
+
+  return scaledSourceSize(sourceSize, baseWidth, baseHeight);
+}
+
+function fullSessionWeatherChromeOffHeight(overlayId, overlayState, previewMode, metricRowCounts, gridRowCounts, fullHeight) {
+  if (overlayId !== 'session-weather') {
+    return null;
+  }
+
+  const session = sessionKeyFromPreview(previewMode);
+  if (chromeEnabled(overlayState, 'header', 'Time remaining', session, true)) {
+    return null;
+  }
+
+  if (gridRowCounts.some((count) => count > 0)) {
+    return null;
+  }
+
+  const rowCount = metricRowCounts.reduce((total, count) => total + Math.max(0, Number(count || 0)), 0);
+  return rowCount >= 10 ? fullHeight : null;
+}
+
+function simpleTelemetryRenderedHeight(metricRowCounts, gridRowCounts, maximumHeight) {
+  const geometry = overlayGeometry().metricRows || {};
+  const metricHeight = metricSectionsHeight(metricRowCounts, geometry);
+  const gridHeight = gridSectionsHeight(gridRowCounts, geometry);
+  const contentHeight = metricHeight
+    + (metricHeight > 0 && gridHeight > 0 ? metricGeometryNumber(geometry, 'metricGridGap', 10) : 0)
+    + gridHeight;
+  const height = contentHeight + metricGeometryNumber(geometry, 'pitServiceContentChromeHeight', 38);
+  return Math.round(Math.max(
+    metricGeometryNumber(geometry, 'minimumSimpleTelemetryHeight', 126),
+    Math.min(maximumHeight, height)));
+}
+
+function metricSectionsHeight(rowCounts, geometry) {
+  const sectionHeights = rowCounts
+    .filter((count) => count > 0)
+    .map((count) => metricSectionHeight(count, geometry));
+  return sectionHeights.reduce((total, value) => total + value, 0)
+    + Math.max(0, sectionHeights.length - 1) * metricGeometryNumber(geometry, 'pitServiceSectionGap', 8);
+}
+
+function metricSectionHeight(rowCount, geometry) {
+  return metricGeometryNumber(geometry, 'sectionTitleHeight', 14)
+    + metricGeometryNumber(geometry, 'sectionTitleBottomGap', 6)
+    + rowCount * metricGeometryNumber(geometry, 'segmentedRowHeight', 35)
+    + Math.max(0, rowCount - 1) * metricGeometryNumber(geometry, 'rowGap', 5);
+}
+
+function gridSectionsHeight(rowCounts, geometry) {
+  const sectionHeights = rowCounts
+    .filter((count) => count > 0)
+    .map((count) => gridSectionHeight(count, geometry));
+  return sectionHeights.reduce((total, value) => total + value, 0)
+    + Math.max(0, sectionHeights.length - 1) * metricGeometryNumber(geometry, 'metricGridGap', 10);
+}
+
+function gridSectionHeight(rowCount, geometry) {
+  return metricGeometryNumber(geometry, 'metricGridHeaderHeight', 26)
+    + metricGeometryNumber(geometry, 'metricGridHeaderBottomGap', 6)
+    + rowCount * metricGeometryNumber(geometry, 'metricGridRowHeight', 28)
+    + Math.max(0, rowCount - 1) * metricGeometryNumber(geometry, 'metricGridRowGap', 4);
+}
+
+function flagsBrowserSourceSizeForModel(model, sourceSize) {
+  const count = Array.isArray(model?.flags?.flags) ? model.flags.flags.length : 0;
+  const size = flagsSizeForDisplayedFlagCount(count);
+  return scaledSourceSize(sourceSize, size.width, size.height);
+}
+
+function flagsSizeForDisplayedFlagCount(count) {
+  const flagsGeometry = overlayGeometry().flags || {};
+  const overlaySizes = overlayGeometry().overlaySizes || {};
+  const minimumWidth = flagGeometryNumber(flagsGeometry, 'minimumWidth', 180);
+  const minimumHeight = flagGeometryNumber(flagsGeometry, 'minimumHeight', 96);
+  if (count <= 1) {
+    return { width: minimumWidth, height: minimumHeight };
+  }
+
+  const { columns, rows } = flagsGridForCount(count, flagsGeometry);
+  const padding = flagGeometryNumber(flagsGeometry, 'outerPadding', 8);
+  const gap = flagGeometryNumber(flagsGeometry, 'cellGap', 8);
+  const defaultWidth = overlaySizeNumberFrom(overlaySizes, 'flagsWidth', 270);
+  const defaultHeight = overlaySizeNumberFrom(overlaySizes, 'flagsHeight', 128);
+  const defaultCellWidth = (defaultWidth - 2 * padding - gap) / 2;
+  const defaultCellHeight = (defaultHeight - 2 * padding - gap) / 2;
+  const width = Math.round(columns * defaultCellWidth + Math.max(0, columns - 1) * gap + 2 * padding);
+  const height = Math.round(rows * defaultCellHeight + Math.max(0, rows - 1) * gap + 2 * padding);
+  return {
+    width: Math.max(minimumWidth, Math.min(flagGeometryNumber(flagsGeometry, 'maximumWidth', 960), width)),
+    height: Math.max(minimumHeight, Math.min(flagGeometryNumber(flagsGeometry, 'maximumHeight', 420), height))
+  };
+}
+
+function flagsGridForCount(count, flagsGeometry) {
+  if (count <= 1) return { columns: 1, rows: 1 };
+  if (count <= flagGeometryNumber(flagsGeometry, 'gridTwoCountMaximum', 2)) return { columns: 2, rows: 1 };
+  if (count <= flagGeometryNumber(flagsGeometry, 'gridFourCountMaximum', 4)) return { columns: 2, rows: 2 };
+  if (count <= flagGeometryNumber(flagsGeometry, 'gridSixCountMaximum', 6)) return { columns: 3, rows: 2 };
+  const columns = flagGeometryNumber(flagsGeometry, 'gridMaximumColumns', 4);
+  return { columns, rows: Math.ceil(count / columns) };
+}
+
+function flagGeometryNumber(flagsGeometry, key, fallback) {
+  const value = Number(flagsGeometry?.[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function reviewChromeAdjustedBaseHeight(overlayId, overlayState, fullHeight, previewMode = 'off') {
+  if (!collapsibleBrowserSourceChromeIds.has(overlayId)) {
+    return fullHeight;
+  }
+
+  const session = sessionKeyFromPreview(previewMode);
+  if (chromeEnabled(overlayState, 'header', 'Time remaining', session, true)) {
+    return fullHeight;
+  }
+
+  return Math.max(80, fullHeight - (overlayId === 'relative'
+    ? overlaySizeNumber('relativeHeaderChromeCollapseHeight', 34)
+    : 38));
+}
+
+function scaledSourceSize(sourceSize, baseWidth, baseHeight) {
+  const scale = Number(sourceSize?.scale || 1);
+  return {
+    ...sourceSize,
+    baseWidth: Math.round(baseWidth),
+    baseHeight: Math.round(baseHeight),
+    width: Math.max(1, Math.round(baseWidth * scale)),
+    height: Math.max(1, Math.round(baseHeight * scale))
+  };
+}
+
+function applySourceSize(target, source) {
+  target.baseWidth = source.baseWidth;
+  target.baseHeight = source.baseHeight;
+  target.width = source.width;
+  target.height = source.height;
+}
+
 function metricGeometryNumber(metricRows, key, fallback) {
   const value = Number(metricRows?.[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function overlaySizeNumber(key, fallback) {
+  return overlaySizeNumberFrom(overlayGeometry().overlaySizes || {}, key, fallback);
+}
+
+function overlaySizeNumberFrom(overlaySizes, key, fallback) {
+  const value = Number(overlaySizes?.[key]);
   return Number.isFinite(value) ? value : fallback;
 }
 
@@ -2577,7 +2831,10 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
                 carsEachSide: 2
               }
           : overlayState;
-        return withChrome(filterTableModelContent(filterRelativeReviewRows(relativeDisplayModel(previewLabel, session), effectiveOverlayState), 'relative', effectiveOverlayState, session));
+        const relativeModel = fixture === 'relative-empty-rows'
+          ? relativeFocusOnlyDisplayModel(previewLabel, session)
+          : relativeDisplayModel(previewLabel, session);
+        return withChrome(filterTableModelContent(filterRelativeReviewRows(relativeModel, effectiveOverlayState), 'relative', effectiveOverlayState, session));
       }
     case 'fuel-calculator':
       {
@@ -3857,6 +4114,15 @@ function relativeDisplayModel(previewLabel = 'review fixture', session = 'practi
   };
 }
 
+function relativeFocusOnlyDisplayModel(previewLabel = 'review fixture', session = 'practice') {
+  const model = relativeDisplayModel(previewLabel, session);
+  return {
+    ...model,
+    status: `5 - focus only | ${previewLabel}`,
+    rows: model.rows.filter((row) => row.isReference)
+  };
+}
+
 function filterRelativeReviewRows(model, overlayState) {
   const eachSide = clampInteger(overlayState?.carsEachSide, 3, 0, 8);
   const rows = model.rows || [];
@@ -4303,12 +4569,14 @@ function gridCell(value, tone) {
 }
 
 function standingsDisplayModel(previewLabel = 'review fixture', session = 'race', fixture = '') {
-  if (fixture === 'standings-no-results-chrome-on') {
+  if (fixture === 'standings-no-results-chrome-on' || fixture === 'standings-zero-default-timing') {
     return {
       overlayId: 'standings',
       title: 'Standings',
       status: 'waiting for standings',
-      source: 'source: waiting for standings',
+      source: fixture === 'standings-zero-default-timing'
+        ? 'source: zero/default timing placeholders filtered'
+        : 'source: waiting for standings',
       bodyKind: 'table',
       columns: [],
       rows: [],

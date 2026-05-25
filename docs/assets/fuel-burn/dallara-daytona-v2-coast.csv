@@ -1,0 +1,4 @@
+regime,sampleCount,durationSeconds,speedKphMean,fuelKgPerHourMean,fuelKgPerHourP50,fuelKgPerHourP90,fuelKgPerHourMax
+lift in gear,8764,146.067,150.09,0.275,0.0,0.909,3.92
+clutch/neutral coast,495,8.25,180.99,0.008,0.0,0.0,3.897
+tiny throttle,950,15.833,111.48,6.432,7.19,8.835,10.531

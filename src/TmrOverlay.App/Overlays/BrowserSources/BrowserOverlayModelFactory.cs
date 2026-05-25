@@ -2865,6 +2865,16 @@ internal sealed class BrowserOverlayModelFactory
                 browserBaseSize.Width,
                 StandingsBrowserSourceHeight(model, browserBaseSize.Height));
         }
+        else if (IsSimpleTelemetryModelDrivenSizeOverlay(overlayId)
+            && model.ShouldRender)
+        {
+            browserBaseSize = SimpleTelemetryBrowserSourceSize(model, definition, overlay, sessionKind, browserBaseSize);
+        }
+        else if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            && model.ShouldRender)
+        {
+            browserBaseSize = FlagsOverlaySizing.SizeForDisplayedFlagCount(model.Flags?.Flags.Count ?? 0);
+        }
 
         var browserScaledSize = new System.Drawing.Size(
             Math.Max(1, (int)Math.Round(browserBaseSize.Width * clampedScale)),
@@ -3222,6 +3232,40 @@ internal sealed class BrowserOverlayModelFactory
             fallbackHeight,
             hasVisibleHeader,
             showFooter: false);
+    }
+
+    private static bool IsSimpleTelemetryModelDrivenSizeOverlay(string overlayId)
+    {
+        return string.Equals(overlayId, PitServiceOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(overlayId, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static System.Drawing.Size SimpleTelemetryBrowserSourceSize(
+        BrowserOverlayDisplayModel model,
+        OverlayDefinition definition,
+        OverlaySettings overlay,
+        OverlaySessionKind? sessionKind,
+        System.Drawing.Size fallback)
+    {
+        var metricRowCounts = (model.MetricSections ?? [])
+            .Where(section => section.Rows.Count > 0)
+            .Select(section => section.Rows.Count)
+            .ToArray();
+        var gridRowCounts = (model.GridSections ?? [])
+            .Where(section => section.Rows.Count > 0)
+            .Select(section => section.Rows.Count)
+            .ToArray();
+        if (metricRowCounts.Length == 0 && gridRowCounts.Length == 0)
+        {
+            return fallback;
+        }
+
+        return OverlayContentSizing.SimpleTelemetrySizeForRenderedRowCounts(
+            definition,
+            overlay,
+            sessionKind,
+            metricRowCounts,
+            gridRowCounts);
     }
 
     private static BrowserOverlayFuelStrategyEvidence? EffectiveFuelStrategyEvidence(

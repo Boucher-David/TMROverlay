@@ -1604,6 +1604,16 @@ def row_has_valid_lap(row: dict[str, Any]) -> bool:
     return valid_lap_time(row.get("bestLapTimeSeconds")) is not None or valid_lap_time(row.get("lastLapTimeSeconds")) is not None
 
 
+def row_has_standings_timing_evidence(row: dict[str, Any]) -> bool:
+    return (
+        row.get("overallPosition") is not None
+        or row.get("classPosition") is not None
+        or valid_timing_seconds(row.get("f2TimeSeconds")) is not None
+        or valid_timing_seconds(row.get("estimatedTimeSeconds")) is not None
+        or row_has_valid_lap(row)
+    )
+
+
 def update_gridded_cars(
     raw: dict[str, Any],
     values: dict[str, list[Any]],
@@ -1751,23 +1761,35 @@ def timing_display_rows(
     values: dict[str, list[Any]],
     maximum_rows: int,
 ) -> tuple[str, str, list[dict[str, Any]]]:
+    selected = current_session(session_data)
+    session_kind = classify_session_kind(str((selected or {}).get("SessionType") or (selected or {}).get("SessionName") or ""))
+    requires_valid_lap = session_kind in ("practice", "qualifying", "test")
     timing_rows = timing_lookup(values)
+    if not timing_rows:
+        status = "waiting for valid laps" if requires_valid_lap else "waiting for timing rows"
+        return status, "source: waiting", []
     ref_idx = reference_car_idx(raw, timing_rows)
     if ref_idx is None:
         return "waiting for focus car", "source: waiting", []
     drivers = driver_directory(session_data)
-    selected = current_session(session_data)
-    session_kind = classify_session_kind(str((selected or {}).get("SessionType") or (selected or {}).get("SessionName") or ""))
     session_state = raw.get("SessionState") if isinstance(raw.get("SessionState"), int) else None
     allow_leader_progress = session_kind == "race" and isinstance(session_state, int) and session_state >= 4
     rows = sorted(
-        timing_rows.values(),
+        (
+            row
+            for row in timing_rows.values()
+            if row_has_standings_timing_evidence(row)
+            and (not requires_valid_lap or row_has_valid_lap(row))
+        ),
         key=lambda row: (
             row.get("classPosition") or 999,
             row.get("overallPosition") or 999,
             row.get("carIdx") or 999,
         ),
     )
+    if not rows:
+        status = "waiting for valid laps" if requires_valid_lap else "waiting for timing rows"
+        return status, "source: waiting", []
     ordered_rows = rows
     rows = select_around_reference(ordered_rows, ref_idx, maximum_rows, preserve_first=True)
     display_rows = [

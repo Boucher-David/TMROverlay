@@ -8,6 +8,43 @@ namespace TmrOverlay.App.Tests.Replay;
 public sealed class RawCaptureTelemetrySampleBuilderTests
 {
     [Fact]
+    public void Build_IgnoresDefaultTimingAndSpatialPlaceholders()
+    {
+        var frame = RawFrameBuilder.Create()
+            .AddInt("PlayerCarIdx")
+            .AddInt("CamCarIdx")
+            .AddIntArray("CarIdxClass", 64)
+            .AddIntArray("CarIdxLapCompleted", 64)
+            .AddDoubleArray("CarIdxLapDistPct", 64)
+            .AddIntArray("CarIdxTrackSurface", 64)
+            .AddIntArray("CarIdxPosition", 64)
+            .AddIntArray("CarIdxClassPosition", 64)
+            .AddDoubleArray("CarIdxF2Time", 64)
+            .AddDoubleArray("CarIdxEstTime", 64)
+            .AddDoubleArray("CarIdxLastLapTime", 64)
+            .AddDoubleArray("CarIdxBestLapTime", 64)
+            .Build();
+
+        frame.WriteInt("PlayerCarIdx", 0);
+        frame.WriteInt("CamCarIdx", 0);
+
+        var sample = new RawCaptureTelemetrySampleBuilder(frame.Schema).Build(new TelemetryFrameEnvelope(
+            CapturedAtUtc: DateTimeOffset.UtcNow,
+            FrameIndex: 1,
+            SessionTick: 1,
+            SessionInfoUpdate: 1,
+            SessionTime: 10d,
+            Payload: frame.Payload));
+
+        Assert.Null(sample.FocusCarIdx);
+        Assert.Equal("cam_car_progress_unavailable", sample.FocusUnavailableReason);
+        Assert.NotNull(sample.FocusClassCars);
+        Assert.Empty(sample.FocusClassCars!);
+        Assert.NotNull(sample.AllCars);
+        Assert.Empty(sample.AllCars!);
+    }
+
+    [Fact]
     public void Build_PreservesSpatialLapDistanceWhenLapCompletedIsUnavailable()
     {
         var frame = RawFrameBuilder.Create()

@@ -561,7 +561,16 @@ test.describe('browser overlay Playwright integration', () => {
   test('sizes session weather missing review fixture from effective weather-off content', async ({ page }) => {
     const reviewServer = await startReviewServer();
     const geometry = overlayGeometry().metricRows;
-    const expectedHeight = 496;
+    const sectionHeight = (rowCount) => geometry.sectionTitleHeight
+      + geometry.sectionTitleBottomGap
+      + rowCount * geometry.segmentedRowHeight
+      + Math.max(0, rowCount - 1) * geometry.rowGap;
+    const expectedHeight = Math.round(
+      sectionHeight(5)
+      + geometry.pitServiceSectionGap
+      + sectionHeight(5)
+      + geometry.pitServiceContentChromeHeight
+    );
     try {
       const modelResponse = await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-missing');
       expect(modelResponse.model.metricSections).toHaveLength(2);

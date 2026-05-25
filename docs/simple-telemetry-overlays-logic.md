@@ -13,9 +13,9 @@ Session / Weather and Pit Service use the shared `SimpleTelemetryOverlayForm` sh
 
 ## Flags
 
-`Flags` reads `LiveSessionModel.SessionState` and `SessionFlags`. It renders as a compact transparent icon-only overlay with procedurally drawn waving flags rather than a table, text label, or full-screen border. It requires recognized live session context before the window is shown; generated mac screenshots and demo states can still force review visuals.
+`Flags` reads `LiveSessionModel.SessionState`, global `SessionFlags`, and local/player `CarIdxSessionFlags` when available. It renders as a compact transparent icon-only overlay with procedurally drawn waving flags rather than a table, text label, or full-screen border. It requires recognized live session context before the window is shown; generated mac screenshots and demo states can still force review visuals.
 
-The settings tab lets the user choose which flag categories can display and uses the shared scale control for overlay size. There are no per-flag display timers: each flag paints while the current telemetry state maps to an enabled user-facing flag category and clears when that telemetry state clears or changes to a disabled category. Multiple meaningful categories can render at once, so persistent states such as white, meatball, and black can stay up while transient yellow/debris/blue states appear or disappear around them.
+The settings tab lets the user choose which flag categories can display and uses the shared scale control for overlay size. There are no per-flag display timers: each flag paints while the current telemetry state maps to an enabled user-facing flag category and clears when that telemetry state clears or changes to a disabled category. Multiple meaningful categories can render at once, so persistent states such as white, meatball, and black can stay up while transient yellow/debris/blue states appear or disappear around them. The base surface is count-driven across native Windows, browser review, and localhost/OBS: one displayed flag uses the compact minimum surface, two to four flags grow within the reduced default footprint, and larger flag sets expand only as far as the shared geometry contract allows.
 
 The transparent native flags window is click-through/no-activate and is also hidden while the Settings window is active. Diagnostics bundles include UI-freeze-watch metrics that make Windows validation distinguish a real UI-thread stall from an overlay window/input-capture problem.
 
@@ -26,6 +26,8 @@ Background SDK bits such as `serviceable` and `start hidden` are decoded for dia
 - yellow/caution/debris/one-to-green
 - critical red/black/repair/furled/disqualification/driver-flag states
 - finish/countdown/white/checkered
+
+Race-start pseudo flags are race-only display signals. `one-to-green`, `start-ready`, `start-set`, and `start-go` can show when session metadata identifies the active event as a race, even if the session type label is stale during gridding. Test, practice, and qualifying sessions suppress those pseudo-start signals. Practice and qualifying also suppress global yellow/debris/caution-style bits unless local/player flag telemetry has yellow-family evidence; local critical driver flags such as repair/meatball and black-flag states remain visible outside race sessions.
 
 Flag design is semantic: green for green-flag running, amber for yellow/caution, blue for blue flags, white/checkered for finish/countdown, red for stopped sessions, black for penalties, and black-with-orange-disc for repair/meatball states. Internal labels are retained for diagnostics and tests, but the user-facing renderer does not show penalty text until telemetry capture has a reliable source for exact instructions such as slow-down time or drive-through/stop-go penalty type.
 
@@ -74,6 +76,8 @@ It displays:
   - per-corner cells use the same compact chip treatment as other service rows; tire change is success/green, keep/static is info/blue, and zero available sets is error/red
 
 Requested-service rows get a short info/blue highlight when their formatted value changes, such as fuel amount, tire request, repair time, tearoff, or fast repair selected/availability state. Red/yellow/green release and repair severity still wins over the change highlight.
+
+Pit Service and Session / Weather use rendered-section sizing rather than always reserving their full configured default height. If content settings or unavailable telemetry remove metric sections, grid sections, or the tire-analysis grid, the browser source and native capture size shrink to the rows that are actually rendered while preserving the shared minimum height and user scale. The full default height still caps rich populated states.
 
 Pit service details are player/team-car telemetry, not competitor-wide telemetry. Current captures expose per-car pit-road and fast-repair-used arrays (`CarIdxOnPitRoad`, `CarIdxFastRepairsUsed`) plus general per-car track-surface/timing arrays, but not per-car requested fuel, tire selections, repair timers, service-active state, or service-complete status. Standings/Relative can use those per-car arrays for pit-road context, but this overlay stays anchored to the local player/team car service snapshot and does not display while the user is intentionally following another car.
 

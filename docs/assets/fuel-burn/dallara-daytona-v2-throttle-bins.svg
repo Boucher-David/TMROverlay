@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="540" viewBox="0 0 920 540">
+<style>
+text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#0f172a}
+.title{font-size:20px;font-weight:700}
+.subtitle{font-size:12px;fill:#64748b}
+.axis{font-size:12px;fill:#334155}
+.tick{font-size:11px;fill:#64748b}
+.legend{font-size:12px;fill:#334155}
+</style>
+<rect width="920" height="540" fill="#ffffff"/>
+<text class="title" x="78" y="30">Throttle/load dominates instantaneous fuel flow</text>
+<text class="subtitle" x="78" y="50">Binned moving samples by gear; not speed-controlled, so treat this as shape evidence</text>
+<line x1="78" y1="456" x2="880" y2="456" stroke="#0f172a" stroke-width="1"/>
+<line x1="78" y1="72" x2="78" y2="456" stroke="#0f172a" stroke-width="1"/>
+<text class="axis" x="479.0" y="498" text-anchor="middle">Throttle (%)</text>
+<text class="axis" x="18" y="264.0" transform="rotate(-90 18 264.0)" text-anchor="middle">FuelUsePerHour (kg/h)</text>
+<line x1="78.0" y1="72" x2="78.0" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="78.0" y="474" text-anchor="middle">0</text>
+<line x1="158.2" y1="72" x2="158.2" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="158.2" y="474" text-anchor="middle">10</text>
+<line x1="238.4" y1="72" x2="238.4" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="238.4" y="474" text-anchor="middle">20</text>
+<line x1="318.6" y1="72" x2="318.6" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="318.6" y="474" text-anchor="middle">30</text>
+<line x1="398.8" y1="72" x2="398.8" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="398.8" y="474" text-anchor="middle">40</text>
+<line x1="479.0" y1="72" x2="479.0" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="479.0" y="474" text-anchor="middle">50</text>
+<line x1="559.2" y1="72" x2="559.2" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="559.2" y="474" text-anchor="middle">60</text>
+<line x1="639.4" y1="72" x2="639.4" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="639.4" y="474" text-anchor="middle">70</text>
+<line x1="719.6" y1="72" x2="719.6" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="719.6" y="474" text-anchor="middle">80</text>
+<line x1="799.8" y1="72" x2="799.8" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="799.8" y="474" text-anchor="middle">90</text>
+<line x1="880.0" y1="72" x2="880.0" y2="456" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="880.0" y="474" text-anchor="middle">100</text>
+<line x1="78" y1="456.0" x2="880" y2="456.0" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="68" y="460.0" text-anchor="end">0</text>
+<line x1="78" y1="392.0" x2="880" y2="392.0" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="68" y="396.0" text-anchor="end">20</text>
+<line x1="78" y1="328.0" x2="880" y2="328.0" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="68" y="332.0" text-anchor="end">40</text>
+<line x1="78" y1="264.0" x2="880" y2="264.0" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="68" y="268.0" text-anchor="end">60</text>
+<line x1="78" y1="200.0" x2="880" y2="200.0" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="68" y="204.0" text-anchor="end">80</text>
+<line x1="78" y1="136.0" x2="880" y2="136.0" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="68" y="140.0" text-anchor="end">100</text>
+<line x1="78" y1="72.0" x2="880" y2="72.0" stroke="#d8dee8" stroke-width="1"/>
+<text class="tick" x="68" y="76.0" text-anchor="end">120</text>
+<circle cx="158.2" cy="419.0" r="3.5" fill="#dc2626"/>
+<circle cx="238.4" cy="390.1" r="3.5" fill="#dc2626"/>
+<circle cx="318.6" cy="363.2" r="3.5" fill="#dc2626"/>
+<circle cx="659.4" cy="152.1" r="3.5" fill="#dc2626"/>
+<circle cx="859.9" cy="146.8" r="3.5" fill="#dc2626"/>
+<polyline points="158.2,419.0 238.4,390.1 318.6,363.2 659.4,152.1 859.9,146.8" fill="none" stroke="#dc2626" stroke-width="2"/>
+<circle cx="158.2" cy="422.4" r="3.5" fill="#ea580c"/>
+<circle cx="238.4" cy="400.3" r="3.5" fill="#ea580c"/>
+<circle cx="318.6" cy="349.0" r="3.5" fill="#ea580c"/>
+<circle cx="659.4" cy="152.5" r="3.5" fill="#ea580c"/>
+<circle cx="859.9" cy="158.8" r="3.5" fill="#ea580c"/>
+<polyline points="158.2,422.4 238.4,400.3 318.6,349.0 659.4,152.5 859.9,158.8" fill="none" stroke="#ea580c" stroke-width="2"/>
+<circle cx="158.2" cy="425.1" r="3.5" fill="#ca8a04"/>
+<circle cx="238.4" cy="400.9" r="3.5" fill="#ca8a04"/>
+<circle cx="318.6" cy="358.6" r="3.5" fill="#ca8a04"/>
+<circle cx="659.4" cy="152.4" r="3.5" fill="#ca8a04"/>
+<circle cx="859.9" cy="149.4" r="3.5" fill="#ca8a04"/>
+<polyline points="158.2,425.1 238.4,400.9 318.6,358.6 659.4,152.4 859.9,149.4" fill="none" stroke="#ca8a04" stroke-width="2"/>
+<circle cx="158.2" cy="420.6" r="3.5" fill="#16a34a"/>
+<circle cx="238.4" cy="391.4" r="3.5" fill="#16a34a"/>
+<circle cx="318.6" cy="357.2" r="3.5" fill="#16a34a"/>
+<circle cx="398.8" cy="300.3" r="3.5" fill="#16a34a"/>
+<circle cx="659.4" cy="152.9" r="3.5" fill="#16a34a"/>
+<circle cx="859.9" cy="161.1" r="3.5" fill="#16a34a"/>
+<polyline points="158.2,420.6 238.4,391.4 318.6,357.2 398.8,300.3 659.4,152.9 859.9,161.1" fill="none" stroke="#16a34a" stroke-width="2"/>
+<circle cx="158.2" cy="423.3" r="3.5" fill="#2563eb"/>
+<circle cx="238.4" cy="387.7" r="3.5" fill="#2563eb"/>
+<circle cx="318.6" cy="371.2" r="3.5" fill="#2563eb"/>
+<circle cx="398.8" cy="312.1" r="3.5" fill="#2563eb"/>
+<circle cx="479.0" cy="255.3" r="3.5" fill="#2563eb"/>
+<circle cx="559.2" cy="203.2" r="3.5" fill="#2563eb"/>
+<circle cx="659.4" cy="156.1" r="3.5" fill="#2563eb"/>
+<circle cx="859.9" cy="187.9" r="3.5" fill="#2563eb"/>
+<polyline points="158.2,423.3 238.4,387.7 318.6,371.2 398.8,312.1 479.0,255.3 559.2,203.2 659.4,156.1 859.9,187.9" fill="none" stroke="#2563eb" stroke-width="2"/>
+<circle cx="158.2" cy="423.5" r="3.5" fill="#7c3aed"/>
+<circle cx="238.4" cy="400.2" r="3.5" fill="#7c3aed"/>
+<circle cx="318.6" cy="379.1" r="3.5" fill="#7c3aed"/>
+<circle cx="398.8" cy="334.0" r="3.5" fill="#7c3aed"/>
+<circle cx="479.0" cy="271.2" r="3.5" fill="#7c3aed"/>
+<circle cx="559.2" cy="231.5" r="3.5" fill="#7c3aed"/>
+<circle cx="659.4" cy="173.2" r="3.5" fill="#7c3aed"/>
+<circle cx="859.9" cy="167.2" r="3.5" fill="#7c3aed"/>
+<polyline points="158.2,423.5 238.4,400.2 318.6,379.1 398.8,334.0 479.0,271.2 559.2,231.5 659.4,173.2 859.9,167.2" fill="none" stroke="#7c3aed" stroke-width="2"/>
+<circle cx="680" cy="84" r="4" fill="#dc2626"/><text class="legend" x="690" y="88">G1</text>
+<circle cx="750" cy="84" r="4" fill="#ea580c"/><text class="legend" x="760" y="88">G2</text>
+<circle cx="820" cy="84" r="4" fill="#ca8a04"/><text class="legend" x="830" y="88">G3</text>
+<circle cx="680" cy="106" r="4" fill="#16a34a"/><text class="legend" x="690" y="110">G4</text>
+<circle cx="750" cy="106" r="4" fill="#2563eb"/><text class="legend" x="760" y="110">G5</text>
+<circle cx="820" cy="106" r="4" fill="#7c3aed"/><text class="legend" x="830" y="110">G6</text>
+</svg>

@@ -1,10 +1,13 @@
+using System.Drawing;
 using System.Text.Json;
 using TmrOverlay.App.History;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.Content;
+using TmrOverlay.App.Overlays.Flags;
 using TmrOverlay.App.Overlays.FuelCalculator;
 using TmrOverlay.App.Overlays.GapToLeader;
 using TmrOverlay.App.Overlays.PitService;
+using TmrOverlay.App.Overlays.SessionWeather;
 using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Overlays;
@@ -581,7 +584,7 @@ public sealed class BrowserOverlayModelFactoryTests
             ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
         }));
         var settings = new ApplicationSettings();
-        EnableOverlay(settings, "session-weather");
+        var overlay = EnableOverlay(settings, "session-weather");
         var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
         var snapshot = LiveTelemetrySnapshot.Empty with
         {
@@ -622,6 +625,11 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.DoesNotContain(response.Model.HeaderItems, item => item.Key == "status");
         Assert.Contains(response.Model.Metrics, row => row.Label == "Session");
         Assert.DoesNotContain(response.Model.Metrics, row => row.Label == "Source");
+        AssertSimpleTelemetryBrowserSourceSize(
+            response,
+            SessionWeatherOverlayDefinition.Definition,
+            overlay,
+            OverlaySessionKind.Race);
     }
 
     [Fact]
@@ -634,7 +642,10 @@ public sealed class BrowserOverlayModelFactoryTests
             ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
         }));
         var settings = new ApplicationSettings();
-        var overlay = settings.GetOrAddOverlay("flags", 360, 170);
+        var overlay = settings.GetOrAddOverlay(
+            "flags",
+            FlagsOverlayDefinition.Definition.DefaultWidth,
+            FlagsOverlayDefinition.Definition.DefaultHeight);
         overlay.Enabled = true;
         overlay.SetBooleanOption(OverlayOptionKeys.FlagsShowBlue, false);
         var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
@@ -666,6 +677,39 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.Equal(new[] { "yellow", "green" }, response.Model.Flags.Flags.Select(flag => flag.Kind).ToArray());
         Assert.DoesNotContain(response.Model.Flags.Flags, flag => flag.Kind == "blue");
         Assert.Equal("source: session flags telemetry", response.Model.Source);
+        AssertBrowserSourceSize(
+            response.Model.EffectiveSettings!.Rendered.BrowserSource,
+            FlagsOverlaySizing.SizeForDisplayedFlagCount(2));
+    }
+
+    [Fact]
+    public void FlagsModel_EffectiveSettingsUseDisplayedFlagCountForBrowserSourceSize()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        var overlay = settings.GetOrAddOverlay(
+            "flags",
+            FlagsOverlayDefinition.Definition.DefaultWidth,
+            FlagsOverlayDefinition.Definition.DefaultHeight);
+        overlay.Enabled = true;
+        var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.True(factory.TryBuild("flags", FlagSnapshot(now, 0x00000020), settings, now, out var single));
+        Assert.Equal(new[] { "blue" }, single.Model.Flags!.Flags.Select(flag => flag.Kind).ToArray());
+        AssertBrowserSourceSize(
+            single.Model.EffectiveSettings!.Rendered.BrowserSource,
+            FlagsOverlaySizing.SizeForDisplayedFlagCount(1));
+
+        Assert.True(factory.TryBuild("flags", FlagSnapshot(now, 0x00000008 | 0x00000020 | 0x00000400), settings, now, out var multi));
+        Assert.Equal(3, multi.Model.Flags!.Flags.Count);
+        AssertBrowserSourceSize(
+            multi.Model.EffectiveSettings!.Rendered.BrowserSource,
+            FlagsOverlaySizing.SizeForDisplayedFlagCount(3));
     }
 
     [Fact]
@@ -778,7 +822,7 @@ public sealed class BrowserOverlayModelFactoryTests
             ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
         }));
         var settings = new ApplicationSettings();
-        EnableOverlay(settings, "pit-service");
+        var overlay = EnableOverlay(settings, "pit-service");
         var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
         var fuelPit = LiveFuelPitModel.Empty with
         {
@@ -866,6 +910,11 @@ public sealed class BrowserOverlayModelFactoryTests
         var tireAnalysis = Assert.Single(response.Model.GridSections!);
         Assert.Contains(tireAnalysis.Rows, row => row.Label == "Change" && row.Cells.Any(cell => cell.Value == "Keep" && cell.Tone == "info"));
         Assert.Contains(tireAnalysis.Rows, row => row.Label == "Available" && row.Cells.All(cell => cell.Value == "2"));
+        AssertSimpleTelemetryBrowserSourceSize(
+            response,
+            PitServiceOverlayDefinition.Definition,
+            overlay,
+            OverlaySessionKind.Race);
     }
 
     [Fact]
@@ -1642,6 +1691,51 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.All(latestResponse.Model.Graph!.Series, series => Assert.True(series.Points.Count <= 300));
         var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(latestResponse.Model, JsonOptions).Length;
         Assert.True(payloadBytes < 250_000);
+    }
+
+    private static void AssertSimpleTelemetryBrowserSourceSize(
+        BrowserOverlayModelResponse response,
+        OverlayDefinition definition,
+        OverlaySettings overlay,
+        OverlaySessionKind sessionKind)
+    {
+        var expected = OverlayContentSizing.SimpleTelemetrySizeForRenderedRowCounts(
+            definition,
+            overlay,
+            sessionKind,
+            response.Model.MetricSections?.Select(section => section.Rows.Count).ToArray() ?? [],
+            response.Model.GridSections?.Select(section => section.Rows.Count).ToArray() ?? []);
+        AssertBrowserSourceSize(response.Model.EffectiveSettings!.Rendered.BrowserSource, expected);
+    }
+
+    private static void AssertBrowserSourceSize(BrowserOverlayEffectiveBrowserSource browserSource, Size expected)
+    {
+        Assert.Equal(expected.Width, browserSource.BaseWidth);
+        Assert.Equal(expected.Height, browserSource.BaseHeight);
+        Assert.Equal(expected.Width, browserSource.Width);
+        Assert.Equal(expected.Height, browserSource.Height);
+    }
+
+    private static LiveTelemetrySnapshot FlagSnapshot(DateTimeOffset now, int sessionFlags)
+    {
+        return LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Sequence = 1,
+            Models = LiveRaceModels.Empty with
+            {
+                Session = LiveSessionModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    SessionType = "Race",
+                    SessionState = 4,
+                    SessionFlags = sessionFlags
+                }
+            }
+        };
     }
 
     private static OverlaySettings EnableOverlay(ApplicationSettings settings, string overlayId)

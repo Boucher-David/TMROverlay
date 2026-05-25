@@ -493,7 +493,9 @@ def car_progress(values: dict[str, list[Any]], car_idx: int, require_lap_progres
         return None
     lap_completed_raw = array_value(values, "CarIdxLapCompleted", car_idx)
     lap_dist_pct_raw = array_value(values, "CarIdxLapDistPct", car_idx)
-    lap_dist_pct = valid_lap_dist_pct(lap_dist_pct_raw)
+    track_surface = array_value(values, "CarIdxTrackSurface", car_idx)
+    track_surface = track_surface if isinstance(track_surface, int) else None
+    lap_dist_pct = valid_lap_dist_pct(lap_dist_pct_raw) if has_track_surface_evidence(track_surface) else None
     has_lap_progress = isinstance(lap_completed_raw, int) and lap_completed_raw >= 0 and lap_dist_pct is not None
     if require_lap_progress and not has_lap_progress:
         return None
@@ -514,10 +516,14 @@ def car_progress(values: dict[str, list[Any]], car_idx: int, require_lap_progres
         position=position if isinstance(position, int) and position > 0 else None,
         class_position=class_position if isinstance(class_position, int) and class_position > 0 else None,
         car_class=array_value(values, "CarIdxClass", car_idx) if isinstance(array_value(values, "CarIdxClass", car_idx), int) else None,
-        track_surface=array_value(values, "CarIdxTrackSurface", car_idx) if isinstance(array_value(values, "CarIdxTrackSurface", car_idx), int) else None,
+        track_surface=track_surface,
         on_pit_road=array_value(values, "CarIdxOnPitRoad", car_idx) if isinstance(array_value(values, "CarIdxOnPitRoad", car_idx), bool) else None,
         has_lap_progress=has_lap_progress,
     )
+
+
+def has_track_surface_evidence(track_surface: int | None) -> bool:
+    return track_surface is None or track_surface > 0
 
 
 def has_standing_or_timing(
@@ -529,8 +535,8 @@ def has_standing_or_timing(
     return (
         (isinstance(position, int) and position > 0)
         or (isinstance(class_position, int) and class_position > 0)
-        or f2_time is not None
-        or estimated_time is not None
+        or (f2_time is not None and f2_time > 0)
+        or (estimated_time is not None and estimated_time > 0)
     )
 
 

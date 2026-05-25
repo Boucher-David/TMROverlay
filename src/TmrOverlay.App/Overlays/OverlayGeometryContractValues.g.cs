@@ -1053,8 +1053,8 @@ internal static class OverlayGeometryContractValues
         internal const int InputStateHeight = 260;
         internal const int CarRadarWidth = 300;
         internal const int CarRadarHeight = 300;
-        internal const int FlagsWidth = 360;
-        internal const int FlagsHeight = 170;
+        internal const int FlagsWidth = 270;
+        internal const int FlagsHeight = 128;
         internal const int SessionWeatherWidth = 464;
         internal const int SessionWeatherHeight = 496;
         internal const int PitServiceWidth = 530;

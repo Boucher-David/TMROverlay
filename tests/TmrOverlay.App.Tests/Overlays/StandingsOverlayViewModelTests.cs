@@ -1403,6 +1403,43 @@ public sealed class StandingsOverlayViewModelTests
     }
 
     [Fact]
+    public void From_NonRaceTimingFallbackIgnoresDefaultEstimatedTimePlaceholders()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var rows = Enumerable.Range(0, 14)
+            .Select(carIdx => PlaceholderTimingRow(
+                carIdx,
+                isFocus: carIdx == 0,
+                driverName: carIdx == 0 ? "Dafydd Boucher" : $"Car {carIdx}",
+                carNumber: carIdx == 0 ? "000" : $"{carIdx}"))
+            .ToArray();
+        var snapshot = Snapshot(now, LiveRaceModels.Empty with
+        {
+            Session = LiveSessionModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                SessionType = "Offline Testing"
+            },
+            Timing = LiveTimingModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Partial,
+                FocusCarIdx = 0,
+                FocusRow = rows[0],
+                OverallRows = rows,
+                ClassRows = rows
+            }
+        });
+
+        var viewModel = StandingsOverlayViewModel.From(snapshot, now, maximumRows: 14);
+
+        Assert.Equal("waiting for valid laps", viewModel.Status);
+        Assert.Equal("source: waiting", viewModel.Source);
+        Assert.Empty(viewModel.Rows);
+    }
+
+    [Fact]
     public void From_DoesNotRenderOtherClassSectionsWhenClassSeparatorsAreDisabled()
     {
         var now = DateTimeOffset.UtcNow;
@@ -1666,6 +1703,51 @@ public sealed class StandingsOverlayViewModelTests
             DeltaSecondsToFocus: deltaSeconds,
             TrackSurface: null,
             OnPitRoad: onPitRoad);
+    }
+
+    private static LiveTimingRow PlaceholderTimingRow(
+        int carIdx,
+        bool isFocus,
+        string driverName,
+        string carNumber)
+    {
+        return new LiveTimingRow(
+            CarIdx: carIdx,
+            Quality: LiveModelQuality.Partial,
+            Source: "test-placeholder",
+            IsPlayer: isFocus,
+            IsFocus: isFocus,
+            IsOverallLeader: false,
+            IsClassLeader: false,
+            HasTiming: false,
+            HasSpatialProgress: false,
+            CanUseForRadarPlacement: false,
+            TimingEvidence: LiveSignalEvidence.Unavailable("test-placeholder", "timing_fields_missing"),
+            SpatialEvidence: LiveSignalEvidence.Unavailable("test-placeholder", "lap_progress_missing"),
+            RadarPlacementEvidence: LiveSignalEvidence.Unavailable("test-placeholder", "lap_progress_missing"),
+            GapEvidence: LiveSignalEvidence.Unavailable("class-gap", "gap_not_calculated_for_row"),
+            DriverName: driverName,
+            TeamName: null,
+            CarNumber: carNumber,
+            CarClassName: "GT3",
+            CarClassColorHex: "#FFDA59",
+            OverallPosition: null,
+            ClassPosition: null,
+            CarClass: 4098,
+            LapCompleted: null,
+            LapDistPct: null,
+            ProgressLaps: null,
+            F2TimeSeconds: null,
+            EstimatedTimeSeconds: 0d,
+            LastLapTimeSeconds: null,
+            BestLapTimeSeconds: null,
+            GapSecondsToClassLeader: null,
+            GapLapsToClassLeader: null,
+            IntervalSecondsToPreviousClassRow: null,
+            IntervalLapsToPreviousClassRow: null,
+            DeltaSecondsToFocus: null,
+            TrackSurface: -1,
+            OnPitRoad: false);
     }
 
     private static LiveTelemetrySnapshot Snapshot(DateTimeOffset now, LiveRaceModels models)

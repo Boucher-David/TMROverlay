@@ -470,11 +470,12 @@
           "status": "partial",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "fixtures": ["fixtures/telemetry-analysis/model-timeline/policy-valid.models.jsonl", "fixtures/telemetry-analysis/model-timeline/policy-regressions.models.jsonl"],
-          "artifacts": ["browser-overlays/standings/no-results-chrome-on.png", "localhost-overlays/standings/no-results-chrome-on.png", "native-overlays/standings-no-results-chrome-on.png"],
+          "artifacts": ["browser-overlays/standings/no-results-chrome-on.png", "localhost-overlays/standings/no-results-chrome-on.png", "native-overlays/standings-no-results-chrome-on.png", "browser-overlays/standings/zero-default-timing.png", "localhost-overlays/standings/zero-default-timing.png"],
           "testFiles": ["tests/tools/test_model_timeline_validator.py", "tests/TmrOverlay.App.Tests/Overlays/BrowserOverlayModelFactoryTests.cs", "tests/browser-overlays/standingsRendering.test.js", "tests/browser-overlays/reviewServerContracts.test.js", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js"],
           "validatorRules": ["tools/analysis/validate_model_timeline.py:standings-chrome-no-data-hidden", "tools/analysis/validate_model_timeline.py:standings-no-data-content-visible"],
           "assertions": [
             "enabled Standings header/footer chrome has an explicit stable policy when scoring rows are absent",
+            "zero/default timing placeholders are filtered before browser replay/export rows become visible",
             "no-data state cannot flash between hidden and visible shells before accepted scoring source exists",
             "header/footer-only visibility is distinguished from all-content-disabled no-render",
             "rowless chrome-on Standings hides the table/body section instead of rendering an empty body placeholder"
@@ -564,7 +565,8 @@
           "tier": "tier1-ci-contract-fixtures",
           "status": "partial",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
-          "artifacts": ["browser-overlays/relative/chrome-off.png", "browser-overlays/relative/rightmost-evidence.png", "browser-overlays/relative/no-content.png"],
+          "artifacts": ["browser-overlays/relative/chrome-off.png", "browser-overlays/relative/rightmost-evidence.png", "browser-overlays/relative/empty-rows.png", "browser-overlays/relative/no-content.png", "localhost-overlays/relative/empty-rows.png", "native-overlays/relative-empty-rows.png"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_relative_empty_rows_variant"],
           "gaps": ["explicit telemetry no-data state is missing", "minimum-scale column preservation is missing"]
         },
         {
@@ -821,8 +823,10 @@
           "tier": "tier1-ci-contract-fixtures",
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
-          "artifacts": ["browser-overlays/pit-service/session-off.png", "browser-overlays/pit-service/signal-off.png", "browser-overlays/pit-service/service-off.png", "browser-overlays/pit-service/tire-analysis-off.png"],
-          "assertions": ["disabled sections are absent", "tire grid bounds and row counts remain valid"]
+          "artifacts": ["browser-overlays/pit-service/session-off.png", "browser-overlays/pit-service/signal-off.png", "browser-overlays/pit-service/service-off.png", "browser-overlays/pit-service/grid-only.png", "browser-overlays/pit-service/tire-analysis-off.png", "localhost-overlays/pit-service/grid-only.png", "native-overlays/pit-service-grid-only.png"],
+          "testFiles": ["tests/TmrOverlay.App.Tests/Overlays/OverlayContentSizingTests.cs", "tests/TmrOverlay.App.Tests/Overlays/BrowserOverlayModelFactoryTests.cs", "tests/browser-overlays/reviewServerContracts.test.js"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_pit_service_section_off_variant"],
+          "assertions": ["disabled sections are absent", "tire grid bounds and row counts remain valid", "rendered section and grid row counts drive the effective browser-source height"]
         },
         {
           "id": "pit-refuel-real-data",
@@ -1217,6 +1221,17 @@
           "assertions": ["active flag icons and labels render", "flag cell bounds and display kinds are compared"]
         },
         {
+          "id": "flags-count-driven-sizing",
+          "family": "geometry-and-sizing",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/flags/practice.png", "localhost-overlays/flags/practice.png", "native-overlays/flags-practice.png", "browser-overlays/flags/six-kinds.png", "localhost-overlays/flags/six-kinds.png", "native-overlays/flags-six-kinds.png", "browser-overlays/flags/all-kinds.png", "localhost-overlays/flags/all-kinds.png", "native-overlays/flags-all-kinds.png"],
+          "testFiles": ["tests/TmrOverlay.App.Tests/Overlays/FlagsOverlaySizingTests.cs", "tests/TmrOverlay.App.Tests/Overlays/BrowserOverlayModelFactoryTests.cs", "tests/browser-overlays/browserRuntimeModules.test.js"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_flags_contract", "tools/validate_overlay_screenshots.py:validate_flags_variant"],
+          "assertions": ["default flags surface is reduced from the legacy 360x170 baseline through the shared geometry contract", "single-flag rendering uses a compact count-driven surface instead of reserving the full default bounds", "browser SVG viewBox and Windows native capture size follow the displayed flag count", "browser review, localhost, and Windows native fixture variants share the same count-sized surface"]
+        },
+        {
           "id": "flags-confirmed-meatball-real-data",
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
@@ -1238,6 +1253,17 @@
           "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
           "assertions": ["global repair/furled/black bits require local-driver or session-context evidence before local critical display"],
           "gaps": ["Windows native render replay from this compact counterexample is still missing"]
+        },
+        {
+          "id": "flags-session-policy",
+          "family": "session-policy",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "covered",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "artifacts": ["browser-overlays/flags/race-start-pseudo.png", "localhost-overlays/flags/race-start-pseudo.png", "native-overlays/flags-race-start-pseudo.png", "browser-overlays/flags/practice-pseudo-suppressed.png", "localhost-overlays/flags/practice-pseudo-suppressed.png", "native-overlays/flags-practice-pseudo-suppressed.png", "browser-overlays/flags/practice-local-yellow.png", "localhost-overlays/flags/practice-local-yellow.png", "native-overlays/flags-practice-local-yellow.png"],
+          "testFiles": ["tests/TmrOverlay.App.Tests/Overlays/FlagsOverlayViewModelTests.cs", "tests/browser-overlays/reviewServerContracts.test.js"],
+          "validatorRules": ["tools/validate_overlay_screenshots.py:validate_flags_variant"],
+          "assertions": ["race-start pseudo flags remain visible when EventType indicates race despite stale SessionType metadata", "offline testing suppresses one-to-green/ready/start pseudo flags", "practice and qualifying suppress global yellow/debris/caution without local yellow-family evidence", "local actionable driver flags remain visible outside race sessions"]
         },
         {
           "id": "flags-obs-readiness",

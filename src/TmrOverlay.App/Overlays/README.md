@@ -15,7 +15,7 @@ Put common Windows overlay colors, typography, and chrome/layout constants in `S
 
 Overlay modules should not talk directly to iRacing or raw capture files. They should consume shared state, metrics, and history services from the app/core layers so multiple overlays can reuse the same telemetry interpretation.
 
-The tray shell should not construct overlay windows directly. Add new overlay windows through `OverlayManager` so multiple overlay types can run together and share the same lifecycle/settings behavior.
+The tray shell should not construct overlay windows directly. Add new overlay windows through `OverlayManager` so multiple overlay types can run together and share the same lifecycle/settings behavior. Tray-level recovery actions should also route through `OverlayManager` so they can update settings and live windows together.
 
 Shared data sources intended for overlays:
 

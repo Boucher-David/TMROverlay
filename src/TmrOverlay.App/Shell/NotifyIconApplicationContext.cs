@@ -33,6 +33,7 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _checkUpdatesItem;
     private readonly ToolStripMenuItem _installUpdateItem;
     private readonly ToolStripMenuItem _rootItem;
+    private readonly ToolStripMenuItem _disableOverlaysItem;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private bool _exiting;
 
@@ -88,6 +89,7 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
         }
         var logsItem = new ToolStripMenuItem("Open Logs", null, (_, _) => OpenDirectory(_storageOptions.LogsRoot));
         var settingsItem = new ToolStripMenuItem("Open Settings", null, (_, _) => _overlayManager.OpenSettingsOverlay());
+        _disableOverlaysItem = new ToolStripMenuItem("Disable All Overlays", null, (_, _) => DisableAllOverlays());
         var diagnosticsItem = new ToolStripMenuItem("Create Diagnostics Bundle", null, (_, _) => CreateDiagnosticsBundle());
         var exitItem = new ToolStripMenuItem("Exit", null, (_, _) => ExitApplication());
 
@@ -100,6 +102,7 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
             _rootItem,
             logsItem,
             settingsItem,
+            _disableOverlaysItem,
             new ToolStripSeparator(),
             _updateStatusItem,
             _checkUpdatesItem,
@@ -156,6 +159,7 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
         var snapshot = _state.Snapshot();
         RefreshUpdateMenu();
         _rootItem.Text = snapshot.RawCaptureEnabled ? "Open Capture Root" : "Open Raw Capture Root";
+        _disableOverlaysItem.Enabled = _overlayManager.HasEnabledManagedOverlays();
 
         if (!string.IsNullOrWhiteSpace(snapshot.LastError))
         {
@@ -202,6 +206,13 @@ internal sealed class NotifyIconApplicationContext : ApplicationContext
 
         _captureItem.Enabled = !string.IsNullOrWhiteSpace(snapshot.LastCaptureDirectory);
         _captureItem.Text = snapshot.RawCaptureEnabled ? "Open Latest Capture" : "Open Latest Raw Capture";
+    }
+
+    private void DisableAllOverlays()
+    {
+        var disabledCount = _overlayManager.DisableManagedOverlays();
+        _disableOverlaysItem.Enabled = false;
+        _logger.LogInformation("Disabled {OverlayCount} overlays from tray menu.", disabledCount);
     }
 
     private void ReleaseUpdatesStateChanged(object? sender, EventArgs e)

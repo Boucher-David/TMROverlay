@@ -227,6 +227,32 @@ public sealed class DesignV2TableRenderingTests
         Assert.Equal(geometry.MetricGridCellHeight, grid.Rows[0].Cells[0].Bounds.Height, 3);
     }
 
+    [Fact]
+    public void MetricRowsLayoutStartsGridAtBodyTopWhenNoMetricRowsRender()
+    {
+        var geometry = OverlayGeometryContracts.MetricRows;
+        var tireGrid = new DesignV2MetricGridSection(
+            "Tires",
+            ["Info", "FL", "FR"],
+            [
+                new DesignV2MetricGridRow(
+                    "Pressure",
+                    [
+                        new DesignV2MetricGridCell("27.5", DesignV2Evidence.Measured),
+                        new DesignV2MetricGridCell("27.7", DesignV2Evidence.Measured)
+                    ],
+                    DesignV2Evidence.Measured)
+            ]);
+        var metrics = new DesignV2MetricRowsBody([], [], [tireGrid]);
+        var bounds = new RectangleF(10f, 20f, geometry.MetricListMinimumWidth, 360f);
+
+        var layout = InvokeInstanceBody("BuildMetricRowsLayout", bounds, metrics);
+
+        Assert.Empty(layout.MetricRows);
+        var grid = Assert.Single(layout.MetricGrids);
+        Assert.Equal(bounds.Top, grid.Bounds.Y, 3);
+    }
+
     private static Color InvokeColor(string methodName, params object[] arguments)
     {
         var method = typeof(DesignV2LiveOverlayForm).GetMethod(

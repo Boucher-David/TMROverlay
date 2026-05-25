@@ -252,9 +252,115 @@ public sealed class OverlayContentSizingTests
                 viewModel.Sections));
     }
 
+    [Fact]
+    public void SessionWeatherChromeOffSizingKeepsFullMetricSectionsVisible()
+    {
+        var now = new DateTimeOffset(2026, 5, 25, 18, 30, 0, TimeSpan.Zero);
+        var settings = NewOverlay(
+            SessionWeatherOverlayDefinition.Definition.Id,
+            SessionWeatherOverlayDefinition.Definition.DefaultWidth,
+            SessionWeatherOverlayDefinition.Definition.DefaultHeight);
+        DisableSharedChrome(settings);
+        var snapshot = Snapshot(now, LiveRaceModels.Empty with
+        {
+            Session = LiveSessionModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                SessionType = "Race",
+                SessionName = "Endurance",
+                EventType = "Race",
+                TeamRacing = true,
+                SessionTimeSeconds = 60d,
+                SessionTimeRemainSeconds = 3600d,
+                SessionTimeTotalSeconds = 14400d,
+                SessionLapsRemain = 20,
+                RaceLaps = 50,
+                SessionState = 4,
+                TrackDisplayName = "Road Atlanta",
+                TrackLengthKm = 4.088d,
+                CarDisplayName = "Mercedes-AMG GT3"
+            },
+            Reference = LiveReferenceModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                PlayerCarIdx = 10,
+                FocusCarIdx = 10,
+                FocusIsPlayer = true,
+                PlayerYawNorthRadians = Math.PI
+            },
+            Weather = LiveWeatherModel.Empty with
+            {
+                HasData = true,
+                Quality = LiveModelQuality.Reliable,
+                AirTempC = 19d,
+                TrackTempCrewC = 44d,
+                TrackWetness = 0,
+                TrackWetnessLabel = "dry",
+                WeatherDeclaredWet = false,
+                WeatherType = "constant",
+                SkiesLabel = "partly cloudy",
+                PrecipitationPercent = 0.12d,
+                WindVelocityMetersPerSecond = 4.2d,
+                WindDirectionRadians = Math.PI,
+                RelativeHumidityPercent = 0.67d,
+                FogLevelPercent = 0.02d,
+                AirPressurePa = 101325d,
+                RubberState = "moderate usage"
+            }
+        });
+        var viewModel = SessionWeatherOverlayViewModel.From(snapshot, now, "Metric", settings);
+
+        Assert.Collection(
+            viewModel.MetricSections,
+            section => Assert.Equal(5, section.Rows.Count),
+            section =>
+            {
+                Assert.Equal(5, section.Rows.Count);
+                Assert.Contains(section.Rows, row => row.Label == "Atmosphere");
+            });
+
+        var expected = OverlayContentSizing.BaseSizeFor(
+            SessionWeatherOverlayDefinition.Definition,
+            settings,
+            OverlaySessionKind.Race);
+        var renderedSectionSize = OverlayContentSizing.SimpleTelemetrySizeForRenderedSections(
+            SessionWeatherOverlayDefinition.Definition,
+            settings,
+            OverlaySessionKind.Race,
+            viewModel.MetricSections,
+            viewModel.Sections);
+        var renderedRowCountSize = OverlayContentSizing.SimpleTelemetrySizeForRenderedRowCounts(
+            SessionWeatherOverlayDefinition.Definition,
+            settings,
+            OverlaySessionKind.Race,
+            viewModel.MetricSections.Select(section => section.Rows.Count).ToArray(),
+            viewModel.Sections.Select(section => section.Rows.Count).ToArray());
+
+        Assert.Equal(expected, renderedSectionSize);
+        Assert.Equal(expected, renderedRowCountSize);
+    }
+
     private static OverlaySettings NewOverlay(string id, int defaultWidth, int defaultHeight)
     {
         return new ApplicationSettings().GetOrAddOverlay(id, defaultWidth, defaultHeight);
+    }
+
+    private static void DisableSharedChrome(OverlaySettings settings)
+    {
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusTest, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusPractice, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusQualifying, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderStatusRace, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingTest, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingPractice, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingQualifying, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeHeaderTimeRemainingRace, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceTest, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourcePractice, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceQualifying, false);
+        settings.SetBooleanOption(OverlayOptionKeys.ChromeFooterSourceRace, false);
     }
 
     private static void SetGapTrendBlocks(OverlaySettings settings, bool enabled)

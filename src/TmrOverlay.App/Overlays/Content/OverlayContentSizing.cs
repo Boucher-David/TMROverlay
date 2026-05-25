@@ -234,7 +234,13 @@ internal static class OverlayContentSizing
                 visibleMetricSections.Select(section => section.Rows.Count).ToArray(),
                 visibleGridSections.Select(section => section.Rows.Count).ToArray(),
                 definition.DefaultHeight));
-        return ApplyChromeHeight(definition, settings, sessionKind, baseSize);
+        return EnsureFullSessionWeatherChromeOffHeight(
+            definition,
+            settings,
+            sessionKind,
+            visibleMetricSections.Select(section => section.Rows.Count).ToArray(),
+            visibleGridSections.Select(section => section.Rows.Count).ToArray(),
+            ApplyChromeHeight(definition, settings, sessionKind, baseSize));
     }
 
     public static Size SimpleTelemetrySizeForRenderedRowCounts(
@@ -266,7 +272,39 @@ internal static class OverlayContentSizing
         var baseSize = new Size(
             width,
             SimpleTelemetryRenderedHeight(visibleMetricRowCounts, visibleGridRowCounts, definition.DefaultHeight));
-        return ApplyChromeHeight(definition, settings, sessionKind, baseSize);
+        return EnsureFullSessionWeatherChromeOffHeight(
+            definition,
+            settings,
+            sessionKind,
+            visibleMetricRowCounts,
+            visibleGridRowCounts,
+            ApplyChromeHeight(definition, settings, sessionKind, baseSize));
+    }
+
+    private static Size EnsureFullSessionWeatherChromeOffHeight(
+        OverlayDefinition definition,
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind,
+        IReadOnlyList<int> metricRowCounts,
+        IReadOnlyList<int> gridRowCounts,
+        Size size)
+    {
+        if (!string.Equals(definition.Id, SessionWeatherOverlayDefinition.Definition.Id, StringComparison.Ordinal)
+            || HasSelectedHeaderChrome(definition.Id, settings, sessionKind)
+            || gridRowCounts.Any(rowCount => rowCount > 0)
+            || metricRowCounts.Where(rowCount => rowCount > 0).Sum() < 10)
+        {
+            return size;
+        }
+
+        var fullChromeOffSize = ApplyChromeHeight(
+            definition,
+            settings,
+            sessionKind,
+            new Size(size.Width, SimpleTelemetryDefaultHeightForSession(definition, sessionKind)));
+        return size.Height >= fullChromeOffSize.Height
+            ? size
+            : new Size(size.Width, fullChromeOffSize.Height);
     }
 
     private static int TableOverlayWidth(

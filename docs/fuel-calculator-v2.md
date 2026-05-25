@@ -38,9 +38,12 @@ the finish lap from the session clock, leader progress, and pace.
 
 ### Product Decision
 
-Fuel V2 must treat race lap budget as a first-class model with source,
-confidence, and missing-signal details. It should not only expose a decimal
-`RaceLapsRemaining` value.
+Race lap budget / laps logic V2 should be a shared Core model from the start,
+with source, confidence, and missing-signal details. Fuel V2 consumes this
+contract, but does not own it. The same contract should eventually feed
+Session / Weather, Pit Service, Standings class separators, Track Map, and
+shared header/footer options that display laps or race-budget context. It should
+not only expose a decimal `RaceLapsRemaining` value.
 
 User-facing strategy advice such as stop deletion, underfueling, stretch-to-one-
 more-lap prompts, or pit-service refuel recommendations should require a trusted
@@ -270,10 +273,12 @@ The row should name the source compactly when space allows, such as `history`,
 live green-lap burn confirms or rejects it.
 
 If the Fuel tab or overlay section is labeled `Strategy`, it is reasonable for
-users to read it as strategy suggestion space. Fuel V2 should therefore allow
-user settings that choose how much strategy advice to show, such as conservative
-facts only, soft scenarios, or more assertive strategy suggestions once evidence
-clears the relevant gates.
+users to read it as strategy suggestion space. For initial V2, park explicit
+advice-level settings and default to conservative behavior: core fuel,
+configured margin, stable strategy summary, and high-confidence risk/status
+context. Use teammate testing to decide whether controls such as conservative
+facts only, soft scenarios, or more assertive strategy suggestions are actually
+needed.
 
 ### User Fuel Margin Policy
 
@@ -564,21 +569,70 @@ Race pace should prefer:
 
 The race lap budget model should carry at least:
 
-- source id
-- confidence band
+- `primaryLapsRemaining`: the conservative/actionable whole-lap value that Fuel
+  can use for `fuel to finish`, refuel amount, and margin math.
+- `possibleLapsRemaining`: decimal alternate/range context for boundary cases,
+  displayed when useful but not used to lower safety-critical fuel by itself.
+- `source`: one of the V2 lap-budget source enum values listed below.
+- `confidence`: one of the V2 confidence enum values listed below.
+- `stateFlags`: additive V2 reason flags listed below.
+- `canDriveFuelAdvice`: Fuel-specific gate that says whether
+  `primaryLapsRemaining` may drive fuel-to-finish, refuel, margin, stop deletion,
+  or stop-risk advice.
+- `displayLabel`: shared short text for general overlay chrome, such as
+  `6 laps` or `laps unknown`, separate from Fuel-specific strategy copy.
 - estimated finish lap
-- strategy laps remaining
-- leader progress
-- strategy car progress
+- leader progress, including fractional lap position where available
+- strategy car progress, including fractional lap position where available
 - race pace and pace source
 - strategy-car pace and pace source, when needed for lapped-car projection
 - session time remaining
 - session state/phase
 - missing or contradictory signals
-- user margin applied
 - pace/phase and outlier classification
 
-Recommended confidence bands:
+Fuel-specific policy such as user fuel margin should be applied by Fuel after it
+consumes the shared lap-budget contract, not stored as part of the shared laps
+model.
+
+Display-label decision: the shared lap-budget model owns the simple actionable
+lap-count language. It should say `N laps` or the appropriate unavailable form,
+and consumers should consume that label rather than formatting their own
+competing lap-count text. Fuel, Pit Service, Session / Weather, Track Map,
+Standings, and shared header/footer renderers can still add their own surrounding
+strategy copy, but the base lap-budget label comes from the shared model. When a
+surface needs boundary context, it should consume the model's decimal
+`possibleLapsRemaining` value rather than recomputing its own estimate.
+
+Consumer policy: most consumers should stay dumb until proven otherwise. Shared
+header/footer slots, standings separators, track-map labels, and similar display
+surfaces should consume the model-provided header/content value, such as
+`6 laps`, without reinterpreting confidence, source, or state flags. Fuel is the
+primary consumer that turns the lap-budget contract into strategy math, margin
+math, refuel advice, and stop-risk decisions.
+
+Fuel actionability decision: the shared model should publish one Fuel-specific
+gate, `canDriveFuelAdvice`, instead of requiring Fuel to duplicate every
+source/confidence/flag rule. This does not make every consumer smart. It simply
+lets the shared lap-budget model say whether its current `primaryLapsRemaining`
+is safe enough for Fuel math; Fuel still applies user margin, fuel-cap, burn
+evidence, unit display, and strategy copy after consuming the gate.
+
+The exact relationship between `medium` confidence and `canDriveFuelAdvice`
+should be decided by replay/fixture testing, not locked by planning text. Start
+with the conservative assumption that lower-confidence states must not reduce
+fuel or delete stops, then let the V2 laps tests show whether any medium states
+are stable enough for specific Fuel actions.
+
+Lap-budget persistence decision: do not persist every live
+`primaryLapsRemaining` or `possibleLapsRemaining` projection. Do persist compact
+final race-distance facts when they are proven, because they can seed future
+planning months later for the same track/session/car-class shape. A future race
+can benefit from knowing that a matching 35-minute Dallara session previously
+finished at 6 laps, but that fact should be context or a pre-green seed until
+live race evidence takes over.
+
+Initial confidence enum:
 
 - `authoritative`: published remaining laps or fixed lap total.
 - `high`: timed race with positive live clock, leader progress, and rolling clean
@@ -589,6 +643,118 @@ Recommended confidence bands:
   fallback.
 - `blocked`: active/end-of-race ambiguity, missing clock, missing progress, or
   contradictory SDK fields.
+
+`blocked` means the lap-budget model must not publish a Fuel-actionable
+`primaryLapsRemaining`. `low` can still be useful planning context in settings,
+pre-race, diagnostics, or non-actionable header/footer display, but it should not
+drive overlay refuel advice or stop deletion.
+
+Initial source enum:
+
+- `published-laps-remaining`: finite SDK/session field directly reports laps
+  remaining.
+- `fixed-lap-total`: fixed-lap race total plus leader/team progress determines
+  remaining distance.
+- `timed-live-clock`: active timed race projection from live remaining clock,
+  leader progress, and accepted pace evidence.
+- `timed-pre-green-estimate`: scheduled race time and seed pace before enough
+  live race progress exists.
+- `timed-expired-final-lap`: timed race clock has expired and final-lap /
+  own-checkered state determines the remaining budget.
+- `missing-active-clock`: active race state exists but the clock needed for timed
+  projection is missing, contradictory, or unusable.
+- `unavailable`: no trustworthy lap budget can be published.
+
+Initial state flags:
+
+- `pre-green`: session has not produced live race-progress evidence yet.
+- `boundary-risk`: plausible finish range straddles a lap boundary.
+- `leader-progress-missing`: leader progress needed for the chosen source is
+  missing or unusable.
+- `strategy-progress-missing`: local/team strategy-car progress needed for the
+  chosen source is missing or unusable.
+- `pace-seed-only`: pace comes from scheduled, historical, or estimated seed
+  data rather than clean live race laps.
+- `pace-contaminated`: recent pace evidence may include yellow, pit, damage,
+  traffic, draft, wet-condition, leader-change, or other disruption.
+- `own-checkered-pending`: finish state depends on whether the strategy car has
+  personally taken checkered.
+- `session-finished`: session has finished and the model is reporting final
+  state rather than live strategy state.
+- `contradictory-fields`: SDK/session fields disagree in a way that affects lap
+  budget.
+- `published-field-transient`: an authoritative-looking published lap field has
+  recently changed in a suspicious short-lived way.
+- `clock-expired`: timed-race clock has reached zero or sentinel final-lap
+  behavior.
+- `clock-missing`: active timed race is missing a usable remaining-clock value.
+
+State flags explain why a source/confidence decision was made. They should not
+become a second source enum or confidence ladder.
+
+Initial pace-contamination policy:
+
+- Hard invalids should reject pace evidence up front: missing lap time, zero or
+  negative lap time, known pit lap, a lap/progress sample that cannot be matched
+  to a real completed race lap, or a physically impossible outlier for the
+  car/track/session scope.
+- Yellow, wet, traffic, draft, damage, leader-change, and similar conditions
+  should usually start as contamination flags that degrade confidence or add
+  boundary risk rather than automatically discarding the pace sample. Replay
+  tests can later prove which of those conditions should become hard
+  disqualifiers for specific Fuel actions.
+- Plausible slow pace must not be rejected just because it is materially slower
+  than the normal baseline. In a 35-minute race, a driver may intentionally give
+  up 6+ seconds per lap to hit a `12.5 L/lap` fuel target and save roughly 40
+  seconds of pit time. That pace should be degraded or labeled as fuel-save /
+  strategy context until corroborated, but it is still real race evidence and may
+  be the point of the strategy.
+
+Primary strictness from replay evidence:
+
+- Treat this as a "never low" contract for Fuel. At replay checkpoints after
+  `N` completed leader/team laps, `primaryLapsRemaining` must not be below the
+  eventual strategy-car laps still required to finish. Being one lap high is
+  acceptable and should be labeled as conservative/boundary-risk when relevant.
+- Actionable fuel math rounds up to whole laps. Fractional remaining distance is
+  useful context for progress, stint shape, and possible-range display, but a
+  value such as `5.65` laps must become `6` laps for `primaryLapsRemaining` when
+  calculating final fuel requirement.
+- Do not overload `primaryLapsRemaining` with decimal estimates. It is the
+  rounded-up, safety-critical lap count. Fractional values such as `5.65` belong
+  in leader/strategy-car progress, estimated finish-lap detail,
+  `possibleLapsRemaining`, or diagnostics.
+- Keep `possibleLapsRemaining` decimal. Seeing a boundary value such as `6.01`
+  laps remaining, then watching it tick to `5.99`, can explain why the leader may
+  need one more stop and why Fuel can remove one actionable lap only after the
+  boundary is truly crossed.
+- Store `possibleLapsRemaining` as a numeric decimal with enough precision for
+  testing and model comparison. Initial Fuel/detail display can round it to two
+  decimal places, such as `6.01` or `5.99`, while the shared `displayLabel`
+  remains the simple actionable whole-lap text. This display precision is a
+  starting convention and can change after real UI testing.
+- Existing telemetry supports asymmetric strictness. In the 45-minute Dallara
+  timed race, leader-lap checkpoints projected `7` laps while the race finished
+  at `6` until later slower pace evidence settled. In the 4-hour team race,
+  start and early/mid-race projections were `31` while the actual result was
+  `30`, then later checkpoints matched `30`. These are acceptable conservative
+  misses, not reasons to lower the primary count early.
+- For timed races, the current rolling projection threshold of `3` clean leader
+  laps is enough to publish a projection, but not enough by itself to lower the
+  actionable primary count when the plausible finish range straddles a lap
+  boundary. In that case, keep the higher whole-lap count in
+  `primaryLapsRemaining` and put the decimal boundary estimate in
+  `possibleLapsRemaining`.
+- Lower `primaryLapsRemaining` to the smaller timed-race count only when clean
+  rolling pace, current leader progress, and recent projection history agree on a
+  single finish lap without pit/yellow/leader-change contamination, or when
+  finite published lap fields or own-checkered/final-lap state prove the shorter
+  distance.
+- Finite published `SessionLapsRemainEx` / `SessionLapsTotal` remains
+  authoritative, but short-lived decreases should be debounced or degraded before
+  reducing the actionable primary count. A transient `4 -> 3 -> 4` blip should
+  not make fuel strategy flicker or briefly underfuel; increases can apply
+  immediately because they are conservative.
 
 Advice gating:
 
@@ -880,6 +1046,64 @@ Project decisions from this probe:
   Fuel strategy output for the same frames.
 - Add a compact fixture that records race lap budget inputs and expected quality
   classification without committing raw `telemetry.bin`.
+- Add "laps after N" fixture sweeps for timed and fixed-lap races. For each
+  checkpoint, record leader/team progress, candidate source, primary count,
+  possible range, eventual strategy laps to finish, and whether the candidate was
+  exact, one-high, or undercounted. Undercounts are failures for Fuel advice;
+  one-high timed estimates are acceptable conservative outputs.
+  Initial fixture rows should use this compact contract shape:
+
+```text
+captureId
+sessionPhase
+overallLeaderCarId
+overallLeaderCompletedLap
+overallLeaderLapProgress
+classLeaderCarId
+classLeaderCompletedLap
+classLeaderLapProgress
+focusCarId
+focusCarCompletedLap
+focusCarLapProgress
+inputs
+paceEvidence
+source
+confidence
+stateFlags
+primaryLapsRemaining
+possibleLapsRemaining
+displayLabel
+canDriveFuelAdvice
+eventualLapsToFinish
+classification
+```
+
+  `classification` starts as `exact`, `one-high`, `undercount`, or `blocked`.
+  The sweep should directly prove the "never low" rule for Fuel: undercounts fail
+  the contract, one-high timed estimates are acceptable conservative results, and
+  blocked rows explain why Fuel should not act.
+  Use explicit overall-leader, class-leader, and focus/strategy-car checkpoint
+  fields instead of one ambiguous `checkpointLap`; endurance, multiclass, and
+  lap-down scenarios need those perspectives separated. Include both completed
+  lap and fractional progress for each role where available so fixtures can audit
+  integer checkpoint behavior and explain timed-race boundary math.
+  Include a compact `inputs` object for the raw SDK/session values that produced
+  the result, especially `SessionLapsRemainEx`, `SessionLapsTotal`,
+  `SessionTimeRemain`, `SessionTime`, `SessionState`, `RaceLaps`,
+  `DriverCarEstLapTime`, and the `CarIdx*` progress fields used for overall
+  leader, class leader, and focus car. The fixture should explain failures
+  without committing or reopening full raw captures.
+  Include a compact `paceEvidence` object with selected pace source, pace value,
+  sample count or window identity, rolling/window metadata when relevant, and
+  contamination flags such as pit, yellow, wet, traffic, draft, damage,
+  leader-change, invalid lap, or outlier. Timed projections need this to explain
+  why the model chose a 6-lap versus 7-lap budget.
+  `paceEvidence` can also include a lightweight `paceMode` hint such as
+  `normal`, `fuel-save-candidate`, `push-candidate`, `contaminated`, or
+  `invalid`. Do not overbuild this classifier up front. Average lap time may be
+  enough for the first V2 model, especially when normal traffic constantly makes
+  laps several seconds slower. Let replay testing prove whether a more detailed
+  pace-mode split is worth using.
 - Add tests that prevent scheduled race time from reappearing as the remaining
   lap budget after an active timed-race clock expires.
 - Add a race-start test where `SessionTimeRemain` is positive but local/team
@@ -928,9 +1152,8 @@ Project decisions from this probe:
 - How should cautions/yellows affect timed-race pace selection: freeze the
   previous green pace for normal burn, classify the yellow as current-race
   context, and keep it out of historical green-burn projections?
-- Should race lap budget be a shared Core model consumed by Session / Weather,
-  Pit Service, Standings class separators, and Fuel, or remain Fuel-owned until
-  the replay evidence stabilizes?
+- Which shared header/footer display options should consume the lap-budget
+  model first, and which should wait until Fuel V2 replay evidence stabilizes?
 
 ## Next-Session Backlog
 
@@ -938,8 +1161,36 @@ These are Fuel V2 areas to return to next time. Some now have planning sections
 below, but still need implementation design, compact replay proof, or final
 product decisions before they should drive overlay advice.
 
+Implementation sequencing decision: start V2 by building and validating the
+under-the-hood data contracts, not by adding overlay rows. The first slices
+should promote core model contracts such as race lap budget / laps logic, fuel
+capacity, burn evidence, sector burn evidence, teammate/endurance stint shape,
+pit-service evidence, and `nextPitRequest`. Use the new compact data tooling,
+replay-window fixtures, and contract tests to prove each model before Fuel,
+Pit Service, Track Map, shared header/footer options, or Settings UI consumes it
+as user-facing advice.
+
+The initial contract-first pass should:
+
+- define explicit V2 source/confidence fields instead of renderer-local booleans;
+- preserve source units, normalized values, scope keys, and rejection/degradation
+  reasons;
+- produce deterministic fixture outputs for shown/hidden/degraded/rejected
+  states before overlay copy is finalized;
+- keep shared Core contracts renderer-neutral so Windows native, browser review,
+  and localhost/OBS consume the same model shape;
+- update durable schema/version/data-contract snapshots only when the model
+  becomes persisted user history rather than temporary replay evidence.
+
 Race lap budget and reserve:
 
+- Race lap budget / laps logic V2: make this the first contract target. It
+  should classify fixed-lap, timed-race, pre-green, boundary-risk, leader/focus
+  disruption, own-checkered, and unavailable states as structured model output
+  with source, confidence, and conservative/possible lap counts. It is a shared
+  Core model, not a Fuel-owned helper, because it will eventually be consumed by
+  Fuel, Pit Service, Session / Weather, Standings, Track Map, and shared
+  header/footer display options.
 - User fuel margin policy: expose a lap-based Fuel tab setting so the user
   decides the normal extra fuel target; avoid hidden model reserve constants.
 - Cautions, yellows, and pace phases: classify edge-state fuel usage as
@@ -948,9 +1199,10 @@ Race lap budget and reserve:
 - Leader/focus disruption scenarios: fixture leader retirement, leader damage,
   strategy-car meatball/repair, and sudden lap-down changes so Fuel V2 does not
   lower fuel targets on unconfirmed future state.
-- Shared race-budget ownership: decide whether lap-budget confidence becomes a
-  Core model consumed by Session / Weather, Pit Service, Standings class
-  separators, and Fuel, or remains Fuel-owned until replay evidence stabilizes.
+- Shared race-budget ownership: build lap-budget confidence as a Core model from
+  the start. Fuel is the first strategy consumer, but header/footer display
+  should eventually be able to show the same laps/race-budget state without
+  duplicating Fuel logic.
 
 Fuel usage and baseline evidence:
 
@@ -1032,42 +1284,66 @@ Pit-service evidence and diagnostics:
   classify as a valid cap-limited fill, not as failed refuel evidence.
 - Fast repair and discrete service proof: collect or import clean samples so
   fast repair, tearoff/wiper, setup adjustments, and other exposed services can
-  graduate like tires/fuel.
-- Required/optional repair lower bounds: collect historical minimum meatball or
-  repair timings without pretending exact repair duration is fixed.
+  graduate like tires/fuel. Once isolated, these services should use the same
+  unavailable/observed/corroborated/proven promotion ladder as the main service
+  facts.
+- Required/optional repair handling: consume live repair timers/status while in
+  pit lane so strategy can update around known waiting time, but do not pretend
+  exact repair duration is a fixed learned service. Historical repair evidence is
+  mostly diagnostics or conservative lower-bound context.
 - Black-flag/penalty holds: classify stop-and-go and stop-and-hold windows as
-  race-control obligations separate from normal service timing.
+  race-control obligations separate from normal service timing. Consume known
+  live hold time for current strategy updates, but keep historical penalty holds
+  diagnostic unless they are needed to explain a past stop.
 - Unknown schema discovery: preserve plausible new `PitSv*`, `dp*`, `dc*`, and
-  `CarIdx*` service signals in diagnostics until semantics can be mapped.
+  `CarIdx*` service signals as first-class diagnostics and bundle evidence until
+  semantics can be mapped. Unknown signals must not affect overlay advice until
+  mapped and promoted.
 
 Pit-lane, team, and shared evidence:
 
 - Fuel-to-pit-box risk: account for pit stall location, pit-lane travel, late or
-  wrapped/shared boxes, and minimum fuel at pit entry.
+  wrapped/shared boxes, and minimum fuel at pit entry. This is a V2
+  risk/status output, not an optimization input; it should warn when the car may
+  reach pit entry but not the assigned stall, and it must not pollute normal
+  race-lap burn history.
 - Pit-lane travel baselines: prove track/config/version, pit speed,
   `DriverPitTrkPct`, entry/exit behavior, and car effects before using pit loss
-  as a strategy constant.
+  as a strategy constant. When evidence is strong, pit-lane loss can influence
+  stop-loss, rejoin, and strategy-summary calculations, but it does not need a
+  standalone driving-overlay row by default.
 - Opponent/cohort evidence: build same-car/class pit-road distributions from
   `CarIdxOnPitRoad` so local stop classifications can be corroborated or
-  flagged as outliers.
+  flagged as outliers. Cohort evidence is context only: it can strengthen or
+  challenge a local classification, but it must not replace local proof for fill
+  rate, service timing, or strategy-grade advice.
 - Team and endurance model: handle teammate stint length, active driver changes,
   reconnects, scalar fuel validity, and teammate targets as V2 scope from the
-  start. Overlay Bridge can later strengthen live sharing, but the V2 strategy
-  model should not treat teammate/endurance stints as a post-V2 add-on.
+  start. If Overlay Bridge provides valid teammate fuel state, consume it like
+  live fuel state for the active team car, at sector/lap cadence instead of
+  frame cadence. The V2 strategy model should not treat teammate/endurance
+  stints as a post-V2 add-on.
 - Shared evidence import: support teammate/support diagnostic bundles and future
   Overlay Bridge evidence as source-labeled samples that can strengthen but not
-  silently replace local proof.
+  silently replace local proof. This is separate from live Bridge teammate fuel
+  state, which is the current source of truth for that teammate's stint when
+  valid.
 
 Pit now versus later and traffic:
 
 - Current stint plan comparison: define exact candidate plans for `pit now`
   versus current stint plan, early stop, pit in `N` laps, and last safe lap.
 - Projected rejoin: prove stop-loss plus field projection well enough for
-  "pit now exits into traffic" and future Track Map `Pit` ghost markers.
+  informational rows such as "pit now exits into traffic", "pit now clear by
+  3.2s", and future Track Map `Pit` ghost markers. Treat this as rejoin context
+  first, not box/stay-out optimization.
 - Tire-payback model: build tire-age, warmup/outlap, traffic, fuel-load, and
   temperature baselines before showing strategy-grade "tires pay back" rows.
-- Fuel weight and clean-air value: decide whether these are V2 inputs or later
-  scenario evidence.
+  Keep this hidden or explicitly experimental until both stop-loss and on-track
+  tire-performance evidence are credible.
+- Fuel weight and clean-air value: V3 strategy modeling. V2 can preserve fuel
+  load, traffic, and clean-air context as evidence, but should not use those
+  effects to recommend underfueling, boxing, or staying out.
 
 Validation and fixtures:
 
@@ -1145,7 +1421,9 @@ What is not proven available from live telemetry:
 
 - Direct trustworthy `FuelPerLap`.
 - Opponent or class fuel levels.
+- Teammate-active fuel level from a non-driving/spectator client.
 - iRacing-computed fuel to finish.
+- iRacing black-box laps-left/fuel-left estimate as a public SDK field.
 - A final refuel recommendation for the current race.
 - A safe strategy value derived from one frame of `FuelUsePerHour`.
 
@@ -1192,6 +1470,12 @@ Current evidence notes:
   could imply materially higher per-lap burn than fuel-delta history for the same
   combo, so instantaneous burn must not drive strategy without smoothing and
   agreement checks.
+- In the 4-hour team-race capture, teammate stints had no direct
+  `FuelLevel`/`FuelUsePerHour` scalar available to the non-driving local client,
+  even though team-car timing and pit context remained available through
+  `CarIdx*` arrays. The iRacing black box may display laps-left information from
+  simulator-internal state or an internal estimate, but that value is not proven
+  exposed in the captured SDK schema.
 
 Replay questions:
 
@@ -1201,8 +1485,8 @@ Replay questions:
   underfueling?
 - Does `FuelUsePerHour` become stable after smoothing by throttle/green-lap
   windows, or does it remain too sensitive for strategy?
-- In team races, when a teammate is driving, does scalar `FuelLevel` represent
-  the active team car consistently enough to measure teammate stint burn?
+- In team races, can any newer SDK schema or session state expose the black-box
+  fuel/laps-left value while a teammate is driving, or is it simulator UI-only?
 - During pit service, which fuel request and service fields best distinguish
   requested fuel, actual fuel added, and final tank level?
 
@@ -1432,6 +1716,11 @@ current-state context that affects recommendations such as `fuel to next stop`,
 This prevents pit-lane artifacts from corrupting the driver's race-pace fuel
 number while still accounting for the real risk case: a car can have enough fuel
 to reach pit entry but not enough fuel to reach a late/shared pit stall.
+Fuel-to-box risk should use current fuel, expected burn to pit entry/stall,
+`DriverPitTrkPct`, pit-lane travel/burn evidence, and the current assigned-box
+context. It should surface as a status/risk row such as `low fuel to stall`, not
+as a strategy optimizer, and its pit-lane consumption samples should stay out of
+normal clean-lap history.
 
 Examples of useful edge-state outputs:
 
@@ -1575,21 +1864,26 @@ Timing model:
 
 - Fast repair should be modeled like other discrete pit services such as tires,
   refuel, windshield tearoff, or wiper service where exposed. Once isolated, it
-  can become a durable car/rule service constant. Actual required/optional
-  repairs remain separate because damage repair duration can vary dramatically.
-  A meatball repair window should never be rolled into normal tire, fuel,
-  tearoff, fast-repair, or pit-lane timing baselines.
+  can become a durable car/rule service constant and use the same promotion
+  ladder as the main service facts. Actual required/optional repairs remain
+  separate because damage repair duration can vary dramatically. A meatball
+  repair window should never be rolled into normal tire, fuel, tearoff,
+  fast-repair, or pit-lane timing baselines.
 - Black flags and penalty holds must be a separate race-control class, not a
   repair or service class. A stop-and-go or stop-and-hold penalty adds enforced
   hold time to the stop, but it should not contaminate tire, fuel, repair, or
-  pit-lane baselines.
+  pit-lane baselines. When live race-control state exposes a known hold, Fuel V2
+  can update current strategy around that obligation. Historical penalty holds
+  should remain diagnostics/explanation, not pre-stop service predictions.
 - In the normal pit-service model, nearly everything can become a durable
   constant, solved equation, or track/session baseline after enough clean
   evidence. Fuel quantity is strategy-dependent, but refuel time becomes a solved
   equation once the per-liter rate is proven. Pit-lane travel should be treated
   as dynamic until proven, then promoted to a durable strategy input when repeat
   stops show the same track, pit box, pit speed, entry/exit behavior, and no
-  traffic/penalty contamination.
+  traffic/penalty contamination. Promotion means it can affect total stop,
+  rejoin, and `pit now vs later` math; it does not imply the overlay must show a
+  separate pit-lane loss row.
 
 Stable versus synthesized service model:
 
@@ -1604,7 +1898,9 @@ Stable versus synthesized service model:
 - Track/session baseline after proof: pit-lane travel/loss from entry to box and
   box to exit. Once repeated clean stops prove it is stable for the track,
   assigned box, pit-speed rule, and entry/exit behavior, it can become a durable
-  strategy decision point instead of a live-only estimate.
+  strategy input instead of a live-only estimate. Use it inside total stop,
+  rejoin, and strategy-summary calculations before adding any standalone
+  display.
 - Calculated every stop, not unknown timing constants: liters to add, fuel
   service duration, requested tires, requested tearoff, selected fast repair,
   and any proven fixed service task selected by the strategy.
@@ -1613,12 +1909,12 @@ Stable versus synthesized service model:
   traffic, abnormal entry/exit, tow/reset/garage transitions, penalty holds, or
   contradictory stop-window/tank-delta signals. These windows should invalidate
   or degrade the stop sample rather than become normal timing constants.
-- Required/optional repairs can still have historical baselines, but those
-  baselines should be treated as conservative distributions or lower bounds, not
-  fixed service constants. For example, Fuel V2 can learn the minimum observed
-  meatball repair time for a car/session scope and use it to warn that a stop
-  will take at least `N` seconds, while keeping the open-ended extra repair time
-  source-labeled as uncertain.
+- Required/optional repairs should primarily be consumed live from repair
+  timers/status while the car is in pit lane. If telemetry says there are six
+  minutes of repair remaining, Fuel V2 can update strategy around that known
+  waiting time. Historical repair evidence can exist as diagnostics or
+  conservative lower-bound context, but it should not become a fixed service
+  constant or a normal pre-stop prediction.
 - Setup adjustments such as ARB or wing should fit the stable-service bucket if
   iRacing exposes reliable request/status fields for the car. Current corpus
   searches prove pit-service request fields for tires, fuel, fast repair,
@@ -1642,7 +1938,8 @@ Scope-key model:
 - Pit-lane travel/loss should start as car plus track, then include the assigned
   pit box, pit-speed rule, entry/exit behavior, and traffic/penalty rejection.
   If repeated clean stops prove the same track/box/rule combination is stable,
-  that value can be promoted to a durable baseline for strategy comparisons.
+  that value can be promoted to a durable baseline for strategy comparisons and
+  overlay calculations without requiring a visible pit-loss row.
 - Historical baselines should store the scope key that proved the value, not
   only the numeric result. A future strategy row needs to know whether it is
   using exact car/track/session evidence, car-only service evidence, or a weaker
@@ -1698,9 +1995,9 @@ Recommended initial scope policy:
 | Tire service duration | car + car version + tire/service-rule signature | track, practice vs race, fuel cap | Tire service should be a car/rules constant once isolated. |
 | Tearoff/wiper/setup service | car + car version + exposed service-rule signature | track, practice vs race | These are stationary service mechanics, not track geometry. |
 | Fast repair duration | car + car version + fast-repair/rule signature | track, practice vs race | Fast repair is a discrete service once isolated; exact availability comes from rules. |
-| Required/optional repair lower bound | car + car version + repair/rule signature | track for stationary repair | Damage varies, but minimum observed repair behavior is mostly car/rules; pit travel stays separate. |
+| Required/optional repair live status | car + car version + repair/rule signature | track for stationary repair | Damage varies too much for fixed timing. Live repair timers/status are useful for current strategy; historical repair data is lower-bound/diagnostic context. Pit travel stays separate. |
 | Service overlap/order | car + service-rule signature + service-shape bucket | track, practice vs race | Overlap behavior is how iRacing services that car; service shape matters more than session type. |
-| Pit-lane travel/loss | track/config/version + pit speed + `DriverPitTrkPct` + car + entry/exit behavior | stationary service rules | Track geometry, assigned box, and pit speed dominate this bucket. |
+| Pit-lane travel/loss | track/config/version + pit speed + `DriverPitTrkPct` + car + entry/exit behavior | stationary service rules | Track geometry, assigned box, and pit speed dominate this bucket. Use it as a calculation input when strong; no standalone overlay row is required. |
 | Fuel-to-box risk | track/config/version + `DriverPitTrkPct` + current fuel burn/rate | stationary service proof | A late pit box affects whether the car reaches the stall, not the service duration. |
 | Penalty hold | race-control rule + session event context + observed hold | car/track service baselines | Penalty time is an obligation layered on top of service, not a normal service mechanic. |
 
@@ -1733,6 +2030,9 @@ Promotion and corroboration model:
   promoted baseline by itself. It can raise confidence in a local stop
   classification when local telemetry already supports that classification, and
   it can block promotion when the local stop disagrees with the race cohort.
+  Opponent windows should not directly teach fuel fill-rate, tire timing,
+  service overlap, or refuel strategy because iRacing does not expose their
+  requested service, tank delta, stall state, or repair status.
 
 Confidence states and UI copy policy:
 
@@ -1805,9 +2105,10 @@ Current capture confidence by pit signal:
 | Tire service | `observed`, not corroborated by rich local windows yet. | NASCAR has one tire-set-change stop with `58.750s` service active. The 4h GT3 aggregate reports tire-change service at `39.200s`, but compact data lacks per-stop service/flag/tire-counter detail. Dallara race stops show no tire changes. | "Observed tire service in NASCAR capture" is allowed. No "tires cost N seconds" strategy copy yet. |
 | Tearoff | `observed` as requested service, duration unproven. | Dallara fuel stops have flags `48`, which decode as fuel plus tearoff. There is no isolated tearoff-only or fuel-without-tearoff comparison in the current race evidence. | Can mention request state in diagnostics. Must not claim tearoff duration. |
 | Fast repair | `unavailable` / `learning`, but service class is static once isolated. | Current summarized race pit stops do not show a clean `fastRepairUsed = true` service window. | Hide timing rows until isolated. Diagnostics can say no clean fast-repair sample; once proven, treat like tires/fuel/tearoff rather than like open-ended damage repair. |
-| Required/optional repair timers | `unavailable` / `learning` for exact duration; future lower-bound baselines are plausible. | `PitRepairLeft` and `PitOptRepairLeft` are present in telemetry schemas, but no clean repair service window has been classified from the current race summaries. | No exact repair-duration advice yet. A future row may show conservative minimum meatball/repair time if learned from history. |
-| Black-flag / penalty hold | `unavailable` / `learning`. | Live diagnostics show `pitWindowsWithBlackFlag = 0` in the inspected diagnostics. Some windows carry session-flag bits, but no confirmed stop-and-go or timed hold is classified. | No penalty-hold timing advice. Keep penalty holds as a separate bucket when captured. |
-| Cohort/opponent pit timing | Signal available, model still `learning`. | `CarIdxOnPitRoad` can expose field pit-road windows, but current capture summaries do not yet include cohort distributions by car/class/service family. | Good next analysis target; cannot promote local service timing by itself. |
+| Other discrete services | `unavailable` / `learning` until isolated. | Tearoff/wiper, setup adjustment, and similar discrete pit-service options should be discovered from request/status fields and clean stop windows. | Use the same service-fact promotion ladder as fuel, tires, and fast repair once isolated. Do not mix them with variable required/optional repair timing. |
+| Required/optional repair timers | `observed` as live countdown fields when present; `learning` for historical lower-bound context. | `PitRepairLeft` and `PitOptRepairLeft` are present in telemetry schemas, but no clean repair service window has been classified from the current race summaries. | Use live repair timers/status to update current strategy while in pit lane. Do not present fixed pre-stop repair-duration advice from history. |
+| Black-flag / penalty hold | `observed` when live race-control hold state is known; `learning` for historical explanation. | Live diagnostics show `pitWindowsWithBlackFlag = 0` in the inspected diagnostics. Some windows carry session-flag bits, but no confirmed stop-and-go or timed hold is classified. | Use known live hold time to update current strategy. Keep penalty holds separate from service timing and historical baselines. |
+| Cohort/opponent pit timing | Signal available, model still `learning`. | `CarIdxOnPitRoad` can expose field pit-road windows, but current capture summaries do not yet include cohort distributions by car/class/service family. | Use as corroboration, outlier detection, and diagnostics. It cannot promote local service timing, fill-rate, or strategy advice by itself. |
 | Service overlap/order | `learning`. | Current captures show fuel and tearoff can be requested together, and tire/fuel contamination exists, but we do not yet have paired clean no-tire/tire or fuel-only/fuel-plus-tire comparisons in the same car scope. | Do not show "tires are free" or additive tire/fuel math until proven. |
 
 Current telemetry/model inventory:
@@ -1825,7 +2126,8 @@ Current telemetry/model inventory:
   `CarIdxTireCompound`, class/car metadata, timing/scoring rows, and local
   race-control flags. That is enough to infer cohort pit-road windows and
   compare stop durations, but not enough to know another car's exact service
-  request or fuel amount.
+  request or fuel amount. Treat these windows as a reason to ask "does our local
+  stop look normal?" rather than as a replacement timing or fuel source.
 - Pit request context includes `dpFuelFill`, `dpFuelAddKg`, tire-change request
   controls, pressure controls, `dpWindshieldTearoff`, and fast-repair request
   controls.
@@ -1868,6 +2170,10 @@ Schema discovery and unknown signal policy:
   included in shared evidence bundles, but they should not affect overlay advice
   until promoted to an explicit known signal or until a general classifier has
   enough corroborated evidence to prove what the field means.
+- Treat unknown candidate signals as first-class evidence for diagnostics and
+  support bundles, not as throwaway logs. They are useful precisely because a
+  later build or support workflow can map them without requiring a new raw
+  capture.
 - A newly discovered field should carry the original schema name, type, unit,
   description, value range, sample transitions, first/last capture versions, and
   proposed semantic family. If iRacing adds a new service such as another setup
@@ -1986,8 +2292,10 @@ Product decisions and hypotheses:
 - Fuel V2 should model fixed-duration service tasks as proven constants, model
   refuel time as a proven per-liter equation, and promote pit-lane travel to a
   durable track/session baseline when repeated clean stops prove it. With those
-  pieces, planned stop loss can become a strategy-grade estimate. Actual
-  required/optional repair duration remains the main genuinely dynamic
+  pieces, planned stop loss can become a strategy-grade estimate. Pit-lane loss
+  may influence the overlay through total stop, rejoin, or strategy-summary
+  calculations, but it should not be a standalone row unless that proves useful.
+  Actual required/optional repair duration remains the main genuinely dynamic
   service-time input.
 - Fuel capacity must be modeled as both physical tank capacity and effective
   event capacity. Physical max fuel is usually car-scoped; effective max fuel is
@@ -2005,7 +2313,8 @@ Product decisions and hypotheses:
 - Black flags should be modeled as race-control obligations layered on top of
   service timing. A black-flag stop can be a mandatory strategy state, but the
   hold itself should be source-labeled and never merged into normal stop-loss
-  baselines.
+  baselines. Historical penalty holds explain past stops; live race-control hold
+  state is what should drive current strategy updates.
 - The user-visible pit-service recommendation should name its source:
   live measured, exact historical baseline, known car baseline, or unavailable.
 - Tire advice such as "tires are free" should remain hidden or soft until
@@ -2045,7 +2354,9 @@ Action items:
   contamination reasons, outlier rejection, and source/confidence labels.
 - Add a cohort pit-window classifier that groups same-car/class stops in the
   same race, compares pit-road duration distributions, and records whether the
-  local stop aligns with or deviates from the cohort.
+  local stop aligns with or deviates from the cohort. The classifier should emit
+  corroboration/outlier labels only; it should not create strategy-grade service
+  facts without matching local proof.
 - Add display confidence gates for pit-service advice so new users see safe core
   fuel strategy first, while service timing rows appear only as learning or
   proven evidence supports them.
@@ -2065,16 +2376,44 @@ Action items:
   signals. It should list fields matching known naming families, observed value
   transitions around pit windows, inferred semantic family, and whether the field
   is diagnostics-only, mapped, or promoted.
-- Investigate Overlay Bridge as a future shared-evidence path. If teammates opt
-  in, Bridge could publish known service facts or clean sample summaries for the
-  same team/session, helping corroborate fuel fill-rate, tire service, pit-lane
-  travel, and overlap behavior faster than isolated local learning. Shared proof
-  must keep scope, source, privacy, and conflict handling explicit; remote data
-  should probably corroborate local evidence before it becomes strategy-grade
-  advice for a driver.
+- Investigate Overlay Bridge as both a live team-state path and a future
+  shared-evidence path. For the active teammate's fuel state, Bridge messages are
+  consumed as the real current team-car state at sector/lap cadence, equivalent
+  to how the local client consumes its own live fuel state at frame cadence. For
+  learned service facts or clean historical sample summaries, Bridge data remains
+  source-labeled evidence that helps corroborate fuel fill-rate, tire service,
+  pit-lane travel, and overlap behavior faster than isolated local learning.
+  Shared proof must keep scope, source, privacy, and conflict handling explicit;
+  remote learned samples should usually corroborate local evidence before they
+  become strategy-grade advice for a driver.
+- Keep the default history store compact and derived. Normal Fuel V2 learning
+  should persist service/fuel evidence summaries, scope keys, source labels,
+  confidence, and rejection reasons, not raw telemetry frames. Raw captures and
+  richer frame-adjacent evidence stay opt-in diagnostic/development artifacts.
+- Persist compact race-distance outcome facts, not live projection streams. Useful
+  fields include track/config, session/race duration or lap total, series/session
+  type, car class or car scope, final overall-leader laps, final class-leader
+  laps, final focus/team-car laps, finish source, confidence, and notable state
+  flags. These facts can seed future pre-race lap-budget estimates, but they must
+  not override live authoritative fields or fresh race-progress evidence.
 
 Shared diagnostic evidence model:
 
+- Default retention boundary: Fuel V2 should store compact derived evidence for
+  ordinary history, not full raw telemetry. The normal local store needs enough
+  information to reproduce fuel/service decisions and explain confidence, but it
+  should not retain frame-by-frame payloads or private local history beyond what
+  the model actually uses.
+- Race-distance history should stay compact and scoped. Store the final observed
+  outcome and enough context to decide whether a future race is comparable; do
+  not store every lap-budget recalculation, full progress timeline, or raw
+  teammate/local history by default.
+- Versioning/migration should reuse the existing durable-data posture instead of
+  inventing a separate settings model. User-facing Fuel controls belong in the
+  versioned app settings path, while learned fuel/service evidence should follow
+  the history pattern: explicit version constants, compatible readers, skipped
+  future/unsupported records, rebuilt aggregates where possible, and data
+  contract snapshots when the durable schema changes.
 - A teammate should be able to share an individual race diagnostic bundle and
   have it strengthen another teammate's model without sending the entire raw
   capture. The bundle should contain compact service-evidence records, not just
@@ -2085,6 +2424,19 @@ Shared diagnostic evidence model:
   into the local evidence store here to train or validate the model. Later, the
   same bundle shape could let users import teammate evidence directly to seed or
   strengthen their own local models.
+- Live Overlay Bridge teammate fuel state is not just imported learning
+  evidence. When a teammate's client publishes valid current fuel, sector burn,
+  completed-lap burn, pit-entry/stall/exit, or tank-delta facts for the active
+  team car, the receiving strategy model should treat those facts as the current
+  state of that stint. The lower update cadence only affects freshness and
+  confidence labels; it should not make the receiver infer a different fuel state
+  from local history when the teammate has published the value they are actually
+  using.
+- Overlay Bridge should exchange current/derived fuel facts and provenance, not
+  raw telemetry frames or a teammate's private local history. Source labels,
+  freshness, session identity, and scope metadata are required so the receiving
+  app can distinguish live teammate state, imported teammate evidence, support
+  bundle evidence, and local proof.
 - Imported teammate evidence should preserve source identity at the evidence
   level: local capture, teammate bundle, Overlay Bridge live share, or imported
   replay. The model should never merge remote samples into local proof without a
@@ -2133,6 +2485,10 @@ Shared diagnostic evidence model:
   of raw telemetry. But it must preserve enough samples around each pit-service
   edge that future classifiers can answer "what changed, when, and under what
   scope?" without asking for the full raw capture.
+- Richer diagnostic/support bundles are explicit exports. They can include more
+  compact transition evidence than ordinary local history, but should still avoid
+  raw frame dumps unless the user deliberately enabled raw capture or a
+  development workflow requires it.
 - Conflicts should degrade or flag confidence rather than silently average. If a
   teammate bundle says Dallara fuel rate is `1.7 L/s` and another clean matching
   bundle says `1.1 L/s`, the model should surface variance/drift and keep overlay
@@ -2194,7 +2550,9 @@ Primary Fuel tab groups:
 - `Strategy controls`: user-editable fuel margin, plus any session-specific
   strategy inputs that affect Fuel V2 advice. The tab should show the configured
   lap margin and its current fuel equivalent so the driver can see what is their
-  preference versus what the model is estimating.
+  preference versus what the model is estimating. Do not add advice-depth
+  controls to initial V2; keep the default posture conservative and use teammate
+  testing to decide whether that setting is worth exposing.
 - `Advice availability`: one compact summary of what the overlay is currently
   allowed to use. It should name blocked rows and the reason, such as "tire time
   hidden: only observed, needs corroborated/proven evidence" or "pit-lane loss
@@ -2238,7 +2596,7 @@ warnings when the advice is degraded. Examples:
 ```text
 Add 24L: ~14s fuel service
 Four tires: +8s vs this fuel plan
-Pit loss: estimate, box baseline learning
+Pit now exits traffic
 ```
 
 If a row is blocked, the overlay should usually omit it rather than display a
@@ -2352,17 +2710,26 @@ Overlay row eligibility:
   proven or deliberately allowed as a corroborated soft estimate. The value must
   be incremental stop loss relative to the selected fuel plan, not raw tire
   duration.
-- `Pit-lane loss` can show as an estimate when the track/box/pit-speed scope is
-  corroborated. It should be hidden or marked learning when `DriverPitTrkPct`,
-  pit-speed, or entry/exit behavior does not match the baseline.
+- `Pit-lane loss` does not need a standalone driving-overlay row in V2. When the
+  track/box/pit-speed scope is strong, it can influence total stop, projected
+  rejoin, `pit now vs later`, and `Strategy summary` values. If a standalone row
+  is added later, require strong scoped evidence and hide/degrade it when
+  `DriverPitTrkPct`, pit-speed, or entry/exit behavior does not match the
+  baseline.
 - `Fast repair` can show once isolated and proven/corroborated like any other
   discrete service. Before then, hide timing advice.
-- `Required/optional repair` should not show exact advice unless a clean repair
-  model exists. A future conservative row may show lower-bound wording such as
-  "repair at least ~N.s" if the lower-bound baseline is corroborated/proven and
-  clearly labeled.
+- `Required/optional repair` should not show fixed pre-stop timing advice. If
+  live repair timers/status are present while in pit lane, Fuel V2 can use that
+  known waiting time to update strategy. Historical lower-bound repair context can
+  stay in diagnostics or conservative source text, but should not look like a
+  solved service constant.
 - `Penalty hold` should show only when the hold is known from race-control state
-  or a proven detected hold, and must remain separate from service timing.
+  or a proven detected hold, and must remain separate from service timing. It is
+  an obligation/risk row, not strategy optimization.
+- `Fuel to box risk` should show only as a low-fuel-to-stall status when current
+  fuel and pit-entry/stall context indicate the car may not reach the assigned
+  box. It is separate from normal race-burn strategy and should not promote
+  pit-lane burn into clean lap history.
 - `Unknown candidate signals` never show in the overlay.
 
 Recommended overlay copy style:
@@ -2371,7 +2738,8 @@ Recommended overlay copy style:
 Add 24L
 Fuel service: ~14s
 Four tires: +8s vs fuel
-Pit loss: ~42s est.
+Pit now exits traffic
+Low fuel to stall
 Repair: at least ~90s
 ```
 
@@ -2420,13 +2788,20 @@ Decisions to lock for Fuel V2:
   Changing selected fuel, tires, tearoff/wiper, fast repair, repair state, or
   penalty state must recompute the comparison immediately or hide/degrade it.
 - Tire-payback strategy is not a day-one row. It requires credible stop-loss
-  evidence plus tire-age/performance evidence. Until then, the app can show
-  service timing and rejoin/traffic scenarios without claiming fresh tires will
-  pay back.
+  evidence plus tire-age/performance evidence, including warmup/outlap, traffic,
+  fuel-load, and condition context. Until then, the app can show service timing
+  and rejoin/traffic scenarios without claiming fresh tires will pay back.
 - Projected rejoin and traffic may be the earliest valuable version. If stop
   time and field positions are credible, "pit now exits into traffic" can be a
   useful soft warning even before the app knows tire degradation well enough to
   calculate a full undercut/overcut recommendation.
+- Rejoin/traffic output should start as information, not advice. It can say
+  "clear by 3.2s", "rejoin 1.8s behind #24", or "pit now exits into GT traffic"
+  when the projection is strong enough, but it should not yet say "stay out" or
+  "box now to avoid traffic" as a strategy command. A future version can compare
+  box-now versus stay-out traffic scenarios once the model knows how to value
+  traffic loss, clean-air gain, and alternative pit windows without false
+  precision.
 - For overlay advice, prefer omission over weak math. The Fuel tab can show the
   scenario inputs and why the row is blocked; the overlay should show only a
   compact result when the current comparison clears the advice gate.
@@ -2489,9 +2864,9 @@ Candidate on-track savings inputs:
 - tire age/degradation: expected lap-time loss from staying out on the current
   tire set versus pitting for fresh tires;
 - tire warmup/outlap: time lost before new tires reach normal pace;
-- fuel weight: expected lap-time gain/loss from different fuel loads, if proven
-  for the car;
-- traffic and clean-air: likely time lost staying in traffic or gained by
+- fuel weight: V3 expected lap-time gain/loss from different fuel loads, if
+  proven for the car;
+- traffic and clean-air: V3 likely time lost staying in traffic or gained by
   undercutting into clean air;
 - lap-budget/stint length: how many laps remain for the benefit to pay back;
 - risk state: low fuel, damage, required repair, black flag, or pit-window
@@ -2524,9 +2899,9 @@ field cars to the same `pitExitTime`, then compare gaps around the rejoin point.
 Useful outputs:
 
 - "pit out into clean air";
+- "pit now clear by 3.2s";
 - "rejoin P12, 1.8s behind #24";
 - "pit now exits into GT traffic";
-- "pit later avoids traffic but costs 2 laps on old tires";
 - Track Map `Pit` ghost dot at the projected rejoin point, with confidence or
   risk color.
 
@@ -2559,8 +2934,9 @@ Confidence rules:
 
 Product posture: this may be more valuable earlier than tire-payback advice once
 stop-loss is known. Even a rough "you will rejoin in traffic" warning can change
-strategy, but it should remain source-labeled and avoid exact position claims
-until the field projection is strong.
+strategy, but it should remain source-labeled and avoid exact position or gap
+claims until the field projection is strong. The first version should answer
+"where do I come out?" rather than "should I box or stay out?"
 
 Simple break-even framing is still useful when the input scope is narrow:
 
@@ -2580,9 +2956,16 @@ Product posture:
 
 - Day-one Fuel V2 does not need this row. It should appear only after the app has
   enough evidence for both stop loss and on-track performance deltas.
+- Fuel-weight and clean-air valuation are V3. V2 should store the context for
+  future analysis, but it should not claim a lighter fuel load or clean-air gain
+  changes the strategy recommendation.
 - The first version should be a soft scenario row, such as "Possible: four tires
   cost +8s but may save ~11s over 15 laps." It must show source/confidence and
   avoid commands unless the evidence is strong.
+- Hide tire-payback from the driving overlay until it clears a deliberately high
+  confidence gate. The Fuel tab can show an experimental/explaining state, but
+  the overlay should not say fresh tires pay back by lap `N` from weak history or
+  incomplete stop-loss data.
 - The row should be more willing to say "not enough tire history yet" than to
   invent a tire-delta model from weak data.
 - Historical baselines should store tire-age, stint-lap, fuel-load, traffic, and
@@ -2688,6 +3071,25 @@ each teammate's own running TMR client publishing local/team-car fuel evidence
 while that driver has valid fuel context. The bridge should exchange compact
 derived facts, not raw telemetry frames.
 
+Privacy/default-sharing decision: Bridge is not raw telemetry sync and should
+not publish private local history by default. For fuel, it should send only the
+current/derived facts needed for team strategy, plus provenance, freshness, scope,
+and confidence labels. Diagnostics/support bundles can carry richer compact
+evidence when the user explicitly exports them.
+
+The iRacing black box may still show a laps-left fuel estimate while a teammate
+is driving, but the 4-hour team capture did not expose that estimate or direct
+teammate fuel level through the SDK schema. Treat it as hidden simulator UI state
+until a capture proves a public field exists.
+
+Live teammate fuel state decision: when Bridge is enabled and a teammate's client
+publishes the fuel state they are actually using, Fuel V2 should consume it like
+local live fuel state for that teammate's stint. The update cadence can be
+sector, lap, pit event, or heartbeat rather than frame-by-frame, so the receiver
+should show freshness/confidence when useful, but it should treat the published
+current fuel and burn facts as the true team-car state until newer valid data or
+an explicit invalidation arrives.
+
 Recommended bridge fuel message cadence:
 
 - emit on valid sector boundary completion;
@@ -2715,11 +3117,15 @@ pit/service context
 source timestamp
 ```
 
-Bridge consumers should treat sector messages as evidence updates, not commands.
-Strategy should still use the local Fuel V2 confidence hierarchy: sector deltas
-can update teammate fuel trend and planning rows quickly, but stop deletion,
-underfueling, and pit-service refuel advice require completed-lap agreement or a
-near-finish high-confidence state.
+Bridge consumers should treat sector messages as live state facts, not commands.
+For teammate/endurance planning, valid Bridge fuel state can update the same
+strategy rows that local live telemetry would update. For learned baselines and
+service-proof promotion, the same messages remain source-labeled evidence and
+should follow the normal Fuel V2 confidence hierarchy; sector deltas can update
+teammate fuel trend and planning rows quickly, while high-impact changes such as
+stop deletion, underfueling, or pit-service refuel advice should require
+completed-lap agreement, a near-finish high-confidence state, or explicit
+current-stint proof.
 
 ### Track Map Fuel Sector Mode
 

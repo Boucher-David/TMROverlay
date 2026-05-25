@@ -1217,6 +1217,16 @@
           "assertions": ["active flag icons and labels render", "flag cell bounds and display kinds are compared"]
         },
         {
+          "id": "flags-count-driven-sizing",
+          "family": "geometry-and-sizing",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "partial",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "testFiles": ["tests/TmrOverlay.App.Tests/Overlays/FlagsOverlaySizingTests.cs", "tests/browser-overlays/browserRuntimeModules.test.js"],
+          "assertions": ["default flags surface is reduced from the legacy 360x170 baseline through the shared geometry contract", "single-flag rendering uses a compact count-driven surface instead of reserving the full default bounds", "browser SVG viewBox follows the displayed flag count"],
+          "gaps": ["production flags sizing helper and native/browser/localhost integration are still pending", "screenshot artifacts still need regeneration after the product sizing path changes"]
+        },
+        {
           "id": "flags-confirmed-meatball-real-data",
           "family": "real-data-window",
           "tier": "tier2-capture-derived-replay",
@@ -1238,6 +1248,16 @@
           "testFiles": ["tests/tools/test_overlay_real_data_snapshots.py", "tests/browser-overlays/realDataSnapshotRendering.pw.spec.js", "tests/TmrOverlay.App.Tests/Overlays/OverlayRealDataSnapshotProductionModelTests.cs"],
           "assertions": ["global repair/furled/black bits require local-driver or session-context evidence before local critical display"],
           "gaps": ["Windows native render replay from this compact counterexample is still missing"]
+        },
+        {
+          "id": "flags-session-policy",
+          "family": "session-policy",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "partial",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "testFiles": ["tests/TmrOverlay.App.Tests/Overlays/FlagsOverlayViewModelTests.cs"],
+          "assertions": ["race-start pseudo flags remain visible when EventType indicates race despite stale SessionType metadata", "offline testing suppresses one-to-green/ready/start pseudo flags", "practice and qualifying suppress global yellow/debris/caution without local yellow-family evidence", "local actionable driver flags remain visible outside race sessions"],
+          "gaps": ["policy implementation and browser/localhost/native fixture evidence still pending", "CourseCautions-specific fixture input still pending because the current live session model does not expose CourseCautions"]
         },
         {
           "id": "flags-obs-readiness",

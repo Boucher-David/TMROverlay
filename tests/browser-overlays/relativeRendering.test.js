@@ -27,7 +27,23 @@ describe('relative browser rendering', () => {
       '',
       ''
     ]);
-    expect(rows[0].classList.contains('placeholder')).toBe(true);
+    const placeholderRows = rows.filter((row) => row.classList.contains('placeholder'));
+    expect(placeholderRows).toHaveLength(4);
+    expect(placeholderRows.map(rowCells)).toEqual(['', '', '', '']);
+    for (const row of placeholderRows) {
+      expect(row.classList.contains('focus')).toBe(false);
+      expect(row.classList.contains('class-colored')).toBe(false);
+      expect(row.classList.contains('lap-ahead-1')).toBe(false);
+      expect(row.classList.contains('lap-behind-2')).toBe(false);
+      expect([...row.querySelectorAll('td')].every((cell) => cell.textContent.trim() === '')).toBe(true);
+    }
+
+    const placeholderStyle = currentOverlay.dom.window.getComputedStyle(placeholderRows[0].querySelector('td'));
+    const populatedStyle = currentOverlay.dom.window.getComputedStyle(rows[2].querySelector('td'));
+    expect(cssAlpha(placeholderStyle.color)).toBeLessThanOrEqual(0.32);
+    expect(cssAlpha(placeholderStyle.boxShadow)).toBeLessThanOrEqual(0.03);
+    expect(placeholderStyle.color).not.toBe(populatedStyle.color);
+    expect(placeholderStyle.boxShadow).not.toBe(populatedStyle.boxShadow);
     expect(rows[2].classList.contains('class-colored')).toBe(true);
     expect(rows[2].classList.contains('lap-ahead-1')).toBe(true);
     expect(rows[3].classList.contains('focus')).toBe(true);
@@ -100,6 +116,11 @@ function relativeDisplayModel({ includeLapDeltas = true } = {}) {
 
 function rowCells(row) {
   return [...row.querySelectorAll('td')].map((cell) => cell.textContent.trim()).join(' ').trim();
+}
+
+function cssAlpha(value) {
+  const match = /,\s*([01]?(?:\.\d+)?)\)/.exec(String(value || ''));
+  return match ? Number.parseFloat(match[1]) : 1;
 }
 
 function row(cells, extra = {}) {

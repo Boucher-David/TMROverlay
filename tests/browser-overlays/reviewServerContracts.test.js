@@ -48,6 +48,15 @@ describe('browser review server validation contracts', () => {
     expect.soft(settings.relativeSettings.reviewOverlayState.carsEachSide).toBe(2);
     expect.soft(settings.relativeSettings.reviewOverlayState.content['Pit status.race']).toBe(false);
     expect.soft(model.rows).toHaveLength(5);
+    expect.soft(relativeRowKinds(model)).toEqual(['placeholder', 'car', 'reference', 'car', 'placeholder']);
+    expect.soft(model.effectiveSettings.rendered.placeholderRowCount).toBe(2);
+    expect.soft(model.effectiveSettings.rendered.rowIdentities).toEqual([
+      'placeholder|/||',
+      'row|3/#34 Near Ahead||',
+      'row|5/#55 Focus Driver||reference',
+      'row|6/#61 Near Behind||',
+      'placeholder|/||'
+    ]);
 
     expect.soft(model.effectiveSettings).toMatchObject({
       overlayId: 'relative',
@@ -788,6 +797,16 @@ function tableText(model) {
     ])
     .filter(Boolean)
     .join(' ');
+}
+
+function relativeRowKinds(model) {
+  return (model.rows || []).map((row) => {
+    if (row.isPlaceholder) {
+      return 'placeholder';
+    }
+
+    return row.isReference ? 'reference' : 'car';
+  });
 }
 
 function metricSectionTitles(model) {

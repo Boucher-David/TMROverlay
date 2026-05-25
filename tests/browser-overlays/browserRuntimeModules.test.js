@@ -164,6 +164,54 @@ describe('browser runtime modules', () => {
     ]));
   });
 
+  it.each([
+    {
+      name: 'single flag',
+      flags: [{ kind: 'blue', label: 'Blue' }],
+      expectedViewBox: '0 0 180 96'
+    },
+    {
+      name: 'default three-flag grid',
+      flags: [
+        { kind: 'yellow', label: 'Yellow' },
+        { kind: 'blue', label: 'Blue' },
+        { kind: 'checkered', label: 'Checkered' }
+      ],
+      expectedViewBox: '0 0 270 128'
+    }
+  ])('sizes the flags SVG to the displayed count for $name', async ({ flags, expectedViewBox }) => {
+    const harness = createRuntimeModuleHarness('flags', {
+      width: 360,
+      height: 170,
+      geometry: {
+        flags: {
+          minimumWidth: 180,
+          minimumHeight: 96,
+          defaultWidth: 270,
+          defaultHeight: 128,
+          gridTwoCountMaximum: 2,
+          gridFourCountMaximum: 4,
+          gridSixCountMaximum: 6,
+          gridMaximumColumns: 4
+        }
+      },
+      model: {
+        overlayId: 'flags',
+        title: 'Flags',
+        status: 'flags sizing',
+        source: 'source: flags sizing test',
+        bodyKind: 'flags',
+        flags: { flags },
+        shouldRender: true
+      }
+    });
+
+    await harness.refresh();
+
+    expect(harness.document.querySelector('.flags-v2')?.getAttribute('viewBox')).toBe(expectedViewBox);
+    expect(harness.document.querySelectorAll('.flag-cell')).toHaveLength(flags.length);
+  });
+
   it('hides the flags surface when no flag rows are renderable', async () => {
     const harness = createRuntimeModuleHarness('flags', {
       model: {

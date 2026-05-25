@@ -1645,17 +1645,19 @@ internal static class Program
             return;
         }
 
-        if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(slug, "min-scale", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(overlayId, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
-            ApplyNativeFlagsCaptureSize(form, model);
+            ApplyNativeFlagsCaptureSize(form, settings, model);
             return;
         }
 
         ApplyNativeModelDrivenCaptureSize(form, definition, settings, previewMode, model, applyFlags: false);
     }
 
-    private static void ApplyNativeFlagsCaptureSize(DesignV2LiveOverlayForm form, DesignV2OverlayModel model)
+    private static void ApplyNativeFlagsCaptureSize(
+        DesignV2LiveOverlayForm form,
+        OverlaySettings settings,
+        DesignV2OverlayModel model)
     {
         if (model.Body is not DesignV2FlagsBody { IsWaiting: false } flags
             || flags.Flags.Count <= 0)
@@ -1663,7 +1665,11 @@ internal static class Program
             return;
         }
 
-        form.ClientSize = FlagsOverlaySizing.SizeForDisplayedFlagCount(flags.Flags.Count);
+        var baseSize = FlagsOverlaySizing.SizeForDisplayedFlagCount(flags.Flags.Count);
+        var scale = double.IsFinite(settings.Scale) ? Math.Clamp(settings.Scale, 0.6d, 2d) : 1d;
+        form.ClientSize = new Size(
+            Math.Max(1, (int)Math.Round(baseSize.Width * scale)),
+            Math.Max(1, (int)Math.Round(baseSize.Height * scale)));
         form.PerformLayout();
     }
 
@@ -1678,7 +1684,7 @@ internal static class Program
         if (applyFlags
             && string.Equals(definition.Id, FlagsOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase))
         {
-            ApplyNativeFlagsCaptureSize(form, model);
+            ApplyNativeFlagsCaptureSize(form, settings, model);
             return;
         }
 
@@ -1695,12 +1701,19 @@ internal static class Program
             return;
         }
 
-        form.ClientSize = OverlayContentSizing.SimpleTelemetrySizeForRenderedRowCounts(
+        var baseSize = OverlayContentSizing.SimpleTelemetrySizeForRenderedRowCounts(
             definition,
             settings,
             previewMode,
             body.MetricSections.Select(section => section.Rows.Count).ToArray(),
             body.Sections.Select(section => section.Rows.Count).ToArray());
+        form.ClientSize = OverlayManager.TargetOverlayClientSizeForApply(
+            definition,
+            settings,
+            form.ClientSize,
+            sessionPreviewActive: true,
+            previewMode,
+            baseSize);
         form.PerformLayout();
     }
 
@@ -2002,7 +2015,9 @@ internal static class Program
                 ShouldRender: false);
         }
 
-        var status = $"5 - 2/4 cars | {ReviewPreviewLabel(previewMode)}";
+        var status = focusOnly
+            ? $"5 - focus only | {ReviewPreviewLabel(previewMode)}"
+            : $"5 - 2/4 cars | {ReviewPreviewLabel(previewMode)}";
         var showLapRelationship = OverlayAvailabilityEvaluator.NormalizeSessionKind(previewMode) is OverlaySessionKind.Practice or OverlaySessionKind.Race;
         var rowCount = Math.Clamp(carsEachSide, 0, 8) * 2 + 1;
         var referenceIndex = Math.Clamp(carsEachSide, 0, Math.Max(0, rowCount - 1));

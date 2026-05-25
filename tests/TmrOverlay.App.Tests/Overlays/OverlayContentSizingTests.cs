@@ -185,9 +185,13 @@ public sealed class OverlayContentSizingTests
             });
         var grid = Assert.Single(viewModel.Sections);
         Assert.Equal("Tire Analysis", grid.Title);
-        Assert.Equal(
-            ["Compound", "Change", "Pressure", "Temp", "Wear"],
-            grid.Rows.Select(row => row.Label).ToArray());
+        Assert.Collection(
+            grid.Rows,
+            row => Assert.Equal("Compound", row.Label),
+            row => Assert.Equal("Change", row.Label),
+            row => Assert.Equal("Pressure", row.Label),
+            row => Assert.Equal("Temp", row.Label),
+            row => Assert.Equal("Wear", row.Label));
 
         var expected = ExpectedSimpleTelemetryRenderedSize(
             PitServiceOverlayDefinition.Definition.DefaultWidth,
@@ -227,7 +231,11 @@ public sealed class OverlayContentSizingTests
 
         var section = Assert.Single(viewModel.MetricSections);
         Assert.Equal("Session", section.Title);
-        Assert.Equal(["Session", "Clock", "Track"], section.Rows.Select(row => row.Label).ToArray());
+        Assert.Collection(
+            section.Rows,
+            row => Assert.Equal("Session", row.Label),
+            row => Assert.Equal("Clock", row.Label),
+            row => Assert.Equal("Track", row.Label));
         Assert.Empty(viewModel.Sections);
 
         var expected = ExpectedSimpleTelemetryRenderedSize(

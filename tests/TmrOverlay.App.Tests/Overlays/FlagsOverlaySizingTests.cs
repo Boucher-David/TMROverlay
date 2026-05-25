@@ -15,8 +15,8 @@ public sealed class FlagsOverlaySizingTests
     [Fact]
     public void DefaultSize_IsReducedAndOwnedByGeometryContract()
     {
-        Assert.Equal(ReducedDefaultSize.Width, OverlayGeometryContractValues.OverlaySizes.FlagsWidth);
-        Assert.Equal(ReducedDefaultSize.Height, OverlayGeometryContractValues.OverlaySizes.FlagsHeight);
+        Assert.Equal(OverlayGeometryContractValues.OverlaySizes.FlagsWidth, ReducedDefaultSize.Width);
+        Assert.Equal(OverlayGeometryContractValues.OverlaySizes.FlagsHeight, ReducedDefaultSize.Height);
         Assert.Equal(ReducedDefaultSize.Width, FlagsOverlayDefinition.Definition.DefaultWidth);
         Assert.Equal(ReducedDefaultSize.Height, FlagsOverlayDefinition.Definition.DefaultHeight);
     }

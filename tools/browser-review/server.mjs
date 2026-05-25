@@ -2039,10 +2039,35 @@ function simpleTelemetryBrowserSourceSizeForModel(overlayId, overlayState, previ
   const baseHeight = reviewChromeAdjustedBaseHeight(
     overlayId,
     overlayState,
-    simpleTelemetryRenderedHeight(metricRowCounts, gridRowCounts, fullHeight),
+    fullSessionWeatherChromeOffHeight(
+      overlayId,
+      overlayState,
+      previewMode,
+      metricRowCounts,
+      gridRowCounts,
+      fullHeight)
+      ?? simpleTelemetryRenderedHeight(metricRowCounts, gridRowCounts, fullHeight),
     previewMode);
 
   return scaledSourceSize(sourceSize, baseWidth, baseHeight);
+}
+
+function fullSessionWeatherChromeOffHeight(overlayId, overlayState, previewMode, metricRowCounts, gridRowCounts, fullHeight) {
+  if (overlayId !== 'session-weather') {
+    return null;
+  }
+
+  const session = sessionKeyFromPreview(previewMode);
+  if (chromeEnabled(overlayState, 'header', 'Time remaining', session, true)) {
+    return null;
+  }
+
+  if (gridRowCounts.some((count) => count > 0)) {
+    return null;
+  }
+
+  const rowCount = metricRowCounts.reduce((total, count) => total + Math.max(0, Number(count || 0)), 0);
+  return rowCount >= 10 ? fullHeight : null;
 }
 
 function simpleTelemetryRenderedHeight(metricRowCounts, gridRowCounts, maximumHeight) {

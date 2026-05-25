@@ -675,7 +675,7 @@ WEB_OVERLAY_VARIANT_EXPECTED_SIZES = {
     ("gap-to-leader", "tire-trend-off"): (654, 336),
     ("gap-to-leader", "trend-off"): (444, 336),
     ("gap-to-leader", "graph-off"): (360, 336),
-    ("session-weather", "chrome-off"): (464, 455),
+    ("session-weather", "chrome-off"): (464, 458),
     ("pit-service", "chrome-off"): (530, 669),
     ("pit-service", "grid-only"): (530, 387),
     ("flags", "all-kinds"): (532, 188),

@@ -339,8 +339,19 @@ describe('browser review server validation contracts', () => {
   });
 
   it('keeps Session Weather missing data distinct from user-disabled weather content', async () => {
+    const chromeOff = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=chrome-off')).model;
     const missing = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-missing')).model;
     const weatherOff = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race&fixture=session-weather-weather-off')).model;
+
+    expect.soft(metricSectionTitles(chromeOff)).toEqual(['Session', 'Weather']);
+    expect.soft(metricRowLabels(chromeOff, 'Session')).toHaveLength(5);
+    expect.soft(metricRowLabels(chromeOff, 'Weather')).toEqual(['Surface', 'Sky', 'Wind', 'Temps', 'Atmosphere']);
+    expect.soft(chromeOff.effectiveSettings.rendered.browserSource.baseHeight).toBe(
+      overlayGeometry.overlaySizes.sessionWeatherHeight - overlayGeometry.metricRows.headerChromeHeight
+    );
+    expect.soft(chromeOff.effectiveSettings.rendered.browserSource.height).toBe(
+      overlayGeometry.overlaySizes.sessionWeatherHeight - overlayGeometry.metricRows.headerChromeHeight
+    );
 
     expect.soft(missing.status).toBe('weather unavailable');
     expect.soft(metricSectionTitles(missing)).toEqual(['Session', 'Weather']);

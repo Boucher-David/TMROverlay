@@ -1040,7 +1040,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
             cars.Add(new HistoricalCarProximity(
                 CarIdx: carIdx,
                 LapCompleted: lapCompleted is >= 0 ? lapCompleted.Value : -1,
-                LapDistPct: Math.Clamp(lapDistPct.Value, 0d, 1d),
+                LapDistPct: Math.Clamp(lapDistPct!.Value, 0d, 1d),
                 F2TimeSeconds: reader.ReadNullableDoubleArrayElement("CarIdxF2Time", carIdx),
                 EstimatedTimeSeconds: reader.ReadNullableDoubleArrayElement("CarIdxEstTime", carIdx),
                 Position: reader.ReadInt32ArrayElement("CarIdxPosition", carIdx),

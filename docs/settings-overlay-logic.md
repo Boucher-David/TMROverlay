@@ -38,6 +38,8 @@ At startup, `OverlayManager.ShowStartupOverlays`:
 5. Saves normalized settings.
 6. Starts a 1 second timer that reapplies session visibility rules.
 
+The tray menu includes `Disable All Overlays` as an emergency recovery action for cases where a managed driving overlay blocks the settings window or simulator controls. It only disables managed driving overlay settings, hides existing non-settings overlay windows, and leaves the settings window, saved positions, sizes, scale, opacity, session gates, and overlay options intact.
+
 ## Settings Window Placement
 
 The settings window:

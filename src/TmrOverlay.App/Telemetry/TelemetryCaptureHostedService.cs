@@ -1049,7 +1049,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             cars.Add(new HistoricalCarProximity(
                 CarIdx: carIdx,
                 LapCompleted: lapCompleted is >= 0 ? lapCompleted.Value : -1,
-                LapDistPct: Math.Clamp(lapDistPct.Value, 0d, 1d),
+                LapDistPct: Math.Clamp(lapDistPct!.Value, 0d, 1d),
                 F2TimeSeconds: ReadNullableDoubleArrayElement(sdk, "CarIdxF2Time", carIdx),
                 EstimatedTimeSeconds: ReadNullableDoubleArrayElement(sdk, "CarIdxEstTime", carIdx),
                 Position: ReadInt32ArrayElement(sdk, "CarIdxPosition", carIdx),

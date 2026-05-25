@@ -240,6 +240,61 @@ internal sealed class OverlayManager : IDisposable
         form.BringToFront();
     }
 
+    public bool HasEnabledManagedOverlays()
+    {
+        _settings ??= _settingsStore.Load();
+        EnsureManagedOverlaySettings();
+        return OverlayRecoveryPolicy.HasEnabledManagedOverlays(_settings, ManagedOverlayDefinitions);
+    }
+
+    public int DisableManagedOverlays()
+    {
+        _settings ??= _settingsStore.Load();
+        EnsureManagedOverlaySettings();
+
+        var managedDefinitions = ManagedOverlayDefinitions;
+        var disabledCount = OverlayRecoveryPolicy.DisableManagedOverlays(_settings, managedDefinitions);
+        var managedOverlayIds = managedDefinitions
+            .Select(definition => definition.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pair in _forms.ToArray())
+        {
+            if (!managedOverlayIds.Contains(pair.Key))
+            {
+                continue;
+            }
+
+            var form = pair.Value;
+            if (form.IsDisposed)
+            {
+                continue;
+            }
+
+            if (form.TopMost)
+            {
+                form.TopMost = false;
+            }
+
+            if (form.Visible)
+            {
+                form.Hide();
+            }
+        }
+
+        if (disabledCount > 0)
+        {
+            _events.Record("overlays_disabled_from_tray", new Dictionary<string, string?>
+            {
+                ["disabledCount"] = disabledCount.ToString()
+            });
+            SaveSettings();
+            ApplyOverlaySettings();
+        }
+
+        return disabledCount;
+    }
+
     public void Dispose()
     {
         _sessionVisibilityTimer.Stop();

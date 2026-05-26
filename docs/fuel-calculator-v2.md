@@ -520,17 +520,107 @@ extra `V1 Ref` column is a comparison baseline from the current aggregate/V1
 view, not final truth. `Max` cell copy should say whether the value is live high,
 quali seed, or another source label so source quality is visible while tuning.
 
-Deferred V2 row type: `Target Lap Usage`. This is not part of the current
-Fuel/Lap row implementation, but it should stay in the design backlog. When a
-race plan is built around a likely stint length, show adjacent per-lap targets so
-the driver can quickly see the fuel burn needed to make nearby stint lengths. For
-example, if the plan is roughly 20-lap stints, a row could expose `19`, `20`,
-`21`, and `22` target cells with the required `L/lap` for each. This row should
-derive from usable fuel/cap/reserve and the current lap budget, and it should be
-framed as target context until later advice logic proves what the driver should
-do with it.
+Current Target Lap Usage workbench shape: show `Target Usage - Green Start`
+first, followed by a smaller `Target Usage - Current Edges` section. This row
+type answers "what L/lap would make these nearby stint lengths?" It does not yet
+answer whether the driver should attempt that stint length.
 
-Current Fuel Range workbench shape: show a `Fuel Range Workbench` section that
+The active workbench columns are:
+
+- `Fuel` or `Green`: the fuel budget used by the row. `Fuel` is the raw
+  checkpoint `FuelLevel`; `Green` is the actual or estimated fuel available at
+  the start of racing after formation/pre-green consumption. Do not silently
+  fall back to physical tank size if the effective session cap is missing or
+  contradictory.
+- `Last`: the most recent accepted clean burn span, expressed as `L/lap`. This
+  is the live driver-feedback comparator for the row: it shows how the user's
+  latest usage relates to the required target usage. If no live `Last` exists, a
+  seed such as qualifying may be shown only as a degraded seed row.
+- Nearby lap-count cells: the required `L/lap` for each displayed target length,
+  calculated as `fuel budget / target laps`. The default workbench shape derives
+  the likely/current target from `round(fuel budget / Last)`, then shows one lap
+  shorter, that center target, and one lap longer. Avoid a fourth far-edge column
+  unless deliberately testing a stress case; it tends to make the row look more
+  extreme than useful.
+
+Row selection for this cell is deliberately planning-focused. Full-cap rows are
+the primary evidence because they match the target-usage question: given an
+effective tank budget, what burn makes the next plausible stint lengths? In
+practice, the start-stint budget should be the first-green fuel, not raw cap,
+once that value is known or can be learned. Current checkpoint rows should be
+sparse and edge-oriented: keep rows that expose a meaningful boundary, such as a
+5-lap stretch, post-stop edge, short-race 2-lap edge, or degraded abnormal-stop
+scenario. Do not carry every Range/Laps checkpoint into Target Usage just for
+symmetry; mid/stop/half repeats hide the signal.
+
+For now, Target Usage subtracts no reserve and does not add a lap-margin policy.
+That is deliberate: the workbench is trying to make the raw relationship visible
+before advice logic gets added. Later strategy can replace the budget with
+`usable fuel - reserve` or use `target laps + margin laps`, but that should be a
+separate visible decision. Formation fuel follows the same posture as `Laps In
+Tank`: it is real fuel that reduces current `Fuel`, but it must not contaminate
+clean burn windows.
+
+Formation and pit-exit budget adjustments:
+
+- Formation/pre-green fuel is a start-stint budget adjustment. If the car leaves
+  grid/formation with a `51.0 L` effective cap but crosses green with `50.1 L`,
+  Target Usage should use `50.1 L` for the start-stint row. This does not change
+  `Last`, `5L`, `10L`, or `Max`; it only changes the budget divided by target
+  laps.
+- If actual first-green fuel is unavailable, Fuel V2 can estimate it as
+  `effective cap - learned formation burn` when the formation-burn model has
+  enough confidence for the car/track/session shape. Otherwise keep the row
+  labeled as a cap/seed assumption.
+- Pit-lane fuel before and after refuel can usually remain part of the surrounding
+  lap/stint accounting instead of becoming a separate visible target-row
+  adjustment. If the target row uses live current fuel after pit exit, the budget
+  already includes whatever fuel was burned leaving the box and rejoining. If the
+  target row uses a service-complete fuel amount, requested add amount, or
+  add-to-max assumption before the car has rejoined, subtract learned
+  pit-exit/rejoin burn only when that evidence is confident enough.
+- This is intentionally different from formation fuel. Pit-lane burn happens
+  around a race lap and can be absorbed by live fuel/current-lap evidence after
+  refuel; formation burn happens before the first racing lap, so the first-stint
+  target budget should temporarily start below cap until live fuel replaces the
+  estimate.
+- Learned pit-lane consumption should still be tracked as track/session evidence:
+  box-to-exit distance, pit-road speed, service state, throttle/gear behavior,
+  and valid `FuelLevel` deltas. Its first job is to improve pre-rejoin estimates,
+  not to rewrite clean green-lap burn windows.
+
+Current probe evidence:
+
+- `VLN 4h team`: effective cap `104.94 L`, first-green fuel about `102.85 L`;
+  formation/pre-green adjustment about `2.09 L`.
+- `Dallara 45m`: effective cap `60.0 L`, first-green fuel about `58.99 L`;
+  formation/pre-green adjustment about `1.01 L`. Pit-box-exit to pit-exit sample
+  was about `0.14 L`.
+- `Dallara 4L full`: effective cap `51.0 L`, first-green fuel about `50.10 L`;
+  formation/pre-green adjustment about `0.90 L`. Pit-box-exit to pit-exit sample
+  was about `0.09 L`.
+- `Dallara 4L blip`: effective cap `51.0 L`, first-green fuel about `50.00 L`;
+  formation/pre-green adjustment about `1.00 L`.
+- `GR86 3L start`: effective cap `83.33 L`, first-green fuel about `82.85 L`;
+  formation/pre-green adjustment about `0.49 L`.
+
+Workbench tones are temporary diagnostics. A target cell is green when the
+required burn is at or above the `Last` comparator, yellow when it is within
+about five percent below that comparator, and red when it would require a larger
+save than the latest accepted usage currently suggests. These colors are for
+table review only, not final product advice. Qualifying-seed and abnormal-stop
+rows should stay visually degraded until live race evidence gives them a better
+source.
+
+Production direction: when a race plan is built around a likely stint length,
+show adjacent per-lap targets so the driver can quickly see the fuel burn needed
+to make nearby stint lengths. For example, if the plan is roughly 20-lap stints,
+a row could expose `19`, `20`, `21`, and `22` target cells with the required
+`L/lap` for each. This row should derive from usable fuel/cap/reserve and the
+current lap budget, and it should be framed as target context until later advice
+logic proves what the driver should do with it.
+
+Fuel Range workbench shape: show a `Fuel Range Workbench` section that
 compares current-tank laps under the V1 selected burn and each V2 Fuel/Lap burn
 window. The earlier Fuel/Lap workbench rows can stay hidden while Range is the
 active work item; their accepted-span outputs still feed these comparison

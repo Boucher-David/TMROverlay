@@ -2002,7 +2002,8 @@ function isFuelLapsWorkbenchModel(model) {
   const status = String(model?.status || '').trim().toLowerCase();
   return status === 'laps workbench'
     || status === 'fuel/lap workbench'
-    || status === 'fuel/range workbench';
+    || status === 'fuel/range workbench'
+    || status === 'fuel/target usage workbench';
 }
 
 function fuelContentHeight(rowCount, sectionCount, options = {}) {
@@ -2868,11 +2869,15 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
         }
 
         if (fixture === 'fuel-laps-workbench-laps') {
-          return withChrome(fuelLapsWorkbenchReviewModel({ includeLapRows: true }));
+          return withChrome(fuelLapsWorkbenchReviewModel({ includeLapRows: true, activeWorkbench: 'range' }));
         }
 
-        if (!fixture || fixture === 'fuel-laps-workbench') {
-          return withChrome(fuelLapsWorkbenchReviewModel());
+        if (fixture === 'fuel-laps-workbench-range') {
+          return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'range' }));
+        }
+
+        if (!fixture || fixture === 'fuel-laps-workbench' || fixture === 'fuel-laps-workbench-target') {
+          return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'target' }));
         }
 
         const calculating = fixture === 'fuel-calculating';
@@ -4390,7 +4395,7 @@ function relativePlaceholderRow(cellCount) {
     { isPlaceholder: true });
 }
 
-function fuelLapsWorkbenchReviewModel({ includeLapRows = false } = {}) {
+function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench = 'target' } = {}) {
   const lapRows = [
     fuelLapsWorkbenchRow('Dallara 45m / V1', 'timed / selected pace', 'info', ['5.99', '6.04', '5.93', '--', '6.06'], '6'),
     fuelLapsWorkbenchRow('Dallara 45m / V2', 'lap budget / same shape', 'info', ['5.99 seed', '6.04', '5.93', '--', '6.06'], '6'),
@@ -4516,24 +4521,80 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false } = {}) {
       max: 3.40
     })
   ];
+  const targetUsageCurrentRows = [
+    fuelTargetUsageWorkbenchRow('VLN 4h team / 5-lap stretch', 'current fuel / no reserve', 'info', {
+      budget: 61.6400,
+      budgetLabel: 'Fuel',
+      referenceBurn: 13.5176
+    }),
+    fuelTargetUsageWorkbenchRow('Dallara 45m / Stop edge', 'current fuel / no reserve', 'info', {
+      budget: 33.2921,
+      budgetLabel: 'Fuel',
+      referenceBurn: 13.7571
+    }),
+    fuelTargetUsageWorkbenchRow('Dallara 4L full / 2-lap edge', 'current fuel / no reserve', 'info', {
+      budget: 26.2104,
+      budgetLabel: 'Fuel',
+      referenceBurn: 12.3634
+    }),
+    fuelTargetUsageWorkbenchRow('Dallara 4L blip / Abnormal', 'abnormal stop / no reserve', 'warning', {
+      budget: 29.5762,
+      budgetLabel: 'Fuel',
+      referenceBurn: 13.5671
+    })
+  ];
+  const targetUsageCapRows = [
+    fuelTargetUsageWorkbenchRow('VLN 4h team / Green start', 'first green fuel / no reserve', 'info', {
+      budget: 102.8464,
+      budgetLabel: 'Green',
+      referenceBurn: 13.5176
+    }),
+    fuelTargetUsageWorkbenchRow('Dallara 45m / Green start', 'first green fuel / no reserve', 'info', {
+      budget: 58.9871,
+      budgetLabel: 'Green',
+      referenceBurn: 13.7593
+    }),
+    fuelTargetUsageWorkbenchRow('Dallara 4L full / Green start', 'first green fuel / no reserve', 'info', {
+      budget: 50.1023,
+      budgetLabel: 'Green',
+      referenceBurn: 12.3421
+    }),
+    fuelTargetUsageWorkbenchRow('Dallara quali seed / Green est', 'expected green fuel / seed burn', 'warning', {
+      budget: 50.1023,
+      budgetLabel: 'Green',
+      referenceBurn: 13.7982,
+      referenceLabel: 'Quali'
+    })
+  ];
+  const targetUsageSections = [
+    { title: 'Target Usage - Green Start', rows: targetUsageCapRows },
+    { title: 'Target Usage - Current Edges', rows: targetUsageCurrentRows }
+  ];
   const metricSections = includeLapRows
     ? [
         { title: 'Laps Workbench', rows: lapRows },
         { title: 'Fuel Range Workbench', rows: rangeRows }
       ]
+    : activeWorkbench === 'range'
+      ? [
+          { title: 'Fuel Range Workbench', rows: rangeRows }
+        ]
     : [
-        { title: 'Fuel Range Workbench', rows: rangeRows }
+        ...targetUsageSections
       ];
   const rows = metricSections.flatMap((section) => section.rows);
+  const isTargetWorkbench = !includeLapRows && activeWorkbench !== 'range';
   return metricsModel(
     'fuel-calculator',
     'Fuel Calculator',
-    'fuel/range workbench',
+    isTargetWorkbench ? 'fuel/target usage workbench' : 'fuel/range workbench',
     rows,
-    'source: Fuel V2 workbench; current-tank range compares V1 selected burn with V2 Last/5L/10L/Max windows',
+    isTargetWorkbench
+      ? 'source: Fuel V2 workbench; Target Usage cells are required L/lap from fuel budget / target laps, no reserve subtracted; Last is the live burn comparator when available'
+      : 'source: Fuel V2 workbench; current-tank range compares V1 selected burn with V2 Last/5L/10L/Max windows',
     [],
     metricSections,
-    [{ key: 'timeRemaining', value: 'Range V2', tone: 'info' }]);
+    [{ key: 'timeRemaining', value: isTargetWorkbench ? 'Target V2' : 'Range V2', tone: 'info' }]);
 }
 
 function fuelLapsWorkbenchRow(label, value, tone, checkpointValues, realValue) {
@@ -4614,6 +4675,82 @@ function fuelRangeWorkbenchRow(label, value, tone, range) {
     value,
     tone,
     segments);
+}
+
+function fuelTargetUsageWorkbenchRow(label, value, tone, targetUsage) {
+  const referenceLabel = targetUsage.referenceLabel || 'Last';
+  const referenceTone = fuelTargetUsageReferenceTone(targetUsage);
+  const targetSegments = fuelTargetUsageTargetLaps(targetUsage)
+    .map((laps) => {
+      const requiredBurn = fuelTargetUsageRequiredBurn(targetUsage.budget, laps);
+      return metricSegment(
+        fuelTargetUsageLapLabel(laps),
+        fuelRangeFuelPerLap(requiredBurn),
+        fuelTargetUsageTone(requiredBurn, targetUsage.referenceBurn));
+    });
+  const segments = [
+    metricSegment(
+      targetUsage.budgetLabel || 'Fuel',
+      fuelRangeVolume(targetUsage.budget),
+      fuelRangeValueTone(targetUsage.budget)),
+    metricSegment(
+      referenceLabel,
+      fuelRangeFuelPerLap(targetUsage.referenceBurn),
+      referenceTone),
+    ...targetSegments
+  ];
+
+  return metricRow(
+    label,
+    value,
+    tone,
+    segments);
+}
+
+function fuelTargetUsageReferenceTone(targetUsage) {
+  if (!Number.isFinite(targetUsage.referenceBurn)) return 'waiting';
+  return targetUsage.referenceLabel ? 'warning' : 'info';
+}
+
+function fuelTargetUsageTargetLaps(targetUsage) {
+  if (Array.isArray(targetUsage.targetLaps) && targetUsage.targetLaps.length > 0) {
+    return targetUsage.targetLaps;
+  }
+
+  const fuelBudget = Number(targetUsage.budget);
+  const referenceBurn = Number(targetUsage.referenceBurn);
+  if (!Number.isFinite(fuelBudget) || fuelBudget <= 0 || !Number.isFinite(referenceBurn) || referenceBurn <= 0) {
+    return [];
+  }
+
+  const projectedLaps = fuelBudget / referenceBurn;
+  const centerLap = Math.max(1, Math.round(projectedLaps));
+  return centerLap === 1
+    ? [1, 2, 3]
+    : [centerLap - 1, centerLap, centerLap + 1];
+}
+
+function fuelTargetUsageRequiredBurn(budget, targetLaps) {
+  const fuelBudget = Number(budget);
+  const laps = Number(targetLaps);
+  return Number.isFinite(fuelBudget) && fuelBudget > 0 && Number.isFinite(laps) && laps > 0
+    ? fuelBudget / laps
+    : null;
+}
+
+function fuelTargetUsageLapLabel(targetLaps) {
+  const laps = Number(targetLaps);
+  if (!Number.isFinite(laps)) return 'Laps';
+  return laps === 1 ? '1 lap' : `${laps} laps`;
+}
+
+function fuelTargetUsageTone(requiredBurn, referenceBurn) {
+  if (!Number.isFinite(requiredBurn)) return 'waiting';
+  if (!Number.isFinite(referenceBurn) || referenceBurn <= 0) return 'info';
+
+  const ratio = requiredBurn / referenceBurn;
+  if (ratio >= 1.0) return 'success';
+  return ratio >= 0.95 ? 'warning' : 'error';
 }
 
 function fuelRangeValueTone(value) {

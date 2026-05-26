@@ -24,7 +24,8 @@ internal enum FuelV2BurnSource
     SameStintSectorScaling = 8,
     ReconstructedFlow = 9,
     ReconstructedDecrement = 10,
-    ManualWorkbench = 11
+    ManualWorkbench = 11,
+    LiveMinimum = 12
 }
 
 internal enum FuelV2SampleContextFlag
@@ -127,6 +128,8 @@ internal sealed record FuelV2FuelPerLapWindows(
     FuelV2Scalar? FiveLapAverage,
     FuelV2Scalar? TenLapAverage,
     FuelV2Scalar? Max,
+    FuelV2Scalar? Min,
+    FuelV2Scalar? QualifyingSeed,
     int AcceptedLapCount);
 
 internal sealed record FuelV2RangeSnapshot(
@@ -145,6 +148,26 @@ internal sealed record FuelV2TargetUsageSnapshot(
 internal sealed record FuelV2TargetUsageCell(
     int TargetLaps,
     FuelV2Scalar RequiredFuelPerLap,
+    FuelV2WorkbenchTone Tone);
+
+internal sealed record FuelV2PitRequestSnapshot(
+    double? CurrentFuelLiters,
+    double? TankCapacityLiters,
+    int TargetLaps,
+    double ReserveLiters,
+    double PitLaneFuelLiters,
+    FuelV2PitRequestCell? Last,
+    FuelV2PitRequestCell? FiveLapAverage,
+    FuelV2PitRequestCell? TenLapAverage,
+    FuelV2PitRequestCell? Max,
+    FuelV2PitRequestCell? Min,
+    FuelV2PitRequestCell? QualifyingSeed);
+
+internal sealed record FuelV2PitRequestCell(
+    string Label,
+    FuelV2Scalar FuelToAddLiters,
+    FuelV2Scalar TargetFuelLiters,
+    bool TankLimited,
     FuelV2WorkbenchTone Tone);
 
 internal sealed record FuelV2SectorDefinition(

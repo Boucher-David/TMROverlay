@@ -235,6 +235,48 @@ displayed conservative counter is 24." This should remain under-the-hood
 scenario evidence unless confidence is deliberately promoted; it should not
 replace the primary counter or lower required fuel by itself.
 
+Condition-aware race length is a required discussion point for V2. Caution or
+pace-car running affects both sides of the fuel problem: lap time rises, so a
+timed race may complete fewer remaining laps, and fuel burn per lap usually
+falls. Early-race caution burn should not be allowed to lower safety-critical
+fuel by itself, because most of the race may still return to green. Late-race
+caution is different: if five of the final ten laps are already spent under
+caution, or the remaining time is likely to expire under caution, those slower
+laps can legitimately remove a stop.
+
+Do not solve that independently inside `Fuel To Add`. The lap-budget model
+needs to publish condition-aware targets or scenarios, such as:
+
+```text
+targetLapMix = {
+  greenSafeLaps: 5,
+  cautionLaps: 5
+}
+```
+
+Then the fuel request can combine the lap mix with matching burn buckets:
+
+```text
+fuelNeed = greenSafeLaps * greenBurn
+         + cautionLaps * cautionBurn
+         + reserveFuel
+         + pitLaneFuel
+```
+
+Until that model exists, recent caution/low-burn windows are diagnostic context,
+not a generic request basis for future unknown green running. This is especially
+important for oval and late-race restart cases: a single scalar `targetLaps`
+or a single scalar `Last/5L/10L` burn window can be technically true while still
+being strategically unsafe.
+
+Current product boundary: caution/slow-lap burn is real fuel usage and should
+not be rejected as invalid. `Fuel To Add` can stay deliberately dumb-ish by
+showing the raw bucket math for `Last`, `5L`, `10L`, `Max`, `Min`, and `Quali`.
+The strategy/stint row must own the interpretation: whether the remaining race
+is green-safe, caution-heavy, mixed-condition, or late enough that caution burn
+can legitimately reduce a stop or refuel request. In other words, bucket rows
+summarize evidence; strategy/stint rows project what to do with it.
+
 Candidate UI row: `Possible strategy change`. This row can expose emerging
 scenario evidence without presenting it as a hard recommendation. Examples:
 
@@ -513,7 +555,10 @@ high-stakes advice.
 Staging implementation boundary: the reusable V2 window shape now lives under
 `src/TmrOverlay.Core/Fuel/V2/` as staged Core code. `FuelV2FuelPerLapCalculator`
 owns `Last`, `5L`, `10L`, and `Max` window selection, including optional partial
-diagnostic windows and a labeled max seed. This is intentionally not wired into
+diagnostic windows and a labeled max seed. The staged window object also carries
+optional `Min` and `Quali` buckets so range/refuel/request rows can use the same
+enabled-bucket vocabulary, even if the first production Fuel/Lap row starts with
+the cleaner four-cell view. This is intentionally not wired into
 `FuelStrategyCalculator` yet; the browser workbench mirrors the shape while V1
 production behavior remains unchanged.
 
@@ -631,6 +676,126 @@ Staging implementation boundary: `FuelV2TargetUsageCalculator` turns a fuel
 budget and target lap counts into required `L/lap` cells, with the latest burn
 window treated as a comparator only. It does not apply reserve, pit-lane loss, or
 strategy advice. Those remain separate promotion decisions.
+
+Fuel To Add / Pit Request workbench shape: show a `Fuel To Add Workbench`
+section that turns the already-staged target and burn windows into pit-request
+amounts. This row answers "if we were requesting fuel now for this target stint,
+how much would each burn window ask us to add?" It does not yet choose one answer
+or send a command to iRacing.
+
+The active columns are:
+
+- `Last`: add amount from the most recent accepted clean burn span.
+- `5L`: add amount from the 5-lap V2 burn window when available.
+- `10L`: add amount from the 10-lap V2 burn window when available.
+- `Max`: add amount from the conservative high bucket. This can include a
+  labeled seed, qualifying value, or promoted live/sector high signal when the
+  workbench is testing that source.
+- `Min`: add amount from the optimistic/low bucket. This is diagnostic context,
+  not permission to reduce fuel on its own.
+- `Quali`: add amount from a qualifying/push-lap seed when one is available.
+  It stays visibly source-labeled because it is not live race evidence.
+
+Earlier workbench-only `Start`, `Lap2 Mid`, and `V1` comparison columns are no
+longer active display columns for this cell. Start/sector/V1/reference values
+can still exist in the model as source evidence, but the visible row should
+express them through the shared enabled bucket set when they are promoted.
+
+The row label carries the current fuel, target stint length, reserve policy, and
+any abnormal context so the comparison columns can stay narrow.
+
+The workbench can include clearly labeled hypothetical rows in a separate
+section. Those rows are not capture evidence; they are pressure tests for the
+same staged add-fuel function. Useful mock cases include multi-stop endurance
+stints, final-stop splashes, tank-cap impossibility, sector-burn spikes,
+driver/spotter handoff with no local fuel scalar, oval caution/repair fuel, low
+burn long-track cap pressure, tiny top-ups, underfilled pit exits, and Overlay
+Bridge teammate packets. Keep them visibly separate from real capture rows.
+The NASCAR mixed-condition rows are specifically testing the agreed boundary:
+low caution burn should remain visible as real recent usage, but the later
+strategy/stint row is responsible for deciding whether that low-burn evidence is
+safe to act on for the remaining lap mix.
+
+Overlay Bridge teammate rows are different from local live rows. If a teammate
+publishes current fuel, by-sector burn, and completed-lap burn, the Fuel To Add
+cell can calculate against those remote packet values. It should not pretend to
+update on the local car's live sector cadence; it updates when the bridge
+delivers a new remote fuel/sector/lap packet. If the bridge has burn but not
+current fuel, the add amount still stays unavailable.
+
+Open discussion point: bridge-sourced rows also need to react to local
+race-length/lap-budget changes. The remote teammate fuel packet might be stale,
+but if the local race-length model changes the target from, for example, `5`
+laps to `6` laps, the add amount should recalculate immediately from the latest
+known bridge fuel/burn values. Treat the visible cell as depending on both
+remote fuel/burn packet cadence and local race-length cadence.
+
+The 24h rejoin row is deliberately a degraded negative-control row for this
+cell. The raw rejoin capture has useful race/lap context, but local `FuelLevel`,
+`FuelLevelPct`, `FuelUsePerHour`, `LapCompleted`, `LapDistPct`, and `IsOnTrack`
+are zero/unusable through the sampled rejoin frames. The row can carry the
+scaled GT3 history fallback burn (`VLN` history adjusted from `24.1544 km` to
+the 24h layout at about `14.21 L/lap`), but `Fuel To Add` still stays blank
+because the current fuel input is unknown. Treat setup `FuelLevel: 104.9 L` as
+static setup fuel, not live current fuel.
+
+Initial formula:
+
+```text
+fuelToAdd = max(0, targetLaps * selectedBurn + reserveFuel + pitLaneFuel - currentFuel)
+```
+
+The staged calculator already has explicit inputs for reserve fuel, learned
+pit-lane/rejoin burn, and tank capacity. Real capture rows currently keep
+reserve and pit-lane burn at `0.0 L` so the raw relationship stays visible;
+hypothetical rows may deliberately exercise those inputs. Tank capacity is used
+only to flag a request that cannot physically fit in the tank. This is important
+for seed-only rows: a qualifying/max seed may be useful context, but it can also
+show an impossible request before live race evidence proves the target is viable.
+
+Production direction: this cell is the first place where V2 can become an actual
+pit-service request. Do not force a single "correct" refuel amount too early.
+Following the same shape as the Fuel/Lap usage buckets, the final overlay can
+show one rolling refuel cell per enabled burn bucket, for example `Last`, `5L`,
+`10L`, `Max`, `Min`, and `Quali`. The user-facing settings should control bucket
+visibility globally enough that disabling a bucket removes its matching cells
+from usage, range, target/context, and refuel rows together. For example, if the
+user does not care about the `5L` bucket, both the `5L` usage cell and the `5L`
+refuel/request cell disappear.
+
+This also sets the product boundary for the top half of the Fuel V2 overlay:
+it should be a compact rolling summary by enabled bucket, not deep strategy
+advice. The rows can show raw-ish current usage, range, target/context, and
+refuel amounts from the same bucket set without deciding which one is "right" or
+whether the driver should stop. More complex stop deletion, caution-condition
+mixing, bucket selection, and pit-service command promotion belong in a lower
+strategy/advice layer or a separate action surface.
+
+That lower strategy/stint surface should be the first place that projects a
+condition-aware remaining-lap mix. It can combine green-safe burn, caution burn,
+lap-budget confidence, tank-cap pressure, target stint length, and stop-plan
+state. It should be allowed to say that a late caution likely removes a stop, or
+that a caution-heavy `Last/5L/Min` bucket is not safe for a likely green restart.
+The raw `Fuel To Add` row should not make that judgment by itself.
+
+This is a display boundary, not a data-collection boundary. The code model may
+collect and retain much richer evidence than the driving overlay shows:
+condition mixes, bucket confidence, bridge packet freshness, sector context,
+traffic/draft flags, pit-lane/rejoin adjustments, formation usage, cap pressure,
+and rejected/degraded samples. The driver-facing overlay can stay sparse while
+future engineering/debug overlays expose deeper diagnostics for tuning and
+post-race analysis.
+
+Keep the output as comparison/context until the selected burn windows, reserve
+policy, pit-lane fuel adjustment, tank-limit behavior, and command-promotion
+rules are approved. Later, Pit Service can surface one selected bucket as a fuel
+request only after Fuel V2 owns the source/confidence labels and any command
+path remains explicit.
+
+Staging implementation boundary: `FuelV2PitRequestCalculator` derives add-fuel
+amounts from current fuel, target laps, and each selected burn window. It does
+not pick the final request, apply a user margin by default, or drive pit-service
+commands.
 
 Fuel Range workbench shape: show a `Fuel Range Workbench` section that
 compares current-tank laps under the V1 selected burn and each V2 Fuel/Lap burn
@@ -1223,6 +1388,9 @@ Initial state flags:
   data rather than clean live race laps.
 - `pace-contaminated`: recent pace evidence may include yellow, pit, damage,
   traffic, draft, wet-condition, leader-change, or other disruption.
+- `condition-mix`: remaining race distance may include a meaningful mix of
+  green and caution/pace-car running. This should not lower safety-critical fuel
+  until the condition-aware lap budget and matching burn buckets are explicit.
 - `front-pack-pace-disagreement`: the current overall leader pace would move
   the race lap budget materially, but nearby front-running cars do not show the
   same pace shift.
@@ -1866,6 +2034,8 @@ models later, or deleted without changing V1 behavior. Current staged slices:
 - `FuelV2RangeCalculator`: current-tank range from each selected burn window.
 - `FuelV2TargetUsageCalculator`: required `L/lap` targets from budget and target
   lap counts.
+- `FuelV2PitRequestCalculator`: add-fuel amounts from current fuel, target laps,
+  reserve/pit-lane adjustment inputs, tank capacity, and each burn window.
 - `FuelV2SectorBurnCalculator`: live sector projection, event-window context,
   reconstructed refuel-sector burn, baseline breaks, and clean-baseline
   eligibility.

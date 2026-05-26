@@ -801,7 +801,9 @@
           height - metricGeometryNumber('headerChromeHeight', 38));
       }
 
-      return height;
+      return isFuelLapsWorkbenchModel(model)
+        ? Math.max(height, 540)
+        : height;
     }
 
     function fuelChartSectionHeight(section) {
@@ -827,6 +829,7 @@
         || status === 'fuel/lap workbench'
         || status === 'fuel/range workbench'
         || status === 'fuel/target usage workbench'
+        || status === 'fuel/pit request workbench'
         || status === 'fuel/sector burn workbench';
     }
 
@@ -842,10 +845,13 @@
       if (rowCount <= 0 || sectionCount <= 0) return minimumHeight;
       const rowGaps = Math.max(0, rowCount - sectionCount) * metricGeometryNumber('rowGap', 5);
       const sectionGaps = Math.max(0, sectionCount - 1) * metricGeometryNumber('sectionGap', 8);
+      const segmentedRowHeight = options?.clampToDefault === false
+        ? 43
+        : metricGeometryNumber('segmentedRowHeight', 35);
       const height = metricGeometryNumber('headerChromeHeight', 38)
         + metricGeometryNumber('fuelContentVerticalPadding', 26)
         + sectionCount * metricGeometryNumber('fuelSectionTitleReserveHeight', 14)
-        + rowCount * metricGeometryNumber('segmentedRowHeight', 35)
+        + rowCount * segmentedRowHeight
         + rowGaps
         + sectionGaps
         + metricGeometryNumber('collapsedFooterReserveHeight', 8);

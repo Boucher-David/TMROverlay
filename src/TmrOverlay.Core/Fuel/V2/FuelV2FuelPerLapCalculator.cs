@@ -29,7 +29,9 @@ internal static class FuelV2FuelPerLapCalculator
                 allowPartial: safeOptions.AllowPartialWindows,
                 source: FuelV2BurnSource.LiveTenLapAverage,
                 label: "live 10L average"),
-            Max: MaxWindow(samples, safeOptions.MaxSeed),
+            Max: MaxWindow(samples, HigherSeed(safeOptions.MaxSeed, safeOptions.QualifyingSeed)),
+            Min: MinWindow(samples, safeOptions.MinSeed),
+            QualifyingSeed: SeedWindow(safeOptions.QualifyingSeed, "qualifying seed"),
             AcceptedLapCount: samples.Length);
     }
 
@@ -94,6 +96,60 @@ internal static class FuelV2FuelPerLapCalculator
         };
     }
 
+    private static FuelV2Scalar? HigherSeed(FuelV2Scalar? first, FuelV2Scalar? second)
+    {
+        if (first?.HasValue != true)
+        {
+            return second;
+        }
+
+        if (second?.HasValue != true)
+        {
+            return first;
+        }
+
+        return second.Value > first.Value ? second : first;
+    }
+
+    private static FuelV2Scalar? MinWindow(IReadOnlyList<double> samples, FuelV2Scalar? seed)
+    {
+        FuelV2Scalar? liveMin = samples.Count >= 1
+            ? WindowValue(
+                samples.Min(),
+                "live min",
+                FuelV2BurnSource.LiveMinimum,
+                samples.Count,
+                cleanBaselineEligible: true)
+            : null;
+
+        if (seed?.HasValue != true)
+        {
+            return liveMin;
+        }
+
+        if (liveMin?.HasValue == true && liveMin.Value <= seed.Value)
+        {
+            return liveMin;
+        }
+
+        return SeedWindow(seed, string.IsNullOrWhiteSpace(seed.Source) ? "seed min" : seed.Source);
+    }
+
+    private static FuelV2Scalar? SeedWindow(FuelV2Scalar? seed, string fallbackSource)
+    {
+        if (seed?.HasValue != true)
+        {
+            return null;
+        }
+
+        return seed with
+        {
+            Source = string.IsNullOrWhiteSpace(seed.Source) ? fallbackSource : seed.Source,
+            DisplayEligible = true,
+            CleanBaselineEligible = false
+        };
+    }
+
     private static FuelV2Scalar WindowValue(
         double value,
         string label,
@@ -121,7 +177,9 @@ internal sealed record FuelV2FuelPerLapWindowOptions(
     bool AllowPartialWindows = false,
     int PartialFiveLapMinimumSampleCount = 3,
     int PartialTenLapMinimumSampleCount = 5,
-    FuelV2Scalar? MaxSeed = null)
+    FuelV2Scalar? MaxSeed = null,
+    FuelV2Scalar? MinSeed = null,
+    FuelV2Scalar? QualifyingSeed = null)
 {
     public static FuelV2FuelPerLapWindowOptions Default { get; } = new();
 }

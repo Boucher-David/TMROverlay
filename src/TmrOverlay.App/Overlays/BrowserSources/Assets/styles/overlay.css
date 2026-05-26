@@ -192,8 +192,9 @@
 
     body.fuel-calculator-page .overlay.laps-workbench {
       --tmr-metric-label-column-width: 220px;
+      --tmr-metric-row-segmented-height: 43px;
       width: min(1500px, calc(100vw - 16px));
-      height: min(var(--fuel-content-height, 315px), calc(100vh - 8px));
+      height: var(--fuel-content-height, 540px);
     }
 
     body.fuel-calculator-page .overlay.fuel-non-race {
@@ -711,6 +712,16 @@
       align-items: center;
       justify-content: center;
       gap: 4px;
+    }
+
+    body.fuel-calculator-page .overlay.laps-workbench .value-segments {
+      min-height: 32px;
+    }
+
+    body.fuel-calculator-page .overlay.laps-workbench .value-segment {
+      min-height: 30px;
+      padding-top: 4px;
+      padding-bottom: 4px;
     }
 
     .wind-arrow {

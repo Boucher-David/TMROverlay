@@ -2011,7 +2011,9 @@ function fuelBrowserSourceHeightForModel(model, fallbackHeight) {
     height = Math.max(80, height - 38);
   }
 
-  return height;
+  return isFuelLapsWorkbenchModel(model)
+    ? Math.max(height, 540)
+    : height;
 }
 
 function isFuelLapsWorkbenchModel(model) {
@@ -2024,6 +2026,7 @@ function isFuelLapsWorkbenchModel(model) {
     || status === 'fuel/lap workbench'
     || status === 'fuel/range workbench'
     || status === 'fuel/target usage workbench'
+    || status === 'fuel/pit request workbench'
     || status === 'fuel/sector burn workbench';
 }
 
@@ -2033,10 +2036,13 @@ function fuelContentHeight(rowCount, sectionCount, options = {}) {
   if (rowCount <= 0 || sectionCount <= 0) return minimumHeight;
   const rowGaps = Math.max(0, rowCount - sectionCount) * metricGeometryNumber(metricRows, 'rowGap', 5);
   const sectionGaps = Math.max(0, sectionCount - 1) * metricGeometryNumber(metricRows, 'sectionGap', 8);
+  const segmentedRowHeight = options?.clampToDefault === false
+    ? 43
+    : metricGeometryNumber(metricRows, 'segmentedRowHeight', 35);
   const height = metricGeometryNumber(metricRows, 'headerChromeHeight', 38)
     + metricGeometryNumber(metricRows, 'fuelContentVerticalPadding', 26)
     + sectionCount * metricGeometryNumber(metricRows, 'fuelSectionTitleReserveHeight', 14)
-    + rowCount * metricGeometryNumber(metricRows, 'segmentedRowHeight', 35)
+    + rowCount * segmentedRowHeight
     + rowGaps
     + sectionGaps
     + metricGeometryNumber(metricRows, 'collapsedFooterReserveHeight', 8);
@@ -2918,8 +2924,12 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'target' }));
         }
 
-        if (!fixture || fixture === 'fuel-laps-workbench' || fixture === 'fuel-laps-workbench-sector') {
+        if (fixture === 'fuel-laps-workbench-sector') {
           return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'sector' }));
+        }
+
+        if (!fixture || fixture === 'fuel-laps-workbench' || fixture === 'fuel-laps-workbench-pit') {
+          return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'pit' }));
         }
 
         const calculating = fixture === 'fuel-calculating';
@@ -4615,6 +4625,268 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
     { title: 'Target Usage - Green Start', rows: targetUsageCapRows },
     { title: 'Target Usage - Current Edges', rows: targetUsageCurrentRows }
   ];
+  const pitRequestRows = [
+    fuelPitRequestWorkbenchRow('VLN 4h team / 7-lap stint', '61.6 L / 7 laps / no reserve', 'info', {
+      currentFuel: 61.64,
+      tankCapacity: 104.94,
+      targetLaps: 7,
+      startBurn: { value: 13.6372, label: 'seed' },
+      sectorBurn: { value: 13.0838, label: 'sector' },
+      lastBurn: 13.5175,
+      fiveBurn: 13.4880,
+      tenBurn: 13.3709,
+      v1Burn: 13.3709
+    }),
+    fuelPitRequestWorkbenchRow('24h rejoin / No local fuel', 'fuel n/a / 7 laps / history fallback', 'warning', {
+      currentFuel: null,
+      tankCapacity: 104.9,
+      targetLaps: 7,
+      startBurn: { value: 14.2142, label: 'history' },
+      sectorBurn: { value: 14.2142, label: 'history' },
+      lastBurn: null,
+      fiveBurn: null,
+      tenBurn: null,
+      v1Burn: null
+    }),
+    fuelPitRequestWorkbenchRow('Dallara 45m / 3-lap finish', '33.3 L / 3 laps / no reserve', 'info', {
+      currentFuel: 33.2921,
+      tankCapacity: 60.0,
+      targetLaps: 3,
+      startBurn: { value: 13.8141, label: 'seed' },
+      sectorBurn: { value: 13.8978, label: 'sector' },
+      lastBurn: 13.7571,
+      fiveBurn: { value: 13.6443, label: '3/5' },
+      tenBurn: null,
+      v1Burn: 13.6443
+    }),
+    fuelPitRequestWorkbenchRow('Dallara 45m / 2-lap edge', '20.4 L / 2 laps / no reserve', 'info', {
+      currentFuel: 20.36,
+      tankCapacity: 60.0,
+      targetLaps: 2,
+      startBurn: { value: 13.7568, label: 'seed' },
+      sectorBurn: { value: 13.8978, label: 'sector' },
+      lastBurn: 13.7568,
+      fiveBurn: { value: 13.6644, label: '3/5' },
+      tenBurn: null,
+      v1Burn: 13.5733
+    }),
+    fuelPitRequestWorkbenchRow('Dallara 4L full / 2-lap finish', '15.3 L / 2 laps / no reserve', 'info', {
+      currentFuel: 15.27,
+      tankCapacity: 51.0,
+      targetLaps: 2,
+      startBurn: { value: 12.9407, label: 'seed' },
+      sectorBurn: { value: 12.4393, label: 'sector' },
+      lastBurn: 12.3145,
+      fiveBurn: { value: 12.6198, label: '3/5' },
+      tenBurn: null,
+      v1Burn: 12.7250
+    }),
+    fuelPitRequestWorkbenchRow('Dallara 4L blip / Repair edge', '18.9 L / 2 laps / abnormal', 'warning', {
+      currentFuel: 18.86,
+      tankCapacity: 51.0,
+      targetLaps: 2,
+      startBurn: { value: 13.5683, label: 'seed' },
+      sectorBurn: { value: 13.3491, label: 'sector' },
+      lastBurn: 13.5683,
+      fiveBurn: null,
+      tenBurn: null,
+      v1Burn: 13.3759
+    }),
+    fuelPitRequestWorkbenchRow('Dallara quali seed / 4-lap target', '0.0 L / 4 laps / stress', 'warning', {
+      currentFuel: 0.0,
+      tankCapacity: 51.0,
+      targetLaps: 4,
+      startBurn: { value: 13.7982, label: 'quali' },
+      sectorBurn: { value: 13.7982, label: 'quali' },
+      lastBurn: null,
+      fiveBurn: null,
+      tenBurn: null,
+      v1Burn: null
+    })
+  ];
+  const pitRequestMockRows = [
+    fuelPitRequestWorkbenchRow('Mock GT3 6h / Stop 1 full stint', '18.0 L / 7 laps / stop 1 of 3', 'modeled', {
+      currentFuel: 18.0,
+      tankCapacity: 104.9,
+      targetLaps: 7,
+      startBurn: { value: 13.9, label: 'seed' },
+      sectorBurn: { value: 13.6, label: 'sector' },
+      lastBurn: 13.50,
+      fiveBurn: 13.45,
+      tenBurn: 13.35,
+      v1Burn: 13.55
+    }),
+    fuelPitRequestWorkbenchRow('Mock GT3 6h / Stop 2 reserve', '41.0 L / 5 laps / 2.7 L margin', 'modeled', {
+      currentFuel: 41.0,
+      tankCapacity: 104.9,
+      targetLaps: 5,
+      reserveFuel: 2.0,
+      pitLaneFuel: 0.7,
+      startBurn: { value: 13.7, label: 'seed' },
+      sectorBurn: { value: 13.3, label: 'sector' },
+      lastBurn: 13.45,
+      fiveBurn: 13.38,
+      tenBurn: 13.32,
+      v1Burn: 13.50
+    }),
+    fuelPitRequestWorkbenchRow('Mock GT3 6h / Splash finish', '37.5 L / 3 laps / final stop', 'modeled', {
+      currentFuel: 37.5,
+      tankCapacity: 104.9,
+      targetLaps: 3,
+      startBurn: { value: 13.8, label: 'seed' },
+      sectorBurn: { value: 13.4, label: 'sector' },
+      lastBurn: 13.35,
+      fiveBurn: 13.42,
+      tenBurn: 13.48,
+      v1Burn: 13.50
+    }),
+    fuelPitRequestWorkbenchRow('Mock GT3 6h / 8-lap cap edge', '25.0 L / 8 laps / impossible', 'warning', {
+      currentFuel: 25.0,
+      tankCapacity: 104.9,
+      targetLaps: 8,
+      startBurn: { value: 13.9, label: 'seed' },
+      sectorBurn: { value: 13.7, label: 'sector' },
+      lastBurn: 13.60,
+      fiveBurn: 13.50,
+      tenBurn: 13.40,
+      v1Burn: 13.55
+    }),
+    fuelPitRequestWorkbenchRow('Mock GT3 6h / Sector spike', '33.0 L / 5 laps / live burn high', 'warning', {
+      currentFuel: 33.0,
+      tankCapacity: 104.9,
+      targetLaps: 5,
+      startBurn: { value: 13.5, label: 'seed' },
+      sectorBurn: { value: 14.2, label: 'sector' },
+      lastBurn: 13.45,
+      fiveBurn: 13.40,
+      tenBurn: 13.35,
+      v1Burn: 13.40
+    }),
+    fuelPitRequestWorkbenchRow('Mock 24h GT3 / Full handoff', '103.5 L / 7 laps / leave full', 'modeled', {
+      currentFuel: 103.5,
+      tankCapacity: 104.9,
+      targetLaps: 7,
+      reserveFuel: 1.0,
+      startBurn: { value: 14.21, label: 'history' },
+      sectorBurn: { value: 14.05, label: 'sector' },
+      lastBurn: 14.10,
+      fiveBurn: 14.18,
+      tenBurn: 14.25,
+      v1Burn: 14.20
+    }),
+    fuelPitRequestWorkbenchRow('Mock 24h GT3 / Short fill', '52.0 L / 4 laps / teammate stint', 'modeled', {
+      currentFuel: 52.0,
+      tankCapacity: 104.9,
+      targetLaps: 4,
+      reserveFuel: 1.5,
+      pitLaneFuel: 0.8,
+      startBurn: { value: 14.21, label: 'history' },
+      sectorBurn: { value: 13.95, label: 'sector' },
+      lastBurn: 14.05,
+      fiveBurn: 14.18,
+      tenBurn: null,
+      v1Burn: 14.20
+    }),
+    fuelPitRequestWorkbenchRow('Mock 24h GT3 / Spotter handoff', 'fuel n/a / 7 laps / remote car', 'warning', {
+      currentFuel: null,
+      tankCapacity: 104.9,
+      targetLaps: 7,
+      startBurn: { value: 14.21, label: 'history' },
+      sectorBurn: { value: 14.05, label: 'bridge' },
+      lastBurn: null,
+      fiveBurn: null,
+      tenBurn: null,
+      v1Burn: null
+    }),
+    fuelPitRequestWorkbenchRow('Mock Bridge / Teammate packets', '58.4 L / 5 laps / sector+lap packets', 'modeled', {
+      currentFuel: 58.4,
+      tankCapacity: 104.9,
+      targetLaps: 5,
+      reserveFuel: 1.0,
+      pitLaneFuel: 0.6,
+      startBurn: { value: 14.21, label: 'history' },
+      sectorBurn: { value: 14.60, label: 'bridge' },
+      lastBurn: { value: 14.10, label: 'bridge lap' },
+      fiveBurn: { value: 14.18, label: 'bridge 5L' },
+      tenBurn: null,
+      v1Burn: null
+    }),
+    fuelPitRequestWorkbenchRow('Mock NASCAR / Repair caution', '72.1 L / 68 laps / oval yellow', 'warning', {
+      currentFuel: 72.1,
+      tankCapacity: 75.7,
+      targetLaps: 68,
+      reserveFuel: 0.5,
+      startBurn: { value: 1.12, label: 'seed' },
+      sectorBurn: { value: 0.86, label: 'caution' },
+      lastBurn: 1.07,
+      fiveBurn: 1.04,
+      tenBurn: 1.02,
+      minBurn: { value: 0.86, label: 'caution' },
+      v1Burn: 1.08
+    }),
+    fuelPitRequestWorkbenchRow('Mock NASCAR / 3 green + 2 caution', '72.1 L / 68 laps / 1.0L caution', 'warning', {
+      currentFuel: 72.1,
+      tankCapacity: 75.7,
+      targetLaps: 68,
+      reserveFuel: 0.5,
+      startBurn: { value: 1.12, label: 'seed' },
+      sectorBurn: { value: 1.0, label: 'caution' },
+      lastBurn: { value: 1.0, label: 'caution' },
+      fiveBurn: { value: 1.046, label: '3G+2Y' },
+      tenBurn: null,
+      minBurn: { value: 1.0, label: 'caution' },
+      v1Burn: 1.08
+    }),
+    fuelPitRequestWorkbenchRow('Mock NASCAR / 5L green + 1L caution', '72.1 L / 68 laps / stress mix', 'warning', {
+      currentFuel: 72.1,
+      tankCapacity: 75.7,
+      targetLaps: 68,
+      reserveFuel: 0.5,
+      startBurn: { value: 5.0, label: 'green' },
+      sectorBurn: { value: 1.0, label: 'caution' },
+      lastBurn: { value: 1.0, label: 'caution' },
+      fiveBurn: { value: 3.4, label: '3G+2Y' },
+      tenBurn: null,
+      maxBurn: { value: 5.0, label: 'green' },
+      minBurn: { value: 1.0, label: 'caution' },
+      v1Burn: 5.0
+    }),
+    fuelPitRequestWorkbenchRow('Mock GR86 Nord / 16-lap edge', '81.1 L / 16 laps / cap pressure', 'warning', {
+      currentFuel: 81.1,
+      tankCapacity: 83.3,
+      targetLaps: 16,
+      startBurn: { value: 5.46, label: 'history' },
+      sectorBurn: { value: 5.30, label: 'sector' },
+      lastBurn: 5.21,
+      fiveBurn: null,
+      tenBurn: null,
+      v1Burn: 5.46
+    }),
+    fuelPitRequestWorkbenchRow('Mock Porsche Cup Spa / Tiny top-up', '45.0 L / 13 laps / history', 'modeled', {
+      currentFuel: 45.0,
+      tankCapacity: 67.0,
+      targetLaps: 13,
+      startBurn: { value: 3.60, label: 'seed' },
+      sectorBurn: { value: 3.50, label: 'history' },
+      lastBurn: 3.54,
+      fiveBurn: { value: 3.53, label: '3/5' },
+      tenBurn: null,
+      v1Burn: 3.54
+    }),
+    fuelPitRequestWorkbenchRow('Mock pit mistake / One lap short', '15.0 L / 2 laps / just refueled', 'error', {
+      currentFuel: 15.0,
+      tankCapacity: 60.0,
+      targetLaps: 2,
+      reserveFuel: 1.0,
+      pitLaneFuel: 0.4,
+      startBurn: { value: 13.8, label: 'seed' },
+      sectorBurn: { value: 13.2, label: 'sector' },
+      lastBurn: 13.5,
+      fiveBurn: 13.45,
+      tenBurn: null,
+      v1Burn: 13.6
+    })
+  ];
   const dallaraSectorStarts = [
     0.0, 0.055834, 0.085078, 0.125389, 0.166193, 0.265561, 0.370098,
     0.43161, 0.513453, 0.590393, 0.665183, 0.73914, 0.818135, 0.949683
@@ -4769,6 +5041,11 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
         ]
     : activeWorkbench === 'sector'
       ? []
+    : activeWorkbench === 'pit'
+      ? [
+          { title: 'Fuel To Add Workbench', rows: pitRequestRows },
+          { title: 'Fuel To Add Hypotheticals', rows: pitRequestMockRows }
+        ]
     : [
         ...targetUsageSections
       ];
@@ -4779,17 +5056,23 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
     ? 'fuel/sector burn workbench'
     : activeWorkbench === 'range'
       ? 'fuel/range workbench'
-      : 'fuel/target usage workbench';
+      : activeWorkbench === 'pit'
+        ? 'fuel/pit request workbench'
+        : 'fuel/target usage workbench';
   const workbenchSource = activeWorkbench === 'sector'
     ? 'source: Fuel V2 workbench; mirrors staged Core sector-burn logic. Rows are real SplitTimeInfo sector boundaries and cells show Live projected L/lap for each lap. Sector labels include median replay speed as context; green cell borders mark pit/refuel/service event-window overlap, not inherently bad sector numbers. Lap 1 uses low-confidence track-percent fallback; later laps hold at S0 and use prior-lap same-sector cumulative scaling from S0+S1 onward. Actual is completed lap burn.'
     : activeWorkbench === 'range'
       ? 'source: Fuel V2 workbench; mirrors staged Core range logic. Current-tank range compares V1 selected burn with V2 Last/5L/10L/Max windows'
-      : 'source: Fuel V2 workbench; mirrors staged Core target-usage logic. Target Usage cells are required L/lap from fuel budget / target laps, no reserve subtracted; Last is the live burn comparator when available';
+      : activeWorkbench === 'pit'
+        ? 'source: Fuel V2 workbench; mirrors staged Core pit-request logic. Fuel To Add is target laps times selected burn plus optional reserve/pit-lane adjustment minus current fuel, clamped at zero and marked if the tank cannot hold the request. Visible cells use the shared burn buckets: Last, 5L, 10L, Max, Min, and Quali. Sector/live/bridge evidence can feed a labeled bucket, but it is no longer a standalone display column. Real capture rows keep reserve and learned pit-lane burn at zero; hypothetical rows may exercise those inputs.'
+        : 'source: Fuel V2 workbench; mirrors staged Core target-usage logic. Target Usage cells are required L/lap from fuel budget / target laps, no reserve subtracted; Last is the live burn comparator when available';
   const workbenchTitle = activeWorkbench === 'sector'
     ? 'Sector Burn V2'
     : activeWorkbench === 'range'
       ? 'Range V2'
-      : 'Target V2';
+      : activeWorkbench === 'pit'
+        ? 'Fuel To Add V2'
+        : 'Target V2';
   return metricsModel(
     'fuel-calculator',
     'Fuel Calculator',
@@ -4904,6 +5187,23 @@ function fuelTargetUsageWorkbenchRow(label, value, tone, targetUsage) {
       fuelRangeFuelPerLap(targetUsage.referenceBurn),
       referenceTone),
     ...targetSegments
+  ];
+
+  return metricRow(
+    label,
+    value,
+    tone,
+    segments);
+}
+
+function fuelPitRequestWorkbenchRow(label, value, tone, request) {
+  const segments = [
+    metricSegment('Last', fuelPitRequestAddLabel(request, request.lastBurn, 'last'), fuelPitRequestTone(request, request.lastBurn, 'last')),
+    metricSegment('5L', fuelPitRequestAddLabel(request, request.fiveBurn, 'five'), fuelPitRequestTone(request, request.fiveBurn, 'five')),
+    metricSegment('10L', fuelPitRequestAddLabel(request, request.tenBurn, 'ten'), fuelPitRequestTone(request, request.tenBurn, 'ten')),
+    metricSegment('Max', fuelPitRequestAddLabel(request, fuelPitRequestMaxBurn(request), 'max'), fuelPitRequestTone(request, fuelPitRequestMaxBurn(request), 'max')),
+    metricSegment('Min', fuelPitRequestAddLabel(request, fuelPitRequestMinBurn(request), 'min'), fuelPitRequestTone(request, fuelPitRequestMinBurn(request), 'min')),
+    metricSegment('Quali', fuelPitRequestAddLabel(request, fuelPitRequestQualiBurn(request), 'quali'), fuelPitRequestTone(request, fuelPitRequestQualiBurn(request), 'quali'))
   ];
 
   return metricRow(
@@ -5193,6 +5493,121 @@ function fuelTargetUsageTone(requiredBurn, referenceBurn) {
   const ratio = requiredBurn / referenceBurn;
   if (ratio >= 1.0) return 'success';
   return ratio >= 0.95 ? 'warning' : 'error';
+}
+
+function fuelPitRequestMaxBurn(request) {
+  if (request?.maxBurn !== undefined) return request.maxBurn;
+  return fuelPitRequestExtremeBurn([
+    request?.lastBurn,
+    request?.fiveBurn,
+    request?.tenBurn,
+    request?.startBurn,
+    request?.sectorBurn,
+    request?.qualiBurn
+  ], 'max');
+}
+
+function fuelPitRequestMinBurn(request) {
+  if (request?.minBurn !== undefined) return request.minBurn;
+  return fuelPitRequestExtremeBurn([
+    request?.lastBurn,
+    request?.fiveBurn,
+    request?.tenBurn
+  ], 'min');
+}
+
+function fuelPitRequestQualiBurn(request) {
+  if (request?.qualiBurn !== undefined) return request.qualiBurn;
+  return fuelPitRequestBurnLabel(request?.startBurn).toLowerCase() === 'quali'
+    ? request.startBurn
+    : null;
+}
+
+function fuelPitRequestExtremeBurn(burns, mode) {
+  const candidates = burns
+    .map((burn) => ({ burn, value: fuelPitRequestBurnValue(burn) }))
+    .filter((candidate) => Number.isFinite(candidate.value) && candidate.value > 0);
+  if (candidates.length === 0) return null;
+
+  return candidates.reduce((selected, candidate) => {
+    return mode === 'min'
+      ? candidate.value < selected.value ? candidate : selected
+      : candidate.value > selected.value ? candidate : selected;
+  }).burn;
+}
+
+function fuelPitRequestAddLabel(request, burn, window) {
+  const add = fuelPitRequestAddAmount(request, burn);
+  if (!add) return '--';
+  const suffix = fuelPitRequestBurnLabel(burn);
+  const value = add.limited
+    ? `${add.amount.toFixed(1)} L cap`
+    : `+${add.amount.toFixed(1)} L`;
+  return suffix
+    ? `${value} ${suffix}`
+    : value;
+}
+
+function fuelPitRequestTone(request, burn, window) {
+  const add = fuelPitRequestAddAmount(request, burn);
+  if (!add) return 'waiting';
+  if (add.limited) return 'error';
+  if (add.amount <= 0.001) return 'success';
+  if (fuelPitRequestBurnLabel(burn)) return 'warning';
+  return window === 'max' || window === 'min' || window === 'quali' ? 'warning' : 'info';
+}
+
+function fuelPitRequestAddAmount(request, burn) {
+  const currentFuelInput = request?.currentFuel;
+  const currentFuel = currentFuelInput === null || currentFuelInput === undefined
+    ? Number.NaN
+    : Number(currentFuelInput);
+  const targetLaps = Number(request?.targetLaps);
+  const burnValue = fuelPitRequestBurnValue(burn);
+  if (!Number.isFinite(currentFuel)
+    || currentFuel < 0
+    || !Number.isFinite(targetLaps)
+    || targetLaps <= 0
+    || !Number.isFinite(burnValue)
+    || burnValue <= 0) {
+    return null;
+  }
+
+  const reserve = fuelPitRequestNonNegative(request?.reserveFuel);
+  const pitLane = fuelPitRequestNonNegative(request?.pitLaneFuel);
+  const targetFuel = targetLaps * burnValue + reserve + pitLane;
+  const rawAdd = Math.max(0, targetFuel - currentFuel);
+  const tankCapacity = Number(request?.tankCapacity);
+  const room = Number.isFinite(tankCapacity) && tankCapacity >= 0
+    ? Math.max(0, tankCapacity - currentFuel)
+    : null;
+  const limited = room !== null && rawAdd > room + 0.001;
+  return {
+    amount: limited ? room : rawAdd,
+    limited,
+    targetFuel
+  };
+}
+
+function fuelPitRequestBurnValue(burn) {
+  if (typeof burn === 'object' && burn !== null) {
+    return Number(burn.value);
+  }
+
+  return Number(burn);
+}
+
+function fuelPitRequestBurnLabel(burn) {
+  if (typeof burn === 'object' && burn !== null) {
+    return String(burn.label || '').trim();
+  }
+
+  return '';
+}
+
+function fuelPitRequestNonNegative(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
 }
 
 function fuelRangeValueTone(value) {

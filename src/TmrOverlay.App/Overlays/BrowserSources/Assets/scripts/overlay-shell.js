@@ -492,6 +492,7 @@
     function updateOverlayRuntimeClasses(model) {
       if (!overlayEl) return;
       overlayEl.classList.toggle('fuel-non-race', isFuelNonRaceModel(model));
+      overlayEl.classList.toggle('laps-workbench', isFuelLapsWorkbenchModel(model));
       if (model?.overlayId === 'fuel-calculator') {
         overlayEl.style.setProperty('--fuel-content-height', `${fuelContentHeightForModel(model)}px`);
       } else {

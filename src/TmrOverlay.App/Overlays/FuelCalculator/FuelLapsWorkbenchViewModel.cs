@@ -80,15 +80,29 @@ internal static class FuelLapsWorkbenchViewModel
             probe.ClassLeaderProgressLaps,
             probe.RacePaceSeconds,
             probe.RacePaceSource);
-        var finishLaps = EstimateFinishLaps(probe, estimate);
+        var budget = LiveRaceLapBudgetEstimator.Estimate(
+            context,
+            session,
+            probe.StrategyProgressLaps,
+            probe.OverallLeaderProgressLaps,
+            probe.ClassLeaderProgressLaps,
+            probe.RacePaceSeconds,
+            probe.RacePaceSource,
+            new LiveRaceLapBudgetOptions(
+                PaceContaminated: probe.PaceContaminated,
+                FrontPackPaceDisagreement: probe.FrontPackPaceDisagreement,
+                CleanRacePaceSeconds: probe.CleanRacePaceSeconds,
+                CleanRacePaceSource: probe.CleanRacePaceSource,
+                PreviousCleanEstimatedFinishLap: probe.PreviousCleanEstimatedFinishLap));
+        var finishLaps = budget.EstimatedFinishLap ?? EstimateFinishLaps(probe, estimate);
         if (finishLaps is null)
         {
             return new WorkbenchCell(SourceToken(estimate.Source, probe), SimpleTelemetryTone.Waiting);
         }
 
         return new WorkbenchCell(
-            $"{FormatLaps(finishLaps.Value)} {SourceToken(estimate.Source, probe)}",
-            CellTone(finishLaps.Value, actualLaps, estimate.Source));
+            $"{FormatLaps(finishLaps.Value)} {SourceToken(estimate.Source, probe)}{BudgetSuffix(budget)}",
+            CellTone(finishLaps.Value, actualLaps, estimate.Source, budget));
     }
 
     private static HistoricalSessionContext BuildContext(CheckpointProbe probe)
@@ -175,11 +189,21 @@ internal static class FuelLapsWorkbenchViewModel
                 || ContainsRace(probe.EventType));
     }
 
-    private static SimpleTelemetryTone CellTone(double finishLaps, double? actualLaps, string source)
+    private static SimpleTelemetryTone CellTone(
+        double finishLaps,
+        double? actualLaps,
+        string source,
+        LiveRaceLapBudget budget)
     {
         if (string.Equals(source, "non-race session", StringComparison.OrdinalIgnoreCase))
         {
             return SimpleTelemetryTone.Waiting;
+        }
+
+        if (!budget.CanDriveFuelAdvice
+            && budget.StateFlags.Any(flag => flag is LiveRaceLapBudgetStateFlag.PaceContaminated or LiveRaceLapBudgetStateFlag.FrontPackPaceDisagreement))
+        {
+            return SimpleTelemetryTone.Warning;
         }
 
         if (actualLaps is null)
@@ -190,6 +214,18 @@ internal static class FuelLapsWorkbenchViewModel
         return Math.Abs(finishLaps - actualLaps.Value) <= 0.25d
             ? SimpleTelemetryTone.Success
             : SimpleTelemetryTone.Warning;
+    }
+
+    private static string BudgetSuffix(LiveRaceLapBudget budget)
+    {
+        if (budget.Source == LiveRaceLapBudgetSource.TimedLiveClockHeldCleanPace)
+        {
+            return " held degraded";
+        }
+
+        return budget.StateFlags.Any(flag => flag is LiveRaceLapBudgetStateFlag.PaceContaminated or LiveRaceLapBudgetStateFlag.FrontPackPaceDisagreement)
+            ? " degraded"
+            : string.Empty;
     }
 
     private static SimpleTelemetryTone RowTone(MaterializedWorkbenchRow row)
@@ -1056,7 +1092,12 @@ internal static class FuelLapsWorkbenchViewModel
         double? OverallLeaderProgressLaps,
         double? ClassLeaderProgressLaps,
         double? RacePaceSeconds,
-        string RacePaceSource);
+        string RacePaceSource,
+        bool PaceContaminated = false,
+        bool FrontPackPaceDisagreement = false,
+        double? CleanRacePaceSeconds = null,
+        string? CleanRacePaceSource = null,
+        double? PreviousCleanEstimatedFinishLap = null);
 
     private sealed record WorkbenchCell(string Value, SimpleTelemetryTone Tone);
 }

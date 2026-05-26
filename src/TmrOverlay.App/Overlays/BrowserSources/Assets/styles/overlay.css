@@ -190,6 +190,11 @@
       min-width: 0;
     }
 
+    body.fuel-calculator-page .overlay.laps-workbench {
+      --tmr-metric-label-column-width: 190px;
+      width: min(720px, calc(100vw - 16px));
+    }
+
     body.fuel-calculator-page .overlay.fuel-non-race {
       height: min(var(--fuel-content-height, var(--tmr-metric-fuel-non-race-height)), calc(100vh - 16px));
     }

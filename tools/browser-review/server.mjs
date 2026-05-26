@@ -4382,18 +4382,23 @@ function relativePlaceholderRow(cellCount) {
 
 function fuelLapsWorkbenchReviewModel() {
   const rows = [
-    fuelLapsWorkbenchRow('Dallara 45m', 'timed / actual known', 'info', ['6', '6', '6', '7'], '6'),
-    fuelLapsWorkbenchRow('Dallara 4L full', 'fixed / full race', 'info', ['4', '4', '4', '4'], '4'),
-    fuelLapsWorkbenchRow('Dallara 4L blip', 'fixed / transient field', 'warning', ['4', '4', '4', '4'], '4'),
-    fuelLapsWorkbenchRow('Dallara 4L early', 'fixed / no finish', 'waiting', ['4', '--', '--', '--'], '?'),
-    fuelLapsWorkbenchRow('GR86 3L start', 'fixed / short start', 'info', ['3', '3', '--', '3'], '3'),
-    fuelLapsWorkbenchRow('VLN 4h team', 'timed / endurance', 'info', ['31', '31', '30', '31'], '30'),
-    fuelLapsWorkbenchRow('24h rejoin', 'timed / rejoin', 'waiting', ['180', '174', '167', '--'], '173'),
-    fuelLapsWorkbenchRow('Dallara timed mid', 'timed / mid-capture', 'waiting', ['7', '6', '--', '--'], '?'),
-    fuelLapsWorkbenchRow('BMW 45m early', 'missing telemetry', 'waiting', ['--', '--', '--', '--'], '?'),
-    fuelLapsWorkbenchRow('Dallara practice', 'practice control', 'waiting', ['--', '--', '--', '--'], 'n/a'),
-    fuelLapsWorkbenchRow('Dallara quali', 'qual/push control', 'waiting', ['--', '--', '--', '--'], 'n/a'),
-    fuelLapsWorkbenchRow('Daytona offline', 'offline/test control', 'waiting', ['--', '--', '--', '--'], '?')
+    fuelLapsWorkbenchRow('Dallara 45m / V1', 'timed / selected pace', 'info', ['5.99', '6.04', '5.93', '--', '6.06'], '6'),
+    fuelLapsWorkbenchRow('Dallara 45m / V2', 'lap budget / same shape', 'info', ['5.99 seed', '6.04', '5.93', '--', '6.06'], '6'),
+    fuelLapsWorkbenchRow('Dallara 4L full / V1', 'fixed / full race', 'info', ['4', '4', '4', '--', '4'], '4'),
+    fuelLapsWorkbenchRow('Dallara 4L full / V2', 'lap budget / SDK authority', 'info', ['4 SDK', '4 SDK', '4 SDK', '--', '4 SDK'], '4'),
+    fuelLapsWorkbenchRow('Dallara 4L blip / V1', 'fixed / transient field', 'warning', ['4', '4', '4', '--', '4'], '4'),
+    fuelLapsWorkbenchRow('Dallara 4L blip / V2', 'lap budget / SDK authority', 'info', ['4 SDK', '4 SDK', '4 SDK', '--', '4 SDK'], '4'),
+    fuelLapsWorkbenchRow('GR86 3L start / V1', 'fixed / short start', 'info', ['3', '3', '--', '--', '3'], '3'),
+    fuelLapsWorkbenchRow('GR86 3L start / V2', 'lap budget / SDK authority', 'info', ['3 SDK', '3 SDK', '--', '--', '3 SDK'], '3'),
+    fuelLapsWorkbenchRow('VLN 4h team / V1', 'timed / selected pace', 'info', ['30.96', '30.39', '30', '--', '31'], '30'),
+    fuelLapsWorkbenchRow('VLN 4h team / V2', 'lap budget / same shape', 'info', ['30.96 seed', '30.39', '30', '--', '31'], '30'),
+    fuelLapsWorkbenchRow('24h rejoin / V1', 'seed then selected pace', 'waiting', ['179.68', '173.30', '166.01 degraded', '173.13', '--'], '173'),
+    fuelLapsWorkbenchRow('24h rejoin / V2', 'lap budget / held degraded pace', 'warning', fuelLapsWorkbenchV2Values(fuelLapsWorkbench24hScenario()), '173'),
+    fuelLapsWorkbenchRow('24h rejoin / Clean', 'quali/clean running pace', 'info', ['179', '174', '174', '174', '--'], '173'),
+    fuelLapsWorkbenchRow('24h rejoin 8h / V1', 'synthetic 8h / selected pace', 'warning', ['59.89', '58.78', '51.65 degraded', '58.60', '--'], '59?'),
+    fuelLapsWorkbenchRow('24h rejoin 8h / V2', 'synthetic 8h / held degraded pace', 'warning', fuelLapsWorkbenchV2Values(fuelLapsWorkbench24hScenario({ durationSeconds: 28800 })), '59?'),
+    fuelLapsWorkbenchRow('24h rejoin 8h / Clean', 'synthetic 8h / clean pace', 'info', ['60', '59', '59', '59', '--'], '59?'),
+    fuelLapsWorkbenchRow('24h rejoin / Elapsed', 'observed elapsed pace', 'info', ['--', '172', '172', '--', '--'], '173')
   ];
   const metricSections = [{ title: 'Laps Workbench', rows }];
   return metricsModel(
@@ -4408,13 +4413,13 @@ function fuelLapsWorkbenchReviewModel() {
 }
 
 function fuelLapsWorkbenchRow(label, value, tone, checkpointValues, realValue) {
-  const checkpointLabels = ['Start', 'Mid S1', 'Stop 1', 'Half'];
+  const checkpointLabels = ['Start', 'Mid S1', 'Stop 1', 'Recover', 'Half Rem'];
   const segments = checkpointLabels
     .map((label, index) => metricSegment(
       label,
-      checkpointValues[index],
+      fuelLapsWorkbenchFormatCell(checkpointValues[index]),
       fuelLapsWorkbenchTone(checkpointValues[index], realValue)));
-  segments.push(metricSegment('Real', realValue, 'modeled'));
+  segments.push(metricSegment('Real', fuelLapsWorkbenchFormatCell(realValue), 'modeled'));
 
   return metricRow(
     label,
@@ -4425,12 +4430,118 @@ function fuelLapsWorkbenchRow(label, value, tone, checkpointValues, realValue) {
 
 function fuelLapsWorkbenchTone(value, realValue) {
   if (value === '--') return 'waiting';
-  const modeled = Number.parseInt(value, 10);
-  const actual = Number.parseInt(realValue, 10);
+  const valueText = String(value || '').toLowerCase();
+  if (valueText.includes('degraded') || valueText.includes('held')) return 'warning';
+  const modeled = Number.parseFloat(value);
+  const actual = Number.parseFloat(realValue);
   if (!Number.isFinite(modeled) || !Number.isFinite(actual)) return 'info';
   const delta = Math.abs(modeled - actual);
-  if (delta === 0) return 'success';
-  return delta === 1 ? 'warning' : 'error';
+  if (delta <= 0.005) return 'success';
+  return delta <= 1 ? 'warning' : 'error';
+}
+
+function fuelLapsWorkbenchFormatCell(value) {
+  if (value === '--' || value == null) return '--';
+  const text = String(value);
+  const match = /^(\s*)([-+]?\d+(?:\.\d+)?)(.*)$/.exec(text);
+  if (!match) return text;
+
+  const parsed = Number.parseFloat(match[2]);
+  return Number.isFinite(parsed)
+    ? `${match[1]}${parsed.toFixed(2)}${match[3]}`
+    : text;
+}
+
+function fuelLapsWorkbenchV2Values(scenario) {
+  return scenario.checkpoints.map((checkpoint) => fuelLapsWorkbenchV2Value(checkpoint));
+}
+
+function fuelLapsWorkbenchV2Value(checkpoint) {
+  if (!checkpoint) return '--';
+
+  let finishLap = null;
+  let suffix = '';
+  if (checkpoint.preGreen) {
+    finishLap = checkpoint.durationSeconds / checkpoint.paceSeconds;
+    suffix = ' seed';
+  } else {
+    const progress = checkpoint.synthetic
+      ? checkpoint.leaderProgressLaps - checkpoint.baselineLeaderProgressLaps
+      : checkpoint.leaderProgressLaps;
+    const remaining = checkpoint.synthetic
+      ? checkpoint.durationSeconds - Math.max(0, checkpoint.sessionTimeSeconds - checkpoint.baselineSessionTimeSeconds)
+      : checkpoint.durationSeconds - checkpoint.sessionTimeSeconds;
+    finishLap = progress + Math.max(0, remaining) / checkpoint.paceSeconds;
+  }
+
+  if (checkpoint.paceContaminated && Number.isFinite(finishLap)) {
+    const cleanFinishLap = fuelLapsWorkbenchCleanFinishLap(checkpoint);
+    const heldFinishLap = Math.max(
+      Number.isFinite(cleanFinishLap) ? cleanFinishLap : finishLap,
+      Number.isFinite(checkpoint.previousCleanFinishLap) ? checkpoint.previousCleanFinishLap : finishLap);
+    if (heldFinishLap > Math.ceil(finishLap)) {
+      finishLap = heldFinishLap;
+      suffix = ' held degraded';
+    }
+  }
+
+  return Number.isFinite(finishLap) ? `${finishLap.toFixed(2)}${suffix}` : '--';
+}
+
+function fuelLapsWorkbenchCleanFinishLap(checkpoint) {
+  if (!Number.isFinite(checkpoint.cleanPaceSeconds) || checkpoint.cleanPaceSeconds <= 0) {
+    return null;
+  }
+
+  const progress = checkpoint.synthetic
+    ? checkpoint.leaderProgressLaps - checkpoint.baselineLeaderProgressLaps
+    : checkpoint.leaderProgressLaps;
+  const remaining = checkpoint.synthetic
+    ? checkpoint.durationSeconds - Math.max(0, checkpoint.sessionTimeSeconds - checkpoint.baselineSessionTimeSeconds)
+    : checkpoint.durationSeconds - checkpoint.sessionTimeSeconds;
+  return progress + Math.max(0, remaining) / checkpoint.cleanPaceSeconds;
+}
+
+function fuelLapsWorkbench24hScenario({ durationSeconds = 86400 } = {}) {
+  const baselineSessionTimeSeconds = 57012.003;
+  const baselineLeaderProgressLaps = 113.3288;
+  const synthetic = durationSeconds !== 86400;
+  const cleanFinishLap = synthetic ? 59 : 174;
+  const checkpoint = (values) => ({
+    durationSeconds,
+    baselineSessionTimeSeconds,
+    baselineLeaderProgressLaps,
+    synthetic,
+    ...values
+  });
+  return {
+    checkpoints: [
+      checkpoint({
+        preGreen: true,
+        paceSeconds: 480.8602
+      }),
+      checkpoint({
+        sessionTimeSeconds: 58504.0,
+        leaderProgressLaps: 116.3744,
+        paceSeconds: 490.0
+      }),
+      checkpoint({
+        sessionTimeSeconds: 59810.019,
+        leaderProgressLaps: 119.3791,
+        paceSeconds: 570.265,
+        cleanPaceSeconds: 491.778,
+        previousCleanFinishLap: cleanFinishLap,
+        paceContaminated: true,
+        frontPackPaceDisagreement: true
+      }),
+      checkpoint({
+        sessionTimeSeconds: 60359.203,
+        leaderProgressLaps: 120.0060,
+        paceSeconds: 490.191
+      }),
+      null
+    ]
+  };
 }
 
 function metricsModel(

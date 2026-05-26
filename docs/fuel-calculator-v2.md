@@ -604,6 +604,29 @@ strategy copy, but the base lap-budget label comes from the shared model. When a
 surface needs boundary context, it should consume the model's decimal
 `possibleLapsRemaining` value rather than recomputing its own estimate.
 
+V2 Lap cell display decision: the user-facing Lap cell should expose the
+underlying projected race distance / finish-lap value to two decimal places when
+that value is available. A value such as `6.04` is intentionally different from
+a whole-lap `7`: it says the race is just beyond the 6-lap boundary, technically
+requiring the next lap for conservative fuel math, but close enough that the
+driver can see it may settle below `6.00` as better evidence arrives. Fixed-lap
+or published-lap sources can still display as decimals for consistency, such as
+`4.00 SDK`; pre-green timed seeds should carry a visible seed marker, such as
+`5.99 seed`; degraded/held values should carry their confidence marker, such as
+`174.00 held degraded`.
+
+The decimal Lap cell is display context, not permission to reduce safety-critical
+Fuel advice. Fuel math should continue to consume `primaryLapsRemaining`,
+`confidence`, `stateFlags`, and `canDriveFuelAdvice`. If the visible decimal is
+near a whole-lap boundary, the model should set `boundary-risk` and Fuel should
+use the conservative higher fuel requirement until the lap-budget source becomes
+stable enough to lower advice. The lower raw projection from a degraded pace
+sample may be shown in workbench/diagnostics, but production advice must not
+underfuel, delete a stop, or promote no-stop based on that degraded value alone.
+Before production promotion, the shared Core contract should carry this decimal
+display value explicitly, such as raw projected finish lap / race distance, so
+browser, localhost, and native surfaces do not recompute it differently.
+
 Consumer policy: most consumers should stay dumb until proven otherwise. Shared
 header/footer slots, standings separators, track-map labels, and similar display
 surfaces should consume the model-provided header/content value, such as
@@ -657,6 +680,9 @@ Initial source enum:
   remaining distance.
 - `timed-live-clock`: active timed race projection from live remaining clock,
   leader progress, and accepted pace evidence.
+- `timed-live-clock-held-clean-pace`: active timed race where the current leader
+  pace sample is degraded, so the primary lap budget is held to recent
+  clean/front-pack context while the lower current projection remains diagnostic.
 - `timed-pre-green-estimate`: scheduled race time and seed pace before enough
   live race progress exists.
 - `timed-expired-final-lap`: timed race clock has expired and final-lap /
@@ -677,6 +703,9 @@ Initial state flags:
   data rather than clean live race laps.
 - `pace-contaminated`: recent pace evidence may include yellow, pit, damage,
   traffic, draft, wet-condition, leader-change, or other disruption.
+- `front-pack-pace-disagreement`: the current overall leader pace would move
+  the race lap budget materially, but nearby front-running cars do not show the
+  same pace shift.
 - `own-checkered-pending`: finish state depends on whether the strategy car has
   personally taken checkered.
 - `session-finished`: session has finished and the model is reporting final
@@ -1007,6 +1036,82 @@ Checkpoint comparison findings:
   `SessionLapsRemainEx` was `3`, which is conservative and user-useful even
   though `teamProgress + 3` is not the eventual race total.
 
+24h rejoin workbench findings:
+
+- The Fuel V2 laps workbench is intentionally an exploratory browser-review
+  test bench while this model is being developed. Rows and cells may be
+  duplicated, moved, deleted, renamed, or temporarily narrowed to one scenario.
+  Do not treat early workbench shape as a final overlay contract.
+- For timed-race lap-budget work, the current workbench columns are `Start`,
+  `Mid S1`, `Stop 1`, `Recover`, `Half Rem`, and `Real`. `Half Rem` means half
+  of the remaining race time from the capture/rejoin point, not halfway through
+  the original scheduled race. For the May 2 24h rejoin capture, that target is
+  around race clock `19:55:06`, but local raw capture coverage only reaches
+  about `17:22:51`, so the real `Half Rem` cell remains unavailable rather than
+  synthetic.
+- The first local 24h rejoin capture starts late in the race, around race clock
+  `15:50:10`; first usable leader progress is about `113.3288` laps. We do not
+  have the first half of the 24h race locally.
+- Actual 24h leader race distance is known from outside the capture as `173`
+  laps. The eventual winner/leader was `CarIdx 6`, `#420 RasenGrasen`, with
+  average lap time `8:21.699` and best lap `8:05.431`. P1 qualifying pace was
+  roughly `8:05.223`, and the live driver estimate near rejoin was `480.8602s`,
+  which projects `180` laps over 24h. That early `180` is a real low-confidence
+  seed estimate, not an obviously wrong value; it should be allowed to settle as
+  live evidence arrives.
+- Hurka Motorsport (`CarIdx 33`, `#92`) qualified P1 at `8:03.020`, but the
+  rejoin capture does not expose useful live progress or repair evidence for
+  Hurka. Treat Hurka as a stale-fast-qualifier/no-live-progress negative control,
+  not as a confirmed meatball or leader-progress fixture. The confirmed local
+  meatball/repair evidence lives in `capture-20260522-194832-318`, but that is a
+  fixed-lap Dallara context and is not a timed-race leader-distance proof.
+- Current V1 24h rejoin workbench row: `Start 180`, `Mid S1 174`, `Stop 1 167`,
+  `Recover 174`, `Half Rem --`, `Real 173`.
+- The workbench now pairs V1/V2 rows for the useful fixed-lap and timed baseline
+  captures, not only for the 24h outlier. V2 should preserve the Dallara 45m,
+  fixed-lap Dallara, GR86, and VLN row shape while adding confidence/source
+  labels; the expected deliberate change is the contaminated 24h `Stop 1` cells.
+- Workbench cells now show the projected finish-lap/race-distance value to two
+  decimals, matching the intended V2 Lap-cell direction. For the Dallara 45m
+  capture, the important cells are `Start 5.99 seed`, `Mid S1 6.04`,
+  `Stop 1 5.93`, `Half Rem 6.06`, and `Real 6.00`. This proves the old whole
+  number `7` was a boundary display artifact, not a meaningful model miss.
+- Clean-control 24h rejoin row: `Start 179`, `Mid S1 174`, `Stop 1 174`,
+  `Recover 174`, `Half Rem --`, `Real 173`.
+- Synthetic 8h-from-rejoin row, using the same observed rejoin data but resetting
+  race duration to 8h: current V1 projects `Start 60`, `Mid S1 59`, `Stop 1 52`,
+  `Recover 59`, with an exploratory `59?` comparison target. This is not a real
+  8h race result. It is useful because it proves the same failure shape in a
+  shorter timed race: the model is fine at start/mid, then collapses when one
+  slow leader lap becomes the denominator for all remaining time.
+- `Mid S1` is only about `3.05` leader laps into the rejoin and is already close:
+  baseline leader progress `113.3288`, `Mid S1` leader progress `116.3744`,
+  projected `174` versus actual `173`. This supports using limited rejoin data
+  once clean rolling/front-runner pace exists.
+- `Stop 1` is about `6.05` leader laps into the rejoin and is the dangerous
+  outlier: baseline leader progress `113.3288`, `Stop 1` leader progress
+  `119.3791`, projected `167` versus actual `173`. The bad source is the
+  overall leader's `570.265s` last lap. The pit/slow lap is not huge in isolation,
+  but projecting that slower denominator across about `26,590s` of remaining
+  race time removes about seven laps from the estimated finish.
+- The model self-recovers after the leader completes the next normal lap:
+  `167 -> 174` about `0.63` leader laps, or about five minutes, after `Stop 1`.
+  An exact `173` appears later, around 9.5 minutes after `Stop 1`, but the clean
+  recovery evidence is the jump back near truth once the leader's last-lap value
+  updates from `570.265s` to about `490.191s`.
+- The surrounding front-pack context at `Stop 1` does not confirm the leader's
+  slow-lap projection. P2 `#21 Skid Mark Sim Racing Red` has `490.663s` last lap
+  and projects `174`; P3 `#68 CGC-Rennsport Orange` has `492.894s` and projects
+  `173`; P4 `#020 Lame Sheep Racing 020` has `489.980s` and projects `174`.
+  Applying the front-pack median pace of about `491.778s` to the leader's
+  current progress projects `174`. This is strong contamination context, but it
+  is not replacement truth: the overall leader still defines the timed-race
+  finish event.
+- Temporary workbench coloring decision: exact cells are green, close cells are
+  yellow, far cells are red, and cells known to be contaminated/degraded can be
+  yellow with an explicit `degraded` marker. That yellow is a development signal
+  for "shown with degraded confidence"; it does not mean the low value is safe.
+
 Project decisions from this probe:
 
 - Finite live `SessionLapsRemainEx` and `SessionLapsTotal` beat clock-derived
@@ -1014,10 +1119,29 @@ Project decisions from this probe:
 - Timed-race projections should expose a finish-lap range or boundary-risk flag
   when the computed value is near a whole-lap boundary. User-facing advice must
   use the higher fuel requirement until confidence improves.
+- The visible V2 Lap cell should prefer the two-decimal projected finish-lap
+  value over a naked whole-lap ceiling. Whole-lap ceilings are still needed for
+  conservative `primaryLapsRemaining` and fuel math, but hiding `6.04` behind
+  `7` loses useful information and makes boundary cases look worse than they
+  are.
 - Pace evidence should carry contamination reasons such as leader on pit road,
   yellow/caution, invalid last-lap values, dirty leader progress, or large
   rolling-pace drift. Contaminated slow pace must not be allowed to
   under-project race length for stop deletion or underfueling advice.
+- Leader race progress remains the authority for the timed-race finish trigger,
+  but nearby front-running cars can be used as pace sanity context. If a single
+  leader last lap would materially lower the race lap budget and P2/P3/P4 or a
+  clean rolling leader window do not corroborate that slowdown, V2 should mark
+  the pace as contaminated/degraded, hold the previous clean/conservative budget,
+  or use a clean pace window. It must not lower safety-critical Fuel advice from
+  that one leader lap alone.
+- A single slow leader last lap may raise confidence only when it agrees with
+  recent clean leader/front-pack context. It should not be allowed to sharply
+  lower projected race distance by itself.
+- Degraded values may still be visible in analysis/workbench UI, but any
+  production Fuel strategy row that depends on a degraded lap budget must show
+  that confidence state and block fuel-reducing advice such as underfueling,
+  no-stop promotion, or stop deletion.
 - Active strategy should stop consuming remaining-clock and remaining-lap
   signals once `SessionState >= 5`. Preserve final result/context for summaries,
   but do not keep projecting from post-checkered cooldown clocks or toggling
@@ -1048,6 +1172,14 @@ Project decisions from this probe:
   does not flicker on short-lived lap-count glitches.
 - Generate compact 4-hour and 24-hour replay-window evidence before using them
   as durable fuel evidence; keep raw `telemetry.bin` out of committed fixtures.
+- For the 24h rejoin capture, add compact windows for `Start`, `Mid S1`,
+  `Stop 1`, `Recover`, and the unavailable `Half Rem` target. Include the V1,
+  clean-control, and synthetic 8h interpretations so the fixture proves both the
+  dangerous low estimate and the proposed degraded/held-clean behavior.
+- For the 24h `Stop 1` window, include P1/P2/P3/P4 progress, last lap, best lap,
+  and front-pack median pace so tests can assert that front-pack context
+  disagrees with the contaminated leader lap. The fixture should classify the
+  V1 `167`/synthetic `52` cells as degraded or rejected for Fuel actionability.
 - For the 4-hour capture, include leader-identity-change windows and the
   final-stint fast-repair-used window so Fuel V2 can test sudden leader shifts,
   damage/repair lap-down changes, and post-repair strategy-car progress.

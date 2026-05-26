@@ -94,8 +94,8 @@ TARGETS = [
     {
         "label": "24h rejoin",
         "capture": "captures/capture-20260502-143722-571",
-        "truth": "?",
-        "truthKind": "unknown",
+        "truth": "173",
+        "truthKind": "actual",
     },
     {
         "label": "Dallara timed mid",

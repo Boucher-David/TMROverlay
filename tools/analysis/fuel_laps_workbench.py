@@ -111,8 +111,8 @@ CAPTURES = [
         "24h rejoin",
         "timed endurance / rejoin",
         "captures/capture-20260502-143722-571",
-        None,
-        "unknown",
+        173,
+        "173 actual",
         include_start=False,
         include_mid_stint=False),
     WorkbenchCapture(

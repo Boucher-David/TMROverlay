@@ -4388,7 +4388,7 @@ function fuelLapsWorkbenchReviewModel() {
     fuelLapsWorkbenchRow('Dallara 4L early', 'fixed / no finish', 'waiting', ['4', '--', '--', '--'], '?'),
     fuelLapsWorkbenchRow('GR86 3L start', 'fixed / short start', 'info', ['3', '3', '--', '3'], '3'),
     fuelLapsWorkbenchRow('VLN 4h team', 'timed / endurance', 'info', ['31', '31', '30', '31'], '30'),
-    fuelLapsWorkbenchRow('24h rejoin', 'timed / rejoin', 'waiting', ['180', '174', '167', '--'], '?'),
+    fuelLapsWorkbenchRow('24h rejoin', 'timed / rejoin', 'waiting', ['180', '174', '167', '--'], '173'),
     fuelLapsWorkbenchRow('Dallara timed mid', 'timed / mid-capture', 'waiting', ['7', '6', '--', '--'], '?'),
     fuelLapsWorkbenchRow('BMW 45m early', 'missing telemetry', 'waiting', ['--', '--', '--', '--'], '?'),
     fuelLapsWorkbenchRow('Dallara practice', 'practice control', 'waiting', ['--', '--', '--', '--'], 'n/a'),

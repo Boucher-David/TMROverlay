@@ -1995,8 +1995,12 @@ function fuelBrowserSourceHeightForModel(model, fallbackHeight) {
 }
 
 function isFuelLapsWorkbenchModel(model) {
-  return model?.overlayId === 'fuel-calculator'
-    && String(model?.status || '').trim().toLowerCase() === 'laps workbench';
+  if (model?.overlayId !== 'fuel-calculator') {
+    return false;
+  }
+
+  const status = String(model?.status || '').trim().toLowerCase();
+  return status === 'laps workbench' || status === 'fuel/lap workbench';
 }
 
 function fuelContentHeight(rowCount, sectionCount, options = {}) {
@@ -2859,6 +2863,10 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
             [],
             [],
             false));
+        }
+
+        if (fixture === 'fuel-laps-workbench-laps') {
+          return withChrome(fuelLapsWorkbenchReviewModel({ includeLapRows: true }));
         }
 
         if (!fixture || fixture === 'fuel-laps-workbench') {
@@ -4380,8 +4388,8 @@ function relativePlaceholderRow(cellCount) {
     { isPlaceholder: true });
 }
 
-function fuelLapsWorkbenchReviewModel() {
-  const rows = [
+function fuelLapsWorkbenchReviewModel({ includeLapRows = false } = {}) {
+  const lapRows = [
     fuelLapsWorkbenchRow('Dallara 45m / V1', 'timed / selected pace', 'info', ['5.99', '6.04', '5.93', '--', '6.06'], '6'),
     fuelLapsWorkbenchRow('Dallara 45m / V2', 'lap budget / same shape', 'info', ['5.99 seed', '6.04', '5.93', '--', '6.06'], '6'),
     fuelLapsWorkbenchRow('Dallara 4L full / V1', 'fixed / full race', 'info', ['4', '4', '4', '--', '4'], '4'),
@@ -4400,16 +4408,33 @@ function fuelLapsWorkbenchReviewModel() {
     fuelLapsWorkbenchRow('24h rejoin 8h / Clean', 'synthetic 8h / clean pace', 'info', ['60', '59', '59', '59', '--'], '59?'),
     fuelLapsWorkbenchRow('24h rejoin / Elapsed', 'observed elapsed pace', 'info', ['--', '172', '172', '--', '--'], '173')
   ];
-  const metricSections = [{ title: 'Laps Workbench', rows }];
+  const fuelRows = [
+    fuelPerLapWorkbenchRow('VLN 4h team', 'race / 13 accepted spans', 'info', ['13.52', '13.50', '13.36', '13.65 live high'], '13.36'),
+    fuelPerLapWorkbenchRow('Dallara 45m', 'race / 3 accepted spans', 'info', ['13.73', '--', '--', '13.80 live high'], '13.62'),
+    fuelPerLapWorkbenchRow('Dallara 4L full', 'race / 3 accepted spans', 'warning', ['12.35', '--', '--', '12.96 live high'], '12.76'),
+    fuelPerLapWorkbenchRow('Dallara 4L blip', 'race / abnormal stop / 1 span', 'warning', ['13.54', '--', '--', '13.54 live high'], '13.38'),
+    fuelPerLapWorkbenchRow('Dallara Daytona long', 'offline / 15 accepted spans', 'warning', ['1.51', '1.86', '1.90', '2.53 live high'], '1.69'),
+    fuelPerLapWorkbenchRow('Dallara Daytona short', 'offline / 6 accepted spans', 'warning', ['1.50', '1.81', '--', '2.72 live high'], '1.90'),
+    fuelPerLapWorkbenchRow('Dallara quali seed', 'qualifying / max seed only', 'warning', ['--', '--', '--', '13.78 quali seed'], '--')
+  ];
+  const metricSections = includeLapRows
+    ? [
+        { title: 'Laps Workbench', rows: lapRows },
+        { title: 'Fuel/Lap Workbench', rows: fuelRows }
+      ]
+    : [
+        { title: 'Fuel/Lap Workbench', rows: fuelRows }
+      ];
+  const rows = metricSections.flatMap((section) => section.rows);
   return metricsModel(
     'fuel-calculator',
     'Fuel Calculator',
-    'laps workbench',
+    'fuel/lap workbench',
     rows,
-    'source: Fuel V2 laps workbench; leader-view race distance from capture probes',
+    'source: Fuel V2 workbench; fuel/lap from accepted clean-span probes; V1 Ref is current aggregate baseline',
     [],
     metricSections,
-    [{ key: 'timeRemaining', value: 'Laps', tone: 'info' }]);
+    [{ key: 'timeRemaining', value: 'Fuel/Lap', tone: 'info' }]);
 }
 
 function fuelLapsWorkbenchRow(label, value, tone, checkpointValues, realValue) {
@@ -4438,6 +4463,41 @@ function fuelLapsWorkbenchTone(value, realValue) {
   const delta = Math.abs(modeled - actual);
   if (delta <= 0.005) return 'success';
   return delta <= 1 ? 'warning' : 'error';
+}
+
+function fuelPerLapWorkbenchRow(label, value, tone, windowValues, finalValue) {
+  const windowLabels = ['Last', '5L', '10L', 'Max'];
+  const segments = windowLabels
+    .map((label, index) => metricSegment(
+      label,
+      fuelLapsWorkbenchFormatCell(windowValues[index]),
+      fuelPerLapWorkbenchTone(windowValues[index], finalValue)));
+  segments.push(metricSegment('V1 Ref', fuelLapsWorkbenchFormatCell(finalValue), 'modeled'));
+
+  return metricRow(
+    label,
+    value,
+    tone,
+    segments);
+}
+
+function fuelPerLapWorkbenchTone(value, finalValue) {
+  if (value === '--') return 'waiting';
+  const text = String(value || '').toLowerCase();
+  if (text.includes('partial')
+    || text.includes('low')
+    || text.includes('stint')
+    || text.includes('high')
+    || text.includes('one')
+    || text.includes('quali')) {
+    return 'warning';
+  }
+  const modeled = Number.parseFloat(value);
+  const actual = Number.parseFloat(finalValue);
+  if (!Number.isFinite(modeled) || !Number.isFinite(actual)) return 'info';
+  const delta = Math.abs(modeled - actual);
+  if (delta <= 0.05) return 'success';
+  return delta <= 0.50 ? 'warning' : 'error';
 }
 
 function fuelLapsWorkbenchFormatCell(value) {

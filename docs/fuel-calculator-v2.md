@@ -470,6 +470,81 @@ Historical baseline taxonomy starting policy:
   exists and may later produce sector baselines, but it should not be mixed into
   full-lap history until it agrees with completed-lap fuel deltas.
 
+Fuel/Lap cell display decision: the likely production Fuel/Lap row should expose
+multiple burn windows directly instead of hiding them behind one selected burn
+number. Start with four cells: `Last`, `5L`, `10L`, and `Max`.
+
+- `Last`: most recent accepted clean burn span. It can populate after one
+  accepted live sample because it is explicitly an immediate trend/outlier view.
+- `5L`: rolling average over the last five accepted clean burn spans. It stays
+  blank until five accepted samples exist; do not backfill it with one to four
+  samples unless a separate diagnostic label makes that weakness impossible to
+  miss.
+- `10L`: rolling average over the last ten accepted clean burn spans. It stays
+  blank until ten accepted samples exist.
+- `Max`: conservative high burn from the accepted live clean window or matching
+  history. Before the current race has an accepted live lap, this may come from
+  a matching qualifying/push-lap baseline because qualifying should be close to
+  maximum normal fuel burn for the combo. Quali-derived max must be labeled
+  visibly, for example `quali`, and replaced or compared once live race windows
+  exist. A higher seed should not disappear after one lower live sample; keep
+  `Max` conservative as the greater of the live clean-window max and the labeled
+  seed until enough live evidence says the seed should be retired. This is the
+  value Fuel can prefer when advice would otherwise reduce fuel, delete a stop,
+  or make a no-stop claim.
+
+Formation/pre-green fuel, pit-road fuel, repair/edge fuel, and degraded samples
+are real race fuel usage, but they do not feed `Last`, `5L`, or `10L`. Keep them
+as separate edge/adjustment buckets so later strategy can account for the fuel
+that was actually burned without contaminating the clean race-burn baseline.
+
+The current implementation adds a standalone `LiveFuelPerLapWindowEstimator` for
+the V2 path while leaving the production V1 selected Fuel/Lap behavior alone.
+The estimator applies the current live measured-burn gate as the first cut:
+green session state, local/team focus, on-track surface, no pit/garage/service,
+plausible fuel delta, and roughly one lap of progress. Missing session state is
+unavailable, not formation; formation is specifically pre-green state. This is
+race-live scoped for now. Yellow, wet, heavy traffic, draft, and nuanced
+off-track weakness labels remain explicit follow-up gates before this feeds
+high-stakes advice.
+
+Current workbench interpretation: the visible Fuel/Lap rows are computed from
+accepted burn spans, not perfect start/finish lap boundaries. The starting gate
+accepts a burn span once progress delta reaches about `0.95` laps and stays
+within the normal elapsed/fuel gates, so these are "accepted burn spans" rather
+than exact completed-lap records. That is good enough for inspecting table
+behavior, but V2 may tighten this if exact completed-lap semantics matter. The
+extra `V1 Ref` column is a comparison baseline from the current aggregate/V1
+view, not final truth. `Max` cell copy should say whether the value is live high,
+quali seed, or another source label so source quality is visible while tuning.
+
+Deferred V2 row type: `Target Lap Usage`. This is not part of the current
+Fuel/Lap row implementation, but it should stay in the design backlog. When a
+race plan is built around a likely stint length, show adjacent per-lap targets so
+the driver can quickly see the fuel burn needed to make nearby stint lengths. For
+example, if the plan is roughly 20-lap stints, a row could expose `19`, `20`,
+`21`, and `22` target cells with the required `L/lap` for each. This row should
+derive from usable fuel/cap/reserve and the current lap budget, and it should be
+framed as target context until later advice logic proves what the driver should
+do with it.
+
+Useful current rows:
+
+- `VLN 4h team`: strongest proof row, with 13 accepted spans and usable
+  `Last`, `5L`, `10L`, and `Max`.
+- `Dallara 45m`: useful race row with three accepted spans, so it can prove
+  `Last` and `Max` but not `5L` or `10L`.
+- `Dallara 4L full`: useful short race/small-stop row with three accepted spans.
+- `Dallara 4L blip`: abnormal-stop/degraded row with one accepted span.
+- `Dallara Daytona long`: non-race/offline row with 15 accepted spans, useful
+  as a pure rolling-window shape check even though it should be labeled as test
+  data before it informs real race advice.
+- `Dallara Daytona short`: non-race/offline row with six accepted spans, useful
+  for `Last`/`5L`/`Max` but not `10L`.
+- `Dallara quali seed`: not a rolling live row; it demonstrates the `Max` seed
+  behavior from matching qualifying/push-lap evidence before the race has an
+  accepted live burn span.
+
 The historical summary path is less strict than the live strategy path and needs
 Fuel V2 review before powering a high-stakes stretch row. The global historical
 fuel-per-lap accumulator accepts on-track, non-pit, non-garage, moving, valid

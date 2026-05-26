@@ -631,8 +631,12 @@
     }
 
     function isFuelLapsWorkbenchModel(model) {
-      return model?.overlayId === 'fuel-calculator'
-        && String(model?.status || '').trim().toLowerCase() === 'laps workbench';
+      if (model?.overlayId !== 'fuel-calculator') {
+        return false;
+      }
+
+      const status = String(model?.status || '').trim().toLowerCase();
+      return status === 'laps workbench' || status === 'fuel/lap workbench';
     }
 
     function gapPanelSizeForModel(model) {

@@ -476,12 +476,14 @@ number. Start with four cells: `Last`, `5L`, `10L`, and `Max`.
 
 - `Last`: most recent accepted clean burn span. It can populate after one
   accepted live sample because it is explicitly an immediate trend/outlier view.
-- `5L`: rolling average over the last five accepted clean burn spans. It stays
-  blank until five accepted samples exist; do not backfill it with one to four
-  samples unless a separate diagnostic label makes that weakness impossible to
-  miss.
-- `10L`: rolling average over the last ten accepted clean burn spans. It stays
-  blank until ten accepted samples exist.
+- `5L`: rolling average over the last five accepted clean burn spans. The fully
+  trusted value requires five accepted samples. A partial diagnostic value may
+  appear after three accepted samples only when the UI labels it clearly, for
+  example `3/5`, and styles it as weak/degraded.
+- `10L`: rolling average over the last ten accepted clean burn spans. The fully
+  trusted value requires ten accepted samples. A partial diagnostic value may
+  appear after six accepted samples only when the UI labels it clearly, for
+  example `6/10`, and styles it as weak/degraded.
 - `Max`: conservative high burn from the accepted live clean window or matching
   history. Before the current race has an accepted live lap, this may come from
   a matching qualifying/push-lap baseline because qualifying should be close to
@@ -528,6 +530,83 @@ derive from usable fuel/cap/reserve and the current lap budget, and it should be
 framed as target context until later advice logic proves what the driver should
 do with it.
 
+Current Fuel Range workbench shape: show a `Fuel Range Workbench` section that
+compares current-tank laps under the V1 selected burn and each V2 Fuel/Lap burn
+window. The earlier Fuel/Lap workbench rows can stay hidden while Range is the
+active work item; their accepted-span outputs still feed these comparison
+columns. Each row is a real capture checkpoint, not a symmetric fake scenario.
+The active columns are:
+
+- `Fuel`: raw `FuelLevel` at the selected checkpoint.
+- `V1 Ref`: `Fuel / Burn V1`, displayed as a comparison baseline only.
+- `Last`: `Fuel / V2 Last`, using the most recent accepted clean burn span when
+  available.
+- `5L`: `Fuel / V2 5L`. Fully trusted at five accepted clean spans; partial
+  values can be shown in the workbench as degraded diagnostics. The exact user
+  communication can be decided later; once the full five samples exist, any
+  partial indicator should disappear.
+- `10L`: `Fuel / V2 10L`. Fully trusted at ten accepted clean spans; partial
+  values can be shown in the workbench as degraded diagnostics. The exact user
+  communication can be decided later; once the full ten samples exist, any
+  partial indicator should disappear.
+- `Max`: `Fuel / V2 Max`, using the conservative high-burn path from accepted
+  live clean windows or a labeled qualifying seed.
+
+The workbench currently uses race checkpoints from `VLN 4h team`, `Dallara 45m`,
+`Dallara 4L full`, and `Dallara 4L blip`, plus a qualifying seed row and Daytona
+gear-test rows as non-race stress checks. The Daytona rows are not production
+logic evidence; they are deliberately weird fuel-testing scenarios that expose
+window volatility. The full-race comparison columns (`Race Left` and `Delta`)
+were deliberately removed from this cell's workbench because they turn `Laps In
+Tank` into strategy advice too early. Full-tank range is also separate from the
+current-tank range cell and can become its own row if needed. Any comparison
+against laps remaining belongs in a later strategy/advice row where the lap
+budget and stop plan are explicit.
+
+Production direction: expose all four current-tank range windows in a dedicated
+`Laps In Tank` row instead of collapsing V2 into a single default number. The
+row should show `Last`, `5L`, `10L`, and `Max` as separate cells for maximum
+clarity. `Last` is the immediate trend/outlier view, `5L` reflects current-stint
+behavior once enough samples exist, `10L` is the steadier baseline when enough
+data exists, and `Max` is the conservative safety view that should gate risky
+advice but may be too pessimistic as the only visible value.
+
+Formation/pre-green usage decision for `Laps In Tank`: formation fuel is real
+fuel consumption and should reduce current `Fuel`, so it naturally lowers every
+current-tank range value. It should not be baked into `Last`, `5L`, `10L`, or
+`Max`, because those windows represent clean race-burn pace. Keep formation fuel
+as a separate adjustment/source context for later strategy rows. A workbench
+`Form/Edge` cell was tried and removed from the active `Laps In Tank` table
+because it made the row too noisy; `Last`, `5L`, `10L`, and `Max` are the cleaner
+display for this cell.
+
+Deferred V2 work stream: `Sector Burn`. This should be treated as a separate
+live-estimation path rather than another rolling Fuel/Lap window. `Last`, `5L`,
+`10L`, and `Max` describe accepted clean burn spans; sector burn describes how
+the current lap is trending before the lap is complete. It is most valuable when
+the driver is trying to hit a target usage, because the overlay could show that
+the current lap is trending above or below target before waiting for the next
+lap-crossing.
+
+Initial Sector Burn posture:
+
+- Keep sector burn separate from completed-lap history. It may explain the live
+  trend and provide a projected current-lap burn, but it should not rewrite
+  `Last`, `5L`, `10L`, or `Max` until completed-lap evidence confirms it.
+- Compare sector burn against target usage or a rolling baseline, not against a
+  fake symmetric expectation. Long sectors and cumulative sector windows should
+  get more trust than single short sectors.
+- Treat sector burn as degraded/contextual evidence for strategy until replay
+  evidence proves it agrees with completed clean-lap deltas. It should not
+  delete a stop, reduce refuel, or make no-stop advice on its own.
+- Use the dedicated sector evidence methods documented in `Sector Fuel Usage`
+  below: fuel-level deltas at sector boundaries and calibrated
+  `FuelUsePerHour` integration. These require different gates and confidence
+  labels from the completed-lap fuel windows.
+- A future workbench should probably start with long-track captures and show
+  target, sector-projected lap burn, completed-lap burn, confidence/source, and
+  rejection reasons side by side.
+
 Useful current rows:
 
 - `VLN 4h team`: strongest proof row, with 13 accepted spans and usable
@@ -536,11 +615,11 @@ Useful current rows:
   `Last` and `Max` but not `5L` or `10L`.
 - `Dallara 4L full`: useful short race/small-stop row with three accepted spans.
 - `Dallara 4L blip`: abnormal-stop/degraded row with one accepted span.
-- `Dallara Daytona long`: non-race/offline row with 15 accepted spans, useful
-  as a pure rolling-window shape check even though it should be labeled as test
-  data before it informs real race advice.
-- `Dallara Daytona short`: non-race/offline row with six accepted spans, useful
-  for `Last`/`5L`/`Max` but not `10L`.
+- `Dallara Daytona gear test / Long`: non-race fuel/gear-test stress row with
+  many accepted spans. Useful only for rolling-window volatility, not race
+  strategy.
+- `Dallara Daytona gear test / Short`: non-race fuel/gear-test stress row with
+  enough accepted spans for `Last`/`5L`/`Max` but not `10L`.
 - `Dallara quali seed`: not a rolling live row; it demonstrates the `Max` seed
   behavior from matching qualifying/push-lap evidence before the race has an
   accepted live burn span.
@@ -3327,6 +3406,16 @@ Overlay product direction:
 - The row/cell should compare against the active target or rolling baseline and
   use wording like `sector-adjusted`, `projected lap`, or `live lap burn` so it
   is not confused with completed lap burn.
+- Sector burn can influence range cell color or context after a sector boundary
+  without replacing the completed-lap windows. For example, if the normal
+  current-tank range is near a target and the latest completed sector projects a
+  worse current-lap burn, the cell can degrade or show a sector-adjusted context
+  state. That is live guidance only; `Last`, `5L`, `10L`, and `Max` update when
+  the completed lap confirms the burn.
+- Do not assume equal sectors. Sector projection must use sector length or a
+  learned sector fuel share, especially on tracks where sector windows are
+  uneven. Short/noisy sectors may need cumulative-sector evidence before they
+  can change color.
 
 Action item: add replay-window evidence for Dallara and GR86 sector crossings
 that compares `sector-fuel-level-delta`, `sector-flow-integral`, and final

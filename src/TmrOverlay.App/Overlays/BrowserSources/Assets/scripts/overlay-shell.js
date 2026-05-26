@@ -636,7 +636,9 @@
       }
 
       const status = String(model?.status || '').trim().toLowerCase();
-      return status === 'laps workbench' || status === 'fuel/lap workbench';
+      return status === 'laps workbench'
+        || status === 'fuel/lap workbench'
+        || status === 'fuel/range workbench';
     }
 
     function gapPanelSizeForModel(model) {

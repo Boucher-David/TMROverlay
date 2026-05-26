@@ -2000,7 +2000,9 @@ function isFuelLapsWorkbenchModel(model) {
   }
 
   const status = String(model?.status || '').trim().toLowerCase();
-  return status === 'laps workbench' || status === 'fuel/lap workbench';
+  return status === 'laps workbench'
+    || status === 'fuel/lap workbench'
+    || status === 'fuel/range workbench';
 }
 
 function fuelContentHeight(rowCount, sectionCount, options = {}) {
@@ -4408,33 +4410,130 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false } = {}) {
     fuelLapsWorkbenchRow('24h rejoin 8h / Clean', 'synthetic 8h / clean pace', 'info', ['60', '59', '59', '59', '--'], '59?'),
     fuelLapsWorkbenchRow('24h rejoin / Elapsed', 'observed elapsed pace', 'info', ['--', '172', '172', '--', '--'], '173')
   ];
-  const fuelRows = [
-    fuelPerLapWorkbenchRow('VLN 4h team', 'race / 13 accepted spans', 'info', ['13.52', '13.50', '13.36', '13.65 live high'], '13.36'),
-    fuelPerLapWorkbenchRow('Dallara 45m', 'race / 3 accepted spans', 'info', ['13.73', '--', '--', '13.80 live high'], '13.62'),
-    fuelPerLapWorkbenchRow('Dallara 4L full', 'race / 3 accepted spans', 'warning', ['12.35', '--', '--', '12.96 live high'], '12.76'),
-    fuelPerLapWorkbenchRow('Dallara 4L blip', 'race / abnormal stop / 1 span', 'warning', ['13.54', '--', '--', '13.54 live high'], '13.38'),
-    fuelPerLapWorkbenchRow('Dallara Daytona long', 'offline / 15 accepted spans', 'warning', ['1.51', '1.86', '1.90', '2.53 live high'], '1.69'),
-    fuelPerLapWorkbenchRow('Dallara Daytona short', 'offline / 6 accepted spans', 'warning', ['1.50', '1.81', '--', '2.72 live high'], '1.90'),
-    fuelPerLapWorkbenchRow('Dallara quali seed', 'qualifying / max seed only', 'warning', ['--', '--', '--', '13.78 quali seed'], '--')
+  const rangeRows = [
+    fuelRangeWorkbenchRow('VLN 4h team / Mid S1', 'race / all V2 windows', 'info', {
+      fuel: 61.64,
+      rangeV1: 4.61,
+      last: 4.56,
+      five: 4.57,
+      ten: 4.61,
+      max: 4.52
+    }),
+    fuelRangeWorkbenchRow('Dallara 45m / Mid S1', 'race / partial 5L', 'info', {
+      fuel: 31.23,
+      rangeV1: 2.29,
+      last: 2.27,
+      five: '2.29 3/5',
+      ten: null,
+      max: 2.26
+    }),
+    fuelRangeWorkbenchRow('Dallara 45m / Stop 1', 'race / post-stop snapshot', 'info', {
+      fuel: 33.29,
+      rangeV1: 2.44,
+      last: 2.42,
+      five: '2.44 3/5',
+      ten: null,
+      max: 2.41
+    }),
+    fuelRangeWorkbenchRow('Dallara 45m / Half Rem', 'race / remaining-time midpoint', 'info', {
+      fuel: 20.36,
+      rangeV1: 1.50,
+      last: 1.48,
+      five: '1.49 3/5',
+      ten: null,
+      max: 1.48
+    }),
+    fuelRangeWorkbenchRow('Dallara 4L full / Mid S1', 'fixed race / partial 5L', 'info', {
+      fuel: 30.98,
+      rangeV1: 2.43,
+      last: 2.51,
+      five: '2.45 3/5',
+      ten: null,
+      max: 2.39
+    }),
+    fuelRangeWorkbenchRow('Dallara 4L full / Half', 'fixed race / partial 5L', 'info', {
+      fuel: 26.21,
+      rangeV1: 2.05,
+      last: 2.12,
+      five: '2.07 3/5',
+      ten: null,
+      max: 2.02
+    }),
+    fuelRangeWorkbenchRow('Dallara 4L full / Stop 1', 'fixed race / late snapshot', 'info', {
+      fuel: 15.27,
+      rangeV1: 1.20,
+      last: 1.24,
+      five: '1.21 3/5',
+      ten: null,
+      max: 1.18
+    }),
+    fuelRangeWorkbenchRow('Dallara 4L blip / Mid S1', 'abnormal stop / one span', 'warning', {
+      fuel: 29.58,
+      rangeV1: 2.21,
+      last: 2.18,
+      five: null,
+      ten: null,
+      max: 2.18
+    }),
+    fuelRangeWorkbenchRow('Dallara 4L blip / Stop 1', 'abnormal stop / repair snapshot', 'warning', {
+      fuel: 18.86,
+      rangeV1: 1.41,
+      last: 1.39,
+      five: null,
+      ten: null,
+      max: 1.39
+    }),
+    fuelRangeWorkbenchRow('Dallara 4L blip / Half', 'abnormal stop / one span', 'warning', {
+      fuel: 31.42,
+      rangeV1: 2.35,
+      last: 2.32,
+      five: null,
+      ten: null,
+      max: 2.32
+    }),
+    fuelRangeWorkbenchRow('Dallara Daytona gear test / Long', 'non-race stress / all V2 windows', 'warning', {
+      fuel: 63.71,
+      rangeV1: 37.70,
+      last: 42.19,
+      five: 34.25,
+      ten: 33.53,
+      max: 25.18
+    }),
+    fuelRangeWorkbenchRow('Dallara Daytona gear test / Short', 'non-race stress / last + 5L + max', 'warning', {
+      fuel: 66.17,
+      rangeV1: 34.83,
+      last: 44.11,
+      five: 36.56,
+      ten: null,
+      max: 24.33
+    }),
+    fuelRangeWorkbenchRow('Dallara quali seed / Mid', 'qualifying / max seed only', 'warning', {
+      fuel: 46.91,
+      rangeV1: 3.40,
+      last: null,
+      five: null,
+      ten: null,
+      max: 3.40
+    })
   ];
   const metricSections = includeLapRows
     ? [
         { title: 'Laps Workbench', rows: lapRows },
-        { title: 'Fuel/Lap Workbench', rows: fuelRows }
+        { title: 'Fuel Range Workbench', rows: rangeRows }
       ]
     : [
-        { title: 'Fuel/Lap Workbench', rows: fuelRows }
+        { title: 'Fuel Range Workbench', rows: rangeRows }
       ];
   const rows = metricSections.flatMap((section) => section.rows);
   return metricsModel(
     'fuel-calculator',
     'Fuel Calculator',
-    'fuel/lap workbench',
+    'fuel/range workbench',
     rows,
-    'source: Fuel V2 workbench; fuel/lap from accepted clean-span probes; V1 Ref is current aggregate baseline',
+    'source: Fuel V2 workbench; current-tank range compares V1 selected burn with V2 Last/5L/10L/Max windows',
     [],
     metricSections,
-    [{ key: 'timeRemaining', value: 'Fuel/Lap', tone: 'info' }]);
+    [{ key: 'timeRemaining', value: 'Range V2', tone: 'info' }]);
 }
 
 function fuelLapsWorkbenchRow(label, value, tone, checkpointValues, realValue) {
@@ -4498,6 +4597,46 @@ function fuelPerLapWorkbenchTone(value, finalValue) {
   const delta = Math.abs(modeled - actual);
   if (delta <= 0.05) return 'success';
   return delta <= 0.50 ? 'warning' : 'error';
+}
+
+function fuelRangeWorkbenchRow(label, value, tone, range) {
+  const segments = [
+    metricSegment('Fuel', fuelRangeVolume(range.fuel), fuelRangeValueTone(range.fuel)),
+    metricSegment('V1 Ref', fuelRangeLaps(range.rangeV1), fuelRangeValueTone(range.rangeV1)),
+    metricSegment('Last', fuelRangeLaps(range.last), fuelRangeV2WindowTone(range.last, 'last')),
+    metricSegment('5L', fuelRangeLaps(range.five), fuelRangeV2WindowTone(range.five, 'five')),
+    metricSegment('10L', fuelRangeLaps(range.ten), fuelRangeV2WindowTone(range.ten, 'ten')),
+    metricSegment('Max', fuelRangeLaps(range.max), fuelRangeV2WindowTone(range.max, 'max'))
+  ];
+
+  return metricRow(
+    label,
+    value,
+    tone,
+    segments);
+}
+
+function fuelRangeValueTone(value) {
+  return Number.isFinite(value) ? 'info' : 'waiting';
+}
+
+function fuelRangeV2WindowTone(value, window) {
+  if (typeof value === 'string' && value.includes('/')) return 'warning';
+  if (!Number.isFinite(value)) return 'waiting';
+  return window === 'max' ? 'warning' : 'info';
+}
+
+function fuelRangeVolume(value) {
+  return Number.isFinite(value) ? `${value.toFixed(1)} L` : '--';
+}
+
+function fuelRangeFuelPerLap(value) {
+  return Number.isFinite(value) ? `${value.toFixed(2)} L` : '--';
+}
+
+function fuelRangeLaps(value) {
+  if (typeof value === 'string') return value;
+  return Number.isFinite(value) ? value.toFixed(2) : '--';
 }
 
 function fuelLapsWorkbenchFormatCell(value) {

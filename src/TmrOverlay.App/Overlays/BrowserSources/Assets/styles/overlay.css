@@ -191,8 +191,9 @@
     }
 
     body.fuel-calculator-page .overlay.laps-workbench {
-      --tmr-metric-label-column-width: 190px;
-      width: min(720px, calc(100vw - 16px));
+      --tmr-metric-label-column-width: 220px;
+      width: min(1500px, calc(100vw - 16px));
+      height: min(var(--fuel-content-height, 315px), calc(100vh - 8px));
     }
 
     body.fuel-calculator-page .overlay.fuel-non-race {
@@ -881,6 +882,170 @@
     .tire-grid-row.error .tire-grid-label {
       background: rgba(var(--tmr-error-rgb), 0.14);
       color: var(--tmr-error);
+    }
+
+    .tire-grid-cell.pit-context {
+      box-shadow:
+        inset 0 0 0 2px rgba(var(--tmr-green-rgb), 0.78),
+        0 0 0 1px rgba(var(--tmr-green-rgb), 0.2);
+    }
+
+    .fuel-workbench-layout {
+      display: grid;
+      grid-template-columns: minmax(520px, 0.86fr) minmax(620px, 1.14fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .fuel-workbench-table,
+    .fuel-workbench-charts {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    @media (max-width: 1180px) {
+      .fuel-workbench-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sector-chart-section {
+      min-width: 0;
+    }
+
+    .sector-chart-panel {
+      border: 1px solid var(--tmr-border-muted);
+      border-radius: 5px;
+      background: var(--tmr-surface-inset);
+      padding: 8px 10px 9px;
+      overflow: hidden;
+    }
+
+    .sector-chart-svg {
+      display: block;
+      width: 100%;
+      height: 250px;
+    }
+
+    .sector-chart-grid {
+      stroke: rgba(var(--tmr-text-muted-rgb), 0.16);
+      stroke-width: 1;
+    }
+
+    .sector-chart-frame {
+      fill: transparent;
+      stroke: rgba(var(--tmr-text-muted-rgb), 0.38);
+      stroke-width: 1.2;
+    }
+
+    .sector-chart-axis-label,
+    .sector-chart-tick {
+      fill: var(--tmr-text-muted);
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .sector-chart-line {
+      fill: none;
+      stroke: var(--tmr-cyan);
+      stroke-width: 2.1;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .sector-chart-line.degraded {
+      stroke-dasharray: 5 4;
+      opacity: 0.62;
+    }
+
+    .sector-chart-line.warning {
+      opacity: 0.78;
+    }
+
+    .sector-chart-line.error {
+      stroke-dasharray: 2 5;
+      opacity: 0.45;
+    }
+
+    .sector-chart-traffic-line {
+      fill: none;
+      stroke: #ffb703;
+      stroke-width: 4.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.9;
+      filter: drop-shadow(0 0 4px rgba(255, 183, 3, 0.32));
+    }
+
+    .sector-chart-traffic-marker {
+      fill: #ffb703;
+      stroke: var(--tmr-surface);
+      stroke-width: 1.4;
+      opacity: 0.95;
+    }
+
+    .sector-chart-line.series-0,
+    .sector-chart-swatch.series-0 { color: #4cc9f0; stroke: #4cc9f0; background: #4cc9f0; }
+    .sector-chart-line.series-1,
+    .sector-chart-swatch.series-1 { color: #80ed99; stroke: #80ed99; background: #80ed99; }
+    .sector-chart-line.series-2,
+    .sector-chart-swatch.series-2 { color: #ffd166; stroke: #ffd166; background: #ffd166; }
+    .sector-chart-line.series-3,
+    .sector-chart-swatch.series-3 { color: #ff6b6b; stroke: #ff6b6b; background: #ff6b6b; }
+    .sector-chart-line.series-4,
+    .sector-chart-swatch.series-4 { color: #b8f2e6; stroke: #b8f2e6; background: #b8f2e6; }
+    .sector-chart-line.series-5,
+    .sector-chart-swatch.series-5 { color: #f7aef8; stroke: #f7aef8; background: #f7aef8; }
+    .sector-chart-line.series-6,
+    .sector-chart-swatch.series-6 { color: #f4a261; stroke: #f4a261; background: #f4a261; }
+    .sector-chart-line.series-7,
+    .sector-chart-swatch.series-7 { color: #90dbf4; stroke: #90dbf4; background: #90dbf4; }
+    .sector-chart-line.series-8,
+    .sector-chart-swatch.series-8 { color: #caffbf; stroke: #caffbf; background: #caffbf; }
+    .sector-chart-line.series-9,
+    .sector-chart-swatch.series-9 { color: #ffadad; stroke: #ffadad; background: #ffadad; }
+    .sector-chart-line.series-10,
+    .sector-chart-swatch.series-10 { color: #a0c4ff; stroke: #a0c4ff; background: #a0c4ff; }
+    .sector-chart-line.series-11,
+    .sector-chart-swatch.series-11 { color: #fdffb6; stroke: #fdffb6; background: #fdffb6; }
+
+    .sector-chart-swatch.degraded {
+      opacity: 0.62;
+    }
+
+    .sector-chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 10px;
+      margin-top: 7px;
+      color: var(--tmr-text-muted);
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 12px;
+    }
+
+    .sector-chart-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .sector-chart-swatch {
+      width: 12px;
+      height: 3px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+    }
+
+    .sector-chart-note {
+      margin-top: 6px;
+      color: var(--tmr-text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 13px;
     }
 
     .graph-metrics {

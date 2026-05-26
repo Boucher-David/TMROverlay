@@ -510,6 +510,13 @@ race-live scoped for now. Yellow, wet, heavy traffic, draft, and nuanced
 off-track weakness labels remain explicit follow-up gates before this feeds
 high-stakes advice.
 
+Staging implementation boundary: the reusable V2 window shape now lives under
+`src/TmrOverlay.Core/Fuel/V2/` as staged Core code. `FuelV2FuelPerLapCalculator`
+owns `Last`, `5L`, `10L`, and `Max` window selection, including optional partial
+diagnostic windows and a labeled max seed. This is intentionally not wired into
+`FuelStrategyCalculator` yet; the browser workbench mirrors the shape while V1
+production behavior remains unchanged.
+
 Current workbench interpretation: the visible Fuel/Lap rows are computed from
 accepted burn spans, not perfect start/finish lap boundaries. The starting gate
 accepts a burn span once progress delta reaches about `0.95` laps and stays
@@ -620,6 +627,11 @@ a row could expose `19`, `20`, `21`, and `22` target cells with the required
 current lap budget, and it should be framed as target context until later advice
 logic proves what the driver should do with it.
 
+Staging implementation boundary: `FuelV2TargetUsageCalculator` turns a fuel
+budget and target lap counts into required `L/lap` cells, with the latest burn
+window treated as a comparator only. It does not apply reserve, pit-lane loss, or
+strategy advice. Those remain separate promotion decisions.
+
 Fuel Range workbench shape: show a `Fuel Range Workbench` section that
 compares current-tank laps under the V1 selected burn and each V2 Fuel/Lap burn
 window. The earlier Fuel/Lap workbench rows can stay hidden while Range is the
@@ -670,6 +682,11 @@ as a separate adjustment/source context for later strategy rows. A workbench
 because it made the row too noisy; `Last`, `5L`, `10L`, and `Max` are the cleaner
 display for this cell.
 
+Staging implementation boundary: `FuelV2RangeCalculator` derives current-tank
+range from `current fuel / selected V2 burn window` for each visible window. It
+does not compare against race laps remaining and does not make stop/no-stop
+claims.
+
 Deferred V2 work stream: `Sector Burn`. This should be treated as a separate
 live-estimation path rather than another rolling Fuel/Lap window. `Last`, `5L`,
 `10L`, and `Max` describe accepted clean burn spans; sector burn describes how
@@ -696,6 +713,260 @@ Initial Sector Burn posture:
 - A future workbench should probably start with long-track captures and show
   target, sector-projected lap burn, completed-lap burn, confidence/source, and
   rejection reasons side by side.
+
+Current Sector Burn workbench shape: the active browser workbench now uses one
+row per real `SplitTimeInfo.Sectors` boundary interval, one column per selected
+stint lap, and a final `Actual` row. `S0` is the first real sector from
+start/finish to the next sector boundary, not pre-race fuel. Each sector/lap
+cell shows the V2 `Live` projected L/lap value at that boundary, not raw sector
+liters. Sector labels include median replay average speed as context, so
+high-speed sectors are not mistaken for bad fuel samples just because they use
+more fuel. The `Actual` row shows completed lap burn for each selected lap.
+
+Staging implementation boundary: `FuelV2SectorBurnCalculator` owns the current
+sector projection shape: effective burns, reconstructed refuel overrides,
+same-stint sector scaling, track-percent fallback, context flags, and clean
+baseline eligibility. It is staged for workbench and bridge consumption, not for
+high-impact strategy advice.
+
+The graph view was useful during exploration, but the current workbench is
+tables-only. The later complete VLN laps that were previously graph-only are now
+shown as table columns so reset/refuel, progress-gap, pit, and non-green context
+can be inspected in the same shape as the primary stint laps.
+
+Raw sector burn remains the source evidence:
+
+```text
+sectorBurnLiters = fuelAtSectorStart - fuelAtSectorEnd
+```
+
+The workbench projection follows the initial V2 rules agreed during exploration:
+the first selected lap uses track-percent fallback as low-confidence evidence;
+later laps hold the previous completed lap at `S0`; and from `S0+S1` onward they
+use same-stint prior-lap cumulative scaling. Amber cells are still exploratory
+confidence/context markers only: early first-lap fallback, held `S0`, or sector
+windows that crossed caution/pit context. The first sector of the first available
+lap is valid measured fuel use, but it is weak guidance until there is a same
+sector precedent from the current stint, an earlier race stint, qualifying, or
+practice.
+
+Initial replay readback from `tools/analysis/fuel_sector_burn_probe.py`:
+
+- `Dallara 45m` exposes two clean full comparison laps, a pit-in lap, a
+  refuel/reset lap whose refuel-overlapped sector needs reconstructed burn
+  instead of raw tank delta, and a non-green lap that remains visible context but
+  does not advance the next green baseline.
+- `VLN 4h team` exposes source laps `2-6` plus later source laps `15-21` in the
+  table. Lap `15` has the same refuel-overlap problem, lap `19` carries
+  progress-gap context, and laps `6`/`21` carry pit context. Its long-track
+  sector pattern is the strongest first proof for sector-based live usage.
+- The table now shows the projected `Live` L/lap value at each sector boundary,
+  with the raw sector liters used only as the source evidence behind the
+  projection.
+
+Live usage direction: once a full clean lap exists, the `Live` usage cell should
+update at sector boundaries by comparing current cumulative sector burn against a
+same-sector baseline and scaling the baseline full-lap burn:
+
+```text
+liveProjectedLPerLap =
+  baselineFullLapBurn *
+  (currentCumulativeSectorBurn / baselineCumulativeSectorBurn)
+```
+
+Baseline source priority should be:
+
+1. current stint clean laps;
+2. earlier race stint clean laps;
+3. same car/track qualifying or practice clean laps;
+4. raw sector-length normalization only as a last resort.
+
+Qualifying and practice sector profiles can seed the first race lap when no race
+lap exists yet, but they should carry a lower confidence label and be displaced
+as soon as current race/stint evidence exists.
+
+Confidence labels for this row should start with:
+
+- `Live`: same-stint sector baseline, current lap has reached the confidence
+  gate;
+- `Live seeded`: historical race, qualifying, or practice sector profile is
+  driving the projection;
+- `Live low`: track-percent fallback or a short/partial seeded window;
+- `Live held`: keeping the last completed/baseline burn because the current
+  sector evidence has not reached the gate yet;
+- `Rejected`: invalid progress, unreconstructed reset/refuel, progress-gap, or
+  otherwise unusable sector evidence.
+
+Sector confidence/context collection:
+
+- Hard rejection flags: `non-race`, pre-green/post-checker not-driving phases,
+  `invalid-progress`, `progress-gap`, unreconstructed `negative/reset-fuel-delta`,
+  unreconstructed `refuel/reset`, and `implausible-burn`.
+- Context-only flags: `advisory-yellow`, `pit-road`, `pit-service`,
+  `pit-stall`, `traffic-within-1s`, `tow/dirty-air-possible`,
+  `driver-fuel-save-possible`, `sector-speed-shape`, and
+  `seeded-sector-profile`. These explain why a sector may be high/low or
+  unstable, but they do not invalidate the fuel sample by themselves.
+- Actual full-course/pace-car caution should be a separate context/hard-split
+  signal based on stronger race-control evidence, not raw `SessionFlags` yellow
+  bits alone. Useful fields observed in current schemas include `PaceMode`,
+  `CarIdxPaceLine`, `CarIdxPaceRow`, `CarIdxPaceFlags`, session YAML
+  `CourseCautions`, and `PaceCarIdx`. Road-race local yellows are usually
+  advisory and should remain fuel evidence unless those stronger signals prove a
+  true pace-car/full-course phase.
+- Confidence should be a combination of source strength, sector-window strength,
+  and context flags. For example, same-stint `S0+S1` evidence with traffic is
+  still usable, but should be treated as less stable than the same sector pair
+  from clean air; pit-entry fuel is real current-lap fuel use but should not
+  become a clean-air baseline without a separate decision; a high-speed sector
+  should be compared against its own expected sector profile rather than marked
+  suspicious for using more fuel.
+- Baseline eligibility is separate from live projection eligibility. Yellow,
+  pace-car, safety-car, pit-entry, and pit-exit sectors can and should still
+  produce a `Live` projection for the lap currently happening, because that is
+  the fuel the car is actually using. The protection is that those context laps
+  do not automatically update the clean-green baseline used when the next green
+  lap starts. Keep separate phase/context baselines where useful: green race,
+  advisory-yellow, full-course/pace-car, pit-entry/exit, and seeded historical.
+- Sector number has no inherent clean/dirty meaning. Attach pit-entry, pit-exit,
+  pit-stall, service, and refuel contamination by intersecting their event
+  windows with the actual sector interval. `S0` can be clean if the car crossed
+  start/finish after leaving pit lane, and a later sector such as `S13` can be
+  refuel-contaminated if the pit box/service window happens before start/finish.
+  The classifier follows telemetry event windows, not sector labels.
+
+Current invalid-sector readback:
+
+- `Dallara 45m` selected table source laps `1-5`: no hard-rejected sectors in
+  laps `1-3` after road-race advisory yellow and pit-road are treated as
+  context. Advisory-yellow context appears in lap 1 (`S1`, `S2`, `S4`, `S5`,
+  `S11`), lap 2 (`S2`, `S11`), and lap 3 (`S2`). Lap 3 also has pit-road
+  context at `S13`. Lap 4 has pit/refuel context at `S0`; the raw tank delta for
+  that interval is unusable because fuel is being added, so the workbench uses a
+  reconstructed burn override and keeps the sector visible as pit-context
+  evidence. Lap 5 is non-green/phase context. Pit/refuel/non-green rows are not
+  eligible to advance the next green baseline.
+- `VLN 4h team` selected table source laps are `2-6` and `15-21`: source lap 2
+  and lap 5 had no caution/pit context; lap 3 had advisory-yellow context
+  (`S3`, `S4`, `S10`); lap 4 had advisory-yellow at `S3`; lap 6 had pit-road
+  context at `S11`; lap 15 has pit/refuel context at `S0`, where the raw tank
+  delta is replaced by reconstructed burn and `S1+` remains visible as post-fuel
+  projection evidence; lap 19 has progress-gap context at `S1`; lap 21 has
+  pit-road context at `S11`. Refuel, progress-gap, and pit-entry context remains
+  visible in the table but is not eligible to advance the next green baseline
+  unless promoted by a later modeling decision.
+
+Refuel-window reconstruction readback:
+
+- `Dallara 45m` lap 4 crosses `S0` on pit road before service/refuel starts. Raw
+  `FuelLevel` delta for `S0` is about `-28.98 L`, because fuel is added during
+  the sector. Decrement-only burn is about `1.014 L`, and flow-integrated burn is
+  about `1.012 L`. The workbench uses the flow-integrated value as an
+  exploratory override so `S0` stays visible as real pit/refuel burn instead of
+  being blanked.
+- `VLN 4h team` lap 15 capture starts with the car already in `S0`, in pit/stall/
+  service context, and fuel begins increasing almost immediately. Raw `S0`
+  `FuelLevel` delta is about `-93.10 L`; decrement-only burn is about `1.103 L`,
+  and flow-integrated burn is about `1.136 L`. Because the capture starts after
+  the sector has already begun, do not overclaim exact sector-start evidence for
+  VLN; keep the reconstructed value labeled as pit/refuel context.
+- Negative tank delta starts when refueling begins in the stall/service window,
+  not only after pit exit or when the car leaves the box. Any future classifier
+  must detect fuel-add windows directly and reconstruct the overlapped sector
+  burn from calibrated flow or decrement-only tank movement.
+
+Initial sector-live confidence rule: for the current stint, do not update the
+`Live` usage projection from `S0` alone. Once lap 1 has completed, lap 2 can
+start updating `Live` after cumulative `S0+S1` is available:
+
+```text
+lap2LiveProjected =
+  lap1FullBurn * (lap2S0S1Burn / lap1S0S1Burn)
+```
+
+Each later sector boundary should refine the same cumulative comparison. Before
+lap 2 reaches `S1`, keep `Live` on the last completed lap or on the best seeded
+baseline. Historical/quali/practice sector profiles may allow earlier seeded
+updates, but those should be visibly lower confidence than same-stint sector
+evidence.
+
+Track-percent fallback investigation: a first-lap `Live` projection can be
+calculated before any same-stint baseline exists by normalizing cumulative burn
+against completed track fraction:
+
+```text
+trackPercentProjectedLPerLap =
+  currentCumulativeSectorBurn / currentLapFractionCompleted
+```
+
+This is useful as a crisp first-lap display, but it should be low confidence
+because it assumes fuel use is proportional to track distance. Replay checks show
+why:
+
+- `Dallara 45m` is fairly friendly to the fallback. `S0+S1` landed about
+  `0.10-0.38 L` away from final lap burn in the inspected laps, and the estimate
+  tightened further by mid-lap. Across the selected laps, the first checkpoint
+  that stayed under roughly `0.30 L`/`2%` max error was `S0-S5` at `37.0%` of
+  the lap; `S0-S6` was stronger with max error around `0.07 L`.
+- `VLN 4h team` is much noisier early. `S0+S1` could be roughly `0.7-1.2 L`
+  high, while the estimate became much more useful around `S0-S3`/one-third lap
+  and later. Across the selected laps, `S0-S3` at `33.1%` was the first strong
+  checkpoint, with max error around `0.12 L`, but the error was not monotonic at
+  every later checkpoint.
+- Same-sector prior-lap scaling is better as soon as a completed same-stint lap
+  exists. In the inspected VLN laps, prior-lap scaling from `S0+S1` was about
+  `0.18-0.25 L` mean absolute error, while raw track-percent projection was about
+  `1.02-1.11 L` at the same point. In the Dallara strict clean pair, prior-lap
+  scaling at `S0+S1` was about `0.03 L` error versus about `0.13 L` for
+  track-percent.
+
+Starting product rule: use track-percent projection only as a seeded first-lap
+fallback, with a degraded/confidence label. If there is no learned sector
+profile, wait until a proven track checkpoint or a conservative generic threshold
+around one-third lap / `~37%` before publishing it as `Live`. Prefer same-sector
+baseline scaling as soon as a current-stint, earlier race, qualifying, or
+practice sector profile exists.
+
+Historical sector-profile seed investigation: existing Dallara P217 / Nürburgring
+Combined Long captures can provide sector profile seeds, but the current history
+summaries do not store sector profiles directly. V2 will need to derive and
+persist sector profile evidence from raw `telemetry.bin` plus
+`latest-session.yaml` sector boundaries if we want this to work outside the
+capture workbench. Useful seed evidence found:
+
+- practice captures `capture-20260522-192333-050`,
+  `capture-20260522-202455-020`, and
+  `v1.1.0-capture/captures/capture-20260523-032606-067` cover all 14 Dallara
+  sectors with clean intervals and are good practice seeds, though they do not
+  provide complete clean sector laps;
+- race/history captures `capture-20260522-204847-774` and
+  `v1.1.0-capture/captures/capture-20260523-034827-919` are stronger historical
+  seeds, with complete clean sector laps available;
+- the lone qualifying capture
+  `v1.1.0-capture/captures/capture-20260523-031807-356` only has 6/14 clean
+  sectors and should be a low-confidence partial seed.
+
+Derived clean-sector medians were plausible: good practice captures summed to
+about `13.9 L/lap`, while good race/history captures summed to about
+`13.5 L/lap`. Existing aggregate history already has similar same-combo lap fuel
+values, but not the sector shape needed for early `Live` projection.
+
+Historical sector profile identity should be `car + track + layout +
+sector-boundary signature`. Session type should be stored as source metadata and
+weighting, not as a hard profile key: practice and qualifying can provide a
+useful sector shape seed, but race/current-stint evidence should override them.
+The sector-boundary signature matters because `SplitTimeInfo.Sectors` gives
+sector starts as lap-distance percentages for the current layout. Absolute
+distance can be derived when track length is known, but different layouts change
+the lap length, route, and sometimes start/finish relationship. Do not reuse a
+sector profile across layouts by track name alone. Cross-layout reuse is allowed
+only when the sector-boundary vector matches within tolerance after normalization
+or an explicit future investigation proves that the shared portions map to the
+same physical track segments.
+
+Colour policy for sector workbench rows remains testing-only. Use colour now to
+surface weird values, rejected/degraded windows, and unstable projections; make a
+final overlay colour pass later when the real user-facing row shape is settled.
 
 Useful current rows:
 
@@ -732,9 +1003,14 @@ Initial data rejection policy:
 - Samples that can influence overlay strategy should share the same hard
   rejection gates across live, race history, practice history, and qualifying
   upper-limit evidence.
-- Hard reject pit road, pit stall/service, garage, tow/reset/refuel jumps,
-  invalid or negative progress, implausible fuel deltas, missing local/team
-  focus, and obvious session-state mismatches.
+- For clean completed-lap and historical strategy baselines, hard reject pit road,
+  pit stall/service, garage, tow/reset/refuel jumps, invalid or negative
+  progress, implausible fuel deltas, missing local/team focus, and obvious
+  session-state mismatches.
+- For live-sector projection and current-stint accounting, those same edge states
+  can stay visible as contextual evidence when the measurement is still real or
+  can be reconstructed. The protection is source labeling and baseline
+  eligibility, not hiding pit/refuel fuel that the car actually burned.
 - A simple off-track event does not have to invalidate the sample by itself.
   Treat it as a weakness/outlier signal attached to the sample. If later clean
   matching laps prove the off-track sample is too far outside the normal range,
@@ -1577,6 +1853,29 @@ each step. Use targeted checks only when they de-risk the current edit, record
 durable decisions and important telemetry findings here, and defer broad
 fixtures/evidence/validation updates until the slice is ready to harden.
 
+Fuel V2 staging decision: finished workbench logic should move into
+`src/TmrOverlay.Core/Fuel/V2/` before it is promoted into production strategy.
+This staging namespace is real typed Core code, but it is not production wiring.
+It exists so each cell can be reviewed, swapped into browser/native/localhost
+models later, or deleted without changing V1 behavior. Current staged slices:
+
+- `FuelV2LapBudgetStaging`: adapter over the shared race-lap budget estimator so
+  Fuel V2 can consume the same lap-budget contract without owning it.
+- `FuelV2FuelPerLapCalculator`: `Last`, `5L`, `10L`, and `Max` clean burn-window
+  selection, with optional partial diagnostic windows and max seed handling.
+- `FuelV2RangeCalculator`: current-tank range from each selected burn window.
+- `FuelV2TargetUsageCalculator`: required `L/lap` targets from budget and target
+  lap counts.
+- `FuelV2SectorBurnCalculator`: live sector projection, event-window context,
+  reconstructed refuel-sector burn, baseline breaks, and clean-baseline
+  eligibility.
+
+Promotion rule: do not wire staged Fuel V2 calculators into
+`FuelStrategyCalculator` or high-impact advice until the corresponding cell has
+fixture proof, copy/source labels, and browser/native/localhost consumption shape
+approved. Browser-review workbench fixtures can mirror staged formulas during
+exploration.
+
 Overlay iteration policy: the Fuel V2 overlay layout is allowed to be fluid
 during development. Any cell or row may be duplicated, moved, hidden, deleted,
 renamed, or retuned while engineering a specific model or strategy behavior. It
@@ -1895,12 +2194,15 @@ Recommended Fuel V2 source hierarchy for usage:
 8. `unavailable`: no valid fuel level.
 
 For live measured usage, Fuel V2 should preserve the current filtering posture:
-use only racing/green local active context; reject pit road, pit stall,
-pit-service, garage, focus-on-other-car, invalid fuel, refuel/reset, negative
-progress, and implausible fuel deltas. Minor off-track should be a weakness
-signal rather than an automatic reject unless fuel/progress jumps or later clean
-laps prove it is an outlier. Current fuel level can still update in grid, pit,
-and pre-green phases, but those frames must not seed burn-rate evidence.
+use only racing/green local active context for confident completed-lap strategy
+burn; reject pit road, pit stall, pit-service, garage, focus-on-other-car,
+invalid fuel, unreconstructed refuel/reset, negative progress, and implausible
+fuel deltas from that clean baseline. Minor off-track should be a weakness signal
+rather than an automatic reject unless fuel/progress jumps or later clean laps
+prove it is an outlier. Current fuel level can still update in grid, pit, and
+pre-green phases. Live-sector rows may also show pit/refuel current-lap evidence
+with context, but those frames must not seed clean burn-rate evidence unless they
+are explicitly promoted into a separate edge-state bucket.
 
 Current evidence notes:
 
@@ -3474,9 +3776,16 @@ Expected confidence:
 - Sector estimates can help early-race planning before a full lap completes, but
   should not drive stop deletion or underfueling until they agree with completed
   green-lap deltas.
-- Reject sector samples under the same conditions as lap-burn samples: non-green
-  race state, pit road, pit stall, pit service, garage, focus-on-other-car,
-  invalid progress, negative fuel delta, refuel/reset, or implausible burn.
+- Reject sector samples only when the measurement is unusable: non-race or
+  not-driving phase, garage/off-track state, focus-on-other-car, invalid
+  progress, progress gap, unreconstructed negative fuel delta, unreconstructed
+  refuel/reset, or implausible burn. Do not reject road-race advisory yellows,
+  full-course/pace-car context, or pit-road/pit-service sectors by default for
+  the live-lap projection; keep them as visible context until we deliberately
+  decide how they feed clean baselines, current-lap fuel, or separate pit-lane
+  buckets. Actual
+  full-course/pace-car caution should be detected from stronger race-control
+  signals such as `PaceMode` / pace fields, not raw yellow flag bits alone.
 
 Overlay product direction:
 
@@ -3506,10 +3815,62 @@ Overlay product direction:
   learned sector fuel share, especially on tracks where sector windows are
   uneven. Short/noisy sectors may need cumulative-sector evidence before they
   can change color.
+- Treat traffic, tow, deliberate lift-and-save behavior, and sector-speed shape
+  as context buckets, not rejection reasons. A sector where the focused car is
+  within about 1s of another car may save fuel in the draft, spend extra fuel in
+  traffic, or become slower because the driver lifts more. A sector after the UI
+  has told the driver to save fuel may also be intentionally fuel-light. Those
+  are accepted fuel samples with explanatory context unless another rule
+  invalidates the measurement.
+- Compare sectors against the expected sector profile for the same car,
+  track/layout, and sector-boundary signature, not against each other as if all
+  sectors should burn the same amount. Sector length and average speed are part
+  of that profile; a high-speed sector can naturally use more fuel than a slower
+  technical sector and still be perfectly normal.
+- In the first speed-shape pass, median sector speed and median sector burn had a
+  moderate positive correlation in both active workbench captures: about `0.54`
+  for Dallara 45m and `0.52` for VLN 4h. That is strong enough to carry as a
+  confidence/context signal, but not strong enough to treat speed as a standalone
+  acceptance or rejection rule.
 
 Action item: add replay-window evidence for Dallara and GR86 sector crossings
 that compares `sector-fuel-level-delta`, `sector-flow-integral`, and final
 completed-lap fuel delta for the same lap.
+
+The first implemented probe is `tools/analysis/fuel_sector_burn_probe.py`. It
+uses the `sector-fuel-level-delta` path only:
+
+- Parse ordered sector start percentages from `SplitTimeInfo.Sectors`.
+- Interpolate `FuelLevel` at each crossed sector boundary from adjacent replay
+  samples.
+- Calculate actual per-sector fuel burn between adjacent real sector boundaries.
+- Build a row-per-lap, column-per-sector grid for selected stint laps so the
+  observed sector profile can be inspected directly.
+- It can still calculate cumulative current-lap burn normalized by exact sector
+  progress for later `Live` projection work, but that projection is no longer the
+  active workbench table shape.
+- Reject or degrade the value independently from completed-lap fuel windows.
+- The browser workbench can highlight graph segments where timing arrays show
+  another active car within about 1s during the sector. This is a traffic/tow
+  context marker only; it does not invalidate the sector or remove it from the
+  projection trace.
+- The sector workbench marks pit-road, pit-stall, or pit-service sectors with a
+  green cell border. That marker is context for why the live projection moved,
+  not a hard rejection reason by itself.
+- Pit/refuel context is assigned by event-window overlap with the sector
+  interval, never by sector number. Raw tank deltas through active refueling are
+  contaminated by added fuel, but the sector can stay visible when burn is
+  reconstructed from calibrated flow or decrement-only evidence. That
+  reconstructed sector still carries pit/refuel context and should not teach the
+  clean-green baseline unless a future model deliberately promotes a pit-lane
+  bucket.
+
+The normal workbench path still starts from `sector-fuel-level-delta`, but active
+refuel windows need a separate reconstruction path. The current exploratory table
+uses flow-integrated overrides for the Dallara lap 4 and VLN lap 15 refuel
+intervals so the table shows real burn instead of a negative tank delta. Broader
+use of `sector-flow-integral` should remain calibrated against observed
+`FuelLevel` deltas before it affects strategy cells.
 
 ### Overlay Bridge Fuel Cadence
 
@@ -3580,6 +3941,13 @@ teammate fuel trend and planning rows quickly, while high-impact changes such as
 stop deletion, underfueling, or pit-service refuel advice should require
 completed-lap agreement, a near-finish high-confidence state, or explicit
 current-stint proof.
+
+For the `Live` fuel-usage cell specifically, Bridge should be able to publish and
+consume the same compact sector facts that local telemetry uses: current lap,
+completed sector, actual sector fuel delta, cumulative current-lap sector burn,
+matching baseline source, baseline cumulative sector burn, and the resulting
+sector-adjusted live projected L/lap. This lets a teammate/engineer see the same
+per-sector usage trend without sharing raw frame telemetry.
 
 ### Track Map Fuel Sector Mode
 

@@ -1905,6 +1905,10 @@ function reviewEffectiveBrowserSource(overlayId, overlayState, previewMode, mode
     const baseHeight = fuelBrowserSourceHeightForModel(model, sourceSize.baseHeight);
     sourceSize.baseHeight = baseHeight;
     sourceSize.height = Math.round(baseHeight * sourceSize.scale);
+    if (isFuelLapsWorkbenchModel(model)) {
+      sourceSize.baseWidth = 1500;
+      sourceSize.width = Math.round(sourceSize.baseWidth * sourceSize.scale);
+    }
   } else if (isSimpleTelemetryModelDrivenSizeOverlay(overlayId)) {
     applySourceSize(
       sourceSize,
@@ -1974,17 +1978,33 @@ function fuelBrowserSourceHeightForModel(model, fallbackHeight) {
     return 88;
   }
 
-  const sections = Array.isArray(model?.metricSections)
+  const metricSections = Array.isArray(model?.metricSections)
     ? model.metricSections.filter((section) => Array.isArray(section?.rows) && section.rows.length > 0)
     : [];
-  const rowCount = sections.reduce((total, section) => total + section.rows.length, 0);
-  if (rowCount <= 0 || sections.length <= 0) {
+  const gridSections = Array.isArray(model?.gridSections)
+    ? model.gridSections.filter((section) => Array.isArray(section?.rows) && section.rows.length > 0)
+    : [];
+  const chartSections = Array.isArray(model?.chartSections)
+    ? model.chartSections.filter((section) => Array.isArray(section?.series) && section.series.length > 0)
+    : [];
+  const metricRowCount = metricSections.reduce((total, section) => total + section.rows.length, 0);
+  const gridRowCount = gridSections.reduce((total, section) => total + section.rows.length + 1, 0);
+  const rowCount = metricRowCount + gridRowCount;
+  const sectionCount = metricSections.length + gridSections.length;
+  if (rowCount <= 0 && chartSections.length <= 0) {
     return fallbackHeight;
   }
 
-  let height = fuelContentHeight(rowCount, sections.length, {
+  let height = fuelContentHeight(rowCount, sectionCount, {
     clampToDefault: !isFuelLapsWorkbenchModel(model)
   });
+  if (chartSections.length > 0) {
+    if (rowCount > 0) {
+      height = Math.max(height, fuelChartStackHeight(chartSections));
+    } else {
+      height += fuelChartStackHeight(chartSections);
+    }
+  }
   const hasHeader = Array.isArray(model?.headerItems)
     && model.headerItems.some((item) => String(item?.value || '').trim());
   if (!hasHeader) {
@@ -2003,7 +2023,8 @@ function isFuelLapsWorkbenchModel(model) {
   return status === 'laps workbench'
     || status === 'fuel/lap workbench'
     || status === 'fuel/range workbench'
-    || status === 'fuel/target usage workbench';
+    || status === 'fuel/target usage workbench'
+    || status === 'fuel/sector burn workbench';
 }
 
 function fuelContentHeight(rowCount, sectionCount, options = {}) {
@@ -2023,6 +2044,20 @@ function fuelContentHeight(rowCount, sectionCount, options = {}) {
   return Math.round(Math.max(
     minimumHeight,
     options?.clampToDefault === false ? height : Math.min(maximumHeight, height)));
+}
+
+function fuelChartSectionHeight(section) {
+  const height = Number(section?.height);
+  return Number.isFinite(height) && height > 0 ? Math.round(height) : 310;
+}
+
+function fuelChartStackHeight(sections) {
+  const metricRows = overlayGeometry().metricRows || {};
+  return metricGeometryNumber(metricRows, 'headerChromeHeight', 38)
+    + metricGeometryNumber(metricRows, 'fuelContentVerticalPadding', 26)
+    + sections.reduce((total, section) => total + fuelChartSectionHeight(section), 0)
+    + Math.max(0, sections.length - 1) * 10
+    + metricGeometryNumber(metricRows, 'collapsedFooterReserveHeight', 8);
 }
 
 function isSimpleTelemetryModelDrivenSizeOverlay(overlayId) {
@@ -2330,7 +2365,8 @@ function fuelStrategyEvidence(overlayId, model) {
 function metricModelText(model) {
   const sections = [
     ...(model?.metricSections || []),
-    ...(model?.gridSections || [])
+    ...(model?.gridSections || []),
+    ...(model?.chartSections || [])
   ];
   return JSON.stringify({
     status: model?.status || '',
@@ -2413,6 +2449,7 @@ function hasSemanticRenderedContent(model) {
     || (model?.metrics || []).length
     || (model?.metricSections || []).some((section) => (section.rows || []).length)
     || (model?.gridSections || []).some((section) => (section.rows || []).length)
+    || (model?.chartSections || []).some((section) => (section.series || []).length)
     || (model?.graph?.series || []).length
     || (model?.graph?.trendMetrics || []).length
     || model?.inputs?.hasGraph
@@ -2429,6 +2466,7 @@ function semanticContentRowCount(model) {
   return (model?.metrics || []).length
     + (model?.metricSections || []).reduce((total, section) => total + (section.rows || []).length, 0)
     + (model?.gridSections || []).reduce((total, section) => total + (section.rows || []).length, 0)
+    + (model?.chartSections || []).reduce((total, section) => total + Math.max(1, (section.series || []).length), 0)
     + (model?.rows || []).length
     + (model?.streamChat?.rows || []).length;
 }
@@ -2876,8 +2914,12 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'range' }));
         }
 
-        if (!fixture || fixture === 'fuel-laps-workbench' || fixture === 'fuel-laps-workbench-target') {
+        if (fixture === 'fuel-laps-workbench-target') {
           return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'target' }));
+        }
+
+        if (!fixture || fixture === 'fuel-laps-workbench' || fixture === 'fuel-laps-workbench-sector') {
+          return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'sector' }));
         }
 
         const calculating = fixture === 'fuel-calculating';
@@ -4396,6 +4438,9 @@ function relativePlaceholderRow(cellCount) {
 }
 
 function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench = 'target' } = {}) {
+  // Browser-only replay workbench data. Keep formulas and field shape aligned
+  // with staged Core V2 calculators under src/TmrOverlay.Core/Fuel/V2; do not
+  // treat these fixtures as production FuelStrategyCalculator wiring.
   const lapRows = [
     fuelLapsWorkbenchRow('Dallara 45m / V1', 'timed / selected pace', 'info', ['5.99', '6.04', '5.93', '--', '6.06'], '6'),
     fuelLapsWorkbenchRow('Dallara 45m / V2', 'lap budget / same shape', 'info', ['5.99 seed', '6.04', '5.93', '--', '6.06'], '6'),
@@ -4570,6 +4615,149 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
     { title: 'Target Usage - Green Start', rows: targetUsageCapRows },
     { title: 'Target Usage - Current Edges', rows: targetUsageCurrentRows }
   ];
+  const dallaraSectorStarts = [
+    0.0, 0.055834, 0.085078, 0.125389, 0.166193, 0.265561, 0.370098,
+    0.43161, 0.513453, 0.590393, 0.665183, 0.73914, 0.818135, 0.949683
+  ];
+  const dallaraSectorRows = [
+    {
+      label: 'Lap 1',
+      burns: [0.7598481993817501, 0.40226782958104224, 0.6235557495425468, 0.5804278678620207, 1.3567395021482298, 1.39586020797325, 0.787613157447872, 1.1673551768545707, 1.1161083747768288, 1.0890585158768715, 0.9370388878801705, 1.121568555615056, 1.7440338024102608, 0.6772615571478262],
+      warningIndexes: [1, 2, 4, 5, 11]
+    },
+    {
+      label: 'Lap 2',
+      burns: [0.7575401149620902, 0.4021852071574834, 0.6229869804958241, 0.5921859042724336, 1.3785955847525848, 1.395861232090823, 0.7925186127602473, 1.2032782804520785, 1.1113016501357684, 1.0884850477891064, 0.9237638261329089, 1.0933981812897784, 1.7310389282762273, 0.6699049573093596],
+      warningIndexes: [2, 11]
+    },
+    {
+      label: 'Lap 3 pit-in',
+      burns: [0.783822078951026, 0.41401701336312513, 0.6223177073081931, 0.5867685378865328, 1.3539382516370235, 1.4038470192722237, 0.7660975363180018, 1.176056421624498, 1.1083989720084926, 1.0703077874142473, 0.9271530718396113, 1.1273021143024433, 1.7366435143480912, 0.6187148836372272],
+      warningIndexes: [2, 13],
+      pitIndexes: [13],
+      baselineEligible: false
+    },
+    {
+      label: 'Lap 4 refuel',
+      burns: [-28.982979844795, 0.403772156071, 0.624943389935, 0.57705331726, 1.377535984809, 1.397596869208, 0.765050209042, 1.176881204868, 1.121434055696, 1.063354768728, 0.918198019861, 1.131269275595, 1.741686431828, 0.666060843462],
+      warningIndexes: [0],
+      pitIndexes: [0],
+      burnOverrides: { 0: 1.011716486230273 },
+      baselineEligible: false,
+      baselineBreak: true
+    },
+    {
+      label: 'Lap 5 non-green',
+      burns: [0.763841664716, 0.420835587835, 0.624009844499, 0.581022174484, 1.376035317787, 1.38724620465, 0.740364552874, 1.199307326597, 1.108741800789, 1.0791256062, 0.908734825878, 1.117356807257, 1.729232051167, 0.655206173909],
+      warningIndexes: [8, 9, 10, 11, 12, 13],
+      trafficIndexes: [12, 13],
+      baselineEligible: false
+    }
+  ];
+  const dallaraSectorSpeedsKph = [
+    148.6, 164.4, 178.0, 188.2, 172.9, 242.2, 183.4,
+    172.3, 226.2, 186.8, 187.0, 209.6, 238.9, 220.0
+  ];
+  const dallaraSectorTableRows = dallaraSectorRows.slice(0, 5);
+  const vlnSectorStarts = [
+    0.0, 0.059239, 0.114229, 0.21989, 0.330979, 0.396273,
+    0.483261, 0.564969, 0.644386, 0.722857, 0.806738, 0.946542
+  ];
+  const vlnSectorRows = [
+    {
+      label: 'Lap 2',
+      burns: [0.7532693164404662, 0.8029803584438042, 1.3677481508859302, 1.3176363680908594, 0.7296434356159125, 1.17952600600141, 1.1827762368767623, 1.1438367059187158, 0.8048902883879521, 1.1446966855620389, 1.7964940486720877, 0.6766241112658875]
+    },
+    {
+      label: 'Lap 3',
+      burns: [0.7971368599727313, 0.8018314871214685, 1.3581014277198733, 1.3674858295743348, 0.7271136520205701, 1.1778559000391695, 1.2085004535102541, 1.11423007309579, 0.8631307755087079, 1.1955865565194586, 1.795046854474279, 0.6775373780106975],
+      warningIndexes: [3, 4, 10]
+    },
+    {
+      label: 'Lap 4',
+      burns: [0.8600512468947272, 0.8140310950137604, 1.4336858716580565, 1.423600725204821, 0.7878611563303366, 1.2332568657231846, 1.218475274128707, 1.1725282184614798, 0.9000760518794024, 1.1959009536054737, 1.8122971909613028, 0.7333868548247793],
+      warningIndexes: [3]
+    },
+    {
+      label: 'Lap 5',
+      burns: [0.8467356638233312, 0.816556275990294, 1.3978722843979412, 1.3846555995919232, 0.7470347029502946, 1.22231600507763, 1.215347500414449, 1.1377588563916916, 0.851730836025073, 1.1935311413312562, 1.7847671793174165, 0.725350314995584]
+    },
+    {
+      label: 'Lap 6 pit-in',
+      burns: [0.8322839744295472, 0.8016017902781378, 1.3193865044458661, 1.3810662631860815, 0.7549524233186098, 1.1703804640922684, 1.1933573411839085, 1.144742724160139, 0.8725994196892053, 1.1883578891696391, 1.8153566409316735, 0.741439027685848],
+      warningIndexes: [11],
+      pitIndexes: [11],
+      baselineEligible: false
+    }
+  ];
+  const vlnSectorSpeedsKph = [
+    143.9, 155.0, 162.2, 226.2, 171.9, 160.7,
+    208.3, 177.3, 171.3, 192.0, 217.5, 203.8
+  ];
+  const vlnSectorTableRows = [
+    { ...vlnSectorRows[0], trafficIndexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+    { ...vlnSectorRows[1], trafficIndexes: [0] },
+    { ...vlnSectorRows[2], trafficIndexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+    { ...vlnSectorRows[3], trafficIndexes: [0] },
+    { ...vlnSectorRows[4], trafficIndexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 11] },
+    {
+      label: 'Lap 15 refuel',
+      burns: [-93.098896845706, 0.873129988979, 1.477429331729, 1.394773086987, 0.819625097418, 1.263450752383, 1.238191925576, 1.16017466307, 0.872061005592, 1.175723654729, 1.830513057684, 0.679753961172],
+      warningIndexes: [0, 3],
+      pitIndexes: [0],
+      burnOverrides: { 0: 1.1364776759013684 },
+      baselineEligible: false,
+      baselineBreak: true
+    },
+    {
+      label: 'Lap 16',
+      burns: [0.850053975405, 0.839592940658, 1.440936427772, 1.415286717133, 0.823165252255, 1.235203704062, 1.225140343905, 1.170636350315, 0.913259073803, 1.213960444098, 1.799637184892, 0.726511162422],
+      warningIndexes: [1, 2, 3],
+      trafficIndexes: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    },
+    {
+      label: 'Lap 17',
+      burns: [0.852066408204, 0.810492057134, 1.437255742056, 1.376360328865, 0.778898258563, 1.219743115526, 1.224215719143, 1.179577030816, 0.910056142547, 1.211407745963, 1.819568906948, 0.733201716167],
+      warningIndexes: [3, 5],
+      trafficIndexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    },
+    {
+      label: 'Lap 18',
+      burns: [0.853000179419, 0.824187415208, 1.432115591562, 1.412643424928, 0.763763093235, 1.247687919877, 1.21536265097, 1.159016110042, 0.879070338247, 1.201681429469, 1.815674362741, 0.730108011049]
+    },
+    {
+      label: 'Lap 19 gap',
+      burns: [0.858243258015, 0.895121234913, 1.402117120244, 1.422373554673, 0.77755663374, 1.223791536094, 1.223192964602, 1.151955777819, 0.912205548605, 1.191116849992, 1.821551774593, 0.735265085203],
+      warningIndexes: [1, 4],
+      trafficIndexes: [0, 8],
+      baselineEligible: false
+    },
+    {
+      label: 'Lap 20',
+      burns: [0.852292364615, 0.82136094621, 1.442267245172, 1.407059680627, 0.769047590021, 1.216067044902, 1.225243964216, 1.157188428747, 0.891022972424, 1.181974072364, 1.798616863357, 0.676385917817],
+      trafficIndexes: [11]
+    },
+    {
+      label: 'Lap 21 pit-in',
+      burns: [0.846849986708, 0.816143873386, 1.438458699086, 1.405194273285, 0.779802288349, 1.250814486081, 1.228527534877, 1.146352265541, 0.917413204478, 1.213169454991, 1.819709622526, 0.743699969108],
+      warningIndexes: [11],
+      pitIndexes: [11],
+      trafficIndexes: [0, 1, 2, 4, 5, 6, 9, 11],
+      baselineEligible: false
+    }
+  ];
+  const sectorBurnGridSections = [
+    {
+      title: 'Dallara 45m - Live Projection By Sector',
+      headers: fuelSectorLiveProjectionHeaders(dallaraSectorTableRows),
+      rows: fuelSectorLiveProjectionGridRows(dallaraSectorTableRows, dallaraSectorStarts, 5, dallaraSectorSpeedsKph)
+    },
+    {
+      title: 'VLN 4h Team - Live Projection By Sector',
+      headers: fuelSectorLiveProjectionHeaders(vlnSectorTableRows),
+      rows: fuelSectorLiveProjectionGridRows(vlnSectorTableRows, vlnSectorStarts, 3, vlnSectorSpeedsKph)
+    }
+  ];
   const metricSections = includeLapRows
     ? [
         { title: 'Laps Workbench', rows: lapRows },
@@ -4579,22 +4767,40 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       ? [
           { title: 'Fuel Range Workbench', rows: rangeRows }
         ]
+    : activeWorkbench === 'sector'
+      ? []
     : [
         ...targetUsageSections
       ];
+  const gridSections = activeWorkbench === 'sector' ? sectorBurnGridSections : [];
+  const chartSections = [];
   const rows = metricSections.flatMap((section) => section.rows);
-  const isTargetWorkbench = !includeLapRows && activeWorkbench !== 'range';
+  const workbenchStatus = activeWorkbench === 'sector'
+    ? 'fuel/sector burn workbench'
+    : activeWorkbench === 'range'
+      ? 'fuel/range workbench'
+      : 'fuel/target usage workbench';
+  const workbenchSource = activeWorkbench === 'sector'
+    ? 'source: Fuel V2 workbench; mirrors staged Core sector-burn logic. Rows are real SplitTimeInfo sector boundaries and cells show Live projected L/lap for each lap. Sector labels include median replay speed as context; green cell borders mark pit/refuel/service event-window overlap, not inherently bad sector numbers. Lap 1 uses low-confidence track-percent fallback; later laps hold at S0 and use prior-lap same-sector cumulative scaling from S0+S1 onward. Actual is completed lap burn.'
+    : activeWorkbench === 'range'
+      ? 'source: Fuel V2 workbench; mirrors staged Core range logic. Current-tank range compares V1 selected burn with V2 Last/5L/10L/Max windows'
+      : 'source: Fuel V2 workbench; mirrors staged Core target-usage logic. Target Usage cells are required L/lap from fuel budget / target laps, no reserve subtracted; Last is the live burn comparator when available';
+  const workbenchTitle = activeWorkbench === 'sector'
+    ? 'Sector Burn V2'
+    : activeWorkbench === 'range'
+      ? 'Range V2'
+      : 'Target V2';
   return metricsModel(
     'fuel-calculator',
     'Fuel Calculator',
-    isTargetWorkbench ? 'fuel/target usage workbench' : 'fuel/range workbench',
+    workbenchStatus,
     rows,
-    isTargetWorkbench
-      ? 'source: Fuel V2 workbench; Target Usage cells are required L/lap from fuel budget / target laps, no reserve subtracted; Last is the live burn comparator when available'
-      : 'source: Fuel V2 workbench; current-tank range compares V1 selected burn with V2 Last/5L/10L/Max windows',
-    [],
+    workbenchSource,
+    gridSections,
     metricSections,
-    [{ key: 'timeRemaining', value: isTargetWorkbench ? 'Target V2' : 'Range V2', tone: 'info' }]);
+    [{ key: 'timeRemaining', value: workbenchTitle, tone: 'info' }],
+    true,
+    chartSections);
 }
 
 function fuelLapsWorkbenchRow(label, value, tone, checkpointValues, realValue) {
@@ -4705,6 +4911,242 @@ function fuelTargetUsageWorkbenchRow(label, value, tone, targetUsage) {
     value,
     tone,
     segments);
+}
+
+function fuelSectorLiveProjectionHeaders(rows) {
+  return [
+    'Sector',
+    ...rows.map((row) => row.label)
+  ];
+}
+
+function fuelSectorLiveProjectionGridRows(rows, sectorStarts, firstLapGateIndex, sectorSpeedsKph = []) {
+  const lapCells = rows.map((row, rowIndex) => {
+    const baselineBurns = row.baselineBreak === true ? null : fuelSectorPreviousBaselineBurns(rows, rowIndex);
+    const warnings = new Set(row.warningIndexes || []);
+    const invalids = new Set(row.invalidIndexes || []);
+    const pitIndexes = new Set(row.pitIndexes || []);
+    const burns = fuelSectorEffectiveBurns(row);
+    const totalBurn = fuelSectorBurnTotal(burns);
+    const acceptedProjection = fuelSectorPartialProjection(burns, invalids, sectorStarts);
+    const rejected = row.rejected === true
+      || (!invalids.size && (!Number.isFinite(totalBurn) || totalBurn <= 0))
+      || (invalids.size > 0 && !Number.isFinite(acceptedProjection));
+    if (rejected) {
+      return [
+        ...sectorStarts.map((_, sectorIndex) => ({
+          value: '--',
+          tone: 'error',
+          pitContext: pitIndexes.has(sectorIndex)
+        })),
+        {
+          value: 'Rejected',
+          tone: 'error'
+        }
+      ];
+    }
+
+    const projections = fuelSectorLiveProjectionValues(burns, baselineBurns, sectorStarts, invalids);
+    const sectorCells = projections.map((value, sectorIndex) => ({
+      value: fuelSectorProjectionValue(value),
+      tone: fuelSectorLiveProjectionTone(rowIndex, sectorIndex, firstLapGateIndex, warnings, invalids, row.baselineBreak === true),
+      pitContext: pitIndexes.has(sectorIndex)
+    }));
+    return [
+      ...sectorCells,
+      {
+        value: invalids.size > 0
+          ? `${fuelSectorProjectionValue(acceptedProjection)} post`
+          : row.burnOverrides
+            ? `${fuelSectorProjectionValue(fuelSectorBurnTotal(burns))} pit`
+            : fuelSectorProjectionValue(fuelSectorBurnTotal(burns)),
+        tone: invalids.size > 0 || warnings.size > 0 || row.burnOverrides ? 'warning' : 'modeled'
+      }
+    ];
+  });
+
+  const rowCount = sectorStarts.length + 1;
+  return Array.from({ length: rowCount }, (_, rowIndex) => {
+    const cells = lapCells.map((cellsForLap) => cellsForLap[rowIndex] || { value: '--', tone: 'waiting' });
+    const speed = sectorSpeedsKph[rowIndex];
+    const label = rowIndex < sectorStarts.length
+      ? Number.isFinite(speed)
+        ? `S${rowIndex} · ${Math.round(speed)} kph`
+        : `S${rowIndex}`
+      : 'Actual';
+    return {
+      label,
+      tone: cells.some((cell) => cell.tone === 'error') ? 'error' : cells.some((cell) => cell.tone === 'warning') ? 'warning' : 'info',
+      cells
+    };
+  });
+}
+
+function fuelSectorPreviousBaselineBurns(rows, rowIndex) {
+  for (let index = rowIndex - 1; index >= 0; index -= 1) {
+    const candidate = rows[index];
+    if (candidate?.baselineBreak === true) {
+      return null;
+    }
+    const burns = fuelSectorEffectiveBurns(candidate);
+    const totalBurn = fuelSectorBurnTotal(burns);
+    if (candidate?.baselineEligible !== false && !candidate?.rejected && Number.isFinite(totalBurn) && totalBurn > 0) {
+      return burns;
+    }
+  }
+  return null;
+}
+
+function fuelSectorLiveProjectionValues(burns, baselineBurns, sectorStarts, invalidIndexes = new Set()) {
+  let cumulativeBurn = 0;
+  let cumulativeStartIndex = 0;
+  return burns.map((burn, sectorIndex) => {
+    if (invalidIndexes.has(sectorIndex)) {
+      cumulativeBurn = 0;
+      cumulativeStartIndex = sectorIndex + 1;
+      return null;
+    }
+
+    cumulativeBurn += burn;
+    if (baselineBurns && cumulativeStartIndex === 0 && sectorIndex === 0) {
+      return fuelSectorBurnTotal(baselineBurns);
+    }
+    if (baselineBurns && cumulativeStartIndex === 0) {
+      const baselineCumulative = fuelSectorBurnTotal(baselineBurns.slice(0, sectorIndex + 1));
+      const baselineFullLap = fuelSectorBurnTotal(baselineBurns);
+      return baselineCumulative > 0
+        ? baselineFullLap * (cumulativeBurn / baselineCumulative)
+        : null;
+    }
+
+    const sectorEnd = sectorIndex + 1 < sectorStarts.length ? sectorStarts[sectorIndex + 1] : 1;
+    const sectorStart = sectorStarts[cumulativeStartIndex] || 0;
+    const sectorProgress = sectorEnd - sectorStart;
+    return sectorProgress > 0 ? cumulativeBurn / sectorProgress : null;
+  });
+}
+
+function fuelSectorLiveProjectionTone(rowIndex, sectorIndex, firstLapGateIndex, warnings, invalids = new Set(), partialRow = false) {
+  if (invalids.has(sectorIndex)) return 'error';
+  if (partialRow) return 'warning';
+  if (rowIndex === 0 && sectorIndex < firstLapGateIndex) return 'warning';
+  if (rowIndex > 0 && sectorIndex === 0) return 'warning';
+  return warnings.has(sectorIndex) ? 'warning' : 'info';
+}
+
+function fuelSectorBurnTotal(burns) {
+  return burns.reduce((total, burn) => total + burn, 0);
+}
+
+function fuelSectorProjectionValue(value) {
+  return Number.isFinite(value) ? value.toFixed(2) : '--';
+}
+
+function fuelSectorEffectiveBurns(row) {
+  const burns = (row?.burns || []).slice();
+  const overrides = row?.burnOverrides || {};
+  for (const [key, value] of Object.entries(overrides)) {
+    const index = Number.parseInt(key, 10);
+    const burn = Number(value);
+    if (Number.isInteger(index) && index >= 0 && index < burns.length && Number.isFinite(burn)) {
+      burns[index] = burn;
+    }
+  }
+  return burns;
+}
+
+function fuelSectorPartialProjection(burns, invalidIndexes, sectorStarts) {
+  if (!invalidIndexes.size) {
+    const total = fuelSectorBurnTotal(burns);
+    return Number.isFinite(total) && total > 0 ? total : null;
+  }
+
+  const lastInvalidIndex = Math.max(...Array.from(invalidIndexes));
+  const startIndex = lastInvalidIndex + 1;
+  if (startIndex >= burns.length || startIndex >= sectorStarts.length) {
+    return null;
+  }
+
+  const acceptedBurn = fuelSectorBurnTotal(burns.slice(startIndex));
+  const acceptedProgress = 1 - (sectorStarts[startIndex] || 0);
+  return Number.isFinite(acceptedBurn) && acceptedBurn > 0 && acceptedProgress > 0
+    ? acceptedBurn / acceptedProgress
+    : null;
+}
+
+function fuelSectorShapeChartSection(title, rows, sectorStarts, options = {}) {
+  const series = fuelSectorProjectionChartSeries(rows, sectorStarts, options.firstLapGateIndex || 3);
+  const range = fuelSectorProjectionChartRange(series);
+  return {
+    title: title.replace('Cumulative Sector Shape', 'Live Projection Trace'),
+    height: options.height || 320,
+    yAxisLabel: 'Live projected L/lap',
+    yMin: range.min,
+    yMax: range.max,
+    yTicks: [
+      { value: range.max, label: `${range.max.toFixed(1)} L` },
+      { value: (range.min + range.max) / 2, label: `${((range.min + range.max) / 2).toFixed(1)} L` },
+      { value: range.min, label: `${range.min.toFixed(1)} L` }
+    ],
+    notes: options.notes || [],
+    series
+  };
+}
+
+function fuelSectorProjectionChartSeries(rows, sectorStarts, firstLapGateIndex) {
+  const series = [];
+  let baselineBurns = null;
+  let liveRowIndex = 0;
+  for (const row of rows) {
+    const totalBurn = fuelSectorBurnTotal(row.burns);
+    const rejected = row.rejected === true || !Number.isFinite(totalBurn) || totalBurn <= 0;
+    if (rejected) {
+      continue;
+    }
+
+    const warningIndexes = new Set(row.warningIndexes || []);
+    const trafficIndexes = new Set(row.trafficIndexes || []);
+    const projections = fuelSectorLiveProjectionValues(row.burns, baselineBurns, sectorStarts);
+    const points = projections
+      .map((value, sectorIndex) => ({
+        sectorIndex,
+        x: sectorIndex + 1 < sectorStarts.length ? sectorStarts[sectorIndex + 1] : 1,
+        y: value
+      }))
+      .filter((point) => Number.isFinite(point.y));
+    series.push({
+      label: `${row.label} ${fuelSectorProjectionValue(totalBurn)}L`,
+      tone: warningIndexes.size > 0 ? 'warning' : 'info',
+      degraded: liveRowIndex === 0 || warningIndexes.size > 0,
+      trafficIndexes: Array.from(trafficIndexes),
+      points,
+      firstLapGateIndex
+    });
+
+    if (row.baselineEligible !== false) {
+      baselineBurns = row.burns;
+    }
+    liveRowIndex += 1;
+  }
+  return series.filter((item) => item.points.length >= 2);
+}
+
+function fuelSectorProjectionChartRange(series) {
+  const values = series
+    .flatMap((item) => item.points || [])
+    .map((point) => Number(point.y))
+    .filter((value) => Number.isFinite(value));
+  if (values.length === 0) {
+    return { min: 0, max: 1 };
+  }
+
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const spread = Math.max(0.25, rawMax - rawMin);
+  const padding = Math.max(0.15, spread * 0.15);
+  const min = Math.floor((rawMin - padding) * 4) / 4;
+  const max = Math.ceil((rawMax + padding) * 4) / 4;
+  return max > min ? { min, max } : { min: min - 0.25, max: max + 0.25 };
 }
 
 function fuelTargetUsageReferenceTone(targetUsage) {
@@ -4889,7 +5331,8 @@ function metricsModel(
   gridSections = [],
   metricSections = [],
   headerItems = [],
-  shouldRender = true) {
+  shouldRender = true,
+  chartSections = []) {
   return {
     overlayId,
     title,
@@ -4902,6 +5345,7 @@ function metricsModel(
     points: [],
     headerItems,
     gridSections,
+    chartSections,
     shouldRender,
     metricSections: metricSections.map((section) => ({
       title: section.title,

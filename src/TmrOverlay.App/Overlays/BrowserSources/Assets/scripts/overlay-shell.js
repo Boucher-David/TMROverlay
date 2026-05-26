@@ -3,6 +3,7 @@
     const gapGraphGeometry = geometry?.gapGraph || {};
     const metricRowsGeometry = geometry?.metricRows || {};
     const streamChatGeometry = geometry?.streamChat || {};
+    const overlaySizesGeometry = geometry?.overlaySizes || {};
     const overlayEl = document.querySelector('.overlay');
     const headerEl = document.querySelector('.header');
     const statusEl = document.getElementById('status');
@@ -614,7 +615,9 @@
         : [];
       const rowCount = sections.reduce((total, section) => total + section.rows.length, 0);
       const sectionCount = sections.length;
-      let height = fuelContentHeight(rowCount, sectionCount);
+      let height = fuelContentHeight(rowCount, sectionCount, {
+        clampToDefault: !isFuelLapsWorkbenchModel(model)
+      });
       const hasHeader = Array.isArray(model?.headerItems)
         && model.headerItems.some((item) => String(item?.value || '').trim());
       if (!hasHeader) {
@@ -626,6 +629,11 @@
       return height;
     }
 
+    function isFuelLapsWorkbenchModel(model) {
+      return model?.overlayId === 'fuel-calculator'
+        && String(model?.status || '').trim().toLowerCase() === 'laps workbench';
+    }
+
     function gapPanelSizeForModel(model) {
       const graph = model?.graph || {};
       if (graph.showGraph === false) return { width: 326, height: 275 };
@@ -633,7 +641,7 @@
       return { width: 620, height: 275 };
     }
 
-    function fuelContentHeight(rowCount, sectionCount) {
+    function fuelContentHeight(rowCount, sectionCount, options = {}) {
       const minimumHeight = metricGeometryNumber('minimumFuelCalculatorHeight', 126);
       if (rowCount <= 0 || sectionCount <= 0) return minimumHeight;
       const rowGaps = Math.max(0, rowCount - sectionCount) * metricGeometryNumber('rowGap', 5);
@@ -645,7 +653,10 @@
         + rowGaps
         + sectionGaps
         + metricGeometryNumber('collapsedFooterReserveHeight', 8);
-      return Math.max(minimumHeight, Math.min(315, height));
+      const maximumHeight = numberOr(overlaySizesGeometry?.fuelCalculatorHeight, 315);
+      return Math.max(
+        minimumHeight,
+        options?.clampToDefault === false ? height : Math.min(maximumHeight, height));
     }
 
     function renderHeaderItems(model, fallbackStatus) {

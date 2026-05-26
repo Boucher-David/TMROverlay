@@ -758,11 +758,23 @@ Primary strictness from replay evidence:
 
 Advice gating:
 
-- `authoritative` and `high` can support normal fuel-to-finish and refuel advice.
-- `medium` can support fuel-to-finish with the user margin plus visible
-  source/range context, but should avoid stop-deletion or edge-sensitive advice.
-- `low` can support planning rows but should not recommend deleting a stop.
-- `blocked` should suppress actionable strategy advice.
+Start with this actionability matrix and tune it through replay fixtures rather
+than treating the first implementation as permanent:
+
+| Lap-budget state | Show lap context | Fuel-to-finish | Add/refuel target | Stop deletion / no-stop advice |
+| --- | --- | --- | --- | --- |
+| `authoritative` | yes | yes | yes | yes |
+| `high` | yes | yes | yes, conservative | maybe, only without boundary risk |
+| `medium` | yes, labeled | yes, conservative | degraded / cautious | no |
+| `low` | planning only | no actionable value | no | no |
+| `blocked` | explain unavailable | no | no | no |
+
+The important split is conservative versus fuel-reducing advice. Fuel V2 may act
+earlier when the result carries extra fuel or keeps a stop, but must wait for
+stronger evidence before lowering required fuel, deleting a stop, or presenting a
+no-stop/stretch scenario as anything more than a possibility. `medium` can drive
+fuel-to-finish only with the user margin and visible source/range context. `low`
+is for planning rows only. `blocked` suppresses actionable strategy advice.
 
 ### Race Lap Budget Evidence Inventory
 
@@ -1145,8 +1157,8 @@ classification
 
 ### Open Questions
 
-- Which race-budget states are allowed to show a degraded source/range label,
-  and which must hide high-impact advice?
+- Which replay fixtures should promote or demote specific `medium` and `low`
+  actionability cases from the starting matrix?
 - Should final-lap behavior be anchored to overall leader only, or should class
   winner behavior matter for class-specific strategy displays?
 - How should cautions/yellows affect timed-race pace selection: freeze the
@@ -1181,6 +1193,62 @@ The initial contract-first pass should:
   and localhost/OBS consume the same model shape;
 - update durable schema/version/data-contract snapshots only when the model
   becomes persisted user history rather than temporary replay evidence.
+
+Development-mode policy: keep Fuel V2 iteration fluid until a stabilization or
+branch-complete pass is explicitly chosen. Small model and overlay experiments do
+not need the full screenshot, scenario-contract, docs, and validation sweep after
+each step. Use targeted checks only when they de-risk the current edit, record
+durable decisions and important telemetry findings here, and defer broad
+fixtures/evidence/validation updates until the slice is ready to harden.
+
+Overlay iteration policy: the Fuel V2 overlay layout is allowed to be fluid
+during development. Any cell or row may be duplicated, moved, hidden, deleted,
+renamed, or retuned while engineering a specific model or strategy behavior. It
+is acceptable to temporarily strip the overlay down to only the cell under
+active development, or to show multiple competing versions of the same value, so
+the team can compare how the outputs feel in real race contexts. Temporary cells
+should stay source-labeled and clearly experimental while they exist. Before
+stabilization, collapse them into the intended user-facing layout or deliberately
+keep a developer/diagnostic-only surface rather than shipping duplicate
+ambiguous strategy cells.
+
+Experimental surface decision: use the existing Fuel overlay as the V2 workbench
+on this branch. Do not create a separate Fuel V2 overlay unless the current Fuel
+overlay becomes too difficult to reason about. The branch itself is the
+experimental gate for now; do not add a user-facing V2 setting yet. If shared
+tester builds need to preserve V1 behavior before hardening, add an explicit
+hidden/developer flag at that point instead of designing a full product toggle
+up front.
+
+Initial lap-counter workbench decision: start Fuel V2 by turning the existing
+Fuel overlay into a capture/checkpoint comparison table. Use one row per useful
+capture and columns such as `Start of Race`, `Middle of Stint 1`, `After First
+Stop`, `Halfway`, and `Real Lap Counter`. Each checkpoint cell initially shows
+the current V1 lap-counter output and compact source text so the team can see
+where the current model is right, one lap high, undercounted, blocked, or
+misleading before replacing it. `Real Lap Counter` should carry actual race
+distance when the capture proves it, and may also carry checkpoint-specific
+expected truth such as `unknown`, `not in capture`, `fixed 4-lap race`, or
+`eventual laps to finish`. Missing checkpoints are allowed; not every capture
+contains race start, halfway, stop windows, and finish evidence.
+
+Workbench evidence policy: do not force fake symmetry. Sparse or missing cells
+are better than invented checkpoint data, because the purpose is to turn lap
+budget behavior into something auditable rather than make a tidy table. Each
+cell should eventually carry enough provenance to debug the value: capture id,
+frame/session time, session state, source fields, and classification such as
+`exact`, `one-high`, `undercount`, `blocked`, or `unknown`. Rows should carry
+tags such as `timed`, `fixed-lap`, `endurance`, `practice control`,
+`offline/test`, `fuel-useful`, or `lap-only`. Undercounts should be visually
+louder than conservative one-lap-high estimates.
+
+Scope humility: keep conceptual room to pull Fuel V2 back if replay evidence
+does not justify ambitious strategy advice. Getting race laps/right-distance
+context correct is a valuable and safer target by itself. If the evidence cannot
+support confident refuel advice, stop-deletion, no-stop prompts, pit-now
+recommendations, or other high-impact strategy calls, the product should ship
+high-quality lap context and source/confidence labeling rather than pretending
+advice is exact.
 
 Race lap budget and reserve:
 

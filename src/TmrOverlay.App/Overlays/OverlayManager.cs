@@ -1005,7 +1005,7 @@ internal sealed class OverlayManager : IDisposable
         if (string.Equals(definition.Id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.Ordinal))
         {
             var strategyModel = LiveFuelStrategyModel.From(snapshot, now, LookupFuelSizingHistory);
-            if (!strategyModel.IsAvailable)
+            if (!strategyModel.IsAvailable && !FuelLapsWorkbenchViewModel.Enabled)
             {
                 return null;
             }
@@ -1020,7 +1020,8 @@ internal sealed class OverlayManager : IDisposable
                 definition,
                 settings,
                 sessionKind,
-                viewModel.MetricSections);
+                viewModel.MetricSections,
+                clampToDefaultHeight: !FuelLapsWorkbenchViewModel.Enabled);
         }
 
         if (string.Equals(definition.Id, PitServiceOverlayDefinition.Definition.Id, StringComparison.Ordinal))

@@ -34,6 +34,11 @@ internal sealed record FuelCalculatorViewModel(
         int maximumRows,
         OverlaySettings? contentSettings = null)
     {
+        if (FuelLapsWorkbenchViewModel.Enabled)
+        {
+            return FuelLapsWorkbenchViewModel.Create();
+        }
+
         var content = FuelContentPolicy.From(contentSettings, strategy.SessionKind);
         return new FuelCalculatorViewModel(
             Status: DisplayStatus(strategy),
@@ -50,6 +55,11 @@ internal sealed record FuelCalculatorViewModel(
         int maximumRows,
         OverlaySettings? contentSettings = null)
     {
+        if (FuelLapsWorkbenchViewModel.Enabled)
+        {
+            return FuelLapsWorkbenchViewModel.Create();
+        }
+
         return model.Strategy is { } strategy
             ? From(strategy, model.History, showAdvice, unitSystem, maximumRows, contentSettings)
             : Waiting(model.Status);

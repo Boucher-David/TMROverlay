@@ -1982,7 +1982,9 @@ function fuelBrowserSourceHeightForModel(model, fallbackHeight) {
     return fallbackHeight;
   }
 
-  let height = fuelContentHeight(rowCount, sections.length);
+  let height = fuelContentHeight(rowCount, sections.length, {
+    clampToDefault: !isFuelLapsWorkbenchModel(model)
+  });
   const hasHeader = Array.isArray(model?.headerItems)
     && model.headerItems.some((item) => String(item?.value || '').trim());
   if (!hasHeader) {
@@ -1992,7 +1994,12 @@ function fuelBrowserSourceHeightForModel(model, fallbackHeight) {
   return height;
 }
 
-function fuelContentHeight(rowCount, sectionCount) {
+function isFuelLapsWorkbenchModel(model) {
+  return model?.overlayId === 'fuel-calculator'
+    && String(model?.status || '').trim().toLowerCase() === 'laps workbench';
+}
+
+function fuelContentHeight(rowCount, sectionCount, options = {}) {
   const metricRows = overlayGeometry().metricRows || {};
   const minimumHeight = metricGeometryNumber(metricRows, 'minimumFuelCalculatorHeight', 126);
   if (rowCount <= 0 || sectionCount <= 0) return minimumHeight;
@@ -2005,7 +2012,10 @@ function fuelContentHeight(rowCount, sectionCount) {
     + rowGaps
     + sectionGaps
     + metricGeometryNumber(metricRows, 'collapsedFooterReserveHeight', 8);
-  return Math.round(Math.max(minimumHeight, Math.min(315, height)));
+  const maximumHeight = overlaySizeNumber('fuelCalculatorHeight', 315);
+  return Math.round(Math.max(
+    minimumHeight,
+    options?.clampToDefault === false ? height : Math.min(maximumHeight, height)));
 }
 
 function isSimpleTelemetryModelDrivenSizeOverlay(overlayId) {
@@ -2328,7 +2338,7 @@ function layoutDensityEvidence(overlayId, model, browserSource) {
   const contentRowCount = semanticContentRowCount(model);
   const sectionCount = (model?.metricSections || []).length + (model?.gridSections || []).length;
   const estimatedContentHeight = overlayId === 'fuel-calculator'
-    ? fuelContentHeight(contentRowCount, sectionCount)
+    ? fuelContentHeight(contentRowCount, sectionCount, { clampToDefault: !isFuelLapsWorkbenchModel(model) })
     : Math.max(0, 38 + contentRowCount * 30 + sectionCount * 18);
   const height = Number(browserSource?.height || 0);
   const unusedHeightRatio = height > 0
@@ -2849,6 +2859,10 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
             [],
             [],
             false));
+        }
+
+        if (!fixture || fixture === 'fuel-laps-workbench') {
+          return withChrome(fuelLapsWorkbenchReviewModel());
         }
 
         const calculating = fixture === 'fuel-calculating';
@@ -4364,6 +4378,59 @@ function relativePlaceholderRow(cellCount) {
   return relativeRow(
     Array.from({ length: Math.max(0, cellCount) }, () => ''),
     { isPlaceholder: true });
+}
+
+function fuelLapsWorkbenchReviewModel() {
+  const rows = [
+    fuelLapsWorkbenchRow('Dallara 45m', 'timed / actual known', 'info', ['6', '6', '6', '7'], '6'),
+    fuelLapsWorkbenchRow('Dallara 4L full', 'fixed / full race', 'info', ['4', '4', '4', '4'], '4'),
+    fuelLapsWorkbenchRow('Dallara 4L blip', 'fixed / transient field', 'warning', ['4', '4', '4', '4'], '4'),
+    fuelLapsWorkbenchRow('Dallara 4L early', 'fixed / no finish', 'waiting', ['4', '--', '--', '--'], '?'),
+    fuelLapsWorkbenchRow('GR86 3L start', 'fixed / short start', 'info', ['3', '3', '--', '3'], '3'),
+    fuelLapsWorkbenchRow('VLN 4h team', 'timed / endurance', 'info', ['31', '31', '30', '31'], '30'),
+    fuelLapsWorkbenchRow('24h rejoin', 'timed / rejoin', 'waiting', ['180', '174', '167', '--'], '?'),
+    fuelLapsWorkbenchRow('Dallara timed mid', 'timed / mid-capture', 'waiting', ['7', '6', '--', '--'], '?'),
+    fuelLapsWorkbenchRow('BMW 45m early', 'missing telemetry', 'waiting', ['--', '--', '--', '--'], '?'),
+    fuelLapsWorkbenchRow('Dallara practice', 'practice control', 'waiting', ['--', '--', '--', '--'], 'n/a'),
+    fuelLapsWorkbenchRow('Dallara quali', 'qual/push control', 'waiting', ['--', '--', '--', '--'], 'n/a'),
+    fuelLapsWorkbenchRow('Daytona offline', 'offline/test control', 'waiting', ['--', '--', '--', '--'], '?')
+  ];
+  const metricSections = [{ title: 'Laps Workbench', rows }];
+  return metricsModel(
+    'fuel-calculator',
+    'Fuel Calculator',
+    'laps workbench',
+    rows,
+    'source: Fuel V2 laps workbench; leader-view race distance from capture probes',
+    [],
+    metricSections,
+    [{ key: 'timeRemaining', value: 'Laps', tone: 'info' }]);
+}
+
+function fuelLapsWorkbenchRow(label, value, tone, checkpointValues, realValue) {
+  const checkpointLabels = ['Start', 'Mid S1', 'Stop 1', 'Half'];
+  const segments = checkpointLabels
+    .map((label, index) => metricSegment(
+      label,
+      checkpointValues[index],
+      fuelLapsWorkbenchTone(checkpointValues[index], realValue)));
+  segments.push(metricSegment('Real', realValue, 'modeled'));
+
+  return metricRow(
+    label,
+    value,
+    tone,
+    segments);
+}
+
+function fuelLapsWorkbenchTone(value, realValue) {
+  if (value === '--') return 'waiting';
+  const modeled = Number.parseInt(value, 10);
+  const actual = Number.parseInt(realValue, 10);
+  if (!Number.isFinite(modeled) || !Number.isFinite(actual)) return 'info';
+  const delta = Math.abs(modeled - actual);
+  if (delta === 0) return 'success';
+  return delta === 1 ? 'warning' : 'error';
 }
 
 function metricsModel(

@@ -277,7 +277,7 @@ internal sealed class FuelCalculatorForm : PersistentOverlayForm, IUnitSystemAwa
                     strategySucceeded);
             }
 
-            if (!strategyModel.IsAvailable)
+            if (!strategyModel.IsAvailable && !FuelLapsWorkbenchViewModel.Enabled)
             {
                 SetLiveTelemetryAvailable(false);
                 var waitingViewModel = FuelCalculatorViewModel.From(strategyModel, showAdvice, _unitSystem, StintRowCount, _settings);

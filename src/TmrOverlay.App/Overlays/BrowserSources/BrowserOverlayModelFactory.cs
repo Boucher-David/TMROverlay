@@ -434,7 +434,7 @@ internal sealed class BrowserOverlayModelFactory
         var effectiveOverlay = OverlayOrDefault(settings, FuelCalculatorOverlayDefinition.Definition);
         const bool showFooter = false;
         var strategyModel = LiveFuelStrategyModel.From(snapshot, now, LookupHistory);
-        if (!strategyModel.IsAvailable)
+        if (!strategyModel.IsAvailable && !FuelLapsWorkbenchViewModel.Enabled)
         {
             var waitingHeaderItems = HeaderItems(overlay, snapshot, strategyModel.Status, "waiting");
             return BrowserOverlayDisplayModel.MetricRows(
@@ -463,7 +463,11 @@ internal sealed class BrowserOverlayModelFactory
         var metrics = MetricSectionsFrom(viewModel.MetricSections)
             .SelectMany(section => section.Rows)
             .ToArray();
-        var headerItems = HeaderItems(overlay, snapshot, viewModel.Status, FuelChromeTone(strategyModel.Strategy));
+        var headerItems = HeaderItems(
+            overlay,
+            snapshot,
+            viewModel.Status,
+            FuelLapsWorkbenchViewModel.Enabled ? "info" : FuelChromeTone(strategyModel.Strategy));
 
         return BrowserOverlayDisplayModel.MetricRows(
             FuelCalculatorOverlayDefinition.Definition.Id,
@@ -3207,11 +3211,20 @@ internal sealed class BrowserOverlayModelFactory
             return fallbackHeight;
         }
 
-        var height = OverlayContentSizing.FuelCalculatorHeightForContent(rowCount, sectionCount);
+        var height = OverlayContentSizing.FuelCalculatorHeightForContent(
+            rowCount,
+            sectionCount,
+            clampToDefaultHeight: !IsFuelLapsWorkbenchModel(model));
         var hasVisibleHeader = model.HeaderItems.Any(item => !string.IsNullOrWhiteSpace(item.Value));
         return hasVisibleHeader
             ? height
             : Math.Max(OverlayGeometryContracts.MetricRows.MinimumChromeAdjustedHeight, height - OverlayGeometryContracts.MetricRows.HeaderChromeHeight);
+    }
+
+    private static bool IsFuelLapsWorkbenchModel(BrowserOverlayDisplayModel model)
+    {
+        return FuelLapsWorkbenchViewModel.Enabled
+            && string.Equals(model.Status, "laps workbench", StringComparison.OrdinalIgnoreCase);
     }
 
     private static int StandingsBrowserSourceHeight(BrowserOverlayDisplayModel model, int fallbackHeight)

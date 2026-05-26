@@ -940,7 +940,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private DesignV2OverlayModel BuildFuelModel(LiveTelemetrySnapshot snapshot, DateTimeOffset now)
     {
         var strategyModel = LiveFuelStrategyModel.From(snapshot, now, LookupHistory);
-        if (!strategyModel.IsAvailable)
+        if (!strategyModel.IsAvailable && !FuelLapsWorkbenchViewModel.Enabled)
         {
             return new DesignV2OverlayModel(
                 "Fuel Calculator",

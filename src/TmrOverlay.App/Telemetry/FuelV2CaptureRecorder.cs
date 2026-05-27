@@ -404,15 +404,15 @@ internal sealed class FuelV2CaptureRecorder
         double? currentFuel,
         LapProgress? progress)
     {
-        if (IsPositiveFinite(currentFuel))
+        if (currentFuel is { } fuelLiters && IsPositiveFinite(fuelLiters))
         {
             _framesWithLocalFuel++;
-            _minFuelLiters = _minFuelLiters is null ? currentFuel : Math.Min(_minFuelLiters.Value, currentFuel.Value);
-            _maxFuelLiters = _maxFuelLiters is null ? currentFuel : Math.Max(_maxFuelLiters.Value, currentFuel.Value);
+            _minFuelLiters = _minFuelLiters is null ? fuelLiters : Math.Min(_minFuelLiters.Value, fuelLiters);
+            _maxFuelLiters = _maxFuelLiters is null ? fuelLiters : Math.Max(_maxFuelLiters.Value, fuelLiters);
 
             if (_lastFuelLiters is { } previousFuel)
             {
-                var delta = currentFuel.Value - previousFuel;
+                var delta = fuelLiters - previousFuel;
                 if (delta > 0d)
                 {
                     _maxObservedFuelIncreaseLiters = _maxObservedFuelIncreaseLiters is null
@@ -428,7 +428,7 @@ internal sealed class FuelV2CaptureRecorder
                 }
             }
 
-            _lastFuelLiters = currentFuel;
+            _lastFuelLiters = fuelLiters;
         }
 
         if (progress is not null)
@@ -560,7 +560,7 @@ internal sealed class FuelV2CaptureRecorder
         IReadOnlyList<string> contextFlags,
         DateTimeOffset capturedAtUtc)
     {
-        if (sample is null || progress is null || !IsPositiveFinite(currentFuel))
+        if (sample is null || progress is null || currentFuel is not { } fuelLiters || !IsPositiveFinite(fuelLiters))
         {
             RejectCleanAnchor("missing_fuel_or_progress", sample, progress, currentFuel, capturedAtUtc, contextFlags);
             return;
@@ -574,15 +574,15 @@ internal sealed class FuelV2CaptureRecorder
 
         if (_cleanLapAnchor is not { } anchor)
         {
-            _cleanLapAnchor = FuelAnchor.From(progress, currentFuel.Value, sample.SessionTime, capturedAtUtc, contextFlags);
+            _cleanLapAnchor = FuelAnchor.From(progress, fuelLiters, sample.SessionTime, capturedAtUtc, contextFlags);
             return;
         }
 
         var progressDelta = progress.ProgressLaps - anchor.ProgressLaps;
         if (progressDelta < 0d)
         {
-            AddLapWindow(_rejectedLapBurnWindows, "progress_reset", anchor, sample, progress, currentFuel.Value, capturedAtUtc, contextFlags, accepted: false);
-            _cleanLapAnchor = FuelAnchor.From(progress, currentFuel.Value, sample.SessionTime, capturedAtUtc, contextFlags);
+            AddLapWindow(_rejectedLapBurnWindows, "progress_reset", anchor, sample, progress, fuelLiters, capturedAtUtc, contextFlags, accepted: false);
+            _cleanLapAnchor = FuelAnchor.From(progress, fuelLiters, sample.SessionTime, capturedAtUtc, contextFlags);
             return;
         }
 
@@ -592,19 +592,19 @@ internal sealed class FuelV2CaptureRecorder
         }
 
         var elapsedSeconds = sample.SessionTime - anchor.SessionTimeSeconds;
-        var fuelUsed = anchor.FuelLiters - currentFuel.Value;
-        var fuelPerLap = progressDelta > 0d ? fuelUsed / progressDelta : null;
+        var fuelUsed = anchor.FuelLiters - fuelLiters;
+        double? fuelPerLap = progressDelta > 0d ? fuelUsed / progressDelta : null;
         var reason = LapWindowRejectionReason(progressDelta, elapsedSeconds, fuelUsed, fuelPerLap);
         if (reason is null)
         {
-            AddLapWindow(_acceptedLapBurnWindows, "accepted", anchor, sample, progress, currentFuel.Value, capturedAtUtc, contextFlags, accepted: true);
+            AddLapWindow(_acceptedLapBurnWindows, "accepted", anchor, sample, progress, fuelLiters, capturedAtUtc, contextFlags, accepted: true);
         }
         else
         {
-            AddLapWindow(_rejectedLapBurnWindows, reason, anchor, sample, progress, currentFuel.Value, capturedAtUtc, contextFlags, accepted: false);
+            AddLapWindow(_rejectedLapBurnWindows, reason, anchor, sample, progress, fuelLiters, capturedAtUtc, contextFlags, accepted: false);
         }
 
-        _cleanLapAnchor = FuelAnchor.From(progress, currentFuel.Value, sample.SessionTime, capturedAtUtc, contextFlags);
+        _cleanLapAnchor = FuelAnchor.From(progress, fuelLiters, sample.SessionTime, capturedAtUtc, contextFlags);
     }
 
     private void TrackSectorBurn(
@@ -620,7 +620,7 @@ internal sealed class FuelV2CaptureRecorder
             _framesWithSectorMetadata++;
         }
 
-        if (sample is null || progress is null || !IsPositiveFinite(currentFuel) || models.TrackMap.Sectors.Count == 0)
+        if (sample is null || progress is null || currentFuel is not { } fuelLiters || !IsPositiveFinite(fuelLiters) || models.TrackMap.Sectors.Count == 0)
         {
             _sectorAnchor = null;
             return;
@@ -635,7 +635,7 @@ internal sealed class FuelV2CaptureRecorder
 
         if (_sectorAnchor is not { } anchor)
         {
-            _sectorAnchor = SectorAnchor.From(progress, sector, currentFuel.Value, sample.SessionTime, capturedAtUtc, contextFlags);
+            _sectorAnchor = SectorAnchor.From(progress, sector, fuelLiters, sample.SessionTime, capturedAtUtc, contextFlags);
             return;
         }
 
@@ -644,7 +644,7 @@ internal sealed class FuelV2CaptureRecorder
             return;
         }
 
-        var fuelUsed = anchor.FuelLiters - currentFuel.Value;
+        var fuelUsed = anchor.FuelLiters - fuelLiters;
         var accepted = fuelUsed > 0d
             && !contextFlags.Any(IsSectorBaselineSuppressingFlag);
         if (accepted)
@@ -671,7 +671,7 @@ internal sealed class FuelV2CaptureRecorder
                 RejectionReason: accepted ? null : SectorRejectionReason(fuelUsed, contextFlags)));
         }
 
-        _sectorAnchor = SectorAnchor.From(progress, sector, currentFuel.Value, sample.SessionTime, capturedAtUtc, contextFlags);
+        _sectorAnchor = SectorAnchor.From(progress, sector, fuelLiters, sample.SessionTime, capturedAtUtc, contextFlags);
     }
 
     private void TrackPitWindow(
@@ -821,9 +821,9 @@ internal sealed class FuelV2CaptureRecorder
             return;
         }
 
-        if (sample is not null && progress is not null && IsPositiveFinite(currentFuel))
+        if (sample is not null && progress is not null && currentFuel is { } fuelLiters && IsPositiveFinite(fuelLiters))
         {
-            AddLapWindow(_rejectedLapBurnWindows, reason, anchor, sample, progress, currentFuel.Value, capturedAtUtc, contextFlags, accepted: false);
+            AddLapWindow(_rejectedLapBurnWindows, reason, anchor, sample, progress, fuelLiters, capturedAtUtc, contextFlags, accepted: false);
         }
 
         _cleanLapAnchor = null;
@@ -1094,7 +1094,7 @@ internal sealed class FuelV2CaptureRecorder
 
     private double? CurrentLapProjection(HistoricalTelemetrySample? sample, LapProgress? progress, double? currentFuel)
     {
-        if (sample is null || progress is null || !IsPositiveFinite(currentFuel))
+        if (sample is null || progress is null || currentFuel is not { } fuelLiters || !IsPositiveFinite(fuelLiters))
         {
             _currentLapAnchor = null;
             return null;
@@ -1104,12 +1104,12 @@ internal sealed class FuelV2CaptureRecorder
             || progress.LapCompleted != _currentLapAnchor.LapCompleted
             || progress.ProgressLaps < _currentLapAnchor.ProgressLaps)
         {
-            _currentLapAnchor = FuelAnchor.From(progress, currentFuel.Value, sample.SessionTime, sample.CapturedAtUtc);
+            _currentLapAnchor = FuelAnchor.From(progress, fuelLiters, sample.SessionTime, sample.CapturedAtUtc);
             return null;
         }
 
         var progressDelta = progress.ProgressLaps - _currentLapAnchor.ProgressLaps;
-        var fuelUsed = _currentLapAnchor.FuelLiters - currentFuel.Value;
+        var fuelUsed = _currentLapAnchor.FuelLiters - fuelLiters;
         return progressDelta > 0.05d && fuelUsed > 0d
             ? fuelUsed / progressDelta
             : null;

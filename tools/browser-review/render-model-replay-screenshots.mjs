@@ -17,6 +17,7 @@ import {
 } from '../../tests/browser-overlays/browserOverlayAssets.js';
 
 const args = parseArgs(process.argv.slice(2));
+const browserChannel = process.env.TMR_PLAYWRIGHT_CHANNEL || undefined;
 const forensicsOutput = resolve(requiredArg(args, 'forensics-output'));
 const renderer = String(args.renderer || 'browser').trim().toLowerCase();
 const overlays = csv(args.overlays).length
@@ -42,7 +43,7 @@ const runManifest = {
 };
 
 try {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(browserChannel ? { channel: browserChannel } : {});
   const context = await browser.newContext({
     viewport: { width: 1280, height: 760 },
     deviceScaleFactor: 1

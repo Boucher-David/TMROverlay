@@ -19,6 +19,7 @@ import {
 } from '../../tests/browser-overlays/browserOverlayAssets.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const browserChannel = process.env.TMR_PLAYWRIGHT_CHANNEL || undefined;
 const overlayPages = browserOverlayPages();
 const geometry = overlayGeometry();
 const gapGraphGeometry = geometry.gapGraph || {};
@@ -250,7 +251,7 @@ try {
   rmSync(outputRoot, { recursive: true, force: true });
   mkdirSync(outputRoot, { recursive: true });
 
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(browserChannel ? { channel: browserChannel } : {});
   const context = await browser.newContext({
     viewport: { width: 1280, height: 760 },
     deviceScaleFactor: 1

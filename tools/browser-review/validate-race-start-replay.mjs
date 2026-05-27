@@ -5,8 +5,9 @@ import { browserOverlayPages } from '../../tests/browser-overlays/browserOverlay
 
 const { baseUrl, outputDir, relativeSeconds, requireCaptureLive } = parseArguments(process.argv.slice(2));
 mkdirSync(outputDir, { recursive: true });
+const browserChannel = process.env.TMR_PLAYWRIGHT_CHANNEL || undefined;
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(browserChannel ? { channel: browserChannel } : {});
 const context = await browser.newContext({
   viewport: { width: 900, height: 600 },
   deviceScaleFactor: 1

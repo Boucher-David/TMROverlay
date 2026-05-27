@@ -19,6 +19,8 @@ jobs:
   browser_review_tests:
     name: Browser review tests
     runs-on: ubuntu-latest
+    env:
+      TMR_PLAYWRIGHT_CHANNEL: chrome
 
     steps:
       - name: Check out repository
@@ -32,9 +34,6 @@ jobs:
 
       - name: Install browser test dependencies
         run: npm ci
-
-      - name: Install Playwright browser
-        run: npx playwright install chromium
 
       - name: Test browser review data contracts
         run: npm run test:browser
@@ -42,6 +41,8 @@ jobs:
   localhost_tests:
     name: Localhost route tests
     runs-on: ubuntu-latest
+    env:
+      TMR_PLAYWRIGHT_CHANNEL: chrome
 
     steps:
       - name: Check out repository
@@ -55,9 +56,6 @@ jobs:
 
       - name: Install browser test dependencies
         run: npm ci
-
-      - name: Install Playwright browser
-        run: npx playwright install chromium
 
       - name: Test localhost overlay routes
         run: npm run test:localhost
@@ -138,6 +136,8 @@ jobs:
   browser_review_screenshots:
     name: Browser review screenshots
     runs-on: ubuntu-latest
+    env:
+      TMR_PLAYWRIGHT_CHANNEL: chrome
 
     steps:
       - name: Check out repository
@@ -151,9 +151,6 @@ jobs:
 
       - name: Install browser screenshot dependencies
         run: npm ci
-
-      - name: Install Playwright browser
-        run: npx playwright install chromium
 
       - name: Generate browser review screenshots
         run: npm run screenshots:browser-review -- --output artifacts/browser-review-screenshots
@@ -179,6 +176,8 @@ jobs:
   localhost_screenshots:
     name: Localhost screenshots
     runs-on: ubuntu-latest
+    env:
+      TMR_PLAYWRIGHT_CHANNEL: chrome
 
     steps:
       - name: Check out repository
@@ -192,9 +191,6 @@ jobs:
 
       - name: Install browser screenshot dependencies
         run: npm ci
-
-      - name: Install Playwright browser
-        run: npx playwright install chromium
 
       - name: Generate localhost screenshots
         run: npm run screenshots:localhost -- --output artifacts/localhost-screenshots

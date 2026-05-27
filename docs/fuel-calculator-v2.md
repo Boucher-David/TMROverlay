@@ -677,6 +677,107 @@ budget and target lap counts into required `L/lap` cells, with the latest burn
 window treated as a comparator only. It does not apply reserve, pit-lane loss, or
 strategy advice. Those remain separate promotion decisions.
 
+Plan / Strategy Summary workbench shape: show the existing V1 `Plan` row first
+for each useful capture/scenario, using the current row vocabulary:
+
+```text
+Race | Remain | Stints | Stops | Save
+```
+
+Then show V2 comparison tables underneath. Keep the start/full-race plan separate
+from the current-checkpoint plan so rows do not mix full-stint fuel budget with a
+later tank state. The V2 tables add the context the V1 row cannot express
+cleanly: lap-budget source/hold behavior, planned stint rhythm, final-stint size,
+edge sensitivity, and whether condition-mix/caution logic belongs to the later
+strategy layer. This is the V2 replacement/evolution of the current race `Plan`
+row, not the detailed `Stint Targets` rows.
+
+The first visible V2 columns are:
+
+```text
+Full race/start budget:
+Race | Start cap | Rhythm | Stops | Final
+
+Current checkpoint/from here:
+Total | To go | Now/Full | Rhythm from now | Stops now | Final
+```
+
+`Signal` is intentionally not a visible column in the first workbench pass. Plan
+source/risk state should stay in row tone, short labels such as `held`, and the
+staged model's state flags unless the table proves we need a dedicated column
+again.
+
+Initial browser workbench rows should use the captures/scenarios that have been
+most useful so far: VLN 4h team rhythm, 24h rejoin clean and degraded full-race
+lap budgets, Dallara 45m half/finish edge, Dallara 4L full and repair/blip
+cases, GR86 3-lap fixed-lap start authority, and clearly labeled NASCAR
+condition-mix stress rows. The V1 row can remain literal and limited; V2 should
+expose why a row is held/degraded instead of silently changing stop count or
+final-stint interpretation.
+
+Initial Plan V2 input policy:
+
+- Leader versus strategy car context is core. The leader determines the race
+  finish event; the strategy car determines required fuel distance.
+- Confirmed lap-down state can update the plan when it happens. Projected future
+  lap-down state should remain scenario/risk context at first, not a primary
+  workbench concern.
+- Pit-cycle adjustment can stay under the hood initially. It may explain held or
+  degraded lap-budget decisions later, but does not need a visible first-pass
+  column.
+- Overlay Bridge ownership/freshness can be placeholder metadata here. Plan V2
+  should accept teammate/bridge fuel, progress, lap, and sector packets at their
+  natural cadence; freshness policy belongs to Overlay Bridge promotion.
+- Event contamination should arrive as classified context flags such as pit,
+  refuel, repair, tow, garage, caution, or service. Plan V2 should not infer
+  contamination from sector labels.
+- Sample confidence should stay visually quiet by default. Use tones/colors and
+  short labels in the driving overlay; richer confidence text belongs behind an
+  engineering/debug toggle.
+- Store team/driver historically as metadata. Teammate stint length and rhythm
+  may influence whole-race planning, even without live fuel or bridge packets.
+  Fuel burn should not default-split by driver unless enough evidence exists.
+- Store weather historically. Track dampness/wetness is a strong scope modifier
+  for fuel burn and pace history: dry, damp, and wet history should be separated
+  or visibly degraded when reused across states. Generic weather fields such as
+  air temperature, track temperature, humidity, wind, and rain state should be
+  kept as context before they become hard partitions.
+
+Staging implementation boundary: `FuelV2PlanCalculator` derives the first-pass
+start/full-race plan row from planned race laps, race laps remaining, and a
+target/usable stint capacity. The capacity can be supplied directly for a
+scenario, but the normal path should derive it from fuel evidence:
+
+```text
+stintCapacityLaps = floor(usableStintFuelLiters / selectedBurnLitersPerLap)
+```
+
+`usableStintFuelLiters` is the planned full-stint fuel budget after known
+formation/reserve/pit-lane adjustments; `selectedBurnLitersPerLap` is the bucket
+being used for the plan, usually a green-safe/max or approved history burn rather
+than a low caution-only value.
+
+The current-checkpoint path is different: it uses the decimal current-tank range
+from current fuel, then uses floored full-stint capacity only for future refueled
+stints:
+
+```text
+currentTankRangeLaps = currentFuelLiters / selectedBurnLitersPerLap
+futureStintCapacityLaps = floor(fullStintFuelLiters / selectedBurnLitersPerLap)
+stopsFromNow = ceil(max(0, lapsToGo - currentTankRangeLaps) / futureStintCapacityLaps)
+```
+
+This is why a checkpoint row can say `1.5 now + 1.5 final` instead of pretending
+the car only has a whole `1` lap left. Do not repeat the partial current tank as
+the capacity for every future stint; once the car stops, later stints should use
+the normal full/refueled stint budget. The 24h rejoin capture stays useful for
+full-race lap-budget/stint-rhythm checks, but its current-checkpoint row should
+remain degraded or unavailable because local current fuel is not reliable. This
+path emits planned stints, stops, final-stint size, compact rhythm text, row tone,
+and state flags such as held/degraded lap budget, repair context, condition mix,
+and final-stint edge. It does not simulate every pit cycle, project future
+lap-down events, choose a final fuel bucket, or issue advice.
+
 Fuel To Add / Pit Request workbench shape: show a `Fuel To Add Workbench`
 section that turns the already-staged target and burn windows into pit-request
 amounts. This row answers "if we were requesting fuel now for this target stint,
@@ -2034,6 +2135,8 @@ models later, or deleted without changing V1 behavior. Current staged slices:
 - `FuelV2RangeCalculator`: current-tank range from each selected burn window.
 - `FuelV2TargetUsageCalculator`: required `L/lap` targets from budget and target
   lap counts.
+- `FuelV2PlanCalculator`: first-pass Plan/Strategy Summary row from planned race
+  laps, remaining laps, stint capacity, and state flags.
 - `FuelV2PitRequestCalculator`: add-fuel amounts from current fuel, target laps,
   reserve/pit-lane adjustment inputs, tank capacity, and each burn window.
 - `FuelV2SectorBurnCalculator`: live sector projection, event-window context,

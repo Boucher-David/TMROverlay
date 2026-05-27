@@ -150,6 +150,40 @@ internal sealed record FuelV2TargetUsageCell(
     FuelV2Scalar RequiredFuelPerLap,
     FuelV2WorkbenchTone Tone);
 
+internal enum FuelV2PlanStateFlag
+{
+    LeaderFinishDriven = 0,
+    StrategyCarDistanceDriven = 1,
+    HeldLapBudget = 2,
+    DegradedLapBudget = 3,
+    ConditionMix = 4,
+    PitCycleScenario = 5,
+    ConfirmedLapDown = 6,
+    BridgeSource = 7,
+    RepairContext = 8,
+    FinalStintEdge = 9,
+    TankLimited = 10
+}
+
+internal sealed record FuelV2PlanSnapshot(
+    FuelV2Scalar? PlannedRaceLaps,
+    FuelV2Scalar? RaceLapsRemaining,
+    double? UsableStintFuelLiters,
+    FuelV2Scalar? StintBurn,
+    double? StintCapacityLaps,
+    double? CurrentStintCapacityLaps,
+    double? FutureStintCapacityLaps,
+    int? PlannedStintCount,
+    int? PlannedStopCount,
+    double? FinalStintLaps,
+    string RaceLabel,
+    string RemainLabel,
+    string RhythmLabel,
+    string StopsLabel,
+    string FinalLabel,
+    FuelV2WorkbenchTone Tone,
+    IReadOnlyList<FuelV2PlanStateFlag> StateFlags);
+
 internal sealed record FuelV2PitRequestSnapshot(
     double? CurrentFuelLiters,
     double? TankCapacityLiters,

@@ -829,6 +829,7 @@
         || status === 'fuel/lap workbench'
         || status === 'fuel/range workbench'
         || status === 'fuel/target usage workbench'
+        || status === 'fuel/plan workbench'
         || status === 'fuel/pit request workbench'
         || status === 'fuel/sector burn workbench';
     }

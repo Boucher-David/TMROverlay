@@ -24,8 +24,8 @@ FuelV2HistorySummary
   Evidence: FuelV2HistoryEvidenceTotals
   FinishedAtUtc: DateTimeOffset
   FuelCapacity: FuelV2HistoryFuelCapacityFacts
-  ImportedAtUtc: DateTimeOffset
   ImportModelVersion: int
+  ImportedAtUtc: DateTimeOffset
   LapBudget: FuelV2HistoryLapBudgetFacts
   PitWindows: IReadOnlyList<FuelV2HistoryPitWindow>
   Quality: FuelV2HistoryQuality

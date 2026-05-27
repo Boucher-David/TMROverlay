@@ -41,8 +41,8 @@ internal static class LiveRaceLapBudgetEstimator
 
         if (ValidLapCount(session.SessionLapsRemain) is { } liveLapsRemaining)
         {
-            var estimatedFinishLap = ValidLapCount(session.SessionLapsTotal) is { } liveLapTotal
-                ? liveLapTotal
+            var estimatedFinishLap = ValidLapCount(session.SessionLapsTotal) is { } publishedLapTotal
+                ? publishedLapTotal
                 : Add(strategyCarProgressLaps, liveLapsRemaining);
             return Budget(
                 liveLapsRemaining,
@@ -245,7 +245,7 @@ internal static class LiveRaceLapBudgetEstimator
         IEnumerable<LiveRaceLapBudgetStateFlag> flags,
         bool canDriveFuelAdvice)
     {
-        var wholeLaps = primaryLapsRemaining is { } laps && laps >= 0 ? laps : null;
+        int? wholeLaps = primaryLapsRemaining is { } laps && laps >= 0 ? laps : null;
         return new LiveRaceLapBudget(
             PrimaryLapsRemaining: wholeLaps,
             PossibleLapsRemaining: possibleLapsRemaining,

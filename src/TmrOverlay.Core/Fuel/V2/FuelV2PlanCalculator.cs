@@ -87,12 +87,17 @@ internal static class FuelV2PlanCalculator
         var raceLaps = PositiveOrNull(plannedRaceLaps);
         var remainingLaps = NonNegativeOrNull(raceLapsRemaining);
         var stintCapacity = PositiveOrNull(stintCapacityLaps);
-        var hasPlan = raceLaps is { } race && stintCapacity is { } capacity;
-        var stintCount = hasPlan ? Math.Max(1, (int)Math.Ceiling(race / capacity - 0.000001d)) : (int?)null;
+        int? stintCount = null;
+        double? finalStint = null;
+        if (raceLaps.HasValue && stintCapacity.HasValue)
+        {
+            var race = raceLaps.Value;
+            var capacity = stintCapacity.Value;
+            stintCount = Math.Max(1, (int)Math.Ceiling(race / capacity - 0.000001d));
+            finalStint = FinalStintLaps(race, capacity, stintCount.Value);
+        }
+
         var stopCount = stintCount is { } stints ? Math.Max(0, stints - 1) : (int?)null;
-        var finalStint = hasPlan && stintCount is { } count
-            ? FinalStintLaps(race, capacity, count)
-            : (double?)null;
 
         if (finalStint is { } final
             && final <= safeOptions.FinalStintEdgeThresholdLaps
@@ -149,13 +154,14 @@ internal static class FuelV2PlanCalculator
         var currentCapacity = PositiveOrNull(currentStintCapacityLaps);
         var futureCapacity = PositiveOrNull(futureStintCapacityLaps);
 
-        var hasCurrentPlan = remainingLaps is { } remaining && currentCapacity is { } current;
         int? stintCount = null;
         int? stopCount = null;
         double? finalStint = null;
 
-        if (hasCurrentPlan)
+        if (remainingLaps.HasValue && currentCapacity.HasValue)
         {
+            var remaining = remainingLaps.Value;
+            var current = currentCapacity.Value;
             if (remaining <= current + 0.000001d)
             {
                 stintCount = 1;
@@ -189,9 +195,9 @@ internal static class FuelV2PlanCalculator
                     displayEligible: true,
                     cleanBaselineEligible: false)
                 : null,
-            RaceLapsRemaining: remainingLaps is { } remaining
+            RaceLapsRemaining: remainingLaps is { } remainingValue
                 ? FuelV2Scalar.From(
-                    remaining,
+                    remainingValue,
                     safeOptions.RemainingSource,
                     flags.Contains(FuelV2PlanStateFlag.DegradedLapBudget) ? FuelV2Confidence.Contextual : FuelV2Confidence.Live,
                     displayEligible: true,
@@ -289,7 +295,7 @@ internal static class FuelV2PlanCalculator
     {
         if (remainingLaps is not { } remaining || currentStintCapacityLaps is not { } current)
         {
-            return futureStintCapacityLaps is { } future ? $"now -- + {FormatNumber(future)}-lap rhythm" : "--";
+            return futureStintCapacityLaps is { } futureCapacity ? $"now -- + {FormatNumber(futureCapacity)}-lap rhythm" : "--";
         }
 
         if (remaining <= current + 0.000001d)

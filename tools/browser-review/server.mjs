@@ -2942,7 +2942,7 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'plan' }));
         }
 
-        if (!fixture || fixture === 'fuel-laps-workbench' || fixture === 'fuel-laps-workbench-stint') {
+        if (fixture === 'fuel-laps-workbench' || fixture === 'fuel-laps-workbench-stint') {
           return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'stint' }));
         }
 

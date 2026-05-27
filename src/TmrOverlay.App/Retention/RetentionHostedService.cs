@@ -11,6 +11,7 @@ internal sealed class RetentionHostedService : IHostedService, IDisposable
     private readonly RetentionOptions _options;
     private readonly LiveModelParityOptions _liveModelParityOptions;
     private readonly LiveOverlayDiagnosticsOptions _liveOverlayDiagnosticsOptions;
+    private readonly FuelV2CaptureOptions _fuelV2CaptureOptions;
     private readonly ILogger<RetentionHostedService> _logger;
     private readonly CancellationTokenSource _cleanupCancellation = new();
     private Task _cleanupTask = Task.CompletedTask;
@@ -20,12 +21,14 @@ internal sealed class RetentionHostedService : IHostedService, IDisposable
         RetentionOptions options,
         LiveModelParityOptions liveModelParityOptions,
         LiveOverlayDiagnosticsOptions liveOverlayDiagnosticsOptions,
-        ILogger<RetentionHostedService> logger)
+        ILogger<RetentionHostedService> logger,
+        FuelV2CaptureOptions? fuelV2CaptureOptions = null)
     {
         _storageOptions = storageOptions;
         _options = options;
         _liveModelParityOptions = liveModelParityOptions;
         _liveOverlayDiagnosticsOptions = liveOverlayDiagnosticsOptions;
+        _fuelV2CaptureOptions = fuelV2CaptureOptions ?? new FuelV2CaptureOptions();
         _logger = logger;
     }
 
@@ -90,6 +93,12 @@ internal sealed class RetentionHostedService : IHostedService, IDisposable
         CleanupFiles(
             Path.Combine(_storageOptions.LogsRoot, _liveOverlayDiagnosticsOptions.LogDirectoryName),
             $"*{_liveOverlayDiagnosticsOptions.OutputFileName}",
+            _options.EdgeCaseRetentionDays,
+            _options.MaxEdgeCaseFiles,
+            cancellationToken);
+        CleanupFiles(
+            Path.Combine(_storageOptions.LogsRoot, _fuelV2CaptureOptions.LogDirectoryName),
+            $"*{_fuelV2CaptureOptions.OutputFileName}",
             _options.EdgeCaseRetentionDays,
             _options.MaxEdgeCaseFiles,
             cancellationToken);

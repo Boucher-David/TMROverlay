@@ -145,10 +145,12 @@ internal static class Program
                 services.AddSingleton(TelemetryEdgeCaseOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(LiveModelParityOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(LiveOverlayDiagnosticsOptions.FromConfiguration(context.Configuration));
+                services.AddSingleton(FuelV2CaptureOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(LiveOverlayWindowCaptureOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(IbtAnalysisOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(PostRaceAnalysisOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(SessionHistoryOptions.FromConfiguration(context.Configuration, storageOptions));
+                services.AddSingleton(FuelV2HistoryOptions.FromConfiguration(context.Configuration, storageOptions));
                 services.AddSingleton(RetentionOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(replayOptions);
                 services.AddSingleton(LocalhostOverlayOptions.FromConfiguration(context.Configuration));
@@ -157,6 +159,8 @@ internal static class Program
                 services.AddSingleton<AppEventRecorder>();
                 services.AddSingleton<AppSettingsStore>();
                 services.AddSingleton<SessionHistoryStore>();
+                services.AddSingleton<FuelV2HistoryStore>();
+                services.AddSingleton<FuelV2HistoryImporter>();
                 services.AddSingleton<SessionHistoryQueryService>();
                 services.AddSingleton<StreamChatOverlaySource>();
                 services.AddSingleton<BrowserOverlayModelFactory>();
@@ -173,6 +177,7 @@ internal static class Program
                 services.AddSingleton<TelemetryEdgeCaseRecorder>();
                 services.AddSingleton<LiveModelParityRecorder>();
                 services.AddSingleton<LiveOverlayDiagnosticsRecorder>();
+                services.AddSingleton<FuelV2CaptureRecorder>();
                 services.AddSingleton<AppPerformanceState>();
                 services.AddSingleton<AppPerformanceSnapshotRecorder>();
                 services.AddSingleton<ReleaseUpdateService>();

@@ -376,6 +376,7 @@ public sealed class DiagnosticsBundleServiceTests
             Directory.CreateDirectory(Path.Combine(storage.LogsRoot, "edge-cases"));
             Directory.CreateDirectory(Path.Combine(storage.LogsRoot, "model-parity"));
             Directory.CreateDirectory(Path.Combine(storage.LogsRoot, "overlay-diagnostics"));
+            Directory.CreateDirectory(Path.Combine(storage.LogsRoot, "fuel-v2-capture"));
 
             File.WriteAllText(storage.RuntimeStatePath, "{}");
             File.WriteAllText(Path.Combine(storage.SettingsRoot, "settings.json"), """{"overlays":[]}""");
@@ -383,6 +384,7 @@ public sealed class DiagnosticsBundleServiceTests
             File.WriteAllText(Path.Combine(storage.LogsRoot, "edge-cases", $"session-{stamp}-edge-cases.json"), """{"clipCount":1}""");
             File.WriteAllText(Path.Combine(storage.LogsRoot, "model-parity", $"session-{stamp}-live-model-parity.json"), """{"frameCount":1}""");
             File.WriteAllText(Path.Combine(storage.LogsRoot, "overlay-diagnostics", $"session-{stamp}-live-overlay-diagnostics.json"), """{"frameCount":1}""");
+            File.WriteAllText(Path.Combine(storage.LogsRoot, "fuel-v2-capture", $"session-{stamp}-fuel-v2-diagnostics.json"), """{"formatVersion":1}""");
             File.WriteAllText(
                 Path.Combine(storage.EventsRoot, $"events-{stamp}.jsonl"),
                 $$$"""
@@ -434,6 +436,33 @@ public sealed class DiagnosticsBundleServiceTests
             File.WriteAllText(Path.Combine(captureDirectory, "capture-synthesis.json"), """{"frameScan":{"totalFrameRecords":12,"sampledFrameCount":12}}""");
             File.WriteAllText(Path.Combine(captureDirectory, "live-model-parity.json"), "{}");
             File.WriteAllText(Path.Combine(captureDirectory, "live-overlay-diagnostics.json"), """{"totals":{"frameCount":12}}""");
+            var fuelV2CaptureDirectory = Path.Combine(captureDirectory, "fuel-v2-capture");
+            Directory.CreateDirectory(fuelV2CaptureDirectory);
+            File.WriteAllText(
+                Path.Combine(fuelV2CaptureDirectory, "fuel-v2-diagnostics.json"),
+                """
+                {
+                  "formatVersion": 1,
+                  "totals": {
+                    "frameCount": 12,
+                    "sampledFrameCount": 3,
+                    "sessionFrameCounts": { "Race": 12 },
+                    "contextFlagCounts": { "clean-race": 10 }
+                  },
+                  "lapBudget": {
+                    "sourceCounts": { "remaining:session-laps-remain-ex": 12 },
+                    "missingSignalCounts": {}
+                  },
+                  "pitService": { "pitWindowCount": 1 },
+                  "team": { "teamStintCount": 1 },
+                  "syntheticReplaySuitability": {
+                    "suitable": true,
+                    "reasons": ["local fuel, team progress, stint, and pit evidence present"]
+                  },
+                  "acceptedLapBurnWindows": [{}],
+                  "rejectedLapBurnWindows": []
+                }
+                """);
             File.WriteAllText(Path.Combine(captureDirectory, "telemetry.bin"), "raw telemetry must stay out");
             var ibtAnalysisDirectory = Path.Combine(captureDirectory, "ibt-analysis");
             Directory.CreateDirectory(ibtAnalysisDirectory);
@@ -486,12 +515,14 @@ public sealed class DiagnosticsBundleServiceTests
             Assert.Contains($"edge-cases/session-{stamp}-edge-cases.json", entryNames);
             Assert.Contains($"model-parity/session-{stamp}-live-model-parity.json", entryNames);
             Assert.Contains($"overlay-diagnostics/session-{stamp}-live-overlay-diagnostics.json", entryNames);
+            Assert.Contains($"fuel-v2-capture/session-{stamp}-fuel-v2-diagnostics.json", entryNames);
             Assert.Contains("latest-capture/capture-manifest.json", entryNames);
             Assert.Contains("latest-capture/telemetry-schema.json", entryNames);
             Assert.Contains("latest-capture/latest-session.yaml", entryNames);
             Assert.Contains("latest-capture/capture-synthesis.json", entryNames);
             Assert.Contains("latest-capture/live-model-parity.json", entryNames);
             Assert.Contains("latest-capture/live-overlay-diagnostics.json", entryNames);
+            Assert.Contains("latest-capture/fuel-v2-capture/fuel-v2-diagnostics.json", entryNames);
             Assert.Contains("latest-capture/ibt-analysis/status.json", entryNames);
             Assert.DoesNotContain("latest-capture/telemetry.bin", entryNames);
             Assert.DoesNotContain("latest-capture/ibt-analysis/source.ibt", entryNames);
@@ -527,10 +558,14 @@ public sealed class DiagnosticsBundleServiceTests
             var latestCaptureJson = ReadJsonEntry(archive, "metadata/latest-capture-evidence.json");
             Assert.True(((bool?)latestCaptureJson?["exists"]) == true);
             Assert.Equal(12, ((int?)latestCaptureJson?["manifest"]?["frameCount"]) ?? -1);
+            Assert.True(((bool?)latestCaptureJson?["fuelV2Capture"]?["exists"]) == true);
+            Assert.Equal(12, ((int?)latestCaptureJson?["fuelV2Capture"]?["frameCount"]) ?? -1);
+            Assert.Equal(1, ((int?)latestCaptureJson?["fuelV2Capture"]?["acceptedLapBurnWindowCount"]) ?? -1);
 
             var evidenceQualityJson = ReadJsonEntry(archive, "metadata/evidence-quality.json");
             Assert.True(((bool?)evidenceQualityJson?["liveTelemetry"]?["currentConnected"]) == true);
             Assert.True(((bool?)evidenceQualityJson?["latestCapture"]?["captureManifestExists"]) == true);
+            Assert.True(((bool?)evidenceQualityJson?["latestCapture"]?["fuelV2CaptureExists"]) == true);
             Assert.True(((bool?)evidenceQualityJson?["latestCapture"]?["ibtStatusExists"]) == true);
 
             if (SharedOverlayContract.TryFindDefaultContractPath() is not null)
@@ -578,13 +613,16 @@ public sealed class DiagnosticsBundleServiceTests
             var edgeCaseDirectory = Path.Combine(storage.LogsRoot, "edge-cases");
             var modelParityDirectory = Path.Combine(storage.LogsRoot, "model-parity");
             var overlayDiagnosticsDirectory = Path.Combine(storage.LogsRoot, "overlay-diagnostics");
+            var fuelV2CaptureLogDirectory = Path.Combine(storage.LogsRoot, "fuel-v2-capture");
             Directory.CreateDirectory(edgeCaseDirectory);
             Directory.CreateDirectory(modelParityDirectory);
             Directory.CreateDirectory(overlayDiagnosticsDirectory);
+            Directory.CreateDirectory(fuelV2CaptureLogDirectory);
             File.WriteAllText(Path.Combine(storage.LogsRoot, "tmroverlay-20260426.log"), "log line");
             File.WriteAllText(Path.Combine(edgeCaseDirectory, "session-20260426-edge-cases.json"), """{"clipCount":1}""");
             File.WriteAllText(Path.Combine(modelParityDirectory, "session-20260426-live-model-parity.json"), """{"frameCount":1}""");
             File.WriteAllText(Path.Combine(overlayDiagnosticsDirectory, "session-20260426-live-overlay-diagnostics.json"), """{"frameCount":1}""");
+            File.WriteAllText(Path.Combine(fuelV2CaptureLogDirectory, "session-20260426-fuel-v2-diagnostics.json"), """{"formatVersion":1}""");
             File.WriteAllText(
                 Path.Combine(storage.EventsRoot, "events-20260426.jsonl"),
                 """
@@ -634,6 +672,20 @@ public sealed class DiagnosticsBundleServiceTests
             File.WriteAllText(Path.Combine(storage.UserHistoryRoot, ".maintenance", "manifest.json"), """{"summaryFilesScanned":1}""");
             File.WriteAllText(Path.Combine(historySessionDirectory, "aggregate.json"), """{"sessionCount":1}""");
             File.WriteAllText(Path.Combine(summariesDirectory, "capture-20260426-120000-000.json"), """{"sourceCaptureId":"capture-20260426-120000-000"}""");
+            var fuelV2HistorySessionDirectory = Path.Combine(
+                storage.UserHistoryRoot,
+                "fuel-v2",
+                "cars",
+                "car-156-mercedesamgevogt3",
+                "tracks",
+                "track-262-nurburgring-combinedshortb",
+                "sessions",
+                "race");
+            var fuelV2HistorySummariesDirectory = Path.Combine(fuelV2HistorySessionDirectory, "summaries");
+            Directory.CreateDirectory(fuelV2HistorySummariesDirectory);
+            File.WriteAllText(Path.Combine(storage.UserHistoryRoot, "fuel-v2", "manifest.json"), """{"manifestVersion":1,"summaryCount":1}""");
+            File.WriteAllText(Path.Combine(fuelV2HistorySessionDirectory, "aggregate.json"), """{"aggregateVersion":1,"summaryCount":1}""");
+            File.WriteAllText(Path.Combine(fuelV2HistorySummariesDirectory, "capture-20260426-120000-000.json"), """{"summaryVersion":1,"sourceId":"capture-20260426-120000-000"}""");
 
             var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-20260426-120000-000");
             Directory.CreateDirectory(captureDirectory);
@@ -796,6 +848,33 @@ public sealed class DiagnosticsBundleServiceTests
                       "merged:recent-personal-best": 48
                     }
                   }
+                }
+                """);
+            var fuelV2CaptureDirectory = Path.Combine(captureDirectory, "fuel-v2-capture");
+            Directory.CreateDirectory(fuelV2CaptureDirectory);
+            File.WriteAllText(
+                Path.Combine(fuelV2CaptureDirectory, "fuel-v2-diagnostics.json"),
+                """
+                {
+                  "formatVersion": 1,
+                  "totals": {
+                    "frameCount": 454144,
+                    "sampledFrameCount": 600,
+                    "sessionFrameCounts": { "Race": 454144 },
+                    "contextFlagCounts": { "fuel-known": 324, "focus-other-car": 453983 }
+                  },
+                  "lapBudget": {
+                    "sourceCounts": { "remaining:session-laps-remain-ex": 120 },
+                    "missingSignalCounts": { "race-projection:leader_pace_missing": 3 }
+                  },
+                  "pitService": { "pitWindowCount": 2 },
+                  "team": { "teamStintCount": 1 },
+                  "syntheticReplaySuitability": {
+                    "suitable": false,
+                    "reasons": ["no_local_fuel_truth_windows"]
+                  },
+                  "acceptedLapBurnWindows": [],
+                  "rejectedLapBurnWindows": [{}]
                 }
                 """);
             File.WriteAllText(Path.Combine(captureDirectory, "telemetry.bin"), "raw");
@@ -1439,6 +1518,7 @@ public sealed class DiagnosticsBundleServiceTests
             Assert.Contains("edge-cases/session-20260426-edge-cases.json", entryNames);
             Assert.Contains("model-parity/session-20260426-live-model-parity.json", entryNames);
             Assert.Contains("overlay-diagnostics/session-20260426-live-overlay-diagnostics.json", entryNames);
+            Assert.Contains("fuel-v2-capture/session-20260426-fuel-v2-diagnostics.json", entryNames);
             Assert.Contains(entryNames, entryName => entryName.StartsWith("performance/performance-", StringComparison.OrdinalIgnoreCase));
             Assert.Contains("events/events-20260426.jsonl", entryNames);
             Assert.Contains("latest-capture/capture-manifest.json", entryNames);
@@ -1447,6 +1527,7 @@ public sealed class DiagnosticsBundleServiceTests
             Assert.Contains("latest-capture/capture-synthesis.json", entryNames);
             Assert.Contains("latest-capture/live-model-parity.json", entryNames);
             Assert.Contains("latest-capture/live-overlay-diagnostics.json", entryNames);
+            Assert.Contains("latest-capture/fuel-v2-capture/fuel-v2-diagnostics.json", entryNames);
             Assert.Contains("latest-capture/ibt-analysis/status.json", entryNames);
             Assert.Contains("latest-capture/ibt-analysis/ibt-schema-summary.json", entryNames);
             Assert.Contains("analysis/20260426-race.json", entryNames);
@@ -1454,6 +1535,9 @@ public sealed class DiagnosticsBundleServiceTests
             Assert.Contains("history/user/.maintenance/manifest.json", entryNames);
             Assert.Contains("history/user/cars/car-156-mercedesamgevogt3/tracks/track-262-nurburgring-combinedshortb/sessions/race/aggregate.json", entryNames);
             Assert.Contains("history/user/cars/car-156-mercedesamgevogt3/tracks/track-262-nurburgring-combinedshortb/sessions/race/summaries/capture-20260426-120000-000.json", entryNames);
+            Assert.Contains("history/user/fuel-v2/manifest.json", entryNames);
+            Assert.Contains("history/user/fuel-v2/cars/car-156-mercedesamgevogt3/tracks/track-262-nurburgring-combinedshortb/sessions/race/aggregate.json", entryNames);
+            Assert.Contains("history/user/fuel-v2/cars/car-156-mercedesamgevogt3/tracks/track-262-nurburgring-combinedshortb/sessions/race/summaries/capture-20260426-120000-000.json", entryNames);
             Assert.DoesNotContain("latest-capture/telemetry.bin", entryNames);
             Assert.DoesNotContain("latest-capture/ibt-analysis/source.ibt", entryNames);
             Assert.DoesNotContain("settings/garage-cover/cover.png", entryNames);
@@ -1539,6 +1623,7 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.Equal(1, ((int?)evidenceQualityJson?["updateEvents"]?["updateCheckFailedCount"]) ?? -1);
                 Assert.Equal(1, ((int?)evidenceQualityJson?["updateEvents"]?["updateCheckFailureErrorCounts"]?["HttpRequestException"]) ?? -1);
                 Assert.Equal("transient_update_check_failures_recovered", (string?)evidenceQualityJson?["updateEvents"]?["updateFailureSummary"]?["classification"]);
+                Assert.True(((bool?)evidenceQualityJson?["latestCapture"]?["fuelV2CaptureExists"]) == true);
             }
 
             var latestCaptureEvidenceEntry = archive.GetEntry("metadata/latest-capture-evidence.json");
@@ -1559,6 +1644,10 @@ public sealed class DiagnosticsBundleServiceTests
                 Assert.True(((bool?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["missingLocalPlayerFuelEvidence"]) == true);
                 Assert.Equal(453983, ((int?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["fuelLocalStrategyUnavailableFrames"]) ?? -1);
                 Assert.Equal(453983, ((int?)latestCaptureEvidenceJson?["postRaceFuelEvidence"]?["fuelLocalStrategyUnavailableReasonCounts"]?["focus_on_another_car"]) ?? -1);
+                Assert.True(((bool?)latestCaptureEvidenceJson?["fuelV2Capture"]?["exists"]) == true);
+                Assert.Equal(454144, ((int?)latestCaptureEvidenceJson?["fuelV2Capture"]?["frameCount"]) ?? -1);
+                Assert.Equal(0, ((int?)latestCaptureEvidenceJson?["fuelV2Capture"]?["acceptedLapBurnWindowCount"]) ?? -1);
+                Assert.Equal(1, ((int?)latestCaptureEvidenceJson?["fuelV2Capture"]?["rejectedLapBurnWindowCount"]) ?? -1);
                 Assert.Equal("values_present_without_usable_quality_all_zero", (string?)latestCaptureEvidenceJson?["lapDeltaQuality"]?["classification"]);
                 Assert.True(((bool?)latestCaptureEvidenceJson?["lapDeltaQuality"]?["valuesPresentWithoutUsableQuality"]) == true);
                 Assert.True(((bool?)latestCaptureEvidenceJson?["liveOverlayDiagnostics"]?["exists"]) == true);

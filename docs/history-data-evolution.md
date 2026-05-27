@@ -18,6 +18,9 @@ High-priority data is user-focused history that makes the app better for that us
 
 - car/track/session summaries
 - fuel burn and stint history
+- Fuel V2 learned history under `history/user/fuel-v2/`, including imported
+  sidecar summaries, rebuilt aggregates, scope/source labels, and calibration
+  evidence that is explicitly not consumed by V1 strategy yet
 - pit lane, pit stall, tire-service, repair, and fill-rate history
 - lap pace and leader/context metrics used by overlays
 - confidence flags and source labels that explain whether a metric came from local-driver telemetry, team-car telemetry, inference, or baseline samples
@@ -87,6 +90,9 @@ Use these version scopes:
 - `collectionModelVersion`: meaning of derived history metrics, quality rules, stint/pit-stop extraction, and confidence flags.
 - `aggregateVersion`: JSON shape of aggregate files.
 - `analysisVersion`: JSON shape of post-race analysis files.
+- `FuelV2HistoryDataVersions`: separate manifest, summary, aggregate, and import
+  model versions for Fuel V2 learned history. These do not change the V1 history
+  readers or strategy path.
 
 The app should write only the current versions. Readers may accept older versions only through migration or explicit compatibility adapters.
 
@@ -159,6 +165,12 @@ The current implementation is intentionally narrow:
 - `aggregateVersion = 3` keeps combo aggregates track/session scoped and removes radar calibration from `aggregate.json`
 - car radar body-size calibration is stored separately at `history/user/cars/{carKey}/radar-calibration.json`, versioned by `carRadarCalibrationAggregateVersion`
 - diagnostics bundles include `history/user/.maintenance/manifest.json` when present
+- Fuel V2 diagnostics can now promote compact derived evidence into
+  `history/user/fuel-v2/` when `FuelV2History:Enabled=true`. The importer stores
+  artifact provenance, session scope, fuel-cap facts, accepted/rejected burn
+  evidence, lap-budget outcome metrics, pit/service windows, and team stint
+  shape while excluding raw frame streams. `FuelV2History:UseForStrategy=false`
+  keeps V1 fuel strategy from reading these records.
 - `HistorySchemaCompatibilityTests` snapshots durable summary, aggregate, and analysis model shapes so schema changes force a compatibility review during test validation
 
 Radar calibration history is car-scoped, not track/session-scoped. Summaries may store clean `CarLeftRight` side-window durations, identity-backed body-length estimates, and confidence flags. The car-level aggregate stops accepting new learned samples once the body-length metric is trusted. Live radar uses exact bundled car specifications first, trusted user calibration second, low-confidence bundled estimates third, and the hard-coded default only when none of those are available.

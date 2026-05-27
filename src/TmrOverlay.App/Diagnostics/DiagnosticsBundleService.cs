@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using TmrOverlay.Core.AppInfo;
+using TmrOverlay.App.History;
 using TmrOverlay.App.Installation;
 using TmrOverlay.App.Localhost;
 using TmrOverlay.App.Overlays;
@@ -41,10 +42,13 @@ internal sealed class DiagnosticsBundleService
     private const int MaxRecentAnalysisFiles = 12;
     private const int MaxRecentHistorySummaryFiles = 50;
     private const int MaxRecentHistoryAggregateFiles = 50;
+    private const int MaxRecentFuelV2HistorySummaryFiles = 50;
+    private const int MaxRecentFuelV2HistoryAggregateFiles = 50;
     private const int MaxRecentEdgeCaseFiles = 20;
     private const int MaxLatestCaptureIbtAnalysisFiles = 12;
     private const int MaxRecentModelParityFiles = 10;
     private const int MaxRecentOverlayDiagnosticsFiles = 10;
+    private const int MaxRecentFuelV2CaptureFiles = 10;
     private const int MaxRecentTrackMapReports = 10;
     private const int MaxRecentEventFilesForDiagnostics = 10;
     private const int MaxBundleNameSegmentLength = 48;
@@ -59,6 +63,9 @@ internal sealed class DiagnosticsBundleService
     private readonly AppStorageOptions _storageOptions;
     private readonly LiveModelParityOptions _liveModelParityOptions;
     private readonly LiveOverlayDiagnosticsOptions _liveOverlayDiagnosticsOptions;
+    private readonly FuelV2CaptureOptions _fuelV2CaptureOptions;
+    private readonly string _fuelV2HistoryRoot;
+    private readonly string _fuelV2HistoryBundleRoot;
     private readonly IbtAnalysisOptions _ibtAnalysisOptions;
     private readonly TelemetryCaptureState _captureState;
     private readonly LocalhostOverlayState _localhostOverlayState;
@@ -100,11 +107,17 @@ internal sealed class DiagnosticsBundleService
         ForegroundWindowTracker foregroundWindowTracker,
         ReleaseUpdateService releaseUpdates,
         StreamChatOverlaySource streamChatSource,
-        ILogger<DiagnosticsBundleService> logger)
+        ILogger<DiagnosticsBundleService> logger,
+        FuelV2CaptureOptions? fuelV2CaptureOptions = null,
+        FuelV2HistoryOptions? fuelV2HistoryOptions = null)
     {
         _storageOptions = storageOptions;
         _liveModelParityOptions = liveModelParityOptions;
         _liveOverlayDiagnosticsOptions = liveOverlayDiagnosticsOptions;
+        _fuelV2CaptureOptions = fuelV2CaptureOptions ?? new FuelV2CaptureOptions();
+        _fuelV2HistoryRoot = fuelV2HistoryOptions?.ResolvedHistoryRoot
+            ?? Path.Combine(storageOptions.UserHistoryRoot, "fuel-v2");
+        _fuelV2HistoryBundleRoot = $"history/user/{fuelV2HistoryOptions?.DirectoryName ?? "fuel-v2"}";
         _ibtAnalysisOptions = ibtAnalysisOptions;
         _captureState = captureState;
         _localhostOverlayState = localhostOverlayState;
@@ -333,6 +346,26 @@ internal sealed class DiagnosticsBundleService
                     AppPerformanceMetricIds.DiagnosticsBundleOverlayDiagnostics,
                     overlayDiagnosticsStarted,
                     overlayDiagnosticsSucceeded);
+            }
+
+            var fuelV2CaptureStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+            var fuelV2CaptureSucceeded = false;
+            try
+            {
+                AddRecentFiles(
+                    archive,
+                    Path.Combine(_storageOptions.LogsRoot, _fuelV2CaptureOptions.LogDirectoryName),
+                    $"*{_fuelV2CaptureOptions.OutputFileName}",
+                    "fuel-v2-capture",
+                    MaxRecentFuelV2CaptureFiles);
+                fuelV2CaptureSucceeded = true;
+            }
+            finally
+            {
+                _performanceState.RecordOperation(
+                    "diagnostics.bundle.fuel-v2-capture",
+                    fuelV2CaptureStarted,
+                    fuelV2CaptureSucceeded);
             }
 
             var liveOverlayWindowsStarted = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -795,6 +828,24 @@ internal sealed class DiagnosticsBundleService
             file => string.Equals(file.Directory?.Name, "summaries", StringComparison.OrdinalIgnoreCase),
             "history/user/cars",
             MaxRecentHistorySummaryFiles);
+
+        AddFileIfExists(
+            archive,
+            Path.Combine(_fuelV2HistoryRoot, "manifest.json"),
+            $"{_fuelV2HistoryBundleRoot}/manifest.json");
+        var fuelV2CarsRoot = Path.Combine(_fuelV2HistoryRoot, "cars");
+        AddRecentRecursiveFiles(
+            archive,
+            fuelV2CarsRoot,
+            file => string.Equals(file.Name, "aggregate.json", StringComparison.OrdinalIgnoreCase),
+            $"{_fuelV2HistoryBundleRoot}/cars",
+            MaxRecentFuelV2HistoryAggregateFiles);
+        AddRecentRecursiveFiles(
+            archive,
+            fuelV2CarsRoot,
+            file => string.Equals(file.Directory?.Name, "summaries", StringComparison.OrdinalIgnoreCase),
+            $"{_fuelV2HistoryBundleRoot}/cars",
+            MaxRecentFuelV2HistorySummaryFiles);
     }
 
     private void AddLatestCaptureMetadata(ZipArchive archive)
@@ -817,6 +868,10 @@ internal sealed class DiagnosticsBundleService
             archive,
             Path.Combine(captureDirectory, _liveOverlayDiagnosticsOptions.OutputFileName),
             $"latest-capture/{_liveOverlayDiagnosticsOptions.OutputFileName}");
+        AddFileIfExists(
+            archive,
+            FuelV2CapturePath(captureDirectory),
+            $"latest-capture/{_fuelV2CaptureOptions.CaptureDirectoryName}/{_fuelV2CaptureOptions.OutputFileName}");
         AddRecentFiles(
             archive,
             Path.Combine(captureDirectory, "ibt-analysis"),
@@ -829,6 +884,14 @@ internal sealed class DiagnosticsBundleService
     {
         var snapshot = _captureState.Snapshot();
         return snapshot.CurrentCaptureDirectory ?? snapshot.LastCaptureDirectory;
+    }
+
+    private string FuelV2CapturePath(string captureDirectory)
+    {
+        return Path.Combine(
+            captureDirectory,
+            _fuelV2CaptureOptions.CaptureDirectoryName,
+            _fuelV2CaptureOptions.OutputFileName);
     }
 
     private object EvidenceQualityDiagnostics(LiveOverlayWindowCaptureManifest liveOverlays)
@@ -959,6 +1022,7 @@ internal sealed class DiagnosticsBundleService
                 CaptureSynthesisExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, "capture-synthesis.json")),
                 LiveOverlayDiagnosticsExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, _liveOverlayDiagnosticsOptions.OutputFileName)),
                 LiveModelParityExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, _liveModelParityOptions.OutputFileName)),
+                FuelV2CaptureExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(FuelV2CapturePath(latestCapture)),
                 IbtStatusExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, IbtAnalysisOutputDirectoryName(), "status.json"))
             }
         };
@@ -999,9 +1063,12 @@ internal sealed class DiagnosticsBundleService
         var synthesis = TryReadJsonObject(synthesisPath);
         var liveOverlayDiagnosticsPath = Path.Combine(captureDirectory, _liveOverlayDiagnosticsOptions.OutputFileName);
         var liveOverlayDiagnostics = TryReadJsonObject(liveOverlayDiagnosticsPath);
+        var fuelV2CapturePath = FuelV2CapturePath(captureDirectory);
+        var fuelV2Capture = TryReadJsonObject(fuelV2CapturePath);
         var lapDeltaQuality = LapDeltaQualityFromDiagnostics(liveOverlayDiagnostics?["lapDelta"] as JsonObject);
         var lapProfileReadiness = LapProfileReadinessFromDiagnostics(liveOverlayDiagnostics?["lapProfile"] as JsonObject);
         var postRaceFuelEvidence = PostRaceFuelEvidence(synthesis, liveOverlayDiagnostics);
+        var fuelV2CaptureEvidence = FuelV2CaptureEvidence(fuelV2Capture);
 
         return new
         {
@@ -1049,6 +1116,24 @@ internal sealed class DiagnosticsBundleService
                 CompletedValidLaps = (int?)synthesis?["session"]?["metrics"]?["completedValidLaps"]
             },
             PostRaceFuelEvidence = postRaceFuelEvidence,
+            FuelV2Capture = new
+            {
+                Path = fuelV2CapturePath,
+                Exists = File.Exists(fuelV2CapturePath),
+                fuelV2CaptureEvidence.FormatVersion,
+                fuelV2CaptureEvidence.FrameCount,
+                fuelV2CaptureEvidence.SampledFrameCount,
+                fuelV2CaptureEvidence.AcceptedLapBurnWindowCount,
+                fuelV2CaptureEvidence.RejectedLapBurnWindowCount,
+                fuelV2CaptureEvidence.PitWindowCount,
+                fuelV2CaptureEvidence.TeamStintCount,
+                fuelV2CaptureEvidence.SyntheticReplaySuitable,
+                fuelV2CaptureEvidence.SyntheticReplayReasons,
+                fuelV2CaptureEvidence.SessionFrameCounts,
+                fuelV2CaptureEvidence.ContextFlagCounts,
+                fuelV2CaptureEvidence.LapBudgetSourceCounts,
+                fuelV2CaptureEvidence.LapBudgetMissingSignalCounts
+            },
             LapDeltaQuality = lapDeltaQuality,
             LapProfileReadiness = lapProfileReadiness,
             LiveOverlayDiagnostics = new
@@ -1146,6 +1231,29 @@ internal sealed class DiagnosticsBundleService
         {
             return null;
         }
+    }
+
+    private static FuelV2CaptureEvidenceDiagnostics FuelV2CaptureEvidence(JsonObject? fuelV2Capture)
+    {
+        if (fuelV2Capture is null)
+        {
+            return FuelV2CaptureEvidenceDiagnostics.Empty;
+        }
+
+        return new FuelV2CaptureEvidenceDiagnostics(
+            FormatVersion: (int?)fuelV2Capture["formatVersion"],
+            FrameCount: (int?)fuelV2Capture["totals"]?["frameCount"],
+            SampledFrameCount: (int?)fuelV2Capture["totals"]?["sampledFrameCount"],
+            AcceptedLapBurnWindowCount: (fuelV2Capture["acceptedLapBurnWindows"] as JsonArray)?.Count,
+            RejectedLapBurnWindowCount: (fuelV2Capture["rejectedLapBurnWindows"] as JsonArray)?.Count,
+            PitWindowCount: (int?)fuelV2Capture["pitService"]?["pitWindowCount"],
+            TeamStintCount: (int?)fuelV2Capture["team"]?["teamStintCount"],
+            SyntheticReplaySuitable: (bool?)fuelV2Capture["syntheticReplaySuitability"]?["suitable"],
+            SyntheticReplayReasons: fuelV2Capture["syntheticReplaySuitability"]?["reasons"] as JsonArray,
+            SessionFrameCounts: fuelV2Capture["totals"]?["sessionFrameCounts"],
+            ContextFlagCounts: fuelV2Capture["totals"]?["contextFlagCounts"],
+            LapBudgetSourceCounts: fuelV2Capture["lapBudget"]?["sourceCounts"],
+            LapBudgetMissingSignalCounts: fuelV2Capture["lapBudget"]?["missingSignalCounts"]);
     }
 
     private UpdateApplyShutdownDiagnosticsSnapshot UpdateApplyShutdownDiagnostics(ReleaseUpdateSnapshot releaseSnapshot)
@@ -5071,6 +5179,37 @@ internal sealed record LapProfileFrameReadinessDiagnostic(
     int RowsWithRecentPersonalBest,
     int RowsWithClassFastestBestLap,
     int RowsWithClassFastestLastLap);
+
+internal sealed record FuelV2CaptureEvidenceDiagnostics(
+    int? FormatVersion,
+    int? FrameCount,
+    int? SampledFrameCount,
+    int? AcceptedLapBurnWindowCount,
+    int? RejectedLapBurnWindowCount,
+    int? PitWindowCount,
+    int? TeamStintCount,
+    bool? SyntheticReplaySuitable,
+    JsonArray? SyntheticReplayReasons,
+    JsonNode? SessionFrameCounts,
+    JsonNode? ContextFlagCounts,
+    JsonNode? LapBudgetSourceCounts,
+    JsonNode? LapBudgetMissingSignalCounts)
+{
+    public static FuelV2CaptureEvidenceDiagnostics Empty { get; } = new(
+        FormatVersion: null,
+        FrameCount: null,
+        SampledFrameCount: null,
+        AcceptedLapBurnWindowCount: null,
+        RejectedLapBurnWindowCount: null,
+        PitWindowCount: null,
+        TeamStintCount: null,
+        SyntheticReplaySuitable: null,
+        SyntheticReplayReasons: null,
+        SessionFrameCounts: null,
+        ContextFlagCounts: null,
+        LapBudgetSourceCounts: null,
+        LapBudgetMissingSignalCounts: null);
+}
 
 internal sealed record IbtAnalysisDiagnosticsSnapshot(
     bool Enabled,

@@ -677,6 +677,108 @@ budget and target lap counts into required `L/lap` cells, with the latest burn
 window treated as a comparator only. It does not apply reserve, pit-lane loss, or
 strategy advice. Those remain separate promotion decisions.
 
+Stint Targets workbench shape: show the existing V1 `Stint Targets` rows first
+so the current overlay behavior remains visible:
+
+```text
+Stint N | Laps | Target | Save
+```
+
+Then show a V2 current-tank comparison table underneath:
+
+```text
+To go | Tank | Short | Plan | Stretch | Extra | Live | Status
+```
+
+This row starts the smarter/lower-half strategy work, but it still stays
+conservative. It answers "what can the current tank do, what target is the
+current stint trying to make, and what burn would make nearby or stretch stint
+lengths possible?" It should not yet issue a hard `box`, `stay out`, or
+`save fuel` command.
+
+Initial Stint Targets V2 policy:
+
+- `Tank` is current usable fuel divided by the selected reference burn. Unlike
+  full-race rhythm, this can be a decimal range because the current stint may
+  end mid-target or require a stop.
+- The visible candidate targets are dynamic, not fake-symmetric. The workbench
+  columns are `Short`, `Plan`, `Stretch`, and `Extra`: `Plan` is the sensible
+  current target chosen by the plan/workbench scenario, `Stretch` is usually
+  `Plan + 1`, and `Extra` can become `Plan + 2` when saving more than one lap is
+  a real strategic call. If no target is supplied, default to the nearest
+  practical target from current range, capped by remaining laps when known.
+- Some candidates should be hidden or softened when they are mathematically true
+  but strategically uninteresting. A very safe short stint can be hidden; a
+  stretch that is past the finish, below plausible historical saving bounds, or
+  slower than simply stopping/refuelling should be marked as not useful rather
+  than displayed as advice.
+- Candidate cells show the required `L/lap` from current usable fuel divided by
+  the candidate lap count, plus the save required versus the selected live or
+  history burn when the target is not currently tracking.
+- `Status` is target context only: `tracking`, `edge`, `save N L/lap`,
+  `condition mix`, `repair context`, or `learning`. Final copy/colors can change
+  later after the strategy layer is reviewed in the real overlay.
+- Large stretch targets must not look like advice. The first workbench guardrail
+  classifies targets below about `92%` of the selected reference burn as
+  `big save`/`large save`, and below about `85%` as `unrealistic`/`not tracking`.
+  These thresholds are intentionally tunable; their job is to keep `N+1` and
+  `Status` from saying crazy-looking "save fuel" instructions when the math is
+  technically valid but strategically implausible.
+- The strategy layer must compare time, not only fuel. If history says a stop
+  for the required fuel would cost `Y` seconds, but hitting a stretch target
+  would cost `Z` seconds in slower pace/lift/coast, then `Z > Y` means the target
+  is not worth chasing even if the fuel math says it is possible. That time-cost
+  comparison belongs above this raw target row and can later turn target context
+  into advice.
+- Historical car/track/layout bounds should include both representative
+  full-green-lap `Max` burn and representative full-green-lap `Min` burn. `Max`
+  bounds conservative range/refuel projections; `Min` bounds how low a plausible
+  save target can be in the next race at the same combo. The stored `Min` must
+  not come from partial laps, pit road, repair/tow laps, caution-only laps, or
+  other non-representative samples, or the next race will think an impossible
+  stretch is achievable.
+- Reserve and pit-lane fuel inputs exist in the staged calculator, but the first
+  real capture rows keep them at zero unless a scenario explicitly tests those
+  adjustments.
+- Caution, repair, and bridge/teammate cases should be carried as state/context
+  flags instead of being folded into one hidden average. The row can collect and
+  display the context before strategy advice decides what to do with it.
+- Some `Short` targets are mathematically true but strategically uninteresting.
+  In the 35-minute Dallara start case, `Plan = 3` laps is the sensible current
+  plan, `Stretch = 4` laps is the hard save-a-stop/no-stop stretch, and
+  `Short = 2` laps is such a safe short stint that the final overlay may hide
+  it.
+
+Initial workbench lead case: use the real 35-minute / 4-lap Dallara race from
+`capture-20260523-034827-919` rather than the generic V1 mock stint rows. This
+capture is useful because the start-of-race decision was a real no-stop/stretch
+question:
+
+- Race metadata was `SessionTime = 2100 sec` and `SessionLaps = 4`.
+- First useful stint fuel was about `49.68 L`, so the sensible 3-lap stint has
+  plenty of fuel, while the 4-lap no-stop/stretch required about `12.42 L/lap`
+  with no reserve.
+- The known Dallara/Nürburgring history baseline around `13.5 L/lap` makes the
+  no-stop target a roughly `1.08 L/lap` save at green.
+- The actual first stint used about `12.63 L/lap`, closer but still slightly
+  above the no-stop target early. This makes the right first-pass V2 output
+  "possible/needs saving" rather than a hard recommendation.
+- V1-style stint rows should show that the old/simple display effectively
+  surfaces a two-stint stop plan and does not make the no-stop comparison
+  visible.
+- Add explicit stress rows beside the real capture rows. They should include an
+  exact edge, reserve-flipped Dallara start, one-lap-too-many, absurd `N+1`,
+  caution-only burn, and no-live-burn case so the table proves it degrades
+  impossible or source-weak targets instead of presenting them as recommendations.
+
+Staging implementation boundary: `FuelV2StintTargetsCalculator` derives the
+current tank range and dynamic required-burn targets from current fuel, reference
+burn, current target laps, optional reserve/pit-lane adjustments, remaining
+laps, state flags, and optional target time context. It can label a target as
+hidden/unrealistic/not-worth-time for workbench inspection, but it does not
+simulate future pit cycles, choose between burn buckets, or decide whether the
+driver should pit now.
+
 Plan / Strategy Summary workbench shape: show the existing V1 `Plan` row first
 for each useful capture/scenario, using the current row vocabulary:
 
@@ -2135,6 +2237,9 @@ models later, or deleted without changing V1 behavior. Current staged slices:
 - `FuelV2RangeCalculator`: current-tank range from each selected burn window.
 - `FuelV2TargetUsageCalculator`: required `L/lap` targets from budget and target
   lap counts.
+- `FuelV2StintTargetsCalculator`: current-stint target context from current fuel,
+  selected burn, adjacent target lap counts, optional reserve/pit-lane
+  adjustments, and state flags.
 - `FuelV2PlanCalculator`: first-pass Plan/Strategy Summary row from planned race
   laps, remaining laps, stint capacity, and state flags.
 - `FuelV2PitRequestCalculator`: add-fuel amounts from current fuel, target laps,
@@ -3415,6 +3520,86 @@ Action items:
   laps, final focus/team-car laps, finish source, confidence, and notable state
   flags. These facts can seed future pre-race lap-budget estimates, but they must
   not override live authoritative fields or fresh race-progress evidence.
+
+Fuel V2 diagnostic capture boundary:
+
+- Fuel V2 needs a separate development/evidence artifact so wider sample
+  collection does not pollute V1 production history or ordinary raw capture
+  semantics. Treat this as a compact derived diagnostics stream, not as another
+  raw telemetry dump and not as strategy-grade learned history until a later
+  promotion step explicitly imports it.
+- Preferred artifact shape:
+  - while raw capture is active, write
+    `capture-*/fuel-v2-capture/fuel-v2-diagnostics.json`;
+  - when raw capture is not active, write recent rolling files under
+    `logs/fuel-v2-capture/*-fuel-v2-diagnostics.json`;
+  - support/diagnostics bundles should include these files under a clearly named
+    `fuel-v2-capture/` entry, separate from `live-overlay-diagnostics.json` and
+    separate from raw `telemetry.bin`/`latest-session.yaml` payloads.
+- This stream should collect the facts needed to tune the V2 workbench and train
+  later models: local fuel-known samples, clean/rejected lap burn windows,
+  partial sector burn and cumulative live-lap projections, fuel-flow integral
+  candidates, refuel/tank-delta windows, tank-capacity/effective-cap facts,
+  target-lap and stint-target inputs, pit-entry/stall/service/exit windows,
+  driver-swap/team-stint windows, race-control/caution/safety-car context,
+  race-distance/lap-budget snapshots, weather/track-state context when exposed,
+  and all source/confidence/rejection labels used by the workbench.
+- Team and teammate evidence must be first-class even when no fuel scalar is
+  visible locally. Store inferred teammate stint shape, pit timing, lap/sector
+  cadence, driver identity for the race, and Overlay Bridge ownership/freshness
+  placeholders separately from local fuel-known proof. These samples are useful
+  for projecting teammate stint length and whole-race strategy, but they should
+  not masquerade as measured local fuel burn.
+- Synthetic teammate clone/replay is allowed as a development tool. The replay
+  should derive from a real local capture, deliberately hide or withhold the
+  local fuel scalar, and route distance/pit/stint facts through the same
+  team-car path a real teammate would use. Every record must be labeled
+  `synthetic`, `replay-derived`, and linked to its source capture/window with
+  source frame/session-time boundaries and the cloned-car assumptions. It must
+  never train production history or be counted as independent teammate proof.
+  Replay-derived teammate output should live in explicit replay/forensics output,
+  not be written back into the source raw-capture directory as if it were
+  observed telemetry.
+- The artifact should record whether a session/window is suitable for a
+  synthetic teammate replay. Good candidates have coherent team-car progress,
+  pit/stint boundaries, and enough lap/sector cadence to compare inferred
+  teammate shape against the original local fuel-known truth. Poor candidates
+  should preserve the rejection reason so future analysis does not keep asking
+  why they were skipped.
+- Capture enough under-the-hood data even when the overlay shows very little.
+  The production overlay can stay a raw, conservative summary, while the future
+  engineering/Fuel tab surface can inspect deeper buckets such as `Last`, `5L`,
+  `10L`, `Max`, `Min`, `Quali`, sector deltas, pace loss, pit service time,
+  caution burn, and teammate stint evidence.
+
+Code areas to inspect before implementing this stream:
+
+- `src/TmrOverlay.App/Telemetry/LiveOverlayDiagnosticsRecorder.cs`: current
+  passive overlay diagnostics, existing fuel/pit summaries, artifact write path,
+  and the place to compare if Fuel V2 gets a separate recorder or a second
+  clearly separated artifact from the same recorder.
+- `src/TmrOverlay.App/Telemetry/LiveOverlayDiagnosticsOptions.cs` and
+  `src/TmrOverlay.App/appsettings.json`: existing output-file/log-directory
+  option pattern to mirror for a `fuel-v2-capture` artifact.
+- `src/TmrOverlay.App/Telemetry/TelemetryCaptureHostedService.cs`: current live
+  collection lifecycle. A future Fuel V2 recorder should start, record frames,
+  and complete beside the existing live-overlay diagnostics recorder, not through
+  renderer/workbench code.
+- `src/TmrOverlay.App/Diagnostics/DiagnosticsBundleService.cs`: bundle inclusion
+  for recent rolling diagnostics and latest capture sidecars. Fuel V2 files need
+  explicit entries so support bundles carry the compact evidence without copying
+  raw telemetry.
+- `src/TmrOverlay.Core/History/HistoricalSessionAccumulator.cs`: existing
+  stint/pit builders already distinguish `local-driver-scalar` from
+  `team-driver-inferred`; use this as prior art for teammate stint shape without
+  assuming it is already the right Fuel V2 artifact.
+- `tools/TmrOverlay.RawCaptureReplayExport/Program.cs` and
+  `docs/browser-capture-replay.md`: likely home for future replay/export options
+  that create synthetic teammate-clone evidence from a real capture.
+- `docs/live-overlay-diagnostics.md`, `docs/capture-format.md`, `telemetry.md`,
+  and `README.md`: update these when the sidecar is implemented. If the raw
+  capture contract itself changes, update capture-format and README in the same
+  pass; if this remains a compact optional sidecar, document it as such.
 
 Shared diagnostic evidence model:
 

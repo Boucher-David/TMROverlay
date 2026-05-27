@@ -150,6 +150,38 @@ internal sealed record FuelV2TargetUsageCell(
     FuelV2Scalar RequiredFuelPerLap,
     FuelV2WorkbenchTone Tone);
 
+internal sealed record FuelV2StintTargetsSnapshot(
+    double? CurrentFuelLiters,
+    double? UsableFuelLiters,
+    double? RemainingLaps,
+    FuelV2Scalar? ReferenceBurn,
+    int? TargetLaps,
+    double? CurrentRangeLaps,
+    IReadOnlyList<FuelV2StintTargetCell> Targets,
+    string StatusLabel,
+    FuelV2WorkbenchTone Tone,
+    IReadOnlyList<FuelV2PlanStateFlag> StateFlags);
+
+internal sealed record FuelV2StintTargetCell(
+    int TargetLaps,
+    int OffsetFromPlan,
+    FuelV2StintTargetRole Role,
+    bool DisplayEligible,
+    string ReasonLabel,
+    FuelV2Scalar RequiredFuelPerLap,
+    double? SaveRequiredLitersPerLap,
+    double? StrategyDeltaSeconds,
+    FuelV2WorkbenchTone Tone);
+
+internal enum FuelV2StintTargetRole
+{
+    Short = 0,
+    Plan = 1,
+    Stretch = 2,
+    ExtraStretch = 3,
+    Custom = 4
+}
+
 internal enum FuelV2PlanStateFlag
 {
     LeaderFinishDriven = 0,

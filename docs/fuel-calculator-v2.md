@@ -3536,6 +3536,25 @@ Fuel V2 diagnostic capture boundary:
   - support/diagnostics bundles should include these files under a clearly named
     `fuel-v2-capture/` entry, separate from `live-overlay-diagnostics.json` and
     separate from raw `telemetry.bin`/`latest-session.yaml` payloads.
+- Current implementation: `FuelV2CaptureRecorder` is a default-on, bounded
+  live observer that writes this separate sidecar beside
+  `LiveOverlayDiagnosticsRecorder`. It records app/data-version metadata,
+  output mode, session/car/track scope, physical fuel-cap facts plus the current
+  effective-cap limitation, sampled fuel/progress/pit/weather/lap-budget inputs,
+  accepted/rejected lap-burn windows, sector burn samples, pit windows, team
+  stint windows, driver-change events, source/missing-signal counts, and
+  synthetic-replay suitability. It does not mutate durable history and does not
+  copy raw telemetry.
+- Current implementation also promotes selected sidecar evidence into a separate
+  Fuel V2 learned-history store after session finalization when
+  `FuelV2History:Enabled=true`. The store lives under
+  `%LOCALAPPDATA%\TmrOverlay\history\user\fuel-v2\`, writes
+  `manifest.json`, per-session `summaries/{sourceId}.json`, and rebuilt
+  `aggregate.json` files, and keeps `FuelV2History:UseForStrategy=false` so V1
+  strategy and overlays do not read it. The importer stores source artifact
+  path/hash, app/schema versions, session scope, fuel-cap facts, accepted and
+  rejected evidence, lap-budget outcome metrics, pit/service windows, and team
+  stint shape; it does not persist raw frame streams or raw SDK value snapshots.
 - This stream should collect the facts needed to tune the V2 workbench and train
   later models: local fuel-known samples, clean/rejected lap burn windows,
   partial sector burn and cumulative live-lap projections, fuel-flow integral
@@ -3582,13 +3601,19 @@ Code areas to inspect before implementing this stream:
   `src/TmrOverlay.App/appsettings.json`: existing output-file/log-directory
   option pattern to mirror for a `fuel-v2-capture` artifact.
 - `src/TmrOverlay.App/Telemetry/TelemetryCaptureHostedService.cs`: current live
-  collection lifecycle. A future Fuel V2 recorder should start, record frames,
-  and complete beside the existing live-overlay diagnostics recorder, not through
+  collection lifecycle. The Fuel V2 recorder starts, records frames, and
+  completes beside the existing live-overlay diagnostics recorder, not through
   renderer/workbench code.
 - `src/TmrOverlay.App/Diagnostics/DiagnosticsBundleService.cs`: bundle inclusion
-  for recent rolling diagnostics and latest capture sidecars. Fuel V2 files need
-  explicit entries so support bundles carry the compact evidence without copying
-  raw telemetry.
+  for recent rolling diagnostics, latest capture sidecars, and compact Fuel V2
+  learned-history summaries/aggregates. Fuel V2 files have explicit entries so
+  support bundles carry the compact evidence without copying raw telemetry.
+- `src/TmrOverlay.Core/Fuel/V2/FuelV2HistoryModels.cs`,
+  `src/TmrOverlay.App/History/FuelV2HistoryStore.cs`, and
+  `src/TmrOverlay.App/History/FuelV2HistoryImporter.cs`: separate durable Fuel
+  V2 learned-history schema, persistence, and sidecar promotion path. These are
+  intentionally separate from `HistoricalSessionAccumulator` and the V1 history
+  query path.
 - `src/TmrOverlay.Core/History/HistoricalSessionAccumulator.cs`: existing
   stint/pit builders already distinguish `local-driver-scalar` from
   `team-driver-inferred`; use this as prior art for teammate stint shape without

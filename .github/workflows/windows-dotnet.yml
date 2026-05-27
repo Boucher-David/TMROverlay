@@ -34,7 +34,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Test browser review data contracts
         run: npm run test:browser
@@ -57,7 +57,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Test localhost overlay routes
         run: npm run test:localhost
@@ -153,7 +153,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Generate browser review screenshots
         run: npm run screenshots:browser-review -- --output artifacts/browser-review-screenshots
@@ -194,7 +194,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Generate localhost screenshots
         run: npm run screenshots:localhost -- --output artifacts/localhost-screenshots

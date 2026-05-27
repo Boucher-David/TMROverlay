@@ -3555,6 +3555,14 @@ Fuel V2 diagnostic capture boundary:
   path/hash, app/schema versions, session scope, fuel-cap facts, accepted and
   rejected evidence, lap-budget outcome metrics, pit/service windows, and team
   stint shape; it does not persist raw frame streams or raw SDK value snapshots.
+- Branching intent: the V1.2.x diagnostics branch should ship this default-on
+  capture/history path without connecting any Fuel V2 overlay advice or
+  workbench rendering. The parked V1.3 Fuel V2 calculator/workbench branch can
+  then compare its top-half models against real teammate `fuel-v2-capture`
+  sidecars and `history/user/fuel-v2/` learned summaries before any strategy
+  promotion. Until a later promotion decision flips
+  `FuelV2History:UseForStrategy`, these records are training/calibration
+  evidence only and must not alter V1 overlay behavior.
 - This stream should collect the facts needed to tune the V2 workbench and train
   later models: local fuel-known samples, clean/rejected lap burn windows,
   partial sector burn and cumulative live-lap projections, fuel-flow integral

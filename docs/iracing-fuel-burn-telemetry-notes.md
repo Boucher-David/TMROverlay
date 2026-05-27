@@ -132,9 +132,9 @@ v1.2.1-capture/captures/capture-20260525-131952-975
 ```
 
 Version context: this capture came from the v1.2.1 capture/package folder. The
-active product context has since moved to v1.2.2 because issues were noticed in
-v1.2.1 by the user and team. Treat the folder name as source provenance for this
-fuel-flow sample, not as the current release target.
+active product context has since moved beyond v1.2.1 because issues were noticed
+in that build by the user and team. Treat the folder name as source provenance
+for this fuel-flow sample, not as the current release target.
 
 Context:
 

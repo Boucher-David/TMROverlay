@@ -13,26 +13,24 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.2.2 - Overlay Regression Fixes
+### v1.2.3 - Fuel V2 Capture And History Diagnostics
 
-Status: active implementation on branch `v1.2.2-small-fixes`.
+Status: active implementation on branch `release/v1.2.3`.
 
 Suggested squash title:
 
 ```text
-[v1.2.2] Fix overlay regressions
+[v1.2.3] Add Fuel V2 capture and history diagnostics
 ```
 
 Suggested squash body:
 
 ```text
-- Filter zero/default timing and spatial placeholders from replay, export, live capture, and analysis paths so Standings does not flash eligible-looking rows before real timing or scoring evidence exists.
-- Drive Pit Service and Session / Weather browser-source and native sizing from rendered metric/grid sections; add grid-only and missing/weather placeholder evidence so disabled or unavailable sections do not leave oversized windows.
-- Keep Relative fixed-slot rows stable when only the focus car has live data, with empty rows dimmed and validated across browser review, localhost, and native screenshots.
-- Refine Flags session policy so race-start pseudo flags remain visible in race contexts, while test/practice/qualifying suppress one-to-green/start and global yellow-family signals unless local yellow evidence exists.
-- Move Flags to shared count-driven sizing across Windows native, browser review, and localhost/OBS, including the reduced default size, compact single-flag surface, and multi-flag variants.
-- Add browser/localhost/native screenshot scenarios, validators, and focused C#/JS/Python tests for the changed behavior.
-- User-data compatibility: no durable raw-capture format or released user-data schema change is intended; generated replay/screenshot evidence is additive, and high-fidelity capture remains opt-in through Enhanced iRacing Telemetry Capture.
+- Add Fuel V2 capture recorder/options plumbing so enhanced telemetry capture can persist versioned fuel-history artifacts alongside diagnostics and forensics packages.
+- Add Fuel V2 history store/importer models and retention integration so captured fuel-history snapshots can be read, packaged, and maintained through app-managed storage.
+- Document the new artifacts and schema flow across the README, capture/data-contract/history docs, diagnostics notes, and telemetry references.
+- Add focused app tests for Fuel V2 capture options/recording, history import/storage behavior, retention handling, diagnostics bundle packaging, and schema compatibility ordering.
+- User-data compatibility: the Fuel V2 history schema is additive and versioned with compatibility coverage; existing released raw-capture and history flows are intended to remain readable.
 ```
 
 ## Merged Mainline Milestones

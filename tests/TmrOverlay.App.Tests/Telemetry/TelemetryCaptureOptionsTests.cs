@@ -32,6 +32,9 @@ public sealed class TelemetryCaptureOptionsTests
         Assert.False(((bool?)json?["TelemetryEdgeCases"]?["Enabled"]) ?? true);
         Assert.False(((bool?)json?["LiveModelParity"]?["Enabled"]) ?? true);
         Assert.True(((bool?)json?["LiveOverlayDiagnostics"]?["Enabled"]) == true);
+        Assert.True(((bool?)json?["FuelV2Capture"]?["Enabled"]) == true);
+        Assert.True(((bool?)json?["FuelV2History"]?["Enabled"]) == true);
+        Assert.False(((bool?)json?["FuelV2History"]?["UseForStrategy"]) ?? true);
         Assert.True(((bool?)json?["IbtAnalysis"]?["Enabled"]) == true);
         Assert.True(((bool?)json?["IbtAnalysis"]?["TelemetryLoggingEnabled"]) == true);
         Assert.False(((bool?)json?["IbtAnalysis"]?["CopyIbtIntoCaptureDirectory"]) ?? true);

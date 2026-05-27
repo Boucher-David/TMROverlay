@@ -16,6 +16,9 @@ compatibly, or explicitly skip unsupported versions without destroying them:
 - `history/user/cars/.../summaries/*.json`
 - `history/user/cars/.../aggregate.json`
 - `history/user/cars/{carKey}/radar-calibration.json`
+- `history/user/fuel-v2/manifest.json`
+- `history/user/fuel-v2/cars/.../summaries/*.json`
+- `history/user/fuel-v2/cars/.../aggregate.json`
 - `track-maps/user/*.json`
 
 ### Versioned Diagnostics
@@ -55,6 +58,9 @@ baseline for:
 - history `aggregateVersion = 3`
 - history `carRadarCalibrationAggregateVersion = 1`
 - post-race `analysisVersion = 1`
+- Fuel V2 learned history is absent from this baseline; its first schema is
+  versioned separately by `FuelV2HistoryDataVersions` when the Fuel V2
+  diagnostics-only collection slice is enabled.
 - track-map `schemaVersion = 2`
 - track-map `generationVersion = 1`
 - raw-capture manifest `formatVersion = 1`
@@ -142,6 +148,12 @@ When a durable schema changes:
   strategy code consume the changed data.
 - Update schema snapshots, `docs/history-data-evolution.md`, this note, and any
   release/update docs that mention compatibility.
+
+Fuel V2 learned history uses its own `FuelV2HistoryDataVersions` constants and
+is stored under `history/user/fuel-v2/`. It is not read by V1 strategy while
+`FuelV2History:UseForStrategy=false`; changes to its manifest, summary,
+aggregate, or import semantics should bump the narrow Fuel V2 version constant
+instead of the V1 `HistoricalDataVersions` constants.
 
 When a setting default changes without changing the persisted setting shape, do
 not bump the settings schema by default. Prefer migrator logic that only applies

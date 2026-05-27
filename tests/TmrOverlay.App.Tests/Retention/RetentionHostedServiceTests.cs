@@ -21,10 +21,12 @@ public sealed class RetentionHostedServiceTests
             var edgeCaseRoot = Path.Combine(storage.LogsRoot, "edge-cases");
             var modelParityRoot = Path.Combine(storage.LogsRoot, "model-parity");
             var overlayDiagnosticsRoot = Path.Combine(storage.LogsRoot, "overlay-diagnostics");
+            var fuelV2CaptureRoot = Path.Combine(storage.LogsRoot, "fuel-v2-capture");
             Directory.CreateDirectory(performanceRoot);
             Directory.CreateDirectory(edgeCaseRoot);
             Directory.CreateDirectory(modelParityRoot);
             Directory.CreateDirectory(overlayDiagnosticsRoot);
+            Directory.CreateDirectory(fuelV2CaptureRoot);
 
             var keepCapture = Directory.CreateDirectory(Path.Combine(storage.CaptureRoot, "capture-keep"));
             var deleteCapture = Directory.CreateDirectory(Path.Combine(storage.CaptureRoot, "capture-delete"));
@@ -38,6 +40,8 @@ public sealed class RetentionHostedServiceTests
             var deleteModelParity = Path.Combine(modelParityRoot, "session-delete-live-model-parity.json");
             var keepOverlayDiagnostics = Path.Combine(overlayDiagnosticsRoot, "session-keep-live-overlay-diagnostics.json");
             var deleteOverlayDiagnostics = Path.Combine(overlayDiagnosticsRoot, "session-delete-live-overlay-diagnostics.json");
+            var keepFuelV2Capture = Path.Combine(fuelV2CaptureRoot, "session-keep-fuel-v2-diagnostics.json");
+            var deleteFuelV2Capture = Path.Combine(fuelV2CaptureRoot, "session-delete-fuel-v2-diagnostics.json");
             File.WriteAllText(keepBundle, "keep");
             File.WriteAllText(deleteBundle, "delete");
             File.WriteAllText(keepPerformance, "keep");
@@ -48,6 +52,8 @@ public sealed class RetentionHostedServiceTests
             File.WriteAllText(deleteModelParity, "delete");
             File.WriteAllText(keepOverlayDiagnostics, "keep");
             File.WriteAllText(deleteOverlayDiagnostics, "delete");
+            File.WriteAllText(keepFuelV2Capture, "keep");
+            File.WriteAllText(deleteFuelV2Capture, "delete");
 
             Directory.SetLastWriteTimeUtc(keepCapture.FullName, DateTime.UtcNow);
             Directory.SetLastWriteTimeUtc(deleteCapture.FullName, DateTime.UtcNow.AddDays(-10));
@@ -61,6 +67,8 @@ public sealed class RetentionHostedServiceTests
             File.SetLastWriteTimeUtc(deleteModelParity, DateTime.UtcNow.AddDays(-10));
             File.SetLastWriteTimeUtc(keepOverlayDiagnostics, DateTime.UtcNow);
             File.SetLastWriteTimeUtc(deleteOverlayDiagnostics, DateTime.UtcNow.AddDays(-10));
+            File.SetLastWriteTimeUtc(keepFuelV2Capture, DateTime.UtcNow);
+            File.SetLastWriteTimeUtc(deleteFuelV2Capture, DateTime.UtcNow.AddDays(-10));
 
             var service = new RetentionHostedService(
                 storage,
@@ -94,6 +102,8 @@ public sealed class RetentionHostedServiceTests
             Assert.False(File.Exists(deleteModelParity));
             Assert.True(File.Exists(keepOverlayDiagnostics));
             Assert.False(File.Exists(deleteOverlayDiagnostics));
+            Assert.True(File.Exists(keepFuelV2Capture));
+            Assert.False(File.Exists(deleteFuelV2Capture));
         }
         finally
         {

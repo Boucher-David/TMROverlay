@@ -234,6 +234,7 @@ internal sealed class OverlayForensicsPackageService
                 CaptureSynthesis = FileInfoOrNull(Path.Combine(captureDirectory, "capture-synthesis.json")),
                 LiveOverlayDiagnostics = FileInfoOrNull(Path.Combine(captureDirectory, "live-overlay-diagnostics.json")),
                 LiveModelParity = FileInfoOrNull(Path.Combine(captureDirectory, "live-model-parity.json")),
+                FuelV2Capture = FileInfoOrNull(Path.Combine(captureDirectory, "fuel-v2-capture", "fuel-v2-diagnostics.json")),
                 IbtAnalysisStatus = FileInfoOrNull(Path.Combine(captureDirectory, "ibt-analysis", "status.json"))
             },
             DiagnosticsBundle = FileInfoOrNull(diagnosticsBundlePath)

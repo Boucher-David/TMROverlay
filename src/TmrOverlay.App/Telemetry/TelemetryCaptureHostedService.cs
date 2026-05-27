@@ -38,6 +38,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
     private readonly TelemetryEdgeCaseRecorder _edgeCaseRecorder;
     private readonly LiveModelParityRecorder _liveModelParityRecorder;
     private readonly LiveOverlayDiagnosticsRecorder _liveOverlayDiagnosticsRecorder;
+    private readonly FuelV2CaptureRecorder _fuelV2CaptureRecorder;
+    private readonly FuelV2HistoryImporter _fuelV2HistoryImporter;
     private readonly object _sync = new();
     private readonly SemaphoreSlim _postSessionArtifactSemaphore = new(1, 1);
     private readonly CancellationTokenSource _startupArtifactCancellation = new();
@@ -73,7 +75,9 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         AppPerformanceState performance,
         TelemetryEdgeCaseRecorder edgeCaseRecorder,
         LiveModelParityRecorder liveModelParityRecorder,
-        LiveOverlayDiagnosticsRecorder liveOverlayDiagnosticsRecorder)
+        LiveOverlayDiagnosticsRecorder liveOverlayDiagnosticsRecorder,
+        FuelV2CaptureRecorder fuelV2CaptureRecorder,
+        FuelV2HistoryImporter fuelV2HistoryImporter)
     {
         _logger = logger;
         _options = options;
@@ -94,6 +98,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         _edgeCaseRecorder = edgeCaseRecorder;
         _liveModelParityRecorder = liveModelParityRecorder;
         _liveOverlayDiagnosticsRecorder = liveOverlayDiagnosticsRecorder;
+        _fuelV2CaptureRecorder = fuelV2CaptureRecorder;
+        _fuelV2HistoryImporter = fuelV2HistoryImporter;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -401,6 +407,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             _edgeCaseRecorder.StartCollection(sourceId, _activeStartedAtUtc.Value, edgeCaseSchema);
             _liveModelParityRecorder.StartCollection(sourceId, _activeStartedAtUtc.Value);
             _liveOverlayDiagnosticsRecorder.StartCollection(sourceId, _activeStartedAtUtc.Value);
+            _fuelV2CaptureRecorder.StartCollection(sourceId, _activeStartedAtUtc.Value);
 
             if (capture is not null)
             {
@@ -1767,6 +1774,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 var liveSnapshot = _liveTelemetrySource.Snapshot();
                 _liveModelParityRecorder.RecordFrame(liveSnapshot);
                 _liveOverlayDiagnosticsRecorder.RecordFrame(liveSnapshot, rawWatch);
+                _fuelV2CaptureRecorder.RecordFrame(liveSnapshot, rawWatch);
             }
             catch (Exception exception)
             {
@@ -1839,6 +1847,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         var finalizeSucceeded = false;
         var parityCompleted = false;
         var overlayDiagnosticsCompleted = false;
+        var fuelV2CaptureCompleted = false;
         try
         {
             _state.MarkCaptureStopped();
@@ -1953,6 +1962,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
 
             CompleteLiveOverlayDiagnostics(capture?.DirectoryPath, capture?.FinishedAtUtc ?? DateTimeOffset.UtcNow);
             overlayDiagnosticsCompleted = true;
+            await CompleteFuelV2CaptureAsync(capture?.DirectoryPath, capture?.FinishedAtUtc ?? DateTimeOffset.UtcNow).ConfigureAwait(false);
+            fuelV2CaptureCompleted = true;
 
             if (capture is not null)
             {
@@ -1983,6 +1994,11 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             if (!overlayDiagnosticsCompleted)
             {
                 CompleteLiveOverlayDiagnostics(capture?.DirectoryPath, capture?.FinishedAtUtc ?? DateTimeOffset.UtcNow);
+            }
+
+            if (!fuelV2CaptureCompleted)
+            {
+                await CompleteFuelV2CaptureAsync(capture?.DirectoryPath, capture?.FinishedAtUtc ?? DateTimeOffset.UtcNow).ConfigureAwait(false);
             }
 
             _performance.RecordOperation(
@@ -2023,6 +2039,25 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "Failed to complete live overlay diagnostics artifact.");
+        }
+    }
+
+    private async Task CompleteFuelV2CaptureAsync(string? captureDirectory, DateTimeOffset finishedAtUtc)
+    {
+        try
+        {
+            var artifactPath = _fuelV2CaptureRecorder.CompleteCollection(finishedAtUtc, captureDirectory);
+            var importResult = await _fuelV2HistoryImporter.ImportAsync(artifactPath, CancellationToken.None).ConfigureAwait(false);
+            if (!importResult.Imported)
+            {
+                _logger.LogInformation(
+                    "Skipped Fuel V2 learned history import after capture finalization: {Reason}.",
+                    importResult.Reason);
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Failed to complete Fuel V2 capture artifact or learned history import.");
         }
     }
 

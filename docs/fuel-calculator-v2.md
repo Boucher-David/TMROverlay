@@ -10,6 +10,25 @@ harden is race lap budget quality, because every fuel-to-finish, stint rhythm,
 stop count, and refuel recommendation depends on how many laps the race will
 actually run.
 
+## V1.2.3 Diagnostics And Learned History
+
+The V1.2.3 diagnostics branch ships default-on Fuel V2 evidence collection
+without connecting Fuel V2 strategy advice or workbench rendering to production
+overlays. `FuelV2CaptureRecorder` writes compact per-session evidence under
+`fuel-v2-capture/`, either inside raw captures or under the logs root when raw
+capture is off. After finalization, `FuelV2HistoryImporter` promotes selected
+derived facts into `history/user/fuel-v2/` while
+`FuelV2History:UseForStrategy=false`.
+
+This makes teammate builds useful for model calibration before Fuel V2 is a
+user-facing strategy path. The V1.3 Fuel V2 calculator/workbench branch should
+compare its parked top-half models against these sidecars and learned summaries:
+scope/provenance, fuel-cap facts, accepted and rejected lap-burn windows,
+sector-burn samples, pit/service windows, team stint shape, lap-budget
+source/missing-signal counts, and source confidence/rejection labels. These
+records are training and calibration evidence only until a later promotion
+decision explicitly allows Fuel V2 strategy to consume them.
+
 ## Race Lap Budget Quality Gate
 
 Goal: classify the race lap budget before Fuel V2 promotes strategy advice.

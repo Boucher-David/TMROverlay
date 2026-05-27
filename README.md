@@ -58,7 +58,7 @@ That app-data root contains settings, history, logs, diagnostics, forensics pack
 
 Durable app data is protected by versioned release snapshots under `fixtures/data-contracts/`. Each future durable schema change should keep the previous released snapshot loading through current code and should add a new snapshot when the release changes the persisted contract. See [docs/data-contracts.md](docs/data-contracts.md).
 
-Raw telemetry capture is opt-in. Use the Support checkbox or a `TelemetryCapture:RawCaptureEnabled=true` configuration override when a tester intentionally needs raw evidence. Normal diagnostics are compact summaries and logs; diagnostics bundles intentionally exclude raw `telemetry.bin` and source `.ibt` files.
+Raw telemetry capture is opt-in. Use the Support checkbox or a `TelemetryCapture:RawCaptureEnabled=true` configuration override when a tester intentionally needs raw evidence. Normal diagnostics are compact summaries and logs; diagnostics bundles intentionally exclude raw `telemetry.bin` and source `.ibt` files. Fuel V2 calibration capture is a compact diagnostics sidecar under `fuel-v2-capture/`; selected derived facts are promoted separately into `history/user/fuel-v2/` while `FuelV2History:UseForStrategy=false`, so V1 fuel strategy does not consume them.
 
 Streamlabs widget URLs and other private local settings are redacted from diagnostics bundles.
 
@@ -168,7 +168,7 @@ The settings Support tab and tray menu can create diagnostics bundles under:
 %LOCALAPPDATA%\TmrOverlay\diagnostics
 ```
 
-Bundles include app/storage metadata, telemetry state, evidence-quality warnings, latest-capture evidence summaries, release update state, localhost request state, IBT analysis settings/status, track-map inventory plus current-track lookup evidence, live telemetry synthesis, performance snapshots, recent logs/events, runtime state, settings, latest capture metadata and compact sidecars, recent history summaries, and advanced collection artifacts when present.
+Bundles include app/storage metadata, telemetry state, evidence-quality warnings, latest-capture evidence summaries, release update state, localhost request state, IBT analysis settings/status, track-map inventory plus current-track lookup evidence, live telemetry synthesis, performance snapshots, recent logs/events, runtime state, settings, latest capture metadata and compact sidecars, recent history summaries, Fuel V2 calibration sidecars and learned-history summaries/aggregates when present, and advanced collection artifacts when present.
 
 When Enhanced iRacing Telemetry Capture is enabled, the app creates an initial overlay forensics package for the finished raw capture under:
 
@@ -176,7 +176,7 @@ When Enhanced iRacing Telemetry Capture is enabled, the app creates an initial o
 %LOCALAPPDATA%\TmrOverlay\forensics\<capture-id>
 ```
 
-That package indexes the explicit capture and related compact sidecars for follow-up replay analysis, including starter package status, OBS/localhost readiness, and evidence-gap files. Offline enrichment can add active production model samples, overlay semantic manifests, and renderer screenshots. Diagnostics bundles may reference this evidence, but raw telemetry and forensics artifacts stay outside the diagnostics bundle by default. The app will not create this package unless enhanced telemetry capture produced a raw capture.
+That package indexes the explicit capture and related compact sidecars, including Fuel V2 calibration sidecars, for follow-up replay analysis, starter package status, OBS/localhost readiness, and evidence-gap files. Offline enrichment can add active production model samples, overlay semantic manifests, and renderer screenshots. Diagnostics bundles may reference this evidence, but raw telemetry and forensics artifacts stay outside the diagnostics bundle by default. The app will not create this package unless enhanced telemetry capture produced a raw capture.
 
 For local replay import checks, `tools/TmrOverlay.RawCaptureReplayExport` writes a compact `import-summary.json` and optional bounded `decoded-samples.jsonl` from an explicit raw capture. It is a developer/evidence tool only; it does not copy raw `telemetry.bin` or full private session YAML into the output.
 

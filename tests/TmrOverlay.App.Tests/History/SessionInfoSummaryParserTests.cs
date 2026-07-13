@@ -6,6 +6,59 @@ namespace TmrOverlay.App.Tests.History;
 public sealed class SessionInfoSummaryParserTests
 {
     [Fact]
+    public void Parse_ReadsDriverAndSelectedClassFuelCapacityRules()
+    {
+        var context = SessionInfoSummaryParser.Parse("""
+DriverInfo:
+ DriverCarIdx: 10
+ DriverCarFuelMaxLtr: 75.000
+ DriverCarMaxFuelPct: 0.800
+ Drivers:
+ - CarIdx: 10
+   CarClassMaxFuelPct: 0.800 %
+ - CarIdx: 12
+   CarClassMaxFuelPct: 0.680 %
+""");
+
+        Assert.Equal(75d, context.Car.DriverCarFuelMaxLiters);
+        Assert.Equal(0.8d, context.FuelCapacityRules.DriverCarMaxFuelPercent);
+        Assert.Equal(0.8d, context.FuelCapacityRules.CarClassMaxFuelPercent);
+    }
+
+    [Fact]
+    public void Parse_DoesNotUseFirstDriverClassCapWhenDriverCarIndexIsMissing()
+    {
+        var context = SessionInfoSummaryParser.Parse("""
+DriverInfo:
+ DriverCarFuelMaxLtr: 75.000
+ DriverCarMaxFuelPct: 0.800
+ Drivers:
+ - CarIdx: 10
+   CarClassMaxFuelPct: 0.680 %
+""");
+
+        Assert.Equal(0.8d, context.FuelCapacityRules.DriverCarMaxFuelPercent);
+        Assert.Null(context.FuelCapacityRules.CarClassMaxFuelPercent);
+    }
+
+    [Fact]
+    public void Parse_DoesNotUseAnotherClassCapWhenDriverCarIndexHasNoMatch()
+    {
+        var context = SessionInfoSummaryParser.Parse("""
+DriverInfo:
+ DriverCarIdx: 99
+ DriverCarFuelMaxLtr: 75.000
+ Drivers:
+ - CarIdx: 10
+   CarClassMaxFuelPct: 0.680 %
+ - CarIdx: 12
+   CarClassMaxFuelPct: 0.800 %
+""");
+
+        Assert.Null(context.FuelCapacityRules.CarClassMaxFuelPercent);
+    }
+
+    [Fact]
     public void Parse_SelectsCurrentSessionResultsPositions()
     {
         var context = SessionInfoSummaryParser.Parse("""

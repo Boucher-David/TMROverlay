@@ -2918,6 +2918,18 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           return withChrome(fuelDallara35mV1DisplayModel(overlayState, session));
         }
 
+        if (fixture === 'fuel-laps-workbench-fuel') {
+          return withChrome(fuelPerLapWorkbenchReviewModel('populated'));
+        }
+
+        if (fixture === 'fuel-laps-workbench-fuel-degraded') {
+          return withChrome(fuelPerLapWorkbenchReviewModel('degraded'));
+        }
+
+        if (fixture === 'fuel-laps-workbench-fuel-no-data') {
+          return withChrome(fuelPerLapWorkbenchReviewModel('no-data'));
+        }
+
         if (fixture === 'fuel-laps-workbench-laps') {
           return withChrome(fuelLapsWorkbenchReviewModel({ includeLapRows: true, activeWorkbench: 'range' }));
         }
@@ -2928,6 +2940,14 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
 
         if (fixture === 'fuel-laps-workbench-target') {
           return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'target' }));
+        }
+
+        if (fixture === 'fuel-laps-workbench-capacity') {
+          return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'capacity' }));
+        }
+
+        if (fixture === 'fuel-laps-workbench-checkpoints') {
+          return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'checkpoints' }));
         }
 
         if (fixture === 'fuel-laps-workbench-sector') {
@@ -4512,6 +4532,57 @@ function fuelDallara35mV1DisplayModel(overlayState, session) {
     [{ key: 'timeRemaining', value: '35:00' }]);
 }
 
+function fuelPerLapWorkbenchReviewModel(state = 'populated') {
+  // Browser review mirrors the accepted Core Fuel/Lap window contract using
+  // explicit accepted-span controls. Core remains the calculation authority;
+  // these isolated states keep the eventual product cell reviewable while
+  // other workbench cells are active.
+  const fuelPerLapSamples = state === 'populated'
+    ? [12.95, 13.00, 13.20, 13.30, 13.65, 13.49, 13.49, 13.50, 13.50, 13.52]
+    : state === 'degraded'
+      ? [13.54]
+      : [0, -1, Number.NaN];
+  const windows = fuelPerLapWorkbenchWindows(fuelPerLapSamples);
+  const row = fuelPerLapWorkbenchRow(windows);
+  const source = state === 'populated'
+    ? 'source: Fuel V2 workbench; VLN 4h capture-derived accepted clean-span control. Browser mirrors staged Core positive-finite filtering and trailing full Last/5L/10L plus live-or-seed Max semantics.'
+    : state === 'degraded'
+      ? 'source: Fuel V2 workbench; Dallara 4L blip capture-derived single accepted clean-span control. Full 5L and 10L windows remain unavailable until they mature.'
+      : 'source: Fuel V2 workbench; deterministic invalid-input control produces no accepted clean fuel spans. Fuel/Lap buckets remain unavailable rather than using edge-state or invented data.';
+
+  return metricsModel(
+    'fuel-calculator',
+    'Fuel Calculator',
+    'fuel/lap workbench',
+    [row],
+    source,
+    [],
+    [{ title: 'Fuel/Lap Workbench', rows: [row] }],
+    [{ key: 'timeRemaining', value: 'Fuel/Lap V2', tone: 'info' }]);
+}
+
+function fuelPerLapWorkbenchWindows(fuelPerLapSamples, maxSeed = null) {
+  const samples = (fuelPerLapSamples || [])
+    .map(Number)
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const trailingAverage = (sampleCount) => samples.length >= sampleCount
+    ? samples.slice(-sampleCount).reduce((total, value) => total + value, 0) / sampleCount
+    : null;
+  const liveMax = samples.length > 0 ? Math.max(...samples) : null;
+  const validSeed = Number.isFinite(maxSeed) && maxSeed > 0 ? maxSeed : null;
+
+  return {
+    last: samples.length > 0 ? samples.at(-1) : null,
+    five: trailingAverage(5),
+    ten: trailingAverage(10),
+    max: Number.isFinite(liveMax) && Number.isFinite(validSeed)
+      ? Math.max(liveMax, validSeed)
+      : Number.isFinite(liveMax)
+        ? liveMax
+        : validSeed
+  };
+}
+
 function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench = 'target' } = {}) {
   // Browser-only replay workbench data. Keep formulas and field shape aligned
   // with staged Core V2 calculators under src/TmrOverlay.Core/Fuel/V2; do not
@@ -4639,6 +4710,22 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       five: null,
       ten: null,
       max: 3.40
+    }),
+    fuelRangeWorkbenchRow('Stress / Known zero fuel', 'zero is factual', 'info', {
+      fuel: 0,
+      rangeV1: null,
+      last: 0,
+      five: 0,
+      ten: 0,
+      max: 0
+    }),
+    fuelRangeWorkbenchRow('Stress / Explicit null fuel', 'null stays unavailable', 'waiting', {
+      fuel: null,
+      rangeV1: null,
+      last: null,
+      five: null,
+      ten: null,
+      max: null
     })
   ];
   const targetUsageCurrentRows = [
@@ -4661,6 +4748,17 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       budget: 29.5762,
       budgetLabel: 'Fuel',
       referenceBurn: 13.5671
+    }),
+    fuelTargetUsageWorkbenchRow('Stress / Round-centered candidates', '44.0 L / 10.0 L reference', 'info', {
+      budget: 44.0,
+      budgetLabel: 'Fuel',
+      referenceBurn: 10.0
+    }),
+    fuelTargetUsageWorkbenchRow('Stress / Missing reference', 'required burn remains factual', 'waiting', {
+      budget: 44.0,
+      budgetLabel: 'Fuel',
+      referenceBurn: null,
+      targetLaps: [5, -1, 4, 4, 3]
     })
   ];
   const targetUsageCapRows = [
@@ -4689,6 +4787,142 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
   const targetUsageSections = [
     { title: 'Target Usage - Green Start', rows: targetUsageCapRows },
     { title: 'Target Usage - Current Edges', rows: targetUsageCurrentRows }
+  ];
+  const capacityGridSections = [
+    {
+      title: 'Effective Capacity V2',
+      headers: ['Scenario', 'Physical', 'Driver cap', 'Class cap', 'Observed', 'Effective', 'Source', 'State'],
+      rows: [
+        fuelCapacityWorkbenchGridRow('Dallara 45m / 80% event cap', {
+          physicalCapacityLiters: 75,
+          driverCapPercent: 0.8,
+          classCapPercent: 0.8,
+          observedFuelLiters: 58.99
+        }),
+        fuelCapacityWorkbenchGridRow('Dallara 4L / 68% event cap', {
+          physicalCapacityLiters: 75,
+          driverCapPercent: 0.68,
+          classCapPercent: 0.68,
+          observedFuelLiters: 50.10
+        }),
+        fuelCapacityWorkbenchGridRow('VLN 4h / unrestricted', {
+          physicalCapacityLiters: 104.94,
+          driverCapPercent: 1,
+          classCapPercent: 1,
+          observedFuelLiters: 102.85
+        }),
+        fuelCapacityWorkbenchGridRow('Stress / Driver cap only', {
+          physicalCapacityLiters: 75,
+          driverCapPercent: 0.68,
+          classCapPercent: null,
+          observedFuelLiters: 50
+        }),
+        fuelCapacityWorkbenchGridRow('Stress / Missing cap evidence', {
+          physicalCapacityLiters: 75,
+          driverCapPercent: null,
+          classCapPercent: null,
+          observedFuelLiters: 50
+        }),
+        fuelCapacityWorkbenchGridRow('Stress / Conflicting caps', {
+          physicalCapacityLiters: 75,
+          driverCapPercent: 0.8,
+          classCapPercent: 0.68,
+          observedFuelLiters: 50
+        }),
+        fuelCapacityWorkbenchGridRow('Stress / Observed above cap', {
+          physicalCapacityLiters: 75,
+          driverCapPercent: 0.68,
+          classCapPercent: 0.68,
+          observedFuelLiters: 52
+        }),
+        fuelCapacityWorkbenchGridRow('Stress / Invalid driver cap', {
+          physicalCapacityLiters: 75,
+          driverCapPercent: 1.2,
+          classCapPercent: 0.8,
+          observedFuelLiters: 50
+        }),
+        fuelCapacityWorkbenchGridRow('Stress / Missing physical tank', {
+          physicalCapacityLiters: null,
+          driverCapPercent: 0.8,
+          classCapPercent: 0.8,
+          observedFuelLiters: 50
+        })
+      ]
+    }
+  ];
+  const checkpointGridSections = [
+    {
+      title: 'Fuel Budget Flow V2',
+      headers: ['Scenario', 'Cap', 'First green', 'Current', 'At box', 'Service', 'Pit exit', 'Request target', 'State'],
+      rows: [
+        fuelCheckpointWorkbenchGridRow('Dallara 45m / Measured green', {
+          capacity: { physicalCapacityLiters: 75, driverCapPercent: 0.8, classCapPercent: 0.8 },
+          measuredFirstGreenFuelLiters: 58.99,
+          currentFuelLiters: 58.99
+        }),
+        fuelCheckpointWorkbenchGridRow('Stress / Single-cap confidence', {
+          capacity: { physicalCapacityLiters: 75, driverCapPercent: 0.8, classCapPercent: null }
+        }),
+        fuelCheckpointWorkbenchGridRow('Dallara 4L / Estimated green', {
+          capacity: { physicalCapacityLiters: 75, driverCapPercent: 0.68, classCapPercent: 0.68 },
+          estimatedFormationFuelLiters: 0.9
+        }),
+        fuelCheckpointWorkbenchGridRow('Stress / Formation exceeds cap', {
+          capacity: { physicalCapacityLiters: 75, driverCapPercent: 0.68, classCapPercent: 0.68 },
+          estimatedFormationFuelLiters: 52
+        }),
+        fuelCheckpointWorkbenchGridRow('Dallara 45m / Projected pit cycle', {
+          capacity: { physicalCapacityLiters: 75, driverCapPercent: 0.8, classCapPercent: 0.8 },
+          currentFuelLiters: 33.29,
+          expectedFuelToBoxLiters: 1,
+          plannedServiceAddLiters: 20,
+          expectedBoxToPitExitFuelLiters: 0.14
+        }),
+        fuelCheckpointWorkbenchGridRow('Stress / Measured overrides projections', {
+          capacity: { physicalCapacityLiters: 60, driverCapPercent: 1, classCapPercent: 1 },
+          currentFuelLiters: 30,
+          measuredAtBoxFuelLiters: 20,
+          expectedFuelToBoxLiters: 2,
+          measuredServiceCompleteFuelLiters: 50,
+          plannedServiceAddLiters: 10,
+          measuredPitExitFuelLiters: 49.8,
+          expectedBoxToPitExitFuelLiters: 0.1
+        }),
+        fuelCheckpointWorkbenchGridRow('Stress / Known zero flow', {
+          capacity: { physicalCapacityLiters: 60, driverCapPercent: 1, classCapPercent: 1 },
+          currentFuelLiters: 0,
+          measuredAtBoxFuelLiters: 0,
+          plannedServiceAddLiters: 0,
+          expectedBoxToPitExitFuelLiters: 0
+        }),
+        fuelCheckpointWorkbenchGridRow('Stress / Missing current telemetry', {
+          capacity: { physicalCapacityLiters: 60, driverCapPercent: 1, classCapPercent: 1 },
+          currentFuelLiters: null,
+          expectedFuelToBoxLiters: 1,
+          plannedServiceAddLiters: 20,
+          expectedBoxToPitExitFuelLiters: 0.14
+        }),
+        fuelCheckpointWorkbenchGridRow('Stress / Above capacity is not clamped', {
+          capacity: { physicalCapacityLiters: 75, driverCapPercent: 0.68, classCapPercent: 0.68 },
+          measuredAtBoxFuelLiters: 20,
+          plannedServiceAddLiters: 40,
+          expectedBoxToPitExitFuelLiters: 0.5
+        }),
+        fuelCheckpointWorkbenchGridRow('Stress / Invalid transition input', {
+          capacity: { physicalCapacityLiters: 60, driverCapPercent: 1, classCapPercent: 1 },
+          currentFuelLiters: 20,
+          expectedFuelToBoxLiters: -1,
+          plannedServiceAddLiters: 10
+        }),
+        fuelCheckpointWorkbenchGridRow('Stress / Cannot reach box', {
+          capacity: { physicalCapacityLiters: 60, driverCapPercent: 1, classCapPercent: 1 },
+          currentFuelLiters: 1,
+          expectedFuelToBoxLiters: 2,
+          plannedServiceAddLiters: 20,
+          expectedBoxToPitExitFuelLiters: 0.1
+        })
+      ]
+    }
   ];
   const stintTargetV1Rows = [
     metricRow('Dallara 35m / V1 Stint 1', `2 laps | target ${formatFuelPerLap(12.73)}`, 'info', [
@@ -4862,6 +5096,50 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
           referenceBurnLitersPerLap: null,
           targetLaps: 4,
           planLabel: 'learning'
+        }),
+        fuelStintTargetV2WorkbenchGridRow('Stress / Known zero fuel', {
+          remainingLaps: 4,
+          currentFuelLiters: 0,
+          referenceBurnLitersPerLap: 10.0,
+          targetLaps: 2,
+          planLabel: 'zero is factual'
+        }),
+        fuelStintTargetV2WorkbenchGridRow('Stress / Race finished', {
+          remainingLaps: 0,
+          currentFuelLiters: 50.0,
+          referenceBurnLitersPerLap: 10.0,
+          targetLaps: 5,
+          planLabel: 'no target after finish'
+        }),
+        fuelStintTargetV2WorkbenchGridRow('Stress / Save threshold 92', {
+          remainingLaps: 3,
+          currentFuelLiters: 9.20,
+          referenceBurnLitersPerLap: 10.0,
+          targetLaps: 1,
+          planLabel: 'boundary'
+        }),
+        fuelStintTargetV2WorkbenchGridRow('Stress / Save threshold below 92', {
+          remainingLaps: 3,
+          currentFuelLiters: 9.19,
+          referenceBurnLitersPerLap: 10.0,
+          targetLaps: 1,
+          planLabel: 'worse boundary'
+        }),
+        fuelStintTargetV2WorkbenchGridRow('Stress / Held tracking', {
+          remainingLaps: 3,
+          currentFuelLiters: 10.0,
+          referenceBurnLitersPerLap: 10.0,
+          targetLaps: 1,
+          planLabel: 'held context',
+          flags: ['held']
+        }),
+        fuelStintTargetV2WorkbenchGridRow('Stress / Explicit null telemetry', {
+          remainingLaps: null,
+          currentFuelLiters: null,
+          referenceBurnLitersPerLap: 10.0,
+          targetLaps: 2,
+          planLabel: 'null stays unavailable',
+          flags: ['held']
         })
       ]
     }
@@ -4967,6 +5245,24 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
           usableFuelLiters: 75.672,
           burnLitersPerLap: { value: 1.1004, label: 'green' },
           flags: ['condition']
+        }),
+        fuelPlanV2StartWorkbenchGridRow('Stress / Sub-lap full budget', {
+          raceLaps: 2,
+          remainLaps: 2,
+          usableFuelLiters: 9.9,
+          burnLitersPerLap: 10.0
+        }),
+        fuelPlanV2StartWorkbenchGridRow('Stress / Known zero full budget', {
+          raceLaps: 2,
+          remainLaps: 2,
+          usableFuelLiters: 0,
+          burnLitersPerLap: 10.0
+        }),
+        fuelPlanV2StartWorkbenchGridRow('Stress / Explicit null full budget', {
+          raceLaps: 2,
+          remainLaps: 2,
+          usableFuelLiters: null,
+          burnLitersPerLap: 10.0
         })
       ]
     },
@@ -5037,6 +5333,30 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
           burnLitersPerLap: { value: 5.0, label: 'green' },
           flags: ['condition'],
           finalLabel: 'condition mix?'
+        }),
+        fuelPlanV2CheckpointWorkbenchGridRow('Stress / Sub-lap future budget', {
+          raceLaps: 2,
+          remainLaps: 2,
+          currentFuelLiters: 9.9,
+          futureFuelLiters: 9.9,
+          currentBurnLitersPerLap: 10.0,
+          futureBurnLitersPerLap: 10.0
+        }),
+        fuelPlanV2CheckpointWorkbenchGridRow('Stress / Known zero checkpoint fuel', {
+          raceLaps: 2,
+          remainLaps: 2,
+          currentFuelLiters: 0,
+          futureFuelLiters: 0,
+          currentBurnLitersPerLap: 10.0,
+          futureBurnLitersPerLap: 10.0
+        }),
+        fuelPlanV2CheckpointWorkbenchGridRow('Stress / Explicit null checkpoint fuel', {
+          raceLaps: 2,
+          remainLaps: 2,
+          currentFuelLiters: null,
+          futureFuelLiters: null,
+          currentBurnLitersPerLap: 10.0,
+          futureBurnLitersPerLap: 10.0
         })
       ]
     }
@@ -5117,6 +5437,19 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       lastBurn: null,
       fiveBurn: null,
       tenBurn: null,
+      v1Burn: null
+    }),
+    fuelPitRequestWorkbenchRow('Stress / Invalid negative reserve', '20.0 L / invalid adjustment', 'error', {
+      currentFuel: 20.0,
+      tankCapacity: 60.0,
+      targetLaps: 2,
+      reserveFuel: -1.0,
+      lastBurn: 10.0,
+      fiveBurn: 10.0,
+      tenBurn: 10.0,
+      maxBurn: 10.0,
+      minBurn: 10.0,
+      qualiBurn: 10.0,
       v1Burn: null
     })
   ];
@@ -5457,6 +5790,8 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
         ]
     : activeWorkbench === 'sector'
       ? []
+    : activeWorkbench === 'capacity' || activeWorkbench === 'checkpoints'
+      ? []
     : activeWorkbench === 'pit'
       ? [
           { title: 'Fuel To Add Workbench', rows: pitRequestRows },
@@ -5475,6 +5810,10 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       ];
   const gridSections = activeWorkbench === 'sector'
     ? sectorBurnGridSections
+    : activeWorkbench === 'capacity'
+      ? capacityGridSections
+    : activeWorkbench === 'checkpoints'
+      ? checkpointGridSections
     : activeWorkbench === 'plan'
       ? planV2GridSections
       : activeWorkbench === 'stint'
@@ -5484,6 +5823,10 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
   const rows = metricSections.flatMap((section) => section.rows);
   const workbenchStatus = activeWorkbench === 'sector'
     ? 'fuel/sector burn workbench'
+    : activeWorkbench === 'capacity'
+      ? 'fuel/effective capacity workbench'
+    : activeWorkbench === 'checkpoints'
+      ? 'fuel/checkpoint flow workbench'
     : activeWorkbench === 'range'
       ? 'fuel/range workbench'
       : activeWorkbench === 'pit'
@@ -5497,6 +5840,10 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
     ? 'source: Fuel V2 workbench; mirrors staged Core sector-burn logic. Rows are real SplitTimeInfo sector boundaries and cells show Live projected L/lap for each lap. Sector labels include median replay speed as context; green cell borders mark pit/refuel/service event-window overlap, not inherently bad sector numbers. Lap 1 uses low-confidence track-percent fallback; later laps hold at S0 and use prior-lap same-sector cumulative scaling from S0+S1 onward. Actual is completed lap burn.'
     : activeWorkbench === 'range'
       ? 'source: Fuel V2 workbench; mirrors staged Core range logic. Current-tank range compares V1 selected burn with V2 Last/5L/10L/Max windows'
+      : activeWorkbench === 'capacity'
+        ? 'source: Fuel V2 workbench; mirrors the typed Core effective-capacity resolver. Physical tank size is never silently treated as usable session fuel when cap evidence is missing or conflicting.'
+      : activeWorkbench === 'checkpoints'
+        ? 'source: Fuel V2 workbench; mirrors the typed Core fuel-checkpoint flow. Effective cap, first green, current, at-box, service-complete, and pit-exit fuel remain distinct; the pit request targets service-complete fuel and box-to-exit consumption is applied afterward once.'
       : activeWorkbench === 'pit'
         ? 'source: Fuel V2 workbench; mirrors staged Core pit-request logic. Fuel To Add is target laps times selected burn plus optional reserve/pit-lane adjustment minus current fuel, clamped at zero and marked if the tank cannot hold the request. Visible cells use the shared burn buckets: Last, 5L, 10L, Max, Min, and Quali. Sector/live/bridge evidence can feed a labeled bucket, but it is no longer a standalone display column. Real capture rows keep reserve and learned pit-lane burn at zero; hypothetical rows may exercise those inputs.'
         : activeWorkbench === 'plan'
@@ -5506,6 +5853,10 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
           : 'source: Fuel V2 workbench; mirrors staged Core target-usage logic. Target Usage cells are required L/lap from fuel budget / target laps, no reserve subtracted; Last is the live burn comparator when available';
   const workbenchTitle = activeWorkbench === 'sector'
     ? 'Sector Burn V2'
+    : activeWorkbench === 'capacity'
+      ? 'Capacity V2'
+    : activeWorkbench === 'checkpoints'
+      ? 'Fuel Flow V2'
     : activeWorkbench === 'range'
       ? 'Range V2'
       : activeWorkbench === 'pit'
@@ -5526,6 +5877,382 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
     [{ key: 'timeRemaining', value: workbenchTitle, tone: 'info' }],
     true,
     chartSections);
+}
+
+function fuelCapacityWorkbenchGridRow(label, inputs) {
+  const snapshot = fuelCapacitySnapshot(inputs);
+  return gridRow(label, [
+    gridCell(fuelCapacityLitersLabel(snapshot.physicalCapacityLiters), fuelCapacityValueTone(snapshot.physicalCapacityLiters)),
+    gridCell(fuelCapacityPercentLabel(snapshot.driverCapPercent), fuelCapacityValueTone(snapshot.driverCapPercent)),
+    gridCell(fuelCapacityPercentLabel(snapshot.classCapPercent), fuelCapacityValueTone(snapshot.classCapPercent)),
+    gridCell(fuelCapacityLitersLabel(snapshot.observedFuelLiters), fuelCapacityValueTone(snapshot.observedFuelLiters)),
+    gridCell(fuelCapacityLitersLabel(snapshot.effectiveCapacityLiters), snapshot.canDriveFuelAdvice ? 'info' : 'warning'),
+    gridCell(fuelCapacitySourceLabel(snapshot.source), fuelCapacityStateTone(snapshot)),
+    gridCell(fuelCapacityStateLabel(snapshot), fuelCapacityStateTone(snapshot))
+  ], fuelCapacityStateTone(snapshot));
+}
+
+function fuelCapacitySnapshot(inputs) {
+  const flags = new Set();
+  const physicalCapacityLiters = fuelCapacityPositiveNumber(inputs?.physicalCapacityLiters);
+  const driverCapPercent = fuelCapacityPercent(inputs?.driverCapPercent);
+  const classCapPercent = fuelCapacityPercent(inputs?.classCapPercent);
+  const observedFuelLiters = fuelCapacityNonNegativeNumber(inputs?.observedFuelLiters);
+  fuelCapacityInvalidFlag(flags, inputs?.physicalCapacityLiters, physicalCapacityLiters, 'invalid-physical');
+  fuelCapacityInvalidFlag(flags, inputs?.driverCapPercent, driverCapPercent, 'invalid-driver');
+  fuelCapacityInvalidFlag(flags, inputs?.classCapPercent, classCapPercent, 'invalid-class');
+  fuelCapacityInvalidFlag(flags, inputs?.observedFuelLiters, observedFuelLiters, 'invalid-observed');
+
+  if (!Number.isFinite(physicalCapacityLiters)) {
+    flags.add('missing-physical');
+    return fuelCapacityResult(
+      physicalCapacityLiters,
+      driverCapPercent,
+      classCapPercent,
+      observedFuelLiters,
+      null,
+      null,
+      'unavailable',
+      'unavailable',
+      flags,
+      false);
+  }
+
+  if (!Number.isFinite(driverCapPercent) && !Number.isFinite(classCapPercent)) {
+    flags.add('missing-cap');
+    return fuelCapacityResult(
+      physicalCapacityLiters,
+      driverCapPercent,
+      classCapPercent,
+      observedFuelLiters,
+      null,
+      null,
+      'physical-only',
+      fuelCapacityHasInvalidEvidence(flags) ? 'conflicted' : 'contextual',
+      flags,
+      false);
+  }
+
+  let appliedFuelPercent;
+  let source;
+  let confidence = 'high';
+  if (Number.isFinite(driverCapPercent) && Number.isFinite(classCapPercent)) {
+    appliedFuelPercent = Math.min(driverCapPercent, classCapPercent);
+    if (Math.abs(driverCapPercent - classCapPercent) <= 0.0005) {
+      source = 'matching-driver-class';
+      confidence = 'authoritative';
+    } else {
+      source = 'most-restrictive-conflict';
+      confidence = 'conflicted';
+      flags.add('driver-class-conflict');
+    }
+  } else if (Number.isFinite(driverCapPercent)) {
+    appliedFuelPercent = driverCapPercent;
+    source = 'driver';
+  } else {
+    appliedFuelPercent = classCapPercent;
+    source = 'class';
+  }
+
+  const effectiveCapacityLiters = physicalCapacityLiters * appliedFuelPercent;
+  flags.add(appliedFuelPercent >= 1 - 0.0005 ? 'unrestricted' : 'limited');
+  if (Number.isFinite(observedFuelLiters) && observedFuelLiters > effectiveCapacityLiters + 0.05) {
+    flags.add('observed-above-cap');
+    confidence = 'conflicted';
+  }
+  if (fuelCapacityHasInvalidEvidence(flags)) {
+    confidence = 'conflicted';
+  }
+
+  return fuelCapacityResult(
+    physicalCapacityLiters,
+    driverCapPercent,
+    classCapPercent,
+    observedFuelLiters,
+    effectiveCapacityLiters,
+    appliedFuelPercent,
+    source,
+    confidence,
+    flags,
+    confidence === 'authoritative' || confidence === 'high');
+}
+
+function fuelCapacityResult(
+  physicalCapacityLiters,
+  driverCapPercent,
+  classCapPercent,
+  observedFuelLiters,
+  effectiveCapacityLiters,
+  appliedFuelPercent,
+  source,
+  confidence,
+  flags,
+  canDriveFuelAdvice) {
+  return {
+    physicalCapacityLiters,
+    driverCapPercent,
+    classCapPercent,
+    observedFuelLiters,
+    effectiveCapacityLiters,
+    appliedFuelPercent,
+    source,
+    confidence,
+    flags,
+    canDriveFuelAdvice: canDriveFuelAdvice && Number.isFinite(effectiveCapacityLiters)
+  };
+}
+
+function fuelCapacityInvalidFlag(flags, rawValue, acceptedValue, flag) {
+  if (rawValue !== null && rawValue !== undefined && !Number.isFinite(acceptedValue)) {
+    flags.add(flag);
+  }
+}
+
+function fuelCapacityHasInvalidEvidence(flags) {
+  return ['invalid-physical', 'invalid-driver', 'invalid-class', 'invalid-observed', 'driver-class-conflict', 'observed-above-cap']
+    .some((flag) => flags.has(flag));
+}
+
+function fuelCapacityPositiveNumber(value) {
+  if (value === null || value === undefined) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function fuelCapacityNonNegativeNumber(value) {
+  if (value === null || value === undefined) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+}
+
+function fuelCapacityPercent(value) {
+  const numeric = fuelCapacityPositiveNumber(value);
+  return Number.isFinite(numeric) && numeric <= 1 ? numeric : null;
+}
+
+function fuelCapacityLitersLabel(value) {
+  return Number.isFinite(value) ? `${value.toFixed(2)} L` : '--';
+}
+
+function fuelCapacityPercentLabel(value) {
+  return Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '--';
+}
+
+function fuelCapacitySourceLabel(source) {
+  if (source === 'matching-driver-class') return 'driver + class';
+  if (source === 'most-restrictive-conflict') return 'min reported';
+  if (source === 'physical-only') return 'physical only';
+  if (source === 'driver') return 'driver cap';
+  if (source === 'class') return 'class cap';
+  return '--';
+}
+
+function fuelCapacityStateLabel(snapshot) {
+  if (snapshot.flags.has('observed-above-cap')) return 'observed above cap; conflict';
+  if (snapshot.flags.has('driver-class-conflict')) return 'cap conflict; no advice';
+  if (['invalid-physical', 'invalid-driver', 'invalid-class', 'invalid-observed'].some((flag) => snapshot.flags.has(flag))) {
+    return 'invalid evidence; no advice';
+  }
+  if (snapshot.flags.has('missing-physical')) return 'missing physical; no advice';
+  if (snapshot.flags.has('missing-cap')) return 'missing cap; no advice';
+  return `${snapshot.flags.has('limited') ? 'limited' : 'unrestricted'}; ${snapshot.confidence}`;
+}
+
+function fuelCapacityStateTone(snapshot) {
+  if (snapshot.confidence === 'conflicted') return 'error';
+  if (!snapshot.canDriveFuelAdvice) return 'warning';
+  return 'info';
+}
+
+function fuelCapacityValueTone(value) {
+  return Number.isFinite(value) ? 'info' : 'waiting';
+}
+
+function fuelCheckpointWorkbenchGridRow(label, inputs) {
+  const snapshot = fuelCheckpointSnapshot(inputs);
+  return gridRow(label, [
+    fuelCheckpointGridCell(snapshot.effectiveCapacity),
+    fuelCheckpointGridCell(snapshot.firstGreen),
+    fuelCheckpointGridCell(snapshot.current),
+    fuelCheckpointGridCell(snapshot.expectedAtBox),
+    fuelCheckpointGridCell(snapshot.serviceComplete),
+    fuelCheckpointGridCell(snapshot.expectedPitExit),
+    gridCell('service complete', 'info'),
+    gridCell(fuelCheckpointStateLabel(snapshot), fuelCheckpointStateTone(snapshot))
+  ], fuelCheckpointStateTone(snapshot));
+}
+
+function fuelCheckpointSnapshot(inputs) {
+  const capacity = fuelCapacitySnapshot(inputs?.capacity || {});
+  const flags = new Set();
+  if (!capacity.canDriveFuelAdvice) {
+    flags.add(Number.isFinite(capacity.effectiveCapacityLiters) ? 'capacity-conflicted' : 'capacity-unavailable');
+  }
+  if (fuelCheckpointInputValues(inputs).some((value) => value !== null && value !== undefined && !Number.isFinite(fuelCapacityNonNegativeNumber(value)))) {
+    flags.add('invalid-input');
+  }
+
+  let effectiveCapacity = Number.isFinite(capacity.effectiveCapacityLiters)
+    ? fuelCheckpointFact(
+        capacity.effectiveCapacityLiters,
+        'resolved-capacity',
+        capacity.confidence === 'authoritative'
+          ? 'authoritative'
+          : capacity.confidence === 'high'
+            ? 'high'
+            : 'conflicted')
+    : null;
+  let firstGreen = fuelCheckpointMeasured(inputs?.measuredFirstGreenFuelLiters, 'measured-first-green');
+  if (!firstGreen
+      && Number.isFinite(capacity.effectiveCapacityLiters)
+      && Number.isFinite(fuelCapacityNonNegativeNumber(inputs?.estimatedFormationFuelLiters))) {
+    const rawFirstGreen = capacity.effectiveCapacityLiters - fuelCapacityNonNegativeNumber(inputs?.estimatedFormationFuelLiters);
+    firstGreen = fuelCheckpointFact(
+      Math.max(0, rawFirstGreen),
+      'estimated-capacity-formation',
+      capacity.canDriveFuelAdvice ? 'estimated' : 'conflicted',
+      rawFirstGreen < 0 ? ['estimated', 'projection-clamped-zero'] : ['estimated']);
+  }
+
+  effectiveCapacity = fuelCheckpointApplyCapacity(effectiveCapacity, capacity, flags);
+  firstGreen = fuelCheckpointApplyCapacity(firstGreen, capacity, flags);
+  const current = fuelCheckpointApplyCapacity(
+    fuelCheckpointMeasured(inputs?.currentFuelLiters, 'measured-current'),
+    capacity,
+    flags);
+  const expectedAtBox = fuelCheckpointApplyCapacity(
+    fuelCheckpointMeasured(inputs?.measuredAtBoxFuelLiters, 'measured-at-box')
+      || fuelCheckpointSubtract(current, inputs?.expectedFuelToBoxLiters, 'projected-current-to-box'),
+    capacity,
+    flags);
+  const serviceComplete = fuelCheckpointApplyCapacity(
+    fuelCheckpointMeasured(inputs?.measuredServiceCompleteFuelLiters, 'measured-service-complete')
+      || fuelCheckpointAdd(expectedAtBox, inputs?.plannedServiceAddLiters, 'planned-service-add'),
+    capacity,
+    flags);
+  const expectedPitExit = fuelCheckpointApplyCapacity(
+    fuelCheckpointMeasured(inputs?.measuredPitExitFuelLiters, 'measured-pit-exit')
+      || fuelCheckpointSubtract(serviceComplete, inputs?.expectedBoxToPitExitFuelLiters, 'projected-box-to-exit'),
+    capacity,
+    flags);
+
+  return {
+    capacity,
+    effectiveCapacity,
+    firstGreen,
+    current,
+    expectedAtBox,
+    serviceComplete,
+    expectedPitExit,
+    pitRequestTarget: 'service-complete',
+    flags
+  };
+}
+
+function fuelCheckpointMeasured(value, source) {
+  const liters = fuelCapacityNonNegativeNumber(value);
+  return Number.isFinite(liters) ? fuelCheckpointFact(liters, source, 'measured', ['measured']) : null;
+}
+
+function fuelCheckpointSubtract(baseline, consumptionValue, source) {
+  const consumption = fuelCapacityNonNegativeNumber(consumptionValue);
+  if (!fuelCheckpointCanProjectFrom(baseline) || !Number.isFinite(consumption)) return null;
+  const rawValue = baseline.liters - consumption;
+  const flags = ['estimated'];
+  if (rawValue < 0) flags.push('projection-clamped-zero');
+  else if (baseline.confidence === 'conflicted') flags.push('derived-from-conflict');
+  return fuelCheckpointFact(
+    Math.max(0, rawValue),
+    source,
+    baseline.confidence === 'conflicted' || rawValue < 0 ? 'conflicted' : 'estimated',
+    flags);
+}
+
+function fuelCheckpointAdd(baseline, addValue, source) {
+  const add = fuelCapacityNonNegativeNumber(addValue);
+  if (!fuelCheckpointCanProjectFrom(baseline) || !Number.isFinite(add)) return null;
+  return fuelCheckpointFact(
+    baseline.liters + add,
+    source,
+    baseline.confidence === 'conflicted' ? 'conflicted' : 'estimated',
+    baseline.confidence === 'conflicted' ? ['estimated', 'derived-from-conflict'] : ['estimated']);
+}
+
+function fuelCheckpointCanProjectFrom(fact) {
+  return fact
+    && Number.isFinite(fact.liters)
+    && !fact.flags.has('projection-clamped-zero');
+}
+
+function fuelCheckpointFact(liters, source, confidence, flags = []) {
+  return { liters, source, confidence, flags: new Set(flags) };
+}
+
+function fuelCheckpointApplyCapacity(fact, capacity, snapshotFlags) {
+  if (!fact || !Number.isFinite(fact.liters)) return fact;
+  if (fact.flags.has('projection-clamped-zero')) snapshotFlags.add('projection-clamped-zero');
+  if (fact.flags.has('derived-from-conflict')) snapshotFlags.add('derived-from-conflict');
+  if (fact.liters === 0) fact.flags.add('known-zero');
+  if (Number.isFinite(capacity.effectiveCapacityLiters)
+      && fact.liters > capacity.effectiveCapacityLiters + 0.001) {
+    fact.flags.add('above-capacity');
+    snapshotFlags.add('above-capacity');
+    fact.confidence = 'conflicted';
+  }
+  return fact;
+}
+
+function fuelCheckpointGridCell(fact) {
+  if (!fact || !Number.isFinite(fact.liters)) return gridCell('--', 'waiting');
+  const confidenceSuffix = fact.confidence === 'authoritative'
+    ? ' resolved'
+    : fact.confidence === 'high'
+      ? ' high'
+    : fact.confidence === 'measured'
+      ? ' measured'
+      : fact.confidence === 'conflicted'
+        ? ' conflict'
+        : ' est';
+  const boundarySuffix = fact.flags.has('projection-clamped-zero') ? ' floor' : '';
+  const tone = fact.confidence === 'conflicted'
+    ? 'error'
+    : fact.confidence === 'estimated'
+      ? 'warning'
+      : 'info';
+  return gridCell(`${fact.liters.toFixed(2)} L${confidenceSuffix}${boundarySuffix}`, tone);
+}
+
+function fuelCheckpointInputValues(inputs) {
+  return [
+    inputs?.measuredFirstGreenFuelLiters,
+    inputs?.estimatedFormationFuelLiters,
+    inputs?.currentFuelLiters,
+    inputs?.measuredAtBoxFuelLiters,
+    inputs?.expectedFuelToBoxLiters,
+    inputs?.measuredServiceCompleteFuelLiters,
+    inputs?.plannedServiceAddLiters,
+    inputs?.measuredPitExitFuelLiters,
+    inputs?.expectedBoxToPitExitFuelLiters
+  ];
+}
+
+function fuelCheckpointStateLabel(snapshot) {
+  if (snapshot.flags.has('above-capacity')) return 'above cap; not clamped';
+  if (snapshot.flags.has('projection-clamped-zero')) return 'projection below zero; chain stopped';
+  if (snapshot.flags.has('derived-from-conflict')) return 'derived from conflicted checkpoint';
+  if (snapshot.flags.has('invalid-input')) return 'invalid transition input';
+  if (snapshot.flags.has('capacity-conflicted')) return 'capacity conflict';
+  if (snapshot.flags.has('capacity-unavailable')) return 'capacity unavailable';
+  return 'ordered facts';
+}
+
+function fuelCheckpointStateTone(snapshot) {
+  if (snapshot.flags.has('above-capacity')
+      || snapshot.flags.has('projection-clamped-zero')
+      || snapshot.flags.has('derived-from-conflict')
+      || snapshot.flags.has('invalid-input')) return 'error';
+  if (snapshot.flags.has('capacity-conflicted') || snapshot.flags.has('capacity-unavailable')) return 'warning';
+  return 'info';
 }
 
 function fuelLapsWorkbenchRow(label, value, tone, checkpointValues, realValue) {
@@ -5585,7 +6312,7 @@ function fuelStintTargetV2Snapshot(target) {
   const referenceBurn = Number.isFinite(rawReferenceBurn) && rawReferenceBurn > 0
     ? rawReferenceBurn
     : null;
-  const currentFuel = fuelPlanPositiveNumber(target?.currentFuelLiters);
+  const currentFuel = fuelPlanNonNegativeNumber(target?.currentFuelLiters);
   const reserveFuel = fuelPlanNonNegativeNumber(target?.reserveFuelLiters) || 0;
   const pitLaneFuel = fuelPlanNonNegativeNumber(target?.pitLaneFuelLiters) || 0;
   const usableFuel = Number.isFinite(currentFuel)
@@ -5593,7 +6320,9 @@ function fuelStintTargetV2Snapshot(target) {
     : null;
   const remainingLaps = fuelPlanNonNegativeNumber(target?.remainingLaps);
   const fallbackTarget = fuelStintTargetDefaultTargetLaps(usableFuel, referenceBurn, remainingLaps);
-  const targetLaps = fuelStintTargetPositiveInteger(target?.targetLaps) || fallbackTarget;
+  const targetLaps = remainingLaps === 0
+    ? null
+    : fuelStintTargetPositiveInteger(target?.targetLaps) || fallbackTarget;
   const currentRangeLaps = Number.isFinite(usableFuel) && Number.isFinite(referenceBurn) && referenceBurn > 0
     ? usableFuel / referenceBurn
     : null;
@@ -5607,7 +6336,9 @@ function fuelStintTargetV2Snapshot(target) {
     target));
   const targetCandidate = candidates.find((candidate) => candidate.role === 'plan');
   const flags = new Set(target?.flags || []);
-  const status = fuelStintTargetStatus(targetCandidate, currentRangeLaps, targetLaps, flags, target?.planLabel);
+  const status = remainingLaps === 0
+    ? { label: 'finished', tone: 'info' }
+    : fuelStintTargetStatus(targetCandidate, currentRangeLaps, targetLaps, flags, target?.planLabel);
 
   return {
     currentFuel,
@@ -5625,6 +6356,10 @@ function fuelStintTargetV2Snapshot(target) {
 }
 
 function fuelStintTargetDefaultTargetLaps(usableFuel, referenceBurn, remainingLaps) {
+  if (remainingLaps === 0) {
+    return null;
+  }
+
   if (!Number.isFinite(usableFuel) || !Number.isFinite(referenceBurn) || referenceBurn <= 0) {
     return null;
   }
@@ -5656,7 +6391,7 @@ function fuelStintTargetCandidateLaps(targetLaps, candidateTargetLaps) {
 
 function fuelStintTargetCandidate(usableFuel, referenceBurn, remainingLaps, plannedTargetLaps, candidateLaps, target) {
   const laps = fuelStintTargetPositiveInteger(candidateLaps);
-  const requiredBurn = Number.isFinite(usableFuel) && usableFuel > 0 && Number.isFinite(laps) && laps > 0
+  const requiredBurn = Number.isFinite(usableFuel) && usableFuel >= 0 && Number.isFinite(laps) && laps > 0
     ? usableFuel / laps
     : null;
   const saveRequired = Number.isFinite(requiredBurn) && Number.isFinite(referenceBurn)
@@ -5677,6 +6412,10 @@ function fuelStintTargetCandidate(usableFuel, referenceBurn, remainingLaps, plan
     strategyDeltaSeconds);
   let tone = fuelStintTargetTone(requiredBurn, referenceBurn);
   if (Number.isFinite(strategyDeltaSeconds) && strategyDeltaSeconds < -0.001 && tone !== 'error') {
+    tone = 'warning';
+  }
+  const flags = new Set(target?.flags || []);
+  if (fuelStintTargetHasContextFlag(flags) && tone === 'success') {
     tone = 'warning';
   }
 
@@ -5817,30 +6556,31 @@ function fuelStintTargetTone(requiredBurn, referenceBurn) {
   if (!Number.isFinite(referenceBurn) || referenceBurn <= 0) return 'info';
 
   if (fuelStintTargetIsUnrealistic(requiredBurn, referenceBurn)) return 'error';
-  if (fuelStintTargetIsBigSave(requiredBurn, referenceBurn)) return 'warning';
-
   const ratio = requiredBurn / referenceBurn;
-  if (ratio >= 1.0) return 'success';
-  return ratio >= 0.95 ? 'warning' : 'error';
+  if (ratio >= 1.0 - 0.000000001) return 'success';
+  return ratio >= 0.85 - 0.000000001 ? 'warning' : 'error';
 }
 
 function fuelStintTargetIsBigSave(requiredBurn, referenceBurn) {
   if (!Number.isFinite(requiredBurn) || !Number.isFinite(referenceBurn) || referenceBurn <= 0) return false;
   const ratio = requiredBurn / referenceBurn;
-  return ratio < 0.92 && ratio >= 0.85;
+  return ratio < 0.92 - 0.000000001 && ratio >= 0.85 - 0.000000001;
 }
 
 function fuelStintTargetIsUnrealistic(requiredBurn, referenceBurn) {
   if (!Number.isFinite(requiredBurn) || !Number.isFinite(referenceBurn) || referenceBurn <= 0) return false;
-  return requiredBurn / referenceBurn < 0.85;
+  return requiredBurn / referenceBurn < 0.85 - 0.000000001;
 }
 
 function fuelStintTargetStatus(targetCandidate, currentRangeLaps, targetLaps, flags, planLabel) {
+  const prefix = planLabel ? `${planLabel}; ` : '';
   if (!targetCandidate || !Number.isFinite(targetCandidate.requiredBurn)) {
-    return { label: 'learning', tone: flags.has('repair') || flags.has('condition') ? 'warning' : 'waiting' };
+    return {
+      label: `${prefix}learning`,
+      tone: fuelStintTargetHasContextFlag(flags) ? 'warning' : 'waiting'
+    };
   }
 
-  const prefix = planLabel ? `${planLabel}; ` : '';
   if (flags.has('condition')) {
     return { label: `${prefix}condition mix`, tone: 'warning' };
   }
@@ -5854,7 +6594,10 @@ function fuelStintTargetStatus(targetCandidate, currentRangeLaps, targetLaps, fl
   }
 
   if (Number.isFinite(currentRangeLaps) && Number.isFinite(targetLaps) && currentRangeLaps >= targetLaps - 0.000001) {
-    return { label: `${prefix}tracking`, tone: 'success' };
+    return {
+      label: `${prefix}tracking`,
+      tone: fuelStintTargetHasContextFlag(flags) ? 'warning' : 'success'
+    };
   }
 
   if (fuelStintTargetIsUnrealistic(targetCandidate.requiredBurn, targetCandidate.referenceBurn)) {
@@ -5866,11 +6609,20 @@ function fuelStintTargetStatus(targetCandidate, currentRangeLaps, targetLaps, fl
   }
 
   if (Number.isFinite(targetCandidate.saveRequired) && targetCandidate.saveRequired > 0.005) {
-    const tone = targetCandidate.saveRequired <= 0.75 ? 'warning' : 'error';
-    return { label: `${prefix}save ${targetCandidate.saveRequired.toFixed(2)} L/lap`, tone };
+    return { label: `${prefix}save ${targetCandidate.saveRequired.toFixed(2)} L/lap`, tone: 'warning' };
   }
 
-  return { label: `${prefix}edge`, tone: targetCandidate.tone };
+  return {
+    label: `${prefix}edge`,
+    tone: fuelStintTargetHasContextFlag(flags) && targetCandidate.tone === 'success'
+      ? 'warning'
+      : targetCandidate.tone
+  };
+}
+
+function fuelStintTargetHasContextFlag(flags) {
+  return ['held', 'degraded', 'condition', 'repair', 'final-edge', 'tank-limited']
+    .some((flag) => flags.has(flag));
 }
 
 function fuelStintTargetContextTone(snapshot) {
@@ -5930,11 +6682,11 @@ function fuelPlanV2Snapshot(plan) {
   const flags = new Set(plan?.flags || []);
   const raceLaps = fuelPlanPositiveNumber(plan?.raceLaps);
   const remainLaps = fuelPlanNonNegativeNumber(plan?.remainLaps);
-  const usableFuel = fuelPlanPositiveNumber(plan?.usableFuelLiters);
+  const usableFuel = fuelPlanNonNegativeNumber(plan?.usableFuelLiters);
   const burn = fuelPlanBurnValue(plan?.burnLitersPerLap);
-  const stintCapacity = fuelPlanPositiveNumber(plan?.stintCapacityLaps)
+  const stintCapacity = fuelPlanNonNegativeNumber(plan?.stintCapacityLaps)
     ?? fuelPlanStintCapacityFromFuel(usableFuel, burn);
-  const hasPlan = Number.isFinite(raceLaps) && Number.isFinite(stintCapacity);
+  const hasPlan = Number.isFinite(raceLaps) && Number.isFinite(stintCapacity) && stintCapacity > 0;
   const stintCount = hasPlan ? Math.max(1, Math.ceil(raceLaps / stintCapacity - 0.000001)) : null;
   const stops = Number.isFinite(stintCount) ? Math.max(0, stintCount - 1) : null;
   const finalStint = hasPlan && Number.isFinite(stintCount)
@@ -5959,8 +6711,8 @@ function fuelPlanV2CurrentSnapshot(plan) {
   const flags = new Set(plan?.flags || []);
   const raceLaps = fuelPlanPositiveNumber(plan?.raceLaps);
   const remainLaps = fuelPlanNonNegativeNumber(plan?.remainLaps);
-  const currentFuel = fuelPlanPositiveNumber(plan?.currentFuelLiters ?? plan?.usableFuelLiters);
-  const futureFuel = fuelPlanPositiveNumber(plan?.futureFuelLiters ?? plan?.usableFuelLiters);
+  const currentFuel = fuelPlanNonNegativeNumber(plan?.currentFuelLiters ?? plan?.usableFuelLiters);
+  const futureFuel = fuelPlanNonNegativeNumber(plan?.futureFuelLiters ?? plan?.usableFuelLiters);
   const currentBurn = fuelPlanBurnValue(plan?.currentBurnLitersPerLap ?? plan?.burnLitersPerLap);
   const futureBurn = fuelPlanBurnValue(plan?.futureBurnLitersPerLap ?? plan?.burnLitersPerLap);
   const currentCapacity = fuelPlanStintRangeFromFuel(currentFuel, currentBurn);
@@ -5979,7 +6731,11 @@ function fuelPlanV2CurrentSnapshot(plan) {
     rhythmLabel: plan?.rhythmLabel || currentPlan.rhythmLabel,
     stopsLabel: plan?.stopsLabel || fuelPlanCountLabel(currentPlan.stops),
     finalLabel: plan?.finalLabel || fuelPlanFinalLabel(currentPlan.finalStint),
-    tone: fuelPlanTone(remainLaps, currentCapacity ?? futureCapacity, flags)
+    tone: fuelPlanCurrentTone(
+      currentPlan.stops !== null,
+      remainLaps,
+      currentCapacity ?? futureCapacity,
+      flags)
   };
 }
 
@@ -6002,7 +6758,7 @@ function fuelPlanCurrentCheckpointPlan(remainLaps, currentCapacity, futureCapaci
     };
   }
 
-  if (!Number.isFinite(futureCapacity)) {
+  if (!Number.isFinite(futureCapacity) || futureCapacity <= 0) {
     return {
       stops: null,
       finalStint: null,
@@ -6027,13 +6783,13 @@ function fuelPlanFinalStintLaps(raceLaps, stintCapacity, stintCount) {
 }
 
 function fuelPlanStintCapacityFromFuel(usableFuel, burn) {
-  return Number.isFinite(usableFuel) && usableFuel > 0 && Number.isFinite(burn) && burn > 0
-    ? Math.max(1, Math.floor(usableFuel / burn))
+  return Number.isFinite(usableFuel) && usableFuel >= 0 && Number.isFinite(burn) && burn > 0
+    ? Math.floor(usableFuel / burn)
     : null;
 }
 
 function fuelPlanStintRangeFromFuel(usableFuel, burn) {
-  return Number.isFinite(usableFuel) && usableFuel > 0 && Number.isFinite(burn) && burn > 0
+  return Number.isFinite(usableFuel) && usableFuel >= 0 && Number.isFinite(burn) && burn > 0
     ? Math.max(0, usableFuel / burn)
     : null;
 }
@@ -6134,13 +6890,28 @@ function fuelPlanLapLabel(value) {
 }
 
 function fuelPlanTone(raceLaps, stintCapacity, flags) {
-  if (!Number.isFinite(raceLaps) || (!Number.isFinite(stintCapacity) && !flags.has('condition'))) {
+  if (!Number.isFinite(raceLaps)) {
     return 'waiting';
   }
 
-  return ['held', 'degraded', 'condition', 'repair', 'final-edge', 'tank-limited'].some((flag) => flags.has(flag))
+  const hasWarningContext = ['held', 'degraded', 'condition', 'repair', 'final-edge', 'tank-limited']
+    .some((flag) => flags.has(flag));
+  if (!Number.isFinite(stintCapacity) || stintCapacity <= 0) {
+    return hasWarningContext ? 'warning' : 'waiting';
+  }
+
+  return hasWarningContext ? 'warning' : 'info';
+}
+
+function fuelPlanCurrentTone(planAvailable, remainingLaps, currentOrFutureCapacity, flags) {
+  if (planAvailable) {
+    return fuelPlanTone(remainingLaps, currentOrFutureCapacity, flags);
+  }
+
+  return ['held', 'degraded', 'condition', 'repair', 'final-edge', 'tank-limited']
+    .some((flag) => flags.has(flag))
     ? 'warning'
-    : 'info';
+    : 'waiting';
 }
 
 function fuelPlanPositiveNumber(value) {
@@ -6149,6 +6920,7 @@ function fuelPlanPositiveNumber(value) {
 }
 
 function fuelPlanNonNegativeNumber(value) {
+  if (value === null || value === undefined) return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
 }
@@ -6167,43 +6939,30 @@ function fuelLapsWorkbenchTone(value, realValue) {
   const actual = Number.parseFloat(realValue);
   if (!Number.isFinite(modeled) || !Number.isFinite(actual)) return 'info';
   const delta = Math.abs(modeled - actual);
-  if (delta <= 0.005) return 'success';
+  if (delta <= 0.25) return 'success';
   return delta <= 1 ? 'warning' : 'error';
 }
 
-function fuelPerLapWorkbenchRow(label, value, tone, windowValues, finalValue) {
-  const windowLabels = ['Last', '5L', '10L', 'Max'];
-  const segments = windowLabels
+function fuelPerLapWorkbenchRow(windows) {
+  const windowValues = [windows.last, windows.five, windows.ten, windows.max];
+  const segments = ['Last', '5L', '10L', 'Max']
     .map((label, index) => metricSegment(
       label,
-      fuelLapsWorkbenchFormatCell(windowValues[index]),
-      fuelPerLapWorkbenchTone(windowValues[index], finalValue)));
-  segments.push(metricSegment('V1 Ref', fuelLapsWorkbenchFormatCell(finalValue), 'modeled'));
+      fuelPerLapWorkbenchValue(windowValues[index]),
+      Number.isFinite(windowValues[index]) ? 'info' : 'waiting'));
+  const availableValues = windowValues.filter(Number.isFinite);
 
   return metricRow(
-    label,
-    value,
-    tone,
+    'Fuel/Lap',
+    availableValues.length > 0
+      ? availableValues.map((value) => value.toFixed(2)).join(' | ')
+      : '--',
+    availableValues.length > 0 ? 'info' : 'waiting',
     segments);
 }
 
-function fuelPerLapWorkbenchTone(value, finalValue) {
-  if (value === '--') return 'waiting';
-  const text = String(value || '').toLowerCase();
-  if (text.includes('partial')
-    || text.includes('low')
-    || text.includes('stint')
-    || text.includes('high')
-    || text.includes('one')
-    || text.includes('quali')) {
-    return 'warning';
-  }
-  const modeled = Number.parseFloat(value);
-  const actual = Number.parseFloat(finalValue);
-  if (!Number.isFinite(modeled) || !Number.isFinite(actual)) return 'info';
-  const delta = Math.abs(modeled - actual);
-  if (delta <= 0.05) return 'success';
-  return delta <= 0.50 ? 'warning' : 'error';
+function fuelPerLapWorkbenchValue(value) {
+  return Number.isFinite(value) ? `${value.toFixed(2)} L/lap` : '--';
 }
 
 function fuelRangeWorkbenchRow(label, value, tone, range) {
@@ -6513,7 +7272,10 @@ function fuelTargetUsageReferenceTone(targetUsage) {
 
 function fuelTargetUsageTargetLaps(targetUsage) {
   if (Array.isArray(targetUsage.targetLaps) && targetUsage.targetLaps.length > 0) {
-    return targetUsage.targetLaps;
+    return [...new Set(targetUsage.targetLaps
+      .map((laps) => Number(laps))
+      .filter((laps) => Number.isInteger(laps) && laps > 0))]
+      .sort((left, right) => left - right);
   }
 
   const fuelBudget = Number(targetUsage.budget);
@@ -6523,6 +7285,7 @@ function fuelTargetUsageTargetLaps(targetUsage) {
   }
 
   const projectedLaps = fuelBudget / referenceBurn;
+  if (projectedLaps > 1000) return [];
   const centerLap = Math.max(1, Math.round(projectedLaps));
   return centerLap === 1
     ? [1, 2, 3]
@@ -6632,6 +7395,9 @@ function fuelPitRequestAddAmount(request, burn) {
 
   const reserve = fuelPitRequestNonNegative(request?.reserveFuel);
   const pitLane = fuelPitRequestNonNegative(request?.pitLaneFuel);
+  if (!Number.isFinite(reserve) || !Number.isFinite(pitLane)) {
+    return null;
+  }
   const targetFuel = targetLaps * burnValue + reserve + pitLane;
   const rawAdd = Math.max(0, targetFuel - currentFuel);
   const tankCapacity = Number(request?.tankCapacity);
@@ -6663,8 +7429,9 @@ function fuelPitRequestBurnLabel(burn) {
 }
 
 function fuelPitRequestNonNegative(value) {
+  if (value === null || value === undefined) return 0;
   const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
 }
 
 function fuelRangeValueTone(value) {
@@ -6730,7 +7497,6 @@ function fuelLapsWorkbenchV2Value(checkpoint) {
       Number.isFinite(cleanFinishLap) ? cleanFinishLap : finishLap,
       Number.isFinite(checkpoint.previousCleanFinishLap) ? checkpoint.previousCleanFinishLap : finishLap);
     if (heldFinishLap > Math.ceil(finishLap)) {
-      finishLap = heldFinishLap;
       suffix = ' held degraded';
     }
   }

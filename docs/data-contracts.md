@@ -155,6 +155,14 @@ is stored under `history/user/fuel-v2/`. It is not read by V1 strategy while
 aggregate, or import semantics should bump the narrow Fuel V2 version constant
 instead of the V1 `HistoricalDataVersions` constants.
 
+Fuel V2 format-version-1 capture and summary models already contain physical
+tank capacity, driver/class fuel-cap percentages, effective session capacity,
+source, and limitation fields. Populating those existing nullable/placeholder
+fields from live session info does not change the persisted shape or reinterpret
+older values, so it does not by itself bump a Fuel V2 version. Readers must
+continue to accept older artifacts whose effective capacity is null or whose
+source records that the value was unavailable.
+
 When a setting default changes without changing the persisted setting shape, do
 not bump the settings schema by default. Prefer migrator logic that only applies
 the default transition to versions that predate the baseline that introduced the

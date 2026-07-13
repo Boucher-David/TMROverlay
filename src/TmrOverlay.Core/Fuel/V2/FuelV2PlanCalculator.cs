@@ -24,7 +24,7 @@ internal static class FuelV2PlanCalculator
         FuelV2Scalar? stintBurn,
         FuelV2PlanOptions? options = null)
     {
-        var fuel = PositiveOrNull(usableStintFuelLiters);
+        var fuel = NonNegativeOrNull(usableStintFuelLiters);
         var burn = stintBurn?.HasValue == true && stintBurn.Value > 0d
             ? stintBurn
             : null;
@@ -63,8 +63,8 @@ internal static class FuelV2PlanCalculator
         FuelV2Scalar? futureBurn,
         FuelV2PlanOptions? options = null)
     {
-        var currentCapacity = StintRangeFromFuel(PositiveOrNull(currentFuelLiters), currentBurn);
-        var futureCapacity = StintCapacityFromFuel(PositiveOrNull(futureFuelLiters), futureBurn);
+        var currentCapacity = StintRangeFromFuel(NonNegativeOrNull(currentFuelLiters), currentBurn);
+        var futureCapacity = StintCapacityFromFuel(NonNegativeOrNull(futureFuelLiters), futureBurn);
 
         return BuildCurrentCheckpoint(
             plannedRaceLaps,
@@ -86,10 +86,10 @@ internal static class FuelV2PlanCalculator
         var flags = DistinctFlags(safeOptions.StateFlags);
         var raceLaps = PositiveOrNull(plannedRaceLaps);
         var remainingLaps = NonNegativeOrNull(raceLapsRemaining);
-        var stintCapacity = PositiveOrNull(stintCapacityLaps);
+        var stintCapacity = NonNegativeOrNull(stintCapacityLaps);
         int? stintCount = null;
         double? finalStint = null;
-        if (raceLaps.HasValue && stintCapacity.HasValue)
+        if (raceLaps.HasValue && stintCapacity is > 0d)
         {
             var race = raceLaps.Value;
             var capacity = stintCapacity.Value;
@@ -151,8 +151,8 @@ internal static class FuelV2PlanCalculator
         var flags = DistinctFlags(safeOptions.StateFlags);
         var raceLaps = PositiveOrNull(plannedRaceLaps);
         var remainingLaps = NonNegativeOrNull(raceLapsRemaining);
-        var currentCapacity = PositiveOrNull(currentStintCapacityLaps);
-        var futureCapacity = PositiveOrNull(futureStintCapacityLaps);
+        var currentCapacity = NonNegativeOrNull(currentStintCapacityLaps);
+        var futureCapacity = NonNegativeOrNull(futureStintCapacityLaps);
 
         int? stintCount = null;
         int? stopCount = null;
@@ -168,7 +168,7 @@ internal static class FuelV2PlanCalculator
                 stopCount = 0;
                 finalStint = remaining;
             }
-            else if (futureCapacity is { } future)
+            else if (futureCapacity is { } future && future > 0d)
             {
                 var remainingAfterCurrent = remaining - current;
                 var futureStintCount = Math.Max(1, (int)Math.Ceiling(remainingAfterCurrent / future - 0.000001d));
@@ -223,18 +223,20 @@ internal static class FuelV2PlanCalculator
     private static double? StintCapacityFromFuel(double? usableStintFuelLiters, FuelV2Scalar? burn)
     {
         if (usableStintFuelLiters is not { } fuel
+            || burn?.HasValue != true
             || burn?.Value is not { } burnValue
             || burnValue <= 0d)
         {
             return null;
         }
 
-        return Math.Max(1d, Math.Floor(fuel / burnValue));
+        return Math.Floor(fuel / burnValue);
     }
 
     private static double? StintRangeFromFuel(double? usableStintFuelLiters, FuelV2Scalar? burn)
     {
         if (usableStintFuelLiters is not { } fuel
+            || burn?.HasValue != true
             || burn?.Value is not { } burnValue
             || burnValue <= 0d)
         {
@@ -345,17 +347,23 @@ internal static class FuelV2PlanCalculator
 
     private static FuelV2WorkbenchTone Tone(double? raceLaps, double? stintCapacityLaps, IReadOnlyList<FuelV2PlanStateFlag> flags)
     {
-        if (raceLaps is null || stintCapacityLaps is null)
+        if (raceLaps is null)
         {
             return FuelV2WorkbenchTone.Waiting;
         }
 
-        return flags.Any(flag => flag is FuelV2PlanStateFlag.HeldLapBudget
+        var hasWarningContext = flags.Any(flag => flag is FuelV2PlanStateFlag.HeldLapBudget
                 or FuelV2PlanStateFlag.DegradedLapBudget
                 or FuelV2PlanStateFlag.ConditionMix
                 or FuelV2PlanStateFlag.RepairContext
                 or FuelV2PlanStateFlag.FinalStintEdge
-                or FuelV2PlanStateFlag.TankLimited)
+                or FuelV2PlanStateFlag.TankLimited);
+        if (stintCapacityLaps is not > 0d)
+        {
+            return hasWarningContext ? FuelV2WorkbenchTone.Warning : FuelV2WorkbenchTone.Waiting;
+        }
+
+        return hasWarningContext
             ? FuelV2WorkbenchTone.Warning
             : FuelV2WorkbenchTone.Info;
     }

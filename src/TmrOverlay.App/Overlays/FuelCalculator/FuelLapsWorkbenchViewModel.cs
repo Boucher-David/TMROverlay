@@ -101,8 +101,16 @@ internal static class FuelLapsWorkbenchViewModel
         }
 
         return new WorkbenchCell(
-            $"{FormatLaps(finishLaps.Value)} {SourceToken(estimate.Source, probe)}{BudgetSuffix(budget)}",
+            FormatBudgetProjection(finishLaps.Value, SourceToken(estimate.Source, probe), budget),
             CellTone(finishLaps.Value, actualLaps, estimate.Source, budget));
+    }
+
+    internal static string FormatBudgetProjection(
+        double estimatedFinishLap,
+        string sourceToken,
+        LiveRaceLapBudget budget)
+    {
+        return $"{FormatLaps(estimatedFinishLap)} {sourceToken}{BudgetSuffix(budget)}";
     }
 
     private static HistoricalSessionContext BuildContext(CheckpointProbe probe)
@@ -299,10 +307,7 @@ internal static class FuelLapsWorkbenchViewModel
 
     private static string FormatLaps(double laps)
     {
-        var rounded = Math.Round(laps);
-        return Math.Abs(laps - rounded) <= 0.05d
-            ? rounded.ToString("0", CultureInfo.InvariantCulture)
-            : laps.ToString("0.0", CultureInfo.InvariantCulture);
+        return laps.ToString("0.00", CultureInfo.InvariantCulture);
     }
 
     private static double? ValidLapCount(int? laps)

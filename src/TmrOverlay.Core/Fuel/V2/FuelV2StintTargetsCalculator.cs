@@ -2,6 +2,8 @@ namespace TmrOverlay.Core.Fuel.V2;
 
 internal static class FuelV2StintTargetsCalculator
 {
+    private const double RatioComparisonEpsilon = 0.000000001d;
+
     public static FuelV2StintTargetsSnapshot From(
         double? currentFuelLiters,
         FuelV2Scalar? referenceBurn,
@@ -11,7 +13,7 @@ internal static class FuelV2StintTargetsCalculator
     {
         var safeOptions = options ?? FuelV2StintTargetsOptions.Default;
         var flags = DistinctFlags(safeOptions.StateFlags);
-        var currentFuel = PositiveOrNull(currentFuelLiters);
+        var currentFuel = NonNegativeOrNull(currentFuelLiters);
         var reserve = NonNegativeOrZero(safeOptions.ReserveFuelLiters);
         var pitLane = NonNegativeOrZero(safeOptions.PitLaneFuelLiters);
         var usableFuel = currentFuel is { } fuel
@@ -21,12 +23,15 @@ internal static class FuelV2StintTargetsCalculator
             ? referenceBurn
             : null;
         var remaining = NonNegativeOrNull(remainingLaps);
-        var target = PositiveIntOrNull(targetLaps)
-            ?? DefaultTargetLaps(usableFuel, burn, remaining);
+        var target = remaining is 0d
+            ? null
+            : PositiveIntOrNull(targetLaps) ?? DefaultTargetLaps(usableFuel, burn, remaining);
         var range = CurrentRange(usableFuel, burn);
         var targets = TargetCells(usableFuel, burn, remaining, target, safeOptions);
         var targetCell = targets.FirstOrDefault(cell => cell.TargetLaps == target);
-        var status = Status(targetCell, range, target, burn, flags, safeOptions.PlanLabel);
+        var status = remaining is 0d
+            ? (Label: "finished", Tone: FuelV2WorkbenchTone.Info)
+            : Status(targetCell, range, target, burn, flags, safeOptions.PlanLabel);
 
         return new FuelV2StintTargetsSnapshot(
             CurrentFuelLiters: currentFuel,
@@ -68,7 +73,7 @@ internal static class FuelV2StintTargetsCalculator
         int targetLaps,
         FuelV2StintTargetsOptions options)
     {
-        var required = PositiveOrNull(usableFuelLiters) is { } fuel
+        var required = NonNegativeOrNull(usableFuelLiters) is { } fuel
             ? FuelV2Scalar.From(
                 fuel / targetLaps,
                 $"stint target {targetLaps} laps",
@@ -92,7 +97,12 @@ internal static class FuelV2StintTargetsCalculator
             role,
             strategyDelta);
         var tone = TargetTone(required, referenceBurn);
-        if (strategyDelta is < -0.001d && tone < FuelV2WorkbenchTone.Warning)
+        if (strategyDelta is < -0.001d && tone != FuelV2WorkbenchTone.Error)
+        {
+            tone = FuelV2WorkbenchTone.Warning;
+        }
+
+        if (options.StateFlags?.Any(IsContextFlag) == true && tone == FuelV2WorkbenchTone.Success)
         {
             tone = FuelV2WorkbenchTone.Warning;
         }
@@ -158,7 +168,9 @@ internal static class FuelV2StintTargetsCalculator
         if (context?.StopAvoidanceSeconds is not { } stopAvoidance
             || context.PaceLossSeconds is not { } paceLoss
             || !IsFinite(stopAvoidance)
-            || !IsFinite(paceLoss))
+            || !IsFinite(paceLoss)
+            || stopAvoidance < 0d
+            || paceLoss < 0d)
         {
             return null;
         }
@@ -259,7 +271,9 @@ internal static class FuelV2StintTargetsCalculator
             && targetLaps is { } target
             && range >= target - 0.000001d)
         {
-            return (prefix + "tracking", FuelV2WorkbenchTone.Success);
+            return (
+                prefix + "tracking",
+                flags.Any(IsContextFlag) ? FuelV2WorkbenchTone.Warning : FuelV2WorkbenchTone.Success);
         }
 
         if (IsUnrealistic(targetCell.RequiredFuelPerLap, referenceBurn))
@@ -274,11 +288,14 @@ internal static class FuelV2StintTargetsCalculator
 
         if (targetCell.SaveRequiredLitersPerLap is { } save && save > 0.005d)
         {
-            var tone = save <= 0.75d ? FuelV2WorkbenchTone.Warning : FuelV2WorkbenchTone.Error;
-            return ($"{prefix}save {save:0.00} L/lap", tone);
+            return ($"{prefix}save {save:0.00} L/lap", FuelV2WorkbenchTone.Warning);
         }
 
-        return (prefix + "edge", targetCell.Tone);
+        return (
+            prefix + "edge",
+            flags.Any(IsContextFlag) && targetCell.Tone == FuelV2WorkbenchTone.Success
+                ? FuelV2WorkbenchTone.Warning
+                : targetCell.Tone);
     }
 
     private static FuelV2WorkbenchTone TargetTone(FuelV2Scalar required, FuelV2Scalar? referenceBurn)
@@ -298,18 +315,15 @@ internal static class FuelV2StintTargetsCalculator
             return FuelV2WorkbenchTone.Error;
         }
 
-        if (IsBigSave(required, referenceBurn))
-        {
-            return FuelV2WorkbenchTone.Warning;
-        }
-
         var ratio = required.Value!.Value / referenceBurn.Value!.Value;
-        if (ratio >= 1d)
+        if (ratio >= 1d - RatioComparisonEpsilon)
         {
             return FuelV2WorkbenchTone.Success;
         }
 
-        return ratio >= 0.95d ? FuelV2WorkbenchTone.Warning : FuelV2WorkbenchTone.Error;
+        return ratio >= 0.85d - RatioComparisonEpsilon
+            ? FuelV2WorkbenchTone.Warning
+            : FuelV2WorkbenchTone.Error;
     }
 
     private static bool IsBigSave(FuelV2Scalar required, FuelV2Scalar? referenceBurn)
@@ -320,7 +334,8 @@ internal static class FuelV2StintTargetsCalculator
         }
 
         var ratio = required.Value!.Value / referenceBurn.Value!.Value;
-        return ratio < 0.92d && ratio >= 0.85d;
+        return ratio < 0.92d - RatioComparisonEpsilon
+            && ratio >= 0.85d - RatioComparisonEpsilon;
     }
 
     private static bool IsUnrealistic(FuelV2Scalar required, FuelV2Scalar? referenceBurn)
@@ -330,11 +345,16 @@ internal static class FuelV2StintTargetsCalculator
             return false;
         }
 
-        return required.Value!.Value / referenceBurn.Value!.Value < 0.85d;
+        return required.Value!.Value / referenceBurn.Value!.Value < 0.85d - RatioComparisonEpsilon;
     }
 
     private static int? DefaultTargetLaps(double? usableFuelLiters, FuelV2Scalar? referenceBurn, double? remainingLaps)
     {
+        if (remainingLaps is 0d)
+        {
+            return null;
+        }
+
         var range = CurrentRange(usableFuelLiters, referenceBurn);
         if (range is not { } projected || projected <= 0d)
         {
@@ -349,7 +369,7 @@ internal static class FuelV2StintTargetsCalculator
 
     private static double? CurrentRange(double? usableFuelLiters, FuelV2Scalar? referenceBurn)
     {
-        return PositiveOrNull(usableFuelLiters) is { } fuel
+        return NonNegativeOrNull(usableFuelLiters) is { } fuel
             && referenceBurn?.HasValue == true
             && referenceBurn.Value!.Value > 0d
             ? fuel / referenceBurn.Value!.Value

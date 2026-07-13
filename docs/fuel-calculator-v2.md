@@ -384,9 +384,10 @@ Hard product decision:
 - Effective session capacity comes from the physical tank plus the active rule
   cap fields, such as `DriverCarMaxFuelPct` and `CarClassMaxFuelPct`.
 - When caps are percentages of the physical tank, use the applicable most
-  restrictive positive cap for the local car/session. If no cap is present or
-  the cap is effectively unrestricted, effective session capacity can equal the
-  physical tank.
+  restrictive positive cap for the local car/session. An explicit, trusted
+  unrestricted cap can make effective session capacity equal the physical
+  tank. If cap evidence is absent, physical capacity remains useful context but
+  does not silently become an advice-capable effective capacity.
 - If the car has a 75 L physical tank but the session cap is 50 L, full-tank
   stint, add-to-full, no-stop, last-safe-lap, and pit-service quantity
   calculations must use 50 L.
@@ -1412,12 +1413,13 @@ Two current gaps matter for the Dallara examples:
   normal event burn.
 - Session info exposes both physical tank capacity (`DriverCarFuelMaxLtr`) and
   effective fuel-limit fields such as `DriverCarMaxFuelPct` and per-class
-  `CarClassMaxFuelPct` in captures. Current parsed history stores the physical
-  tank capacity but not the effective event fuel cap, so limited-fuel races can
-  overstate full-tank stint potential. Fuel V2 should parse the effective cap
-  before enabling full-tank or add-to-full live strategy for capped sessions.
-  Historical stop timing should still be learned from the observed stop and fuel
-  delta even when cap metadata is incomplete.
+  `CarClassMaxFuelPct` in captures. Gate 2 now retains exact-local-car cap
+  evidence in runtime context and populates the existing Fuel V2 sidecar/history
+  capacity fields. Those facts remain diagnostics/learning evidence until the
+  later composition and production-promotion gates explicitly allow them to
+  drive full-tank or add-to-full strategy. Historical stop timing should still
+  be learned from the observed stop and fuel delta even when cap metadata is
+  incomplete.
 
 The product value is not only the average. For example, if no-stop requires
 `12.5 L/lap`, an average of `13.5`, a historical minimum of `12.7`, and no
@@ -2254,6 +2256,463 @@ fixture proof, copy/source labels, and browser/native/localhost consumption shap
 approved. Browser-review workbench fixtures can mirror staged formulas during
 exploration.
 
+### Phased Workbench Continuation Plan
+
+Continue the foundational hardening and lower-half work with the same phased
+method used for the existing V2 cells. Each phase should answer one narrow
+question, compare real and controlled evidence in the browser workbench, and
+only then promote the accepted behavior into staged typed Core code.
+
+The repeating phase loop is:
+
+1. State the narrow calculation or evidence question in this document.
+2. Add real-capture rows, spreadsheet-derived control cases, and relevant
+   degraded or negative controls. Spreadsheet cases supplement live/capture
+   evidence; they do not replace telemetry as runtime authority.
+3. Expose raw inputs, competing interpretations, source/confidence, and the
+   proposed output in the browser workbench. Sparse rows are acceptable.
+4. Review and revise the rule while the workbench remains fluid.
+5. Promote only the accepted calculation into a small renderer-neutral contract
+   under `src/TmrOverlay.Core/Fuel/V2/`.
+6. Add focused characterization or contract tests for accepted behavior and
+   important exclusions, then run only the targeted checks that de-risk the
+   slice.
+7. Commit the completed slice before beginning the next phase. Keep V1
+   production strategy unchanged and keep Fuel V2 learned history gated from
+   strategy until a later explicit promotion decision.
+
+Planned phases:
+
+0. **Lock the current staged and workbench baseline.** Review Fuel/Lap, Range,
+   Target Usage, Fuel To Add, Plan, and Stint Targets one cell at a time. Add
+   focused Core characterization tests and deterministic populated, degraded,
+   and no-data workbench states for the same accepted contract. Capture current
+   intentional behavior, missing-input behavior, product-visible cell
+   semantics, and top-half/lower-half boundaries without freezing temporary
+   engineering rows, paint details, or formulas already classified as
+   provisional.
+1. **Effective Capacity workbench.** Compare physical capacity, driver cap,
+   class cap, resolved effective capacity, source, confidence, and conflict
+   state. Include real Dallara/endurance evidence, spreadsheet cap examples,
+   unrestricted controls, missing fields, contradictory fields, and observed
+   fuel above the proposed cap. Promote a resolver only after field semantics
+   and precedence are proven.
+2. **Fuel Budget Flow workbench.** Preserve separate typed checkpoints for
+   effective cap, first-green fuel, current fuel, expected fuel at the box,
+   service-complete fuel, and expected pit-exit fuel. Show formation, reserve,
+   margin, and pit-lane adjustments explicitly rather than collapsing them into
+   one universal `usable fuel` value. Keep margin/reserve out of the raw Target
+   Usage row until that separate strategy policy is deliberately applied.
+3. **Burn Bucket Contract workbench.** Normalize identity and provenance for
+   `Last`, `5L`, `10L`, `Max`, optional `Min`, and optional `Quali` across
+   Fuel/Lap, Range, Target Usage, and Fuel To Add. Extend the existing
+   `FuelV2Scalar` and `FuelV2FuelPerLapWindows` shapes rather than creating a
+   parallel evidence model. Do not reinterpret evidence buckets as save, push,
+   wet, caution, or other strategy profiles, and do not force visual symmetry
+   when a calculation has no useful value for a bucket.
+4. **Boundary and Feasibility workbench.** Add factual Core outputs for
+   fractional range, safe whole laps, next-lap fuel edge, required add, tank
+   room, clamped add, shortfall, and target achievability. Exercise exact and
+   near-integer lap boundaries, margin-flipped cases, tank-limited requests,
+   unknown current fuel, unknown effective capacity, and seed-only evidence.
+   Keep the visible top half sparse and comparative; `box`, `stay out`, `save`,
+   stop deletion, and condition-aware bucket selection still belong below.
+5. **Shared Snapshot parity workbench.** After the individual contracts are
+   stable, add a thin renderer-neutral Fuel V2 composition point that consumes
+   the independently owned lap budget, capacity/budget facts, burn evidence,
+   feasibility, and optional service evidence. Compare its outputs against the
+   accepted individual workbench cells before the lower half depends on it. Do
+   not replace cell-by-cell iteration with a monolithic evidence/live/strategy
+   rewrite.
+6. **Bottom-half `Stint N` workbench.** Build per-stint start fuel, target laps,
+   burn basis, required fuel, add amount, end fuel, feasibility, saving target,
+   and source/confidence context from normalized facts. This is where
+   condition-aware selection, realistic stint sequences, stop deletion, and
+   strategy meaning can begin. Service timing may remain unavailable or
+   learning; that must not block basic stint count, length, fuel, or tank
+   feasibility.
+
+After these phases stabilize, perform a distinct production-promotion pass for
+native Windows, browser review, and localhost/OBS consumption; settings and
+margin persistence; scenario/data contracts; screenshot and manifest evidence;
+Windows build/tests; documentation/version hygiene; and the explicit decision
+to allow any Fuel V2 history or calculation to drive strategy. Broad parity and
+release validation are stabilization gates, not requirements after every fluid
+workbench edit.
+
+#### Phase 0A Contract Inventory - 2026-07-13
+
+Phase 0A audits the existing staged calculators before characterization tests
+are added. It does not approve every current output. Classify behavior as:
+
+- **Lock now:** established mathematical or evidence invariants that later
+  phases should preserve.
+- **Provisional:** current workbench heuristics, presentation, known drift, or
+  behavior that still needs a product/evidence decision.
+- **Defer:** behavior explicitly owned by a later phase and not required to
+  characterize the existing staged foundation.
+
+Cross-cutting inventory:
+
+- The browser Fuel V2 workbench remains the existing branch-gated Fuel overlay
+  fixture in `tools/browser-review/server.mjs`; staged calculations remain under
+  `src/TmrOverlay.Core/Fuel/V2/`. Do not create a second workbench or overlay for
+  Phase 0.
+- The browser workbench does not execute staged Core. It contains hard-coded
+  result rows and hand-translated JavaScript formulas. Visual agreement is not
+  proof that browser and Core share inputs, provenance, missing-data behavior,
+  or arithmetic.
+- Focused characterization tests now exercise the accepted Gate 1 boundaries
+  for Lap, Fuel/Lap, Range, Target Usage, Fuel To Add, Plan, and Stint Targets.
+  The older Fuel V2 tests continue to cover diagnostic capture and learned-
+  history behavior; later gates add composed and replay proof.
+- Lock the renderer-neutral evidence dimensions carried by `FuelV2Scalar`:
+  value, source, confidence, context flags, display eligibility, and clean-
+  baseline eligibility. Keep display eligibility separate from baseline
+  eligibility.
+- Do not lock the current free-form provenance implementation. The typed
+  `FuelV2BurnSource` vocabulary exists, but staged scalars do not retain it and
+  the Fuel/Lap calculator currently discards the enum passed into its window
+  builder. Derived calculations often replace the underlying source string
+  rather than composing provenance.
+- Gate 1 locks factual current/usable zero versus unavailable for Range, Fuel To
+  Add, Plan, and Stint Targets. Target Usage continues to require a positive
+  target budget. Do not generalize those calculator-local rules into the future
+  reusable schema: Gates 2 and 4 must define normalized known-empty,
+  unavailable, invalid, and infeasible budget states.
+- Do not lock tone enum ordering, exact labels, or workbench copy. Tones remain
+  temporary diagnostic presentation, and staged logic must not rely on enum
+  numeric order as a severity scale.
+
+Fuel/Lap inventory:
+
+- **Lock now:** accepted burn inputs are positive and finite; `Last` is the most
+  recent accepted clean span; full `5L` and `10L` are trailing five- and ten-
+  sample averages; `Max` retains the greater of accepted live clean burn and a
+  labeled max/quali seed; formation, pit, repair, caution, and other edge fuel
+  remain separate from clean rolling windows.
+- **Gate 1 resolution:** when partial windows are explicitly enabled, `5L`
+  starts at three accepted samples and `10L` starts at six. Partial averages no
+  longer claim sector-seed context, and zero, negative, or nonfinite seeds cannot
+  become displayed extrema. Exact accepted-span boundaries, `Min`, seed
+  retirement, display bucket count, and source/copy treatment remain provisional.
+- **Retained workbench state:** Fuel/Lap is individually selectable through
+  isolated populated, degraded/learning, and unavailable browser fixtures. Its
+  product-shaped row is `Fuel/Lap | Last | 5L | 10L | Max`; the previous V1
+  reference and multi-scenario engineering table are not part of the retained
+  cell. Browser values are calculated from explicit capture-derived control
+  inputs through a checked hand-translated mirror rather than executed Core
+  output, so focused Core tests carry the authoritative sample-filtering,
+  rolling-window maturation, evidence-dimension, and max-seed-selection proof.
+- **Remaining workbench drift:** downstream Range and Fuel To Add fixtures still
+  receive copied burn values rather than the retained Fuel/Lap evidence set.
+  Phase 3 must normalize that shared bucket identity before composition.
+- **Defer:** nuanced wet/traffic/draft/yellow classification, exact completed-
+  lap semantics, strategy-profile mapping, selected authoritative burn, and
+  production promotion.
+
+Range inventory:
+
+- **Lock now:** decimal current-tank range is `current fuel / burn` for each
+  available evidence bucket; burn confidence, context, and display eligibility
+  propagate; Range does not compare itself to race laps remaining or make a
+  stop/no-stop claim.
+- **Gate 1 resolution:** known zero fuel is a factual zero range for every
+  available positive burn; negative, nonfinite, and unavailable fuel remain
+  unavailable. The snapshot still has closed named fields for only
+  `Last/5L/10L/Max`, and derived source text replaces rather than composes the
+  underlying burn source. Phase 3 owns the reusable bucket contract and must not
+  force visual symmetry.
+- **Workbench drift:** deterministic zero and explicit-null boundary rows now
+  preserve the accepted visible distinction, but the older browser Range rows
+  remain hard-coded finished numbers. Partial status is inferred from display
+  strings, and those rows do not yet prove division or bucket provenance.
+- **Defer:** full-tank range, laps-remaining comparison, safe whole laps,
+  next-lap edge, and target feasibility. Phase 4 may add those as factual Core
+  outputs without turning Range into strategy advice.
+
+Target Usage inventory:
+
+- **Lock now:** required burn is `fuel budget / target laps`; supplied targets
+  are positive, distinct, and ordered; the reference burn is a comparator only;
+  raw Target Usage applies no reserve, margin, pit loss, bucket selection, or
+  strategy advice.
+- **Provisional:** target generation, tones, copy, and provenance. Staged Core
+  marks required values `Live` without inheriting budget confidence and cannot
+  distinguish cap seed, observed first-green fuel, or degraded budget evidence.
+- **Gate 1 resolution:** generated candidates center on
+  `round(budget / reference)` and show the positive, distinct, ordered
+  `N-1/N/N+1` set, with `1/2/3` at the one-lap edge. Implausible projections are
+  rejected before integer conversion. Required burn remains factual and
+  informational without a reference; with a reference, Core and browser share
+  success/warning/error comparator bands. Budget provenance and confidence
+  inheritance remain provisional.
+- **Defer:** capacity resolution, typed first-green/current/at-box/pit-exit
+  budgets, reserve/margin application, plan-owned target selection, and advice.
+
+Fuel To Add inventory:
+
+- **Lock now:** for each available raw burn bucket, desired fuel is
+  `target laps * burn + reserve + pit-lane fuel`; add is desired fuel minus
+  current fuel clamped at zero; known zero current fuel is valid; available tank
+  room clamps the add and sets a factual tank-limited state; no bucket is chosen
+  and no simulator command is issued.
+- **Gate 1 resolution:** negative or nonfinite reserve/pit-lane adjustments and
+  nonpositive or nonfinite burns cannot produce a request cell; known zero
+  current fuel remains valid. Capacity still means session-effective capacity
+  once Gate 2 resolves it, and current fuel is not sufficient for a future stop
+  until Gate 2 provides expected fuel at box. Tones and exact six-column
+  presentation remain diagnostic. Whether a reported zero tank capacity is a
+  factual cap or missing/invalid telemetry is explicitly deferred to Gate 2's
+  typed capacity state rather than locked by this calculator.
+- **Workbench drift:** browser and Core share the basic formula, but browser
+  synthesizes `Max` and `Min` from local scenario fields rather than consuming
+  the staged Fuel/Lap windows. Browser and Core also use different zero-add and
+  degraded-source tone rules.
+- **Defer:** explicit target achievability, shortfall, maximum feasible laps,
+  configured margin, condition-aware selection, selected `nextPitRequest`, and
+  Pit Service command promotion.
+
+Plan inventory:
+
+- **Lock now:** keep full-race/start planning separate from current-checkpoint
+  planning; current tank range remains decimal; future full/refueled capacity is
+  whole-lap capacity; stint count, stop count, and final-stint remainder consume
+  those distinct inputs; Plan does not choose the authoritative burn bucket or
+  issue strategy commands.
+- **Gate 1 resolution:** full/refueled capacity is the unmodified
+  `floor(fuel / burn)` and may be factual zero; positive sub-lap and known-zero
+  fuel no longer invent one lap or collapse to unavailable. Current fractional
+  range remains separate, and a zero future capacity cannot create a plan.
+- **Provisional:** finished-race zero-lap semantics, `FinalStintEdge` threshold,
+  epsilon/rounding, labels, tones, and the generic `UsableStintFuelLiters` name.
+  The visible `Start cap` label is underspecified when the value actually means
+  an adjusted first-stint budget.
+- **Workbench parity:** browser Plan is a close hand-translation of Core for
+  positive inputs, including decimal current versus floored future capacity,
+  but inputs, source/confidence, flags, and unavailable-state tones remain
+  separate implementations.
+- **Defer:** condition-aware bucket selection, future pit-cycle simulation,
+  projected lap-down strategy, time comparison, and final advice.
+
+Stint Targets inventory:
+
+- **Lock now:** current usable fuel is current fuel minus explicit reserve and
+  pit-lane adjustments; current range is decimal; candidate required burn is
+  usable fuel divided by target laps; required saving compares that value with
+  the reference burn; explicit positive candidate overrides and dynamic
+  `Short/Plan/Stretch/Extra` roles are allowed; the row remains target context,
+  not `box`, `stay out`, or hard save advice.
+- **Provisional:** default target selection, candidate visibility, exact roles,
+  92%/85% plausibility thresholds, absolute `0.75 L/lap` copy threshold, tones,
+  labels, and optional time-context ownership. The document says time valuation
+  belongs above the raw row while the staged calculator can already hide a
+  target as `not worth time`; resolve that ownership before locking it.
+- **Gate 1 resolution:** known zero/fully consumed usable fuel stays factual,
+  zero remaining laps produces `finished` with no target candidates, and saving
+  severity is monotonic across the 92% and 85% boundaries. Valid negative time
+  value hides `not worth time` without a success tone; invalid negative timing
+  evidence is ignored; held/degraded context cannot leave a successful visible
+  candidate or status. Explicit browser `null` remains unavailable instead of
+  becoming zero.
+- **Defer:** learned service-time promotion, condition-aware target choice,
+  future stint sequence, stop deletion, and the actual per-`Stint N` schedule in
+  Phase 6. The current V2 Stint Targets current-tank comparison is the first
+  lower-half experiment, not the completed per-stint schedule.
+
+Sector Burn remains outside this Phase 0 baseline because the planned Phase 0
+scope names the six staged cells above. Preserve only its established boundary:
+sector evidence is live current-lap context and must not silently become a clean
+completed-lap baseline.
+
+Phase 0B should now proceed cell by cell because the stabilized workbench is the
+final Fuel V2 overlay contract, not a separate diagnostic prototype. For each
+cell:
+
+1. Identify the intended product-visible cell shape and separate it from
+   temporary V1 references, capture comparisons, duplicate candidates, and
+   engineering detail.
+2. Add focused Core tests around the accepted arithmetic, evidence, and missing-
+   input invariants.
+3. Activate or update that cell in the existing browser Fuel workbench with at
+   least one deterministic populated case, one degraded/boundary case, and one
+   unavailable/no-data case.
+4. Make the canonical workbench values agree with staged Core semantics. A
+   temporary hand-written mirror is acceptable during this phase only when its
+   inputs and expected outputs are explicit and checked; visually plausible
+   hard-coded results are not parity evidence.
+5. Review the cell as eventual driver-facing content, then commit the completed
+   slice before moving to the next cell.
+
+Use this Phase 0 order: Fuel/Lap, Range, Target Usage, Fuel To Add, Plan, then
+Stint Targets. Resolve each cell's known contradiction before locking that
+specific behavior. In particular, do not bless the known-zero drift,
+partial-10L threshold mismatch, discarded burn-source enum, Target
+candidate/tone mismatch, fake minimum-one-lap Plan capacity, bucket-shape drift,
+or Stint Targets tone contradictions.
+
+Phase 0B progress: Fuel/Lap is the first retained cell. Its locked Core
+characterization covers positive-finite sample filtering, unavailable full
+windows, trailing full `5L`/`10L` averages, no partial windows by default,
+live-versus-labeled-seed `Max`, and the shared scalar evidence dimensions. Its
+three isolated browser states preserve the product row while other cells remain
+hidden and individually selectable. The opt-in partial thresholds are now three
+samples for `5L` and six for `10L`; `Min`, a standalone `Quali` cell, typed
+burn-source retention, and final tone/copy remain deliberately unlocked for
+their owning phase. The isolated unavailable fixture
+proves cell-level missing values; it does not change the existing production
+Fuel overlay's whole-overlay no-data suppression contract.
+
+#### Six-Gate Foundation Completion Sequence - 2026-07-13
+
+A read-only audit of the staged Core calculators, browser workbench, branch
+history, telemetry/capacity inputs, feasibility fragments, composition seams,
+and focused validation produced the following implementation gates. Complete
+them in this order before the full bottom-half `Stint N` calculation:
+
+1. **Correct accepted top-half disagreements.** Bring staged Core and the
+   retained workbench contract back into agreement for Lap, Fuel/Lap, Range,
+   Target Usage, Fuel To Add, Plan, and the existing Stint Targets experiment.
+   This includes the decimal Lap display context, partial-window threshold and
+   invalid-seed behavior, known-zero handling, explicit Target candidate rules,
+   Fuel To Add input validation, the fake minimum-one-lap Plan capacity, and
+   Stint Targets zero/remaining-laps/tone defects. Do not pull later capacity,
+   checkpoint, bucket, or feasibility ownership into this correction gate.
+2. **Add typed effective capacity and fuel checkpoints.** Resolve session-
+   effective capacity from physical capacity plus applicable driver/class cap
+   evidence, retaining missing/conflict/source/confidence state. Preserve
+   effective-cap, first-green, current, expected-at-box, service-complete, and
+   expected-pit-exit fuel as distinct typed facts. Resolve whether the pit
+   request targets service-complete or pit-exit fuel so box-to-exit consumption
+   is neither omitted nor applied twice.
+3. **Normalize burn-bucket identity and provenance.** Give `Last`, `5L`, `10L`,
+   `Max`, optional `Min`, and optional `Quali` stable typed IDs while retaining
+   burn source, sample count, confidence/context, display eligibility, and
+   separate strategy eligibility through every derived cell. Browser fixtures
+   must not infer identity by parsing labels or synthesizing local extrema.
+4. **Add one factual boundary/feasibility owner.** Calculate fractional range,
+   safe whole laps, fuel to the next complete lap, desired fuel/add, tank room,
+   clamped add, shortfall, maximum feasible laps, and typed feasibility state
+   once per burn bucket. Preserve known zero, unavailable, invalid, capacity-
+   conflicted, and mathematically unachievable as different states; display
+   rounding must not drive feasibility.
+5. **Compose one immutable Fuel V2 snapshot.** Add a thin renderer-neutral Core
+   composer over the accepted lap, capacity, checkpoint, bucket, feasibility,
+   Fuel To Add, Target Usage, and Plan owners. It must orchestrate existing
+   calculations without copied arithmetic or hidden checkpoint/bucket defaults.
+   `Stint N` will be a later one-way consumer of this snapshot.
+6. **Prove the shared contract before `Stint N`.** Add direct-calculator versus
+   composed-snapshot equality, dependency-isolation, exact-boundary, known-zero,
+   missing/conflicting capacity, seed-only, ordered start/pit checkpoint, and
+   deterministic live/replay controls. Each accepted cell needs focused Core
+   characterization and populated, degraded/boundary, and unavailable browser
+   fixtures. Windows/CI must run the C# gate because the authoring Mac has no
+   local `dotnet` toolchain.
+
+Review protocol for these gates:
+
+- The main implementation thread owns one gate at a time and runs targeted
+  checks before requesting review.
+- After that implementation is complete, independent read-only review threads
+  audit contract correctness, telemetry/evidence semantics, regressions, and
+  validation coverage.
+- The main thread fixes confirmed findings and repeats targeted checks before
+  marking the gate complete or beginning the next gate.
+- Existing V1 production strategy and native/browser/localhost promotion remain
+  unchanged until the later explicit promotion pass. Spreadsheet-derived cases
+  are calculation controls only; runtime facts continue to come from normalized
+  live telemetry and capture/replay evidence.
+
+Gate 1 completion - 2026-07-13:
+
+- Core, native workbench formatting, and the browser mirror now agree on the
+  accepted Lap, Fuel/Lap, Range, Target Usage, Fuel To Add, Plan, and current-
+  tank Stint Targets boundaries described above.
+- Lap staging retains raw possible laps and finish projection separately from
+  conservative actionable laps, with typed projection/actionable source,
+  confidence, state flags, and actionability. A protective held budget cannot
+  overwrite the displayed raw projection.
+- Focused controls cover partial-window maturation and invalid seeds, factual
+  zero versus unavailable, positive ordered target candidates, invalid pit
+  inputs, sub-lap capacity, finished-race targets, monotonic save severity,
+  time-value hiding, and degraded-context tones. Browser explicit `null` no
+  longer becomes factual zero through JavaScript coercion.
+- Three independent review threads approved the corrected Core contract,
+  telemetry/staging scope, and native/browser presentation parity. Targeted
+  browser/settings/localhost tests, JavaScript syntax, diff hygiene, and the C#
+  compile-shape scan pass. The authoring Mac still lacks `dotnet`, so the new C#
+  tests must be included in the eventual commit and executed on Windows/CI
+  before branch completion.
+
+Gate 2 completion - 2026-07-13:
+
+- `FuelV2EffectiveCapacityResolver` owns the factual relationship between the
+  physical tank and the event fuel-cap evidence. It accepts only finite,
+  positive physical capacity and finite cap percentages in `(0, 1]`. Matching
+  driver/class caps are authoritative; either individual cap is usable at high
+  confidence; disagreeing caps retain the most restrictive computed value but
+  remain conflicted and cannot drive advice. A physical tank with no cap
+  evidence remains visible context rather than silently becoming the effective
+  event capacity.
+- The resolver classifies an effective capacity as limited or unrestricted and
+  cross-checks it against maximum observed live fuel from the same car,
+  session, and capacity-rule scope. A warmup or unrestricted session maximum
+  cannot conflict a later restricted race cap. Invalid inputs, cap disagreement,
+  or same-scope observed fuel materially above the resolved value remain
+  explicit conflict flags and block fuel advice. This is intentionally safer
+  than guessing precedence from a contradictory session payload.
+- `SessionInfoSummaryParser` now retains `DriverCarMaxFuelPct` and the selected
+  driver's `CarClassMaxFuelPct` in non-durable session context. Class-cap
+  evidence requires an exact `DriverCarIdx` match and never comes from the
+  parser's fallback first-driver identity. The Fuel V2
+  capture recorder uses those values with `DriverCarFuelMaxLtr`; it populates
+  the capacity fields already present in format-version-1 Fuel V2 sidecars and
+  learned summaries. No durable V1 history shape or Fuel V2 artifact field was
+  added, so this evidence-population change does not require a schema-version
+  bump and older placeholder/null artifacts remain readable.
+- `FuelV2FuelCheckpointCalculator` retains effective capacity, first-green,
+  current, expected-at-box, service-complete, and expected-pit-exit fuel as
+  distinct facts with typed source, confidence, and state. Measured facts win
+  over projections; missing inputs do not become zero; factual zero stays
+  distinct from unavailable; invalid adjustments cannot produce downstream
+  facts; and above-cap projections are flagged without being clamped ahead of
+  Gate 4.
+- Pit requests target the `ServiceComplete` checkpoint. Expected box-to-exit
+  burn is applied once after service to produce `ExpectedPitExit`; it is not
+  silently included in both the requested service quantity and exit projection.
+  Formation burn is likewise an explicit first-green estimate, not a universal
+  subtraction from every later fuel budget.
+- Deterministic Core and browser controls cover matching, single-source,
+  unrestricted, missing, invalid, conflicting, and observed-above-cap capacity;
+  ordered pit-cycle checkpoints; measured overrides; known zero; missing
+  current fuel; invalid transitions; and above-cap projections. A projection
+  that cannot reach the box may expose its zero floor as conflicted math, but it
+  cannot seed plausible service-complete or pit-exit facts. Descendants retain
+  conflicted baseline provenance, and single-cap effective capacity stays High
+  rather than being relabeled Authoritative. Capture and import tests protect
+  the live-session-info-to-learned-history path, warmup-to-race scope changes,
+  and older format-version-1 null/placeholder artifacts through the existing
+  capacity fields.
+
+This is still a factual foundation, not strategy selection. Configured margin,
+reserve policy, service feasibility/clamping, bucket choice, and per-stint
+meaning remain owned by Gates 3, 4, and 6. Native/browser/localhost production
+promotion remains the later explicit stabilization pass.
+
+Three independent review threads approved the corrected capacity/checkpoint
+contract after finding and verifying fixes for cross-session observed-fuel
+contamination, unrelated-driver class-cap fallback, impossible at-box projection
+chains, descendant conflict provenance, single-cap confidence inflation, stale
+capacity notes, and the older pit-exit-target formula. Targeted browser,
+settings, localhost, syntax, and diff-hygiene checks pass. C# execution remains
+the Windows/CI gate because the authoring Mac has no `dotnet` toolchain.
+
+Phase 0 locks semantic product-cell behavior, not final pixels. Exact geometry,
+paint, final copy, settings UI, native Windows wiring, localhost/OBS wiring, and
+broad screenshot/manifest parity remain stabilization work. Phase 5 still adds
+the thin shared composition point; it should centralize already-approved cell
+semantics rather than redesign them.
+
 Overlay iteration policy: the Fuel V2 overlay layout is allowed to be fluid
 during development. Any cell or row may be duplicated, moved, hidden, deleted,
 renamed, or retuned while engineering a specific model or strategy behavior. It
@@ -2272,6 +2731,46 @@ experimental gate for now; do not add a user-facing V2 setting yet. If shared
 tester builds need to preserve V1 behavior before hardening, add an explicit
 hidden/developer flag at that point instead of designing a full product toggle
 up front.
+
+Workbench-to-product decision: the Fuel V2 workbench is the evolving Fuel V2
+overlay, not a disposable engineering mock or a precursor to a separate final
+design. When development is complete, the stabilized workbench is the exact V2
+overlay contract: approved cells, ordering, labels, settings-driven bucket
+visibility, source/confidence semantics, no-data behavior, and lower-half stint
+structure promote directly to the native Windows, browser-review, and
+localhost/OBS surfaces. Do not plan a later product redesign that reinterprets
+or replaces the approved workbench after its logic has been reviewed.
+
+Temporary comparison rows, V1 references, duplicate candidates, stress cases,
+capture identifiers, and engineering-only source detail are still allowed while
+a cell is under active development. They must be clearly experimental and must
+either be removed from the stabilized workbench or deliberately retained behind
+an engineering/debug surface before production promotion. This keeps the
+development loop fluid without creating a second gap between the overlay we
+approve in the workbench and the overlay drivers ultimately receive.
+
+Finalized-cell retention decision: previously approved cells may remain hidden
+while another cell is the active workbench focus, but hidden must never mean
+deleted, duplicated as an unverified formula, or allowed to drift. A finalized
+cell retains all of the following while hidden:
+
+- its staged renderer-neutral Core calculation and typed evidence contract;
+- focused tests for accepted arithmetic, missing/degraded inputs, and important
+  exclusions;
+- deterministic populated, degraded/boundary, and unavailable/no-data fixture
+  states;
+- an individually selectable browser-workbench fixture or equivalent review
+  route;
+- its approved product-cell semantics and intended ordering in the eventual
+  assembled overlay.
+
+The active-workbench selector controls presentation only. It may isolate the
+current cell and hide finalized siblings, but it must not own calculation logic,
+replace shared inputs with unrelated copied values, or erase the ability to
+review any finalized cell on demand. Before stabilization, add an all-approved-
+cells composition fixture that proves the retained sections assemble in their
+intended top-half and bottom-half order without changing their individual
+contracts.
 
 Initial lap-counter workbench decision: start Fuel V2 by turning the existing
 Fuel overlay into a capture/checkpoint comparison table. Use one row per useful
@@ -2946,9 +3445,14 @@ Fuel-service time becomes straightforward once Fuel V2 has a credible fill-rate
 baseline and a credible fuel-to-add target:
 
 ```text
-fuelToAddLiters = max(0, targetFuelAtPitExit - expectedFuelAtBox)
+serviceCompleteTargetLiters = targetFuelAtPitExit + expectedBoxToPitExitFuel
+fuelToAddLiters = max(0, serviceCompleteTargetLiters - expectedFuelAtBox)
 fuelServiceSeconds = fuelToAddLiters / fillRateLitersPerSecond
 ```
+
+The pit request therefore targets service-complete fuel. The explicit
+box-to-exit consumption converts the desired pit-exit fuel into that service
+checkpoint once; it must not be omitted or subtracted a second time later.
 
 The hard part is not the arithmetic. The hard parts are proving the fill-rate
 sample, proving which services were active during the window, and deciding

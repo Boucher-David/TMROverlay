@@ -15,6 +15,7 @@ internal static class SessionInfoSummaryParser
         var selectedSession = SelectSession(parsed);
         var session = selectedSession?.Values ?? EmptyDictionary;
         var driver = SelectDriver(parsed);
+        var exactDriver = SelectExactDriver(parsed);
 
         return new HistoricalSessionContext
         {
@@ -72,6 +73,13 @@ internal static class SessionInfoSummaryParser
                 TrackSkies = ReadString(parsed.WeekendInfo, "TrackSkies"),
                 TrackPrecipitationPercent = ReadDouble(parsed.WeekendInfo, "TrackPrecipitation"),
                 SessionTrackRubberState = ReadString(session, "SessionTrackRubberState")
+            },
+            FuelCapacityRules = new HistoricalFuelCapacityRules
+            {
+                DriverCarMaxFuelPercent = ReadDouble(parsed.DriverInfo, "DriverCarMaxFuelPct"),
+                CarClassMaxFuelPercent = exactDriver is null
+                    ? null
+                    : ReadDouble(exactDriver, "CarClassMaxFuelPct")
             },
             Drivers = parsed.Drivers
                 .Select(ToDriver)
@@ -426,17 +434,17 @@ internal static class SessionInfoSummaryParser
 
     private static IReadOnlyDictionary<string, string> SelectDriver(ParsedSessionInfo parsed)
     {
-        var driverCarIdx = ReadInt(parsed.DriverInfo, "DriverCarIdx");
-        if (driverCarIdx is not null)
-        {
-            var driver = parsed.Drivers.FirstOrDefault(candidate => ReadInt(candidate, "CarIdx") == driverCarIdx);
-            if (driver is not null)
-            {
-                return driver;
-            }
-        }
+        return SelectExactDriver(parsed)
+            ?? parsed.Drivers.FirstOrDefault()
+            ?? EmptyDictionary;
+    }
 
-        return parsed.Drivers.FirstOrDefault() ?? EmptyDictionary;
+    private static IReadOnlyDictionary<string, string>? SelectExactDriver(ParsedSessionInfo parsed)
+    {
+        var driverCarIdx = ReadInt(parsed.DriverInfo, "DriverCarIdx");
+        return driverCarIdx is null
+            ? null
+            : parsed.Drivers.FirstOrDefault(candidate => ReadInt(candidate, "CarIdx") == driverCarIdx);
     }
 
     private static HistoricalSessionDriver ToDriver(IReadOnlyDictionary<string, string> values)

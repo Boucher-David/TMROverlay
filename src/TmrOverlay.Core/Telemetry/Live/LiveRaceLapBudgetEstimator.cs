@@ -92,7 +92,7 @@ internal static class LiveRaceLapBudgetEstimator
             return Budget(
                 estimatedLaps,
                 possibleLaps,
-                estimatedLaps,
+                possibleLaps,
                 LiveRaceLapBudgetSource.TimedPreGreenEstimate,
                 LiveRaceLapBudgetConfidence.Low,
                 flags,
@@ -145,10 +145,10 @@ internal static class LiveRaceLapBudgetEstimator
         }
 
         var rawFinishLap = leaderProgress.Value + timeRemaining / racePace;
-        var projectedFinishLap = Math.Ceiling(rawFinishLap);
+        var conservativeFinishLap = Math.Ceiling(rawFinishLap);
         var protectiveFinishLap = ProtectiveFinishLap(leaderProgress.Value, timeRemaining, options);
-        var usedProtectiveFinishLap = protectiveFinishLap is { } protective && protective > projectedFinishLap;
-        var selectedFinishLap = Math.Max(projectedFinishLap, protectiveFinishLap ?? projectedFinishLap);
+        var usedProtectiveFinishLap = protectiveFinishLap is { } protective && protective > conservativeFinishLap;
+        var selectedFinishLap = Math.Max(conservativeFinishLap, protectiveFinishLap ?? conservativeFinishLap);
         var progress = strategyCarProgressLaps ?? leaderProgress.Value;
         if (strategyCarProgressLaps is null)
         {
@@ -168,14 +168,15 @@ internal static class LiveRaceLapBudgetEstimator
         var confidence = TimedConfidence(racePaceSource, flags);
         return Budget(
             WholeLapsRemaining(selectedFinishLap, progress),
-            Remaining(projectedFinishLap, progress),
-            selectedFinishLap,
+            Remaining(rawFinishLap, progress),
+            rawFinishLap,
             usedProtectiveFinishLap
                 ? LiveRaceLapBudgetSource.TimedLiveClockHeldCleanPace
                 : LiveRaceLapBudgetSource.TimedLiveClock,
             confidence,
             flags,
-            confidence is LiveRaceLapBudgetConfidence.Authoritative or LiveRaceLapBudgetConfidence.High);
+            confidence is LiveRaceLapBudgetConfidence.Authoritative or LiveRaceLapBudgetConfidence.High,
+            projectionSource: LiveRaceLapBudgetSource.TimedLiveClock);
     }
 
     private static List<LiveRaceLapBudgetStateFlag> InitialFlags(LiveRaceLapBudgetOptions options)
@@ -243,7 +244,8 @@ internal static class LiveRaceLapBudgetEstimator
         LiveRaceLapBudgetSource source,
         LiveRaceLapBudgetConfidence confidence,
         IEnumerable<LiveRaceLapBudgetStateFlag> flags,
-        bool canDriveFuelAdvice)
+        bool canDriveFuelAdvice,
+        LiveRaceLapBudgetSource? projectionSource = null)
     {
         int? wholeLaps = primaryLapsRemaining is { } laps && laps >= 0 ? laps : null;
         return new LiveRaceLapBudget(
@@ -251,6 +253,7 @@ internal static class LiveRaceLapBudgetEstimator
             PossibleLapsRemaining: possibleLapsRemaining,
             EstimatedFinishLap: estimatedFinishLap,
             Source: source,
+            ProjectionSource: projectionSource ?? source,
             Confidence: confidence,
             StateFlags: flags.Distinct().ToArray(),
             DisplayLabel: wholeLaps is { } displayLaps
@@ -367,6 +370,7 @@ internal sealed record LiveRaceLapBudget(
     double? PossibleLapsRemaining,
     double? EstimatedFinishLap,
     LiveRaceLapBudgetSource Source,
+    LiveRaceLapBudgetSource ProjectionSource,
     LiveRaceLapBudgetConfidence Confidence,
     IReadOnlyList<LiveRaceLapBudgetStateFlag> StateFlags,
     string DisplayLabel,

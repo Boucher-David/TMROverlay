@@ -68,7 +68,11 @@ public sealed class FuelV2HistoryImporterTests
             Assert.Equal("capture-fuel-v2", summary.SourceId);
             Assert.Equal("car-1-test-car", summary.Scope.Combo.CarKey);
             Assert.NotEmpty(summary.SourceArtifact.Sha256);
-            Assert.Equal("not_available_in_current_models", summary.FuelCapacity.EffectiveSessionCapacitySource);
+            Assert.Equal(56d, summary.FuelCapacity.EffectiveSessionCapacityLiters);
+            Assert.Equal("matching_driver_and_class_caps", summary.FuelCapacity.EffectiveSessionCapacitySource);
+            Assert.Equal(0.8d, summary.FuelCapacity.DriverCarMaxFuelPercent);
+            Assert.Equal(0.8d, summary.FuelCapacity.CarClassMaxFuelPercent);
+            Assert.Equal(string.Empty, summary.FuelCapacity.Limitation);
             Assert.Single(summary.AcceptedLapBurnWindows);
             Assert.Single(summary.RejectedLapBurnWindowExamples);
             Assert.Equal(1, summary.RejectedLapBurnWindowReasonCounts["caution-or-yellow"]);
@@ -92,6 +96,45 @@ public sealed class FuelV2HistoryImporterTests
             Assert.False(manifest.UseForStrategy);
             Assert.Equal(1, manifest.SummaryCount);
             Assert.Equal(1, manifest.AggregateCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_AcceptsFormatOneCapacityPlaceholderWithoutReinterpretation()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact() with { SessionScope = CreateLegacyPlaceholderSessionScope() };
+            var artifactPath = WriteArtifact(root, artifact);
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(artifactPath, CancellationToken.None);
+
+            Assert.True(result.Imported);
+            var summaryPath = Path.Combine(
+                storage.UserHistoryRoot,
+                "fuel-v2",
+                "cars",
+                "car-1-test-car",
+                "tracks",
+                "track-2-test-track",
+                "sessions",
+                "race",
+                "summaries",
+                "capture-fuel-v2.json");
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(File.ReadAllText(summaryPath), JsonOptions);
+            Assert.NotNull(summary);
+            Assert.Null(summary.FuelCapacity.EffectiveSessionCapacityLiters);
+            Assert.Null(summary.FuelCapacity.DriverCarMaxFuelPercent);
+            Assert.Null(summary.FuelCapacity.CarClassMaxFuelPercent);
+            Assert.Equal("not_available_in_current_models", summary.FuelCapacity.EffectiveSessionCapacitySource);
+            Assert.Equal("Effective event fuel-cap parsing is not implemented.", summary.FuelCapacity.Limitation);
         }
         finally
         {
@@ -555,17 +598,32 @@ public sealed class FuelV2HistoryImporterTests
             FuelCapacity: new FuelV2FuelCapacityScope(
                 PhysicalTankCapacityLiters: 70d,
                 FuelKgPerLiter: 0.75d,
-                EffectiveSessionCapacityLiters: null,
-                EffectiveSessionCapacitySource: "not_available_in_current_models",
-                DriverCarMaxFuelPercent: null,
-                CarClassMaxFuelPercent: null,
-                Limitation: "Effective event fuel-cap parsing is not implemented."),
+                EffectiveSessionCapacityLiters: 56d,
+                EffectiveSessionCapacitySource: "matching_driver_and_class_caps",
+                DriverCarMaxFuelPercent: 0.8d,
+                CarClassMaxFuelPercent: 0.8d,
+                Limitation: string.Empty),
             TrackSectors:
             [
                 new FuelV2TrackSectorScope(1, 0d),
                 new FuelV2TrackSectorScope(2, 0.333333d),
                 new FuelV2TrackSectorScope(3, 0.666667d)
             ]);
+    }
+
+    private static FuelV2SessionScopeSample CreateLegacyPlaceholderSessionScope()
+    {
+        return CreateSessionScope() with
+        {
+            FuelCapacity = new FuelV2FuelCapacityScope(
+                PhysicalTankCapacityLiters: 70d,
+                FuelKgPerLiter: 0.75d,
+                EffectiveSessionCapacityLiters: null,
+                EffectiveSessionCapacitySource: "not_available_in_current_models",
+                DriverCarMaxFuelPercent: null,
+                CarClassMaxFuelPercent: null,
+                Limitation: "Effective event fuel-cap parsing is not implemented.")
+        };
     }
 
     private static string TempRoot()

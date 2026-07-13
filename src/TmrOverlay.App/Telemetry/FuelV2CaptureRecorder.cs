@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TmrOverlay.App.Events;
 using TmrOverlay.App.Storage;
 using TmrOverlay.Core.AppInfo;
+using TmrOverlay.Core.Fuel.V2;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Telemetry.EdgeCases;
 using TmrOverlay.Core.Telemetry.Live;
@@ -123,6 +124,8 @@ internal sealed class FuelV2CaptureRecorder
     private int _driverChangeEventCount;
     private double? _minFuelLiters;
     private double? _maxFuelLiters;
+    private CapacityObservationScope? _capacityObservationScope;
+    private double? _maxObservedFuelForCapacityScopeLiters;
     private double? _lastFuelLiters;
     private double? _maxObservedFuelIncreaseLiters;
     private double? _maxObservedFuelDecreaseLiters;
@@ -189,6 +192,8 @@ internal sealed class FuelV2CaptureRecorder
             _driverChangeEventCount = 0;
             _minFuelLiters = null;
             _maxFuelLiters = null;
+            _capacityObservationScope = null;
+            _maxObservedFuelForCapacityScopeLiters = null;
             _lastFuelLiters = null;
             _maxObservedFuelIncreaseLiters = null;
             _maxObservedFuelDecreaseLiters = null;
@@ -243,7 +248,12 @@ internal sealed class FuelV2CaptureRecorder
             var currentFuel = CurrentFuelLiters(snapshot, models);
             var contextFlags = ContextFlags(sample, models, progress, currentFuel, _lastFuelLiters, _currentLapAnchor);
             var lapProjection = CurrentLapProjection(sample, progress, currentFuel);
-            _latestSessionScope = SessionScope(snapshot, models);
+            UpdateCapacityObservationScope(snapshot, currentFuel);
+            _latestSessionScope = SessionScope(
+                snapshot,
+                models,
+                currentFuel,
+                _maxObservedFuelForCapacityScopeLiters);
 
             _frameCount++;
             Increment(_sessionFrameCounts, sessionKind);
@@ -1267,6 +1277,32 @@ internal sealed class FuelV2CaptureRecorder
         return !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
+    private void UpdateCapacityObservationScope(LiveTelemetrySnapshot snapshot, double? currentFuelLiters)
+    {
+        var context = snapshot.Context;
+        var scope = new CapacityObservationScope(
+            CarKey: snapshot.Combo.CarKey,
+            SessionKey: snapshot.Combo.SessionKey,
+            CurrentSessionNum: context.Session.CurrentSessionNum,
+            SessionNum: context.Session.SessionNum,
+            SubSessionId: context.Session.SubSessionId,
+            PhysicalTankCapacityLiters: context.Car.DriverCarFuelMaxLiters,
+            DriverCarMaxFuelPercent: context.FuelCapacityRules.DriverCarMaxFuelPercent,
+            CarClassMaxFuelPercent: context.FuelCapacityRules.CarClassMaxFuelPercent);
+        if (scope != _capacityObservationScope)
+        {
+            _capacityObservationScope = scope;
+            _maxObservedFuelForCapacityScopeLiters = null;
+        }
+
+        if (currentFuelLiters is { } fuelLiters && IsPositiveFinite(fuelLiters))
+        {
+            _maxObservedFuelForCapacityScopeLiters = Math.Max(
+                _maxObservedFuelForCapacityScopeLiters ?? 0d,
+                fuelLiters);
+        }
+    }
+
     private static string FormatRawFlagsHex(int? flags)
     {
         return flags is { } value
@@ -1280,10 +1316,26 @@ internal sealed class FuelV2CaptureRecorder
         return string.Concat(sourceId.Select(character => invalid.Contains(character) ? '-' : character));
     }
 
-    private static FuelV2SessionScopeSample SessionScope(LiveTelemetrySnapshot snapshot, LiveRaceModels models)
+    private static FuelV2SessionScopeSample SessionScope(
+        LiveTelemetrySnapshot snapshot,
+        LiveRaceModels models,
+        double? currentFuelLiters,
+        double? maxObservedFuelLiters)
     {
         var context = snapshot.Context;
         var combo = snapshot.Combo;
+        var observedFuelCandidates = new[] { currentFuelLiters, maxObservedFuelLiters }
+            .Where(value => IsPositiveFinite(value))
+            .Select(value => value!.Value)
+            .ToArray();
+        var observedFuel = observedFuelCandidates.Length > 0
+            ? observedFuelCandidates.Max()
+            : (double?)null;
+        var capacity = FuelV2EffectiveCapacityResolver.From(
+            context.Car.DriverCarFuelMaxLiters,
+            context.FuelCapacityRules.DriverCarMaxFuelPercent,
+            context.FuelCapacityRules.CarClassMaxFuelPercent,
+            observedFuel);
         return new FuelV2SessionScopeSample(
             Combo: new FuelV2ComboScope(
                 CarKey: combo.CarKey,
@@ -1322,11 +1374,13 @@ internal sealed class FuelV2CaptureRecorder
             FuelCapacity: new FuelV2FuelCapacityScope(
                 PhysicalTankCapacityLiters: Round(context.Car.DriverCarFuelMaxLiters),
                 FuelKgPerLiter: Round(context.Car.DriverCarFuelKgPerLiter),
-                EffectiveSessionCapacityLiters: null,
-                EffectiveSessionCapacitySource: "not_available_in_current_models",
-                DriverCarMaxFuelPercent: null,
-                CarClassMaxFuelPercent: null,
-                Limitation: "Effective event fuel-cap parsing is not implemented; capture preserves physical tank capacity and observed fuel maxima only."),
+                EffectiveSessionCapacityLiters: Round(capacity.EffectiveCapacityLiters),
+                EffectiveSessionCapacitySource: FuelV2EffectiveCapacityResolver.SourceLabel(capacity.Source),
+                DriverCarMaxFuelPercent: Round(capacity.DriverCarMaxFuelPercent),
+                CarClassMaxFuelPercent: Round(capacity.CarClassMaxFuelPercent),
+                Limitation: capacity.CanDriveFuelAdvice
+                    ? string.Empty
+                    : string.Join(',', capacity.StateFlags.Select(flag => flag.ToString()))),
             TrackSectors: context.Sectors
                 .OrderBy(sector => sector.SectorNum)
                 .Select(sector => new FuelV2TrackSectorScope(sector.SectorNum, Round(sector.SectorStartPct)))
@@ -1347,6 +1401,16 @@ internal sealed class FuelV2CaptureRecorder
     }
 
     private sealed record LapProgress(string Source, int LapCompleted, double LapDistPct, double ProgressLaps);
+
+    private sealed record CapacityObservationScope(
+        string CarKey,
+        string SessionKey,
+        int? CurrentSessionNum,
+        int? SessionNum,
+        int? SubSessionId,
+        double? PhysicalTankCapacityLiters,
+        double? DriverCarMaxFuelPercent,
+        double? CarClassMaxFuelPercent);
 
     private sealed record FuelAnchor(
         int LapCompleted,

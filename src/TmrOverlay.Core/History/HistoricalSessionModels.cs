@@ -20,6 +20,8 @@ internal sealed class HistoricalSessionContext
 
     public required HistoricalSessionInfoConditions Conditions { get; init; }
 
+    public HistoricalFuelCapacityRules FuelCapacityRules { get; init; } = new();
+
     public IReadOnlyList<HistoricalSessionDriver> Drivers { get; init; } = [];
 
     public IReadOnlyList<HistoricalSessionTireCompound> TireCompounds { get; init; } = [];
@@ -29,6 +31,13 @@ internal sealed class HistoricalSessionContext
     public IReadOnlyList<HistoricalSessionResultPosition> ResultPositions { get; init; } = [];
 
     public IReadOnlyList<HistoricalSessionResultPosition> StartingGridPositions { get; init; } = [];
+}
+
+internal sealed class HistoricalFuelCapacityRules
+{
+    public double? DriverCarMaxFuelPercent { get; init; }
+
+    public double? CarClassMaxFuelPercent { get; init; }
 }
 
 internal sealed class HistoricalSessionSummary

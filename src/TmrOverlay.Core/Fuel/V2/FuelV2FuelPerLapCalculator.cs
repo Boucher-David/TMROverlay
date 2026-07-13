@@ -63,8 +63,7 @@ internal static class FuelV2FuelPerLapCalculator
             $"{label} partial {samples.Count}/{requiredSampleCount}",
             source,
             samples.Count,
-            cleanBaselineEligible: false,
-            FuelV2SampleContextFlag.SeededSectorProfile);
+            cleanBaselineEligible: false);
     }
 
     private static FuelV2Scalar? MaxWindow(IReadOnlyList<double> samples, FuelV2Scalar? seed)
@@ -78,7 +77,7 @@ internal static class FuelV2FuelPerLapCalculator
                 cleanBaselineEligible: true)
             : null;
 
-        if (seed?.HasValue != true)
+        if (!IsPositiveScalar(seed))
         {
             return liveMax;
         }
@@ -98,12 +97,12 @@ internal static class FuelV2FuelPerLapCalculator
 
     private static FuelV2Scalar? HigherSeed(FuelV2Scalar? first, FuelV2Scalar? second)
     {
-        if (first?.HasValue != true)
+        if (!IsPositiveScalar(first))
         {
             return second;
         }
 
-        if (second?.HasValue != true)
+        if (!IsPositiveScalar(second))
         {
             return first;
         }
@@ -122,7 +121,7 @@ internal static class FuelV2FuelPerLapCalculator
                 cleanBaselineEligible: true)
             : null;
 
-        if (seed?.HasValue != true)
+        if (!IsPositiveScalar(seed))
         {
             return liveMin;
         }
@@ -137,7 +136,7 @@ internal static class FuelV2FuelPerLapCalculator
 
     private static FuelV2Scalar? SeedWindow(FuelV2Scalar? seed, string fallbackSource)
     {
-        if (seed?.HasValue != true)
+        if (!IsPositiveScalar(seed))
         {
             return null;
         }
@@ -171,12 +170,17 @@ internal static class FuelV2FuelPerLapCalculator
     {
         return value > 0d && !double.IsNaN(value) && !double.IsInfinity(value);
     }
+
+    private static bool IsPositiveScalar(FuelV2Scalar? scalar)
+    {
+        return scalar?.Value is { } value && IsPositiveFinite(value);
+    }
 }
 
 internal sealed record FuelV2FuelPerLapWindowOptions(
     bool AllowPartialWindows = false,
     int PartialFiveLapMinimumSampleCount = 3,
-    int PartialTenLapMinimumSampleCount = 5,
+    int PartialTenLapMinimumSampleCount = 6,
     FuelV2Scalar? MaxSeed = null,
     FuelV2Scalar? MinSeed = null,
     FuelV2Scalar? QualifyingSeed = null)

@@ -7,7 +7,7 @@ internal static class FuelV2RangeCalculator
         FuelV2FuelPerLapWindows windows)
     {
         return new FuelV2RangeSnapshot(
-            CurrentFuelLiters: IsPositiveFinite(currentFuelLiters) ? currentFuelLiters : null,
+            CurrentFuelLiters: IsNonNegativeFinite(currentFuelLiters) ? currentFuelLiters : null,
             Last: RangeFrom(currentFuelLiters, windows.Last, "range from Last"),
             FiveLapAverage: RangeFrom(currentFuelLiters, windows.FiveLapAverage, "range from 5L"),
             TenLapAverage: RangeFrom(currentFuelLiters, windows.TenLapAverage, "range from 10L"),
@@ -16,7 +16,7 @@ internal static class FuelV2RangeCalculator
 
     private static FuelV2Scalar? RangeFrom(double? currentFuelLiters, FuelV2Scalar? burn, string source)
     {
-        if (!IsPositiveFinite(currentFuelLiters) || burn?.HasValue != true || burn.Value <= 0d)
+        if (!IsNonNegativeFinite(currentFuelLiters) || burn?.HasValue != true || burn.Value <= 0d)
         {
             return null;
         }
@@ -30,13 +30,15 @@ internal static class FuelV2RangeCalculator
             cleanBaselineEligible: false);
     }
 
-    private static bool IsPositiveFinite(double? value)
+    private static bool IsNonNegativeFinite(double? value)
     {
-        return value is { } scalar && scalar > 0d && !double.IsNaN(scalar) && !double.IsInfinity(scalar);
+        return value is { } scalar && scalar >= 0d && !double.IsNaN(scalar) && !double.IsInfinity(scalar);
     }
 }
 internal static class FuelV2TargetUsageCalculator
 {
+    private const double MaxPlausibleProjectedTargetLaps = 1000d;
+
     public static FuelV2TargetUsageSnapshot From(
         double? fuelBudgetLiters,
         string budgetSource,
@@ -60,21 +62,19 @@ internal static class FuelV2TargetUsageCalculator
     public static IReadOnlyList<int> AroundProjectedTarget(double? projectedTargetLaps)
     {
         if (projectedTargetLaps is not { } target
-            || target <= 1d
+            || target <= 0d
+            || target > MaxPlausibleProjectedTargetLaps
             || double.IsNaN(target)
             || double.IsInfinity(target))
         {
             return [];
         }
 
-        var wholeTarget = Math.Max(1, (int)Math.Ceiling(target));
-        return new[]
-        {
-            wholeTarget - 1,
-            wholeTarget,
-            wholeTarget + 1,
-            wholeTarget + 2
-        }.Where(laps => laps > 0).Distinct().ToArray();
+        var wholeTarget = Math.Max(1, (int)Math.Round(target, MidpointRounding.AwayFromZero));
+        var candidates = wholeTarget == 1
+            ? new[] { 1, 2, 3 }
+            : new[] { wholeTarget - 1, wholeTarget, wholeTarget + 1 };
+        return candidates.Where(laps => laps > 0).Distinct().ToArray();
     }
 
     private static FuelV2TargetUsageCell TargetCell(double? fuelBudgetLiters, FuelV2Scalar? referenceBurn, int targetLaps)
@@ -96,14 +96,20 @@ internal static class FuelV2TargetUsageCalculator
 
     private static FuelV2WorkbenchTone TargetTone(FuelV2Scalar required, FuelV2Scalar? referenceBurn)
     {
-        if (!required.HasValue || referenceBurn?.HasValue != true)
+        if (!required.HasValue || referenceBurn?.HasValue != true || referenceBurn.Value is not > 0d)
         {
-            return FuelV2WorkbenchTone.Waiting;
+            return required.HasValue ? FuelV2WorkbenchTone.Info : FuelV2WorkbenchTone.Waiting;
         }
 
-        return required.Value!.Value >= referenceBurn.Value!.Value
-            ? FuelV2WorkbenchTone.Success
-            : FuelV2WorkbenchTone.Warning;
+        var ratio = required.Value!.Value / referenceBurn.Value!.Value;
+        if (ratio >= 1d)
+        {
+            return FuelV2WorkbenchTone.Success;
+        }
+
+        return ratio >= 0.95d
+            ? FuelV2WorkbenchTone.Warning
+            : FuelV2WorkbenchTone.Error;
     }
 
     private static bool IsPositiveFinite(double? value)

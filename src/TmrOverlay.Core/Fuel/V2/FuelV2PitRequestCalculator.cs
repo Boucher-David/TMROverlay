@@ -12,21 +12,25 @@ internal static class FuelV2PitRequestCalculator
     {
         var currentFuel = NonNegativeOrNull(currentFuelLiters);
         var tankCapacity = PositiveOrNull(tankCapacityLiters);
-        var reserve = NonNegativeOrZero(reserveLiters);
-        var pitLaneFuel = NonNegativeOrZero(pitLaneFuelLiters);
+        var reserve = NonNegativeOrNull(reserveLiters);
+        var pitLaneFuel = NonNegativeOrNull(pitLaneFuelLiters);
+        var adjustmentsValid = reserve.HasValue && pitLaneFuel.HasValue;
+        var normalizedReserve = reserve.GetValueOrDefault();
+        var normalizedPitLaneFuel = pitLaneFuel.GetValueOrDefault();
 
         return new FuelV2PitRequestSnapshot(
             CurrentFuelLiters: currentFuel,
             TankCapacityLiters: tankCapacity,
             TargetLaps: Math.Max(0, targetLaps),
-            ReserveLiters: reserve,
-            PitLaneFuelLiters: pitLaneFuel,
-            Last: Cell("Last", currentFuel, targetLaps, windows.Last, tankCapacity, reserve, pitLaneFuel),
-            FiveLapAverage: Cell("5L", currentFuel, targetLaps, windows.FiveLapAverage, tankCapacity, reserve, pitLaneFuel),
-            TenLapAverage: Cell("10L", currentFuel, targetLaps, windows.TenLapAverage, tankCapacity, reserve, pitLaneFuel),
-            Max: Cell("Max", currentFuel, targetLaps, windows.Max, tankCapacity, reserve, pitLaneFuel),
-            Min: Cell("Min", currentFuel, targetLaps, windows.Min, tankCapacity, reserve, pitLaneFuel),
-            QualifyingSeed: Cell("Quali", currentFuel, targetLaps, windows.QualifyingSeed, tankCapacity, reserve, pitLaneFuel));
+            ReserveLiters: normalizedReserve,
+            PitLaneFuelLiters: normalizedPitLaneFuel,
+            AdjustmentsValid: adjustmentsValid,
+            Last: adjustmentsValid ? Cell("Last", currentFuel, targetLaps, windows.Last, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null,
+            FiveLapAverage: adjustmentsValid ? Cell("5L", currentFuel, targetLaps, windows.FiveLapAverage, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null,
+            TenLapAverage: adjustmentsValid ? Cell("10L", currentFuel, targetLaps, windows.TenLapAverage, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null,
+            Max: adjustmentsValid ? Cell("Max", currentFuel, targetLaps, windows.Max, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null,
+            Min: adjustmentsValid ? Cell("Min", currentFuel, targetLaps, windows.Min, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null,
+            QualifyingSeed: adjustmentsValid ? Cell("Quali", currentFuel, targetLaps, windows.QualifyingSeed, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null);
     }
 
     private static FuelV2PitRequestCell? Cell(
@@ -38,12 +42,16 @@ internal static class FuelV2PitRequestCalculator
         double reserveLiters,
         double pitLaneFuelLiters)
     {
-        if (targetLaps <= 0 || currentFuelLiters is not { } currentFuel || burn?.HasValue != true)
+        if (targetLaps <= 0
+            || currentFuelLiters is not { } currentFuel
+            || burn?.HasValue != true
+            || burn?.Value is not { } burnValue
+            || burnValue <= 0d)
         {
             return null;
         }
 
-        var targetFuel = Math.Max(0d, targetLaps * burn.Value!.Value + reserveLiters + pitLaneFuelLiters);
+        var targetFuel = targetLaps * burnValue + reserveLiters + pitLaneFuelLiters;
         var unclippedAdd = Math.Max(0d, targetFuel - currentFuel);
         var tankRoom = tankCapacityLiters is { } capacity
             ? Math.Max(0d, capacity - currentFuel)
@@ -119,9 +127,9 @@ internal static class FuelV2PitRequestCalculator
             : null;
     }
 
-    private static double NonNegativeOrZero(double value)
+    private static double? NonNegativeOrNull(double value)
     {
-        return value >= 0d && IsFinite(value) ? value : 0d;
+        return value >= 0d && IsFinite(value) ? value : null;
     }
 
     private static bool IsFinite(double value)

@@ -25,29 +25,29 @@ internal static class FuelV2LapBudgetStaging
             racePaceSource,
             options ?? LiveRaceLapBudgetOptions.None);
 
-        return FromBudget(budget, strategyProgressLaps);
+        return FromBudget(budget);
     }
 
-    public static FuelV2LapBudgetProjection FromBudget(
-        LiveRaceLapBudget budget,
-        double? strategyProgressLaps = null)
+    public static FuelV2LapBudgetProjection FromBudget(LiveRaceLapBudget budget)
     {
-        var estimatedLapsRemaining = budget.EstimatedFinishLap is { } finishLap && strategyProgressLaps is { } progress
-            ? Math.Max(0d, finishLap - progress)
-            : (double?)null;
-
         return new FuelV2LapBudgetProjection(
+            PrimaryLapsRemaining: budget.PrimaryLapsRemaining,
+            PossibleLapsRemaining: budget.PossibleLapsRemaining,
             EstimatedFinishLap: budget.EstimatedFinishLap,
-            EstimatedLapsRemaining: estimatedLapsRemaining,
-            Source: budget.Source.ToString(),
+            ProjectionSource: budget.ProjectionSource,
+            ActionableSource: budget.Source,
+            Confidence: budget.Confidence,
             CanDriveFuelAdvice: budget.CanDriveFuelAdvice,
-            StateFlags: budget.StateFlags.Select(flag => flag.ToString()).ToArray());
+            StateFlags: budget.StateFlags);
     }
 }
 
 internal sealed record FuelV2LapBudgetProjection(
+    int? PrimaryLapsRemaining,
+    double? PossibleLapsRemaining,
     double? EstimatedFinishLap,
-    double? EstimatedLapsRemaining,
-    string Source,
+    LiveRaceLapBudgetSource ProjectionSource,
+    LiveRaceLapBudgetSource ActionableSource,
+    LiveRaceLapBudgetConfidence Confidence,
     bool CanDriveFuelAdvice,
-    IReadOnlyList<string> StateFlags);
+    IReadOnlyList<LiveRaceLapBudgetStateFlag> StateFlags);

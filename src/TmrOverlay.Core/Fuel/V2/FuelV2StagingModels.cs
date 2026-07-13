@@ -222,6 +222,7 @@ internal sealed record FuelV2PitRequestSnapshot(
     int TargetLaps,
     double ReserveLiters,
     double PitLaneFuelLiters,
+    bool AdjustmentsValid,
     FuelV2PitRequestCell? Last,
     FuelV2PitRequestCell? FiveLapAverage,
     FuelV2PitRequestCell? TenLapAverage,

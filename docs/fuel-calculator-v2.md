@@ -2860,11 +2860,79 @@ the bottom-half stint sequence, or promote the workbench into native Windows or
 localhost/OBS production paths. Those remain Gates 5, 6, the lower-half work,
 and the later explicit promotion pass.
 
+Gate 5 completion - 2026-07-13:
+
+- `FuelV2SnapshotComposer` is the single thin composition point for the staged
+  Fuel V2 workbench. It retains the accepted lap-budget projection, effective
+  capacity, ordered fuel checkpoints, typed burn windows, and one central
+  boundary/feasibility snapshot. Range and Fuel To Add/Pit Request are
+  projections of that same boundary owner rather than recalculations with
+  copied inputs.
+- Target Usage and Plan dependencies are explicit composition inputs. Target
+  Usage names its fuel checkpoint, reference burn bucket, and target-lap list.
+  Plan explicitly chooses full-race or current-checkpoint mode, named lap-budget
+  values, checkpoint kinds, burn-bucket IDs, and options. The composer does not
+  silently substitute another available checkpoint or bucket when the selected
+  dependency is missing.
+- The composer derives budget labels from the selected typed checkpoint instead
+  of accepting caller-authored provenance. Its output retains both the selected
+  checkpoint state and the Plan dependency snapshot, including the chosen lap
+  values, checkpoints, buckets, and burn evidence, so a renderer or later
+  `Stint N` consumer can explain exactly what drove a result.
+- `FuelV2FuelCheckpointSnapshot.Select` is the calculation boundary for typed
+  checkpoint use. It distinguishes `Unavailable`, `Invalid`, `Conflicted`, and
+  `Available`; only an available selection exposes calculation liters. A clean
+  measured zero remains available, while a zero produced by an over-consumed
+  projection remains conflicted and cannot become a plausible Target Usage or
+  Plan budget.
+- Checkpoint snapshots retain which optional projection inputs were supplied as
+  well as which supplied values were invalid. Invalid or conflicted state
+  propagates through an explicitly requested projection chain, but it does not
+  poison a projection that was never requested. Thus invalid capacity affects a
+  formation-based FirstGreen estimate only when formation fuel was supplied,
+  and invalid Current affects a projected ExpectedAtBox only when current-to-box
+  fuel was supplied. Valid direct measured checkpoints continue to override
+  unrelated projection dependencies.
+- The central boundary owner consumes that same typed ExpectedAtBox selection,
+  so Boundary, Pit Request, Target Usage, and Plan agree about invalid,
+  conflicted, and unavailable service baselines. `FromBoundary` also verifies
+  that Range/Pit projections belong to the exact checkpoint and capacity owners
+  retained by the boundary snapshot.
+- Plan lap counts can come only from named values retained by the accepted lap-
+  budget projection (`PrimaryLapsRemaining`, `PossibleLapsRemaining`, or
+  `EstimatedFinishLap`). Held/degraded lap-budget context is merged into the
+  Plan state rather than discarded. Target-lap lists and Plan option flags are
+  defensively copied before the immutable snapshot retains them.
+- The shared-snapshot browser workbench mirrors the Core composition using
+  explicit inputs. Its populated, degraded, unavailable, invalid-capacity,
+  capacity-conflict, invalid-at-box, requested invalid-descendant, unrequested-
+  projection, clamped-zero, and clean-zero controls display the selected typed
+  dependency state instead of relying on the absence of a number alone.
+
+Three independent review threads approved the final Gate 5 contract after
+finding and verifying fixes for renderer-local Pit output on invalid evidence,
+raw conflicted checkpoint values escaping into Target Usage or Plan, caller-
+authored budget provenance, Plan inputs independent of the accepted lap budget,
+missing retained dependency evidence, descendant state collapsing to
+unavailable, and invalid upstream facts over-poisoning unrequested projections.
+The focused shared-snapshot contract, all 58 settings/effects tests, all 53
+localhost tests, the browser data-contract test, JavaScript syntax, and diff
+hygiene pass. C# execution remains the Windows/CI gate because the authoring Mac
+has no `dotnet` toolchain.
+
+Gate 5 does not pick the preferred strategy checkpoint or burn profile, build
+the per-stint sequence, wire native Windows or localhost/OBS production
+renderers, persist new settings, or lock final geometry/copy. Gate 6 now proves
+direct-versus-composed equality and dependency isolation across the accepted
+controls before `Stint N` consumes this snapshot. Production renderer,
+screenshot/manifest, settings, migration, and release coverage remain in the
+later explicit promotion pass.
+
 Phase 0 locks semantic product-cell behavior, not final pixels. Exact geometry,
 paint, final copy, settings UI, native Windows wiring, localhost/OBS wiring, and
-broad screenshot/manifest parity remain stabilization work. Phase 5 still adds
-the thin shared composition point; it should centralize already-approved cell
-semantics rather than redesign them.
+broad screenshot/manifest parity remain stabilization work. Gate 5's shared
+composition point centralizes the already-approved cell semantics; Gate 6 must
+prove that composition without redesigning them.
 
 Overlay iteration policy: the Fuel V2 overlay layout is allowed to be fluid
 during development. Any cell or row may be duplicated, moved, hidden, deleted,

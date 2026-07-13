@@ -23,7 +23,7 @@ internal static class FuelV2PitRequestCalculator
             reserveLiters,
             pitLaneFuelLiters);
 
-        return FromBoundary(checkpoints, boundary, targetLaps, reserveLiters, pitLaneFuelLiters);
+        return Project(checkpoints, boundary, targetLaps, reserveLiters, pitLaneFuelLiters);
     }
 
     public static FuelV2PitRequestSnapshot From(
@@ -39,10 +39,35 @@ internal static class FuelV2PitRequestCalculator
             targetLaps,
             reserveLiters,
             pitLaneFuelLiters);
-        return FromBoundary(checkpoints, boundary, targetLaps, reserveLiters, pitLaneFuelLiters);
+        return FromBoundary(checkpoints, boundary);
     }
 
-    private static FuelV2PitRequestSnapshot FromBoundary(
+    internal static FuelV2PitRequestSnapshot FromBoundary(
+        FuelV2FuelCheckpointSnapshot checkpoints,
+        FuelV2BoundaryFeasibilitySnapshot boundary)
+    {
+        if (boundary.TargetLaps is not { } targetLaps)
+        {
+            throw new ArgumentException("A composed pit request requires an explicit target lap count.", nameof(boundary));
+        }
+
+        if (!ReferenceEquals(boundary.Capacity, checkpoints.Capacity)
+            || !ReferenceEquals(boundary.RangeCheckpoint, checkpoints.Current)
+            || !ReferenceEquals(boundary.ServiceBaselineCheckpoint, checkpoints.ExpectedAtBox)
+            || boundary.ServiceTargetCheckpoint != checkpoints.PitRequestTargetCheckpoint)
+        {
+            throw new ArgumentException("The boundary snapshot does not belong to the supplied checkpoint snapshot.", nameof(boundary));
+        }
+
+        return Project(
+            checkpoints,
+            boundary,
+            targetLaps,
+            boundary.ReserveLiters,
+            boundary.PitLaneFuelLiters);
+    }
+
+    private static FuelV2PitRequestSnapshot Project(
         FuelV2FuelCheckpointSnapshot checkpoints,
         FuelV2BoundaryFeasibilitySnapshot boundary,
         int targetLaps,

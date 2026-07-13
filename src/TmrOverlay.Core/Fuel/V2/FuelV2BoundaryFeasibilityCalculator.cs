@@ -391,19 +391,8 @@ internal static class FuelV2BoundaryFeasibilityCalculator
 
     private static bool ServiceBaselineInputInvalid(FuelV2FuelCheckpointSnapshot checkpoints)
     {
-        var invalid = checkpoints.InvalidInputKinds;
-        if (invalid.Contains(FuelV2FuelCheckpointInputKind.MeasuredAtBoxFuel))
-        {
-            return true;
-        }
-
-        if (checkpoints.ExpectedAtBox?.Source == FuelV2FuelCheckpointSource.MeasuredAtBoxTelemetry)
-        {
-            return false;
-        }
-
-        return invalid.Contains(FuelV2FuelCheckpointInputKind.CurrentFuel)
-            || invalid.Contains(FuelV2FuelCheckpointInputKind.ExpectedFuelToBox);
+        return checkpoints.Select(FuelV2FuelCheckpointKind.ExpectedAtBox).State
+            == FuelV2FuelCheckpointSelectionState.Invalid;
     }
 
     private static bool HasInvalidCapacityEvidence(FuelV2EffectiveCapacitySnapshot capacity)

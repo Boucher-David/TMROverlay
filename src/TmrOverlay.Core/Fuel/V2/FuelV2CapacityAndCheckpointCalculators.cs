@@ -209,6 +209,7 @@ internal static class FuelV2FuelCheckpointCalculator
     {
         var safeInputs = inputs ?? new FuelV2FuelCheckpointInputs();
         var stateFlags = new List<FuelV2FuelCheckpointStateFlag>();
+        var providedInputKinds = ProvidedInputKinds(safeInputs);
         var invalidInputKinds = InvalidInputKinds(safeInputs);
         if (!capacity.CanDriveFuelAdvice)
         {
@@ -278,6 +279,7 @@ internal static class FuelV2FuelCheckpointCalculator
             ExpectedPitExit: pitExit,
             PitRequestTargetCheckpoint: FuelV2PitRequestTargetCheckpoint.ServiceComplete,
             StateFlags: stateFlags.Distinct().OrderBy(flag => flag).ToArray(),
+            ProvidedInputKinds: providedInputKinds,
             InvalidInputKinds: invalidInputKinds);
     }
 
@@ -457,8 +459,25 @@ internal static class FuelV2FuelCheckpointCalculator
 
     private static IReadOnlyList<FuelV2FuelCheckpointInputKind> InvalidInputKinds(FuelV2FuelCheckpointInputs inputs)
     {
-        var inputsByKind = new (FuelV2FuelCheckpointInputKind Kind, double? Value)[]
-        {
+        return InputValues(inputs)
+            .Where(input => input.Value.HasValue && NonNegativeOrNull(input.Value) is null)
+            .Select(input => input.Kind)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<FuelV2FuelCheckpointInputKind> ProvidedInputKinds(FuelV2FuelCheckpointInputs inputs)
+    {
+        return InputValues(inputs)
+            .Where(input => input.Value.HasValue)
+            .Select(input => input.Kind)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<(FuelV2FuelCheckpointInputKind Kind, double? Value)> InputValues(
+        FuelV2FuelCheckpointInputs inputs)
+    {
+        return
+        [
             (FuelV2FuelCheckpointInputKind.MeasuredFirstGreenFuel, inputs.MeasuredFirstGreenFuelLiters),
             (FuelV2FuelCheckpointInputKind.EstimatedFormationFuel, inputs.EstimatedFormationFuelLiters),
             (FuelV2FuelCheckpointInputKind.CurrentFuel, inputs.CurrentFuelLiters),
@@ -468,11 +487,7 @@ internal static class FuelV2FuelCheckpointCalculator
             (FuelV2FuelCheckpointInputKind.PlannedServiceAdd, inputs.PlannedServiceAddLiters),
             (FuelV2FuelCheckpointInputKind.MeasuredPitExitFuel, inputs.MeasuredPitExitFuelLiters),
             (FuelV2FuelCheckpointInputKind.ExpectedBoxToPitExitFuel, inputs.ExpectedBoxToPitExitFuelLiters)
-        };
-        return inputsByKind
-            .Where(input => input.Value.HasValue && NonNegativeOrNull(input.Value) is null)
-            .Select(input => input.Kind)
-            .ToArray();
+        ];
     }
 
     private static double? NonNegativeOrNull(double? value)
@@ -552,7 +567,151 @@ internal sealed record FuelV2FuelCheckpointSnapshot(
     FuelV2FuelCheckpoint? ExpectedPitExit,
     FuelV2PitRequestTargetCheckpoint PitRequestTargetCheckpoint,
     IReadOnlyList<FuelV2FuelCheckpointStateFlag> StateFlags,
-    IReadOnlyList<FuelV2FuelCheckpointInputKind> InvalidInputKinds);
+    IReadOnlyList<FuelV2FuelCheckpointInputKind> ProvidedInputKinds,
+    IReadOnlyList<FuelV2FuelCheckpointInputKind> InvalidInputKinds)
+{
+    public FuelV2FuelCheckpoint? Checkpoint(FuelV2FuelCheckpointKind kind)
+    {
+        return kind switch
+        {
+            FuelV2FuelCheckpointKind.EffectiveCapacity => EffectiveCapacity,
+            FuelV2FuelCheckpointKind.FirstGreen => FirstGreen,
+            FuelV2FuelCheckpointKind.Current => Current,
+            FuelV2FuelCheckpointKind.ExpectedAtBox => ExpectedAtBox,
+            FuelV2FuelCheckpointKind.ServiceComplete => ServiceComplete,
+            FuelV2FuelCheckpointKind.ExpectedPitExit => ExpectedPitExit,
+            _ => null
+        };
+    }
+
+    public FuelV2FuelCheckpointSelection Select(FuelV2FuelCheckpointKind kind)
+    {
+        var checkpoint = Checkpoint(kind);
+        var dependencyState = InputDependencyState(kind, checkpoint);
+        var state = dependencyState is { } blockedState
+            ? blockedState
+            : checkpoint is null
+                ? FuelV2FuelCheckpointSelectionState.Unavailable
+                : !checkpoint.HasValue
+                    ? FuelV2FuelCheckpointSelectionState.Invalid
+                    : checkpoint.Confidence == FuelV2FuelCheckpointConfidence.Conflicted
+                        || checkpoint.StateFlags.Any(flag => flag is FuelV2FuelCheckpointStateFlag.InvalidInput
+                            or FuelV2FuelCheckpointStateFlag.AboveEffectiveCapacity
+                            or FuelV2FuelCheckpointStateFlag.DerivedFromConflictedCheckpoint
+                            or FuelV2FuelCheckpointStateFlag.ProjectionClampedAtZero)
+                            ? FuelV2FuelCheckpointSelectionState.Conflicted
+                            : FuelV2FuelCheckpointSelectionState.Available;
+        return new FuelV2FuelCheckpointSelection(kind, checkpoint, state);
+    }
+
+    private FuelV2FuelCheckpointSelectionState? InputDependencyState(
+        FuelV2FuelCheckpointKind kind,
+        FuelV2FuelCheckpoint? checkpoint)
+    {
+        bool Invalid(FuelV2FuelCheckpointInputKind inputKind) => InvalidInputKinds.Contains(inputKind);
+        bool Provided(FuelV2FuelCheckpointInputKind inputKind) => ProvidedInputKinds.Contains(inputKind);
+        FuelV2FuelCheckpointSelectionState? DependencyState(FuelV2FuelCheckpointSelection selection)
+        {
+            return selection.State is FuelV2FuelCheckpointSelectionState.Invalid
+                or FuelV2FuelCheckpointSelectionState.Conflicted
+                    ? selection.State
+                    : null;
+        }
+
+        return kind switch
+        {
+            FuelV2FuelCheckpointKind.EffectiveCapacity => Capacity.StateFlags.Any(flag => flag is
+                FuelV2CapacityStateFlag.InvalidPhysicalCapacity
+                or FuelV2CapacityStateFlag.InvalidDriverCap
+                or FuelV2CapacityStateFlag.InvalidClassCap
+                or FuelV2CapacityStateFlag.InvalidObservedFuel)
+                    ? FuelV2FuelCheckpointSelectionState.Invalid
+                    : null,
+            FuelV2FuelCheckpointKind.FirstGreen => checkpoint?.Source == FuelV2FuelCheckpointSource.MeasuredFirstGreenTelemetry
+                ? null
+                : (Invalid(FuelV2FuelCheckpointInputKind.MeasuredFirstGreenFuel)
+                    || Invalid(FuelV2FuelCheckpointInputKind.EstimatedFormationFuel))
+                        ? FuelV2FuelCheckpointSelectionState.Invalid
+                        : Provided(FuelV2FuelCheckpointInputKind.EstimatedFormationFuel)
+                            ? DependencyState(Select(FuelV2FuelCheckpointKind.EffectiveCapacity))
+                            : null,
+            FuelV2FuelCheckpointKind.Current => Invalid(FuelV2FuelCheckpointInputKind.CurrentFuel)
+                ? FuelV2FuelCheckpointSelectionState.Invalid
+                : null,
+            FuelV2FuelCheckpointKind.ExpectedAtBox => checkpoint?.Source == FuelV2FuelCheckpointSource.MeasuredAtBoxTelemetry
+                ? null
+                : (Invalid(FuelV2FuelCheckpointInputKind.MeasuredAtBoxFuel)
+                    || Invalid(FuelV2FuelCheckpointInputKind.ExpectedFuelToBox))
+                        ? FuelV2FuelCheckpointSelectionState.Invalid
+                        : Provided(FuelV2FuelCheckpointInputKind.ExpectedFuelToBox)
+                            ? DependencyState(Select(FuelV2FuelCheckpointKind.Current))
+                            : null,
+            FuelV2FuelCheckpointKind.ServiceComplete => checkpoint?.Source == FuelV2FuelCheckpointSource.MeasuredServiceCompleteTelemetry
+                ? null
+                : Invalid(FuelV2FuelCheckpointInputKind.MeasuredServiceCompleteFuel)
+                    || Invalid(FuelV2FuelCheckpointInputKind.PlannedServiceAdd)
+                        ? FuelV2FuelCheckpointSelectionState.Invalid
+                        : Provided(FuelV2FuelCheckpointInputKind.PlannedServiceAdd)
+                            ? DependencyState(Select(FuelV2FuelCheckpointKind.ExpectedAtBox))
+                            : null,
+            FuelV2FuelCheckpointKind.ExpectedPitExit => checkpoint?.Source == FuelV2FuelCheckpointSource.MeasuredPitExitTelemetry
+                ? null
+                : Invalid(FuelV2FuelCheckpointInputKind.MeasuredPitExitFuel)
+                    || Invalid(FuelV2FuelCheckpointInputKind.ExpectedBoxToPitExitFuel)
+                        ? FuelV2FuelCheckpointSelectionState.Invalid
+                        : Provided(FuelV2FuelCheckpointInputKind.ExpectedBoxToPitExitFuel)
+                            ? DependencyState(Select(FuelV2FuelCheckpointKind.ServiceComplete))
+                            : null,
+            _ => FuelV2FuelCheckpointSelectionState.Invalid
+        };
+    }
+}
+
+internal sealed record FuelV2FuelCheckpointSelection(
+    FuelV2FuelCheckpointKind Kind,
+    FuelV2FuelCheckpoint? Checkpoint,
+    FuelV2FuelCheckpointSelectionState State)
+{
+    public double? CalculationLiters => State == FuelV2FuelCheckpointSelectionState.Available
+        ? Checkpoint?.Liters
+        : null;
+
+    public string SourceLabel
+    {
+        get
+        {
+            var source = Checkpoint?.Source switch
+            {
+                FuelV2FuelCheckpointSource.ResolvedEffectiveCapacity => "resolved effective capacity",
+                FuelV2FuelCheckpointSource.MeasuredFirstGreenTelemetry => "measured first-green telemetry",
+                FuelV2FuelCheckpointSource.EstimatedFromCapacityAndFormation => "estimated capacity minus formation fuel",
+                FuelV2FuelCheckpointSource.MeasuredCurrentTelemetry => "measured current telemetry",
+                FuelV2FuelCheckpointSource.MeasuredAtBoxTelemetry => "measured at-box telemetry",
+                FuelV2FuelCheckpointSource.ProjectedCurrentToBox => "projected current-to-box fuel",
+                FuelV2FuelCheckpointSource.MeasuredServiceCompleteTelemetry => "measured service-complete telemetry",
+                FuelV2FuelCheckpointSource.PlannedServiceAdd => "planned service-complete fuel",
+                FuelV2FuelCheckpointSource.MeasuredPitExitTelemetry => "measured pit-exit telemetry",
+                FuelV2FuelCheckpointSource.ProjectedBoxToPitExit => "projected pit-exit fuel",
+                _ => $"{Kind} fuel"
+            };
+            return State switch
+            {
+                FuelV2FuelCheckpointSelectionState.Invalid => $"{source}; invalid input",
+                FuelV2FuelCheckpointSelectionState.Conflicted => $"{source}; conflicted",
+                FuelV2FuelCheckpointSelectionState.Unavailable => $"{Kind} fuel unavailable",
+                _ => source
+            };
+        }
+    }
+}
+
+internal enum FuelV2FuelCheckpointSelectionState
+{
+    Unavailable,
+    Invalid,
+    Conflicted,
+    Available
+}
 
 internal enum FuelV2FuelCheckpointInputKind
 {

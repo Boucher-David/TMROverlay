@@ -691,6 +691,119 @@ describe('browser review server validation contracts', () => {
     });
   });
 
+  it('composes the shared fuel snapshot only from explicitly named owners', async () => {
+    const snapshot = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-snapshot'
+    )).model;
+    expect.soft(snapshot.status).toBe('fuel/shared snapshot workbench');
+    expect.soft(snapshot.gridSections[0].headers).toEqual([
+      'Scenario', 'Lap budget', 'Capacity', 'Current / box', 'Range', 'Fuel to add', 'Target usage', 'Plan', 'Contract'
+    ]);
+    expect.soft(gridRow(snapshot, 'Populated / explicit owners')).toMatchObject({
+      tone: 'info',
+      cells: [
+        { value: '12 / 11.50', tone: 'info' },
+        { value: '60.00 L', tone: 'info' },
+        { value: '40.00 L / 10.00 L', tone: 'info' },
+        { value: '4.000000 laps', tone: 'info' },
+        { value: '11.50 L', tone: 'info' },
+        { value: '58.00 L / 11.60 L @5', tone: 'success' },
+        { value: '4 now + 5 x1 + 3 / 2 stops', tone: 'info' },
+        { value: 'current→range; at-box→service; first-green/5L target; explicit current+future plan', tone: 'info' }
+      ]
+    });
+
+    expect.soft(gridRow(snapshot, 'Degraded / no implicit fallback')).toMatchObject({
+      tone: 'warning',
+      cells: [
+        { value: '12 / 11.50' },
+        { value: '60.00 L' },
+        { value: '40.00 L / --' },
+        { value: '4.000000 laps' },
+        { value: '--' },
+        { value: '-- / -- @4 [unavailable]' },
+        { value: '-- / -- stops' },
+        { value: 'Current and Last stay visible; missing FirstGreen, 5L, target, and Plan inputs stay missing' }
+      ]
+    });
+
+    expect.soft(gridRow(snapshot, 'Unavailable / owner shells only')).toMatchObject({
+      tone: 'waiting',
+      cells: [
+        { value: '-- / --' },
+        { value: '--' },
+        { value: '-- / --' },
+        { value: '--' },
+        { value: '--' },
+        { value: '-- / -- @1 [unavailable]' },
+        { value: '--' },
+        { value: 'Typed unavailable facts; no fabricated capacity, checkpoint, bucket, request, target, or plan' }
+      ]
+    });
+    expect.soft(gridRow(snapshot, 'Unrequested projections / invalid upstreams stay unavailable')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '-- / -- @4 [unavailable]', tone: 'waiting' }),
+        expect.objectContaining({ value: '-- / -- stops [unavailable]', tone: 'waiting' }),
+        expect.objectContaining({ value: 'No formation or current-to-box input: FirstGreen and AtBox remain Unavailable' })
+      ])
+    });
+    expect.soft(gridRow(snapshot, 'Invalid capacity / diagnostic boundary only')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '2.000000 laps' }),
+        expect.objectContaining({ value: '--', tone: 'error' }),
+        expect.objectContaining({ value: 'Boundary retains invalid diagnostic math; Fuel To Add projection is suppressed like Core' })
+      ])
+    });
+    expect.soft(gridRow(snapshot, 'Conflicted cap / blocked selected budget')?.cells.slice(1, 7))
+      .toEqual([
+        { value: '51.00 L', tone: 'error' },
+        { value: '20.00 L / 10.00 L', tone: 'info' },
+        { value: '2.000000 laps', tone: 'info' },
+        { value: '10.00 L', tone: 'error' },
+        { value: '-- / -- @4 [conflicted]', tone: 'waiting' },
+        { value: '-- / -- stops [conflicted]', tone: 'waiting' }
+      ]);
+    expect.soft(gridRow(snapshot, 'Invalid at-box / projected fallback blocked')?.cells.slice(2, 7))
+      .toEqual([
+        { value: '20.00 L / 19.00 L', tone: 'info' },
+        { value: '2.000000 laps', tone: 'info' },
+        { value: '--', tone: 'error' },
+        { value: '-- / -- @2 [invalid]', tone: 'waiting' },
+        { value: '2 now + -- / -- stops [future invalid]', tone: 'waiting' }
+      ]);
+    expect.soft(gridRow(snapshot, 'Invalid descendant chain / provided projections blocked')).toMatchObject({
+      tone: 'error',
+      cells: [
+        { value: '12 / 11.50', tone: 'info' },
+        { value: '60.00 L', tone: 'info' },
+        { value: '-- / --', tone: 'waiting' },
+        { value: '--', tone: 'error' },
+        { value: '--', tone: 'error' },
+        { value: '-- / -- @2 [invalid]', tone: 'waiting' },
+        { value: '-- / -- stops [invalid]', tone: 'waiting' },
+        { value: 'Provided service and pit-exit projections retain the upstream Invalid state', tone: 'error' }
+      ]
+    });
+    expect.soft(gridRow(snapshot, 'Clamped projection / conflicted zero')?.cells.slice(2, 7))
+      .toEqual([
+        { value: '1.00 L / 0.00 L', tone: 'info' },
+        { value: '0.100000 laps', tone: 'info' },
+        { value: '20.00 L', tone: 'error' },
+        { value: '-- / -- @2 [conflicted]', tone: 'waiting' },
+        { value: '-- / -- stops [conflicted]', tone: 'waiting' }
+      ]);
+    expect.soft(gridRow(snapshot, 'Known zero / factual selection')?.cells.slice(2, 7))
+      .toEqual([
+        { value: '0.00 L / 0.00 L', tone: 'info' },
+        { value: '0.000000 laps', tone: 'info' },
+        { value: '20.00 L', tone: 'info' },
+        { value: '-- / -- @2', tone: 'waiting' },
+        { value: '-- / -- stops', tone: 'waiting' }
+      ]);
+  });
+
   it('proves v1.0.2 non-race display contracts in practice and qualifying previews', async () => {
     for (const preview of ['practice', 'qualifying']) {
       const standings = (await reviewServer.getJson(`/api/overlay-model/standings?preview=${preview}`)).model;

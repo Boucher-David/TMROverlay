@@ -11,8 +11,15 @@ internal static class FuelV2RangeCalculator
             new FuelV2FuelCheckpointInputs(CurrentFuelLiters: currentFuelLiters));
         var boundary = FuelV2BoundaryFeasibilityCalculator.From(checkpoints, windows);
 
+        return From(boundary);
+    }
+
+    internal static FuelV2RangeSnapshot From(FuelV2BoundaryFeasibilitySnapshot boundary)
+    {
         return new FuelV2RangeSnapshot(
-            CurrentFuelLiters: IsNonNegativeFinite(currentFuelLiters) ? currentFuelLiters : null,
+            CurrentFuelLiters: boundary.RangeCheckpoint?.HasValue == true
+                ? boundary.RangeCheckpoint.Liters
+                : null,
             Last: Range(boundary, FuelV2BurnBucketId.Last),
             FiveLapAverage: Range(boundary, FuelV2BurnBucketId.FiveLapAverage),
             TenLapAverage: Range(boundary, FuelV2BurnBucketId.TenLapAverage),
@@ -23,10 +30,6 @@ internal static class FuelV2RangeCalculator
         FuelV2BoundaryFeasibilitySnapshot snapshot,
         FuelV2BurnBucketId bucketId) => snapshot.Bucket(bucketId).FractionalRangeLaps;
 
-    private static bool IsNonNegativeFinite(double? value)
-    {
-        return value is { } scalar && scalar >= 0d && !double.IsNaN(scalar) && !double.IsInfinity(scalar);
-    }
 }
 internal static class FuelV2TargetUsageCalculator
 {

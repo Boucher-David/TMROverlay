@@ -218,7 +218,20 @@ internal sealed record FuelV2FuelPerLapWindows(
 {
     public FuelV2Scalar? Bucket(FuelV2BurnBucketId bucketId)
     {
-        var bucket = bucketId switch
+        var bucket = RawBucket(bucketId);
+        if (bucket is null)
+        {
+            return null;
+        }
+
+        return bucket.BurnBucketId == bucketId && bucket.HasTypedBurnEvidence
+            ? bucket
+            : null;
+    }
+
+    internal FuelV2Scalar? RawBucket(FuelV2BurnBucketId bucketId)
+    {
+        return bucketId switch
         {
             FuelV2BurnBucketId.Last => Last,
             FuelV2BurnBucketId.FiveLapAverage => FiveLapAverage,
@@ -228,14 +241,6 @@ internal sealed record FuelV2FuelPerLapWindows(
             FuelV2BurnBucketId.Qualifying => QualifyingSeed,
             _ => null
         };
-        if (bucket is null)
-        {
-            return null;
-        }
-
-        return bucket.BurnBucketId == bucketId && bucket.HasTypedBurnEvidence
-            ? bucket
-            : null;
     }
 
     public IReadOnlyList<FuelV2Scalar> AvailableBuckets => FuelV2BurnBucketCatalog.Ordered
@@ -350,7 +355,12 @@ internal sealed record FuelV2PitRequestCell(
     FuelV2Scalar FuelToAddLiters,
     FuelV2Scalar TargetFuelLiters,
     bool TankLimited,
-    FuelV2WorkbenchTone Tone);
+    FuelV2WorkbenchTone Tone,
+    FuelV2TargetFeasibilityState FeasibilityState,
+    FuelV2Scalar? DesiredAddLiters,
+    FuelV2Scalar? TankRoomLiters,
+    FuelV2Scalar? ShortfallLiters,
+    int? MaximumFeasibleLaps);
 
 internal sealed record FuelV2SectorDefinition(
     int SectorIndex,

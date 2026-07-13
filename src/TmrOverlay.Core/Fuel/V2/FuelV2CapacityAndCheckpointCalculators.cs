@@ -209,6 +209,7 @@ internal static class FuelV2FuelCheckpointCalculator
     {
         var safeInputs = inputs ?? new FuelV2FuelCheckpointInputs();
         var stateFlags = new List<FuelV2FuelCheckpointStateFlag>();
+        var invalidInputKinds = InvalidInputKinds(safeInputs);
         if (!capacity.CanDriveFuelAdvice)
         {
             stateFlags.Add(capacity.EffectiveCapacityLiters is null
@@ -216,7 +217,7 @@ internal static class FuelV2FuelCheckpointCalculator
                 : FuelV2FuelCheckpointStateFlag.CapacityConflicted);
         }
 
-        if (HasInvalidInput(safeInputs))
+        if (invalidInputKinds.Count > 0)
         {
             stateFlags.Add(FuelV2FuelCheckpointStateFlag.InvalidInput);
         }
@@ -276,7 +277,8 @@ internal static class FuelV2FuelCheckpointCalculator
             ServiceComplete: serviceComplete,
             ExpectedPitExit: pitExit,
             PitRequestTargetCheckpoint: FuelV2PitRequestTargetCheckpoint.ServiceComplete,
-            StateFlags: stateFlags.Distinct().OrderBy(flag => flag).ToArray());
+            StateFlags: stateFlags.Distinct().OrderBy(flag => flag).ToArray(),
+            InvalidInputKinds: invalidInputKinds);
     }
 
     private static FuelV2FuelCheckpoint? CapacityCheckpoint(FuelV2EffectiveCapacitySnapshot capacity)
@@ -453,22 +455,24 @@ internal static class FuelV2FuelCheckpointCalculator
             StateFlags: stateFlags.Distinct().OrderBy(flag => flag).ToArray());
     }
 
-    private static bool HasInvalidInput(FuelV2FuelCheckpointInputs inputs)
+    private static IReadOnlyList<FuelV2FuelCheckpointInputKind> InvalidInputKinds(FuelV2FuelCheckpointInputs inputs)
     {
-        return Values(inputs).Any(value => value.HasValue && NonNegativeOrNull(value) is null);
-    }
-
-    private static IEnumerable<double?> Values(FuelV2FuelCheckpointInputs inputs)
-    {
-        yield return inputs.MeasuredFirstGreenFuelLiters;
-        yield return inputs.EstimatedFormationFuelLiters;
-        yield return inputs.CurrentFuelLiters;
-        yield return inputs.MeasuredAtBoxFuelLiters;
-        yield return inputs.ExpectedFuelToBoxLiters;
-        yield return inputs.MeasuredServiceCompleteFuelLiters;
-        yield return inputs.PlannedServiceAddLiters;
-        yield return inputs.MeasuredPitExitFuelLiters;
-        yield return inputs.ExpectedBoxToPitExitFuelLiters;
+        var inputsByKind = new (FuelV2FuelCheckpointInputKind Kind, double? Value)[]
+        {
+            (FuelV2FuelCheckpointInputKind.MeasuredFirstGreenFuel, inputs.MeasuredFirstGreenFuelLiters),
+            (FuelV2FuelCheckpointInputKind.EstimatedFormationFuel, inputs.EstimatedFormationFuelLiters),
+            (FuelV2FuelCheckpointInputKind.CurrentFuel, inputs.CurrentFuelLiters),
+            (FuelV2FuelCheckpointInputKind.MeasuredAtBoxFuel, inputs.MeasuredAtBoxFuelLiters),
+            (FuelV2FuelCheckpointInputKind.ExpectedFuelToBox, inputs.ExpectedFuelToBoxLiters),
+            (FuelV2FuelCheckpointInputKind.MeasuredServiceCompleteFuel, inputs.MeasuredServiceCompleteFuelLiters),
+            (FuelV2FuelCheckpointInputKind.PlannedServiceAdd, inputs.PlannedServiceAddLiters),
+            (FuelV2FuelCheckpointInputKind.MeasuredPitExitFuel, inputs.MeasuredPitExitFuelLiters),
+            (FuelV2FuelCheckpointInputKind.ExpectedBoxToPitExitFuel, inputs.ExpectedBoxToPitExitFuelLiters)
+        };
+        return inputsByKind
+            .Where(input => input.Value.HasValue && NonNegativeOrNull(input.Value) is null)
+            .Select(input => input.Kind)
+            .ToArray();
     }
 
     private static double? NonNegativeOrNull(double? value)
@@ -547,7 +551,21 @@ internal sealed record FuelV2FuelCheckpointSnapshot(
     FuelV2FuelCheckpoint? ServiceComplete,
     FuelV2FuelCheckpoint? ExpectedPitExit,
     FuelV2PitRequestTargetCheckpoint PitRequestTargetCheckpoint,
-    IReadOnlyList<FuelV2FuelCheckpointStateFlag> StateFlags);
+    IReadOnlyList<FuelV2FuelCheckpointStateFlag> StateFlags,
+    IReadOnlyList<FuelV2FuelCheckpointInputKind> InvalidInputKinds);
+
+internal enum FuelV2FuelCheckpointInputKind
+{
+    MeasuredFirstGreenFuel,
+    EstimatedFormationFuel,
+    CurrentFuel,
+    MeasuredAtBoxFuel,
+    ExpectedFuelToBox,
+    MeasuredServiceCompleteFuel,
+    PlannedServiceAdd,
+    MeasuredPitExitFuel,
+    ExpectedBoxToPitExitFuel
+}
 
 internal sealed record FuelV2FuelCheckpoint(
     FuelV2FuelCheckpointKind Kind,

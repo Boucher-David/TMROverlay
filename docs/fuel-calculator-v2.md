@@ -2636,6 +2636,15 @@ migration and maintenance cost of retaining `V2` indefinitely against removing
 development-only labels once this workbench becomes the sole Fuel Calculator
 contract.
 
+Post-gate preservation audit: before that naming discussion, compare every
+retained top-half workbench cell and row against the pre-gate commits, accepted
+cell tests, and current Core projection. Cover Lap, Fuel/Lap, Range, Target
+Usage, Fuel To Add, Plan, and the existing Stint Targets experiment. Classify
+each difference as intentional hardening, relocation into shared ownership, or
+accidental regression; restore anything accidentally removed, reverted, or
+weakened. Hidden engineering rows may remain hidden, but accepted logic and
+evidence semantics must still be present and testable.
+
 Gate 1 completion - 2026-07-13:
 
 - Core, native workbench formatting, and the browser mirror now agree on the
@@ -2776,6 +2785,80 @@ burn source cannot acquire provenance or drive downstream calculations.
 Targeted settings/effects, localhost, browser data-contract, focused workbench,
 JavaScript syntax, and diff-hygiene checks pass. C# execution remains the
 Windows/CI gate because the authoring Mac has no `dotnet` toolchain.
+
+Gate 4 completion - 2026-07-13:
+
+- `FuelV2BoundaryFeasibilityCalculator` is the single factual owner for one
+  cell per typed burn bucket. Each cell retains its burn evidence and exposes
+  fractional current range, safe whole laps, fuel to one more complete lap,
+  desired service-complete fuel and add, tank room, capacity-clamped add,
+  shortfall, maximum feasible laps, range state, feasibility state, and
+  deterministic boundary flags. Existing Range and Fuel To Add calculators now
+  project this owner instead of maintaining independent copies of the math.
+- Current fuel and expected-at-box fuel remain different inputs. Current fuel
+  drives range now; expected-at-box fuel drives the service-complete request.
+  The typed Pit path never substitutes current fuel for a missing future
+  checkpoint. The older direct Pit API has an explicitly named compatibility
+  path that uses a `Current` checkpoint as its immediate service baseline and
+  retains measured-current provenance; it does not manufacture measured-at-box
+  evidence.
+- Safe whole laps are derived from the full-precision fractional range, with a
+  tiny computational tolerance only for binary floating-point equality. UI
+  formatting never feeds the decision. “Fuel to the next complete lap” means
+  the additional fuel required for one more fully safe lap beyond the safe
+  whole laps already in the tank. It is therefore one full lap of burn at an
+  exact integer boundary and from factual zero; just below a boundary it is the
+  small remaining edge.
+- Service feasibility is likewise full precision. `DesiredFuel` is
+  `target laps * burn + reserve + pit-lane fuel`; desired add floors at zero;
+  tank room is effective capacity minus expected-at-box fuel; clamped add is the
+  lesser of desired add and room; shortfall is the unclamped remainder; and
+  maximum feasible laps floors the whole-lap result of
+  `(effective capacity - reserve - pit-lane fuel) / burn`. A sub-display-unit
+  reserve that crosses capacity remains a real unachievable target.
+- Missing, invalid, capacity-conflicted, feasible, and mathematically
+  unachievable service states remain distinct. Known-zero range has its own
+  range state, and known-zero current/service facts remain explicit flags.
+  Missing capacity may retain desired fuel/add but cannot publish room, clamp,
+  shortfall, maximum laps, or achievability. A conflicted numeric capacity may
+  retain diagnostic math but cannot claim feasibility. Invalid capacity or a
+  relevant invalid checkpoint dependency fails closed as invalid rather than
+  becoming missing or feasible.
+- Gate 2 checkpoint snapshots now retain typed invalid-input kinds. This lets
+  Gate 4 reject an invalid current fuel for range without poisoning a separate
+  valid measured-at-box service fact, and reject an invalid measured-at-box
+  value even if the lower-level checkpoint calculator can produce a fallback
+  projection. Invalid formation, service-complete, or pit-exit inputs do not
+  contaminate an independent current/at-box calculation.
+- Burn identity remains fail-closed. The Core owner distinguishes a missing
+  bucket from an invalid raw bucket, and the browser mirror requires an
+  explicit valid bucket ID plus a positive value and non-unavailable typed burn
+  source. It cannot default omitted identity to `Last`. Seed-only evidence can
+  produce factual rows while retaining seeded confidence and false strategy
+  eligibility; no bucket is selected as a strategy profile.
+- The isolated Boundary workbench covers a real projected Dallara stop plus
+  exact, just-below, just-above, known-zero, tank-limited, margin-flipped,
+  missing-current, missing-at-box, missing-capacity, conflicting-capacity,
+  invalid-adjustment, invalid-current, invalid-at-box, invalid-capacity,
+  incomplete-burn, finite-overflow, and seed-only controls. A separate invalid
+  zero-cap Pit row proves the compatibility projection suppresses an invalid
+  request just as Core does.
+
+Three independent review threads approved the final contract after finding and
+verifying fixes for invalid checkpoint evidence collapsing to missing or even
+feasible, invalid capacity collapsing to missing, manufactured at-box
+provenance in the legacy Pit adapter, browser `Last` identity defaults,
+incomplete typed burn acceptance, finite next-lap overflow, stale exact-boundary
+flags on invalid math, and invalid-cap browser Pit output. Targeted settings,
+localhost, browser data-contract, focused workbench, JavaScript syntax, and diff
+hygiene checks pass. C# execution remains the Windows/CI gate because the
+authoring Mac has no `dotnet` toolchain.
+
+Gate 4 remains factual foundation. It does not select a preferred burn bucket,
+issue box/stay-out/save advice, compose the final immutable Fuel snapshot, build
+the bottom-half stint sequence, or promote the workbench into native Windows or
+localhost/OBS production paths. Those remain Gates 5, 6, the lower-half work,
+and the later explicit promotion pass.
 
 Phase 0 locks semantic product-cell behavior, not final pixels. Exact geometry,
 paint, final copy, settings UI, native Windows wiring, localhost/OBS wiring, and

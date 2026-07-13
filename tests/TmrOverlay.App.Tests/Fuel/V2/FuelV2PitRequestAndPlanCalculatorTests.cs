@@ -30,6 +30,82 @@ public sealed class FuelV2PitRequestAndPlanCalculatorTests
         Assert.Equal(FuelV2BurnBucketId.Last, cell.TargetFuelLiters.BurnBucketId);
         Assert.Equal(FuelV2BurnSource.LiveLastLap, cell.TargetFuelLiters.BurnSource);
         Assert.False(cell.TankLimited);
+        Assert.Equal(FuelV2TargetFeasibilityState.Feasible, cell.FeasibilityState);
+        Assert.Equal(100d, Assert.IsType<double>(cell.TankRoomLiters!.Value));
+        Assert.Equal(0d, Assert.IsType<double>(cell.ShortfallLiters!.Value));
+        Assert.Equal(9, cell.MaximumFeasibleLaps);
+    }
+
+    [Fact]
+    public void PitRequest_TypedFlowUsesExpectedAtBoxAndProjectsCentralFeasibilityFacts()
+    {
+        var capacity = FuelV2EffectiveCapacityResolver.From(60d, 1d, 1d);
+        var checkpoints = FuelV2FuelCheckpointCalculator.From(
+            capacity,
+            new FuelV2FuelCheckpointInputs(
+                CurrentFuelLiters: 40d,
+                MeasuredAtBoxFuelLiters: 10d));
+
+        var snapshot = FuelV2PitRequestCalculator.From(
+            checkpoints,
+            targetLaps: 2,
+            windows: FuelV2FuelPerLapCalculator.FromAcceptedLaps([10d]));
+
+        var cell = Assert.IsType<FuelV2PitRequestCell>(snapshot.Last);
+        Assert.Equal(10d, Assert.IsType<double>(cell.FuelToAddLiters.Value));
+        Assert.Equal(10d, Assert.IsType<double>(cell.DesiredAddLiters!.Value));
+        Assert.Equal(50d, Assert.IsType<double>(cell.TankRoomLiters!.Value));
+        Assert.Equal(FuelV2TargetFeasibilityState.Feasible, cell.FeasibilityState);
+    }
+
+    [Fact]
+    public void PitRequest_UnachievableTargetReturnsClampAndShortfallWithoutHidingDesiredAdd()
+    {
+        var snapshot = FuelV2PitRequestCalculator.From(
+            currentFuelLiters: 10d,
+            targetLaps: 6,
+            windows: FuelV2FuelPerLapCalculator.FromAcceptedLaps([10d]),
+            tankCapacityLiters: 50d);
+
+        var cell = Assert.IsType<FuelV2PitRequestCell>(snapshot.Last);
+        Assert.Equal(50d, Assert.IsType<double>(cell.DesiredAddLiters!.Value));
+        Assert.Equal(40d, Assert.IsType<double>(cell.FuelToAddLiters.Value));
+        Assert.Equal(40d, Assert.IsType<double>(cell.TankRoomLiters!.Value));
+        Assert.Equal(10d, Assert.IsType<double>(cell.ShortfallLiters!.Value));
+        Assert.Equal(5, cell.MaximumFeasibleLaps);
+        Assert.True(cell.TankLimited);
+        Assert.Equal(FuelV2TargetFeasibilityState.Unachievable, cell.FeasibilityState);
+        Assert.Equal(FuelV2WorkbenchTone.Error, cell.Tone);
+    }
+
+    [Fact]
+    public void PitRequest_MissingCapacityRetainsDesiredAddButCannotClaimAchievability()
+    {
+        var snapshot = FuelV2PitRequestCalculator.From(
+            currentFuelLiters: 10d,
+            targetLaps: 2,
+            windows: FuelV2FuelPerLapCalculator.FromAcceptedLaps([10d]));
+
+        var cell = Assert.IsType<FuelV2PitRequestCell>(snapshot.Last);
+        Assert.Equal(10d, Assert.IsType<double>(cell.DesiredAddLiters!.Value));
+        Assert.Equal(10d, Assert.IsType<double>(cell.FuelToAddLiters.Value));
+        Assert.Null(cell.TankRoomLiters);
+        Assert.Equal(FuelV2TargetFeasibilityState.Unavailable, cell.FeasibilityState);
+        Assert.Equal(FuelV2WorkbenchTone.Waiting, cell.Tone);
+    }
+
+    [Fact]
+    public void PitRequest_InvalidCapacityDoesNotMasqueradeAsMissingOrProduceARequestCell()
+    {
+        var snapshot = FuelV2PitRequestCalculator.From(
+            currentFuelLiters: 10d,
+            targetLaps: 2,
+            windows: FuelV2FuelPerLapCalculator.FromAcceptedLaps([10d]),
+            tankCapacityLiters: 0d);
+
+        Assert.Null(snapshot.Last);
+        Assert.Contains(FuelV2CapacityStateFlag.InvalidPhysicalCapacity,
+            FuelV2EffectiveCapacityResolver.From(0d, 1d, 1d).StateFlags);
     }
 
     [Fact]

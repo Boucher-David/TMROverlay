@@ -10,30 +10,55 @@ internal static class FuelV2PitRequestCalculator
         double reserveLiters = 0d,
         double pitLaneFuelLiters = 0d)
     {
-        var currentFuel = NonNegativeOrNull(currentFuelLiters);
-        var tankCapacity = PositiveOrNull(tankCapacityLiters);
-        var reserve = NonNegativeOrNull(reserveLiters);
-        var pitLaneFuel = NonNegativeOrNull(pitLaneFuelLiters);
-        var adjustmentsValid = reserve.HasValue && pitLaneFuel.HasValue;
-        var normalizedReserve = reserve.GetValueOrDefault();
-        var normalizedPitLaneFuel = pitLaneFuel.GetValueOrDefault();
-        FuelV2PitRequestCell? Bucket(FuelV2BurnBucketId bucketId) => adjustmentsValid
-            ? Cell(
-                bucketId,
-                currentFuel,
-                targetLaps,
-                windows.Bucket(bucketId),
-                tankCapacity,
-                normalizedReserve,
-                normalizedPitLaneFuel)
-            : null;
+        var capacity = tankCapacityLiters is null
+            ? FuelV2EffectiveCapacityResolver.From(null, null, null)
+            : FuelV2EffectiveCapacityResolver.From(tankCapacityLiters, 1d, 1d);
+        var checkpoints = FuelV2FuelCheckpointCalculator.From(
+            capacity,
+            new FuelV2FuelCheckpointInputs(CurrentFuelLiters: currentFuelLiters));
+        var boundary = FuelV2BoundaryFeasibilityCalculator.FromLegacyCurrentFuelRequest(
+            checkpoints,
+            windows,
+            targetLaps,
+            reserveLiters,
+            pitLaneFuelLiters);
+
+        return FromBoundary(checkpoints, boundary, targetLaps, reserveLiters, pitLaneFuelLiters);
+    }
+
+    public static FuelV2PitRequestSnapshot From(
+        FuelV2FuelCheckpointSnapshot checkpoints,
+        int targetLaps,
+        FuelV2FuelPerLapWindows windows,
+        double reserveLiters = 0d,
+        double pitLaneFuelLiters = 0d)
+    {
+        var boundary = FuelV2BoundaryFeasibilityCalculator.From(
+            checkpoints,
+            windows,
+            targetLaps,
+            reserveLiters,
+            pitLaneFuelLiters);
+        return FromBoundary(checkpoints, boundary, targetLaps, reserveLiters, pitLaneFuelLiters);
+    }
+
+    private static FuelV2PitRequestSnapshot FromBoundary(
+        FuelV2FuelCheckpointSnapshot checkpoints,
+        FuelV2BoundaryFeasibilitySnapshot boundary,
+        int targetLaps,
+        double reserveLiters,
+        double pitLaneFuelLiters)
+    {
+        var adjustmentsValid = NonNegativeOrNull(reserveLiters).HasValue
+            && NonNegativeOrNull(pitLaneFuelLiters).HasValue;
+        FuelV2PitRequestCell? Bucket(FuelV2BurnBucketId bucketId) => Cell(boundary.Bucket(bucketId));
 
         return new FuelV2PitRequestSnapshot(
-            CurrentFuelLiters: currentFuel,
-            TankCapacityLiters: tankCapacity,
+            CurrentFuelLiters: checkpoints.Current?.HasValue == true ? checkpoints.Current.Liters : null,
+            TankCapacityLiters: checkpoints.Capacity.EffectiveCapacityLiters,
             TargetLaps: Math.Max(0, targetLaps),
-            ReserveLiters: normalizedReserve,
-            PitLaneFuelLiters: normalizedPitLaneFuel,
+            ReserveLiters: NonNegativeOrNull(reserveLiters).GetValueOrDefault(),
+            PitLaneFuelLiters: NonNegativeOrNull(pitLaneFuelLiters).GetValueOrDefault(),
             AdjustmentsValid: adjustmentsValid,
             Last: Bucket(FuelV2BurnBucketId.Last),
             FiveLapAverage: Bucket(FuelV2BurnBucketId.FiveLapAverage),
@@ -43,54 +68,47 @@ internal static class FuelV2PitRequestCalculator
             QualifyingSeed: Bucket(FuelV2BurnBucketId.Qualifying));
     }
 
-    private static FuelV2PitRequestCell? Cell(
-        FuelV2BurnBucketId bucketId,
-        double? currentFuelLiters,
-        int targetLaps,
-        FuelV2Scalar? burn,
-        double? tankCapacityLiters,
-        double reserveLiters,
-        double pitLaneFuelLiters)
+    private static FuelV2PitRequestCell? Cell(FuelV2BoundaryFeasibilityCell boundary)
     {
-        if (targetLaps <= 0
-            || currentFuelLiters is not { } currentFuel
-            || burn?.HasValue != true
-            || burn?.Value is not { } burnValue
-            || burnValue <= 0d)
+        var burn = boundary.Burn;
+        var fuelToAdd = boundary.ClampedAddLiters ?? boundary.DesiredAddLiters;
+        if (burn is null
+            || fuelToAdd is null
+            || boundary.DesiredFuelLiters is null
+            || boundary.FeasibilityState == FuelV2TargetFeasibilityState.Invalid)
         {
             return null;
         }
 
-        var targetFuel = targetLaps * burnValue + reserveLiters + pitLaneFuelLiters;
-        var unclippedAdd = Math.Max(0d, targetFuel - currentFuel);
-        var tankRoom = tankCapacityLiters is { } capacity
-            ? Math.Max(0d, capacity - currentFuel)
-            : (double?)null;
-        var tankLimited = tankRoom is { } room && unclippedAdd > room + 0.001d;
-        var fuelToAdd = tankLimited ? tankRoom!.Value : unclippedAdd;
-        var context = ContextFlags(burn, pitLaneFuelLiters);
-        var label = FuelV2BurnBucketCatalog.Label(bucketId);
+        var tankLimited = boundary.StateFlags.Contains(FuelV2BoundaryStateFlag.TankLimited);
+        var label = FuelV2BurnBucketCatalog.Label(boundary.BurnBucketId);
 
         return new FuelV2PitRequestCell(
-            BurnBucketId: bucketId,
+            BurnBucketId: boundary.BurnBucketId,
             Label: label,
-            FuelToAddLiters: burn.Derive(
-                fuelToAdd,
-                $"pit add from {label}",
-                context),
-            TargetFuelLiters: burn.Derive(
-                targetFuel,
-                $"target fuel from {label}",
-                context),
+            FuelToAddLiters: fuelToAdd,
+            TargetFuelLiters: boundary.DesiredFuelLiters,
             TankLimited: tankLimited,
-            Tone: Tone(bucketId, burn, tankLimited));
+            Tone: Tone(boundary, burn),
+            FeasibilityState: boundary.FeasibilityState,
+            DesiredAddLiters: boundary.DesiredAddLiters,
+            TankRoomLiters: boundary.TankRoomLiters,
+            ShortfallLiters: boundary.ShortfallLiters,
+            MaximumFeasibleLaps: boundary.MaximumFeasibleLaps);
     }
 
-    private static FuelV2WorkbenchTone Tone(FuelV2BurnBucketId bucketId, FuelV2Scalar burn, bool tankLimited)
+    private static FuelV2WorkbenchTone Tone(FuelV2BoundaryFeasibilityCell boundary, FuelV2Scalar burn)
     {
-        if (tankLimited)
+        if (boundary.FeasibilityState is FuelV2TargetFeasibilityState.Invalid
+            or FuelV2TargetFeasibilityState.CapacityConflicted
+            or FuelV2TargetFeasibilityState.Unachievable)
         {
             return FuelV2WorkbenchTone.Error;
+        }
+
+        if (boundary.FeasibilityState == FuelV2TargetFeasibilityState.Unavailable)
+        {
+            return FuelV2WorkbenchTone.Waiting;
         }
 
         if (!burn.DisplayEligible)
@@ -98,7 +116,7 @@ internal static class FuelV2PitRequestCalculator
             return FuelV2WorkbenchTone.Waiting;
         }
 
-        if (bucketId is FuelV2BurnBucketId.Maximum or FuelV2BurnBucketId.Minimum or FuelV2BurnBucketId.Qualifying
+        if (boundary.BurnBucketId is FuelV2BurnBucketId.Maximum or FuelV2BurnBucketId.Minimum or FuelV2BurnBucketId.Qualifying
             || burn.Confidence <= FuelV2Confidence.Contextual
             || burn.ContextFlags.Any(flag => flag != FuelV2SampleContextFlag.CleanRace))
         {
@@ -106,24 +124,6 @@ internal static class FuelV2PitRequestCalculator
         }
 
         return FuelV2WorkbenchTone.Info;
-    }
-
-    private static IReadOnlyList<FuelV2SampleContextFlag> ContextFlags(FuelV2Scalar burn, double pitLaneFuelLiters)
-    {
-        var flags = new List<FuelV2SampleContextFlag>(burn.ContextFlags);
-        if (pitLaneFuelLiters > 0d)
-        {
-            flags.Add(FuelV2SampleContextFlag.PitRoad);
-        }
-
-        return flags.Distinct().OrderBy(flag => flag).ToArray();
-    }
-
-    private static double? PositiveOrNull(double? value)
-    {
-        return value is { } scalar && scalar > 0d && IsFinite(scalar)
-            ? scalar
-            : null;
     }
 
     private static double? NonNegativeOrNull(double? value)

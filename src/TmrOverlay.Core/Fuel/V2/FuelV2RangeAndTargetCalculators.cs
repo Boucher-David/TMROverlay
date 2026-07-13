@@ -6,28 +6,22 @@ internal static class FuelV2RangeCalculator
         double? currentFuelLiters,
         FuelV2FuelPerLapWindows windows)
     {
+        var checkpoints = FuelV2FuelCheckpointCalculator.From(
+            FuelV2EffectiveCapacityResolver.From(null, null, null),
+            new FuelV2FuelCheckpointInputs(CurrentFuelLiters: currentFuelLiters));
+        var boundary = FuelV2BoundaryFeasibilityCalculator.From(checkpoints, windows);
+
         return new FuelV2RangeSnapshot(
             CurrentFuelLiters: IsNonNegativeFinite(currentFuelLiters) ? currentFuelLiters : null,
-            Last: RangeFrom(currentFuelLiters, FuelV2BurnBucketId.Last, windows.Bucket(FuelV2BurnBucketId.Last)),
-            FiveLapAverage: RangeFrom(currentFuelLiters, FuelV2BurnBucketId.FiveLapAverage, windows.Bucket(FuelV2BurnBucketId.FiveLapAverage)),
-            TenLapAverage: RangeFrom(currentFuelLiters, FuelV2BurnBucketId.TenLapAverage, windows.Bucket(FuelV2BurnBucketId.TenLapAverage)),
-            Max: RangeFrom(currentFuelLiters, FuelV2BurnBucketId.Maximum, windows.Bucket(FuelV2BurnBucketId.Maximum)));
+            Last: Range(boundary, FuelV2BurnBucketId.Last),
+            FiveLapAverage: Range(boundary, FuelV2BurnBucketId.FiveLapAverage),
+            TenLapAverage: Range(boundary, FuelV2BurnBucketId.TenLapAverage),
+            Max: Range(boundary, FuelV2BurnBucketId.Maximum));
     }
 
-    private static FuelV2Scalar? RangeFrom(
-        double? currentFuelLiters,
-        FuelV2BurnBucketId bucketId,
-        FuelV2Scalar? burn)
-    {
-        if (!IsNonNegativeFinite(currentFuelLiters) || burn?.HasValue != true || burn.Value <= 0d)
-        {
-            return null;
-        }
-
-        return burn.Derive(
-            currentFuelLiters!.Value / burn.Value!.Value,
-            $"range from {FuelV2BurnBucketCatalog.Label(bucketId)}");
-    }
+    private static FuelV2Scalar? Range(
+        FuelV2BoundaryFeasibilitySnapshot snapshot,
+        FuelV2BurnBucketId bucketId) => snapshot.Bucket(bucketId).FractionalRangeLaps;
 
     private static bool IsNonNegativeFinite(double? value)
     {

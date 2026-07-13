@@ -347,6 +347,10 @@ describe('browser review server validation contracts', () => {
     expect.soft(invalidReserve.segments.map((segment) => segment.value)).toEqual([
       '--', '--', '--', '--', '--', '--'
     ]);
+    const invalidCapacity = metricRow(pit, 'Fuel To Add Workbench', 'Stress / Invalid zero capacity');
+    expect.soft(invalidCapacity.segments.map((segment) => segment.value)).toEqual([
+      '--', '--', '--', '--', '--', '--'
+    ]);
     const zeroPitFuel = metricRow(pit, 'Fuel To Add Workbench', 'Dallara quali seed / 4-lap target');
     expect.soft(zeroPitFuel.segments[3]).toMatchObject({ value: '51.0 L cap quali', tone: 'error' });
     expect.soft(zeroPitFuel.segments[5]).toMatchObject({ value: '51.0 L cap quali', tone: 'error' });
@@ -579,6 +583,111 @@ describe('browser review server validation contracts', () => {
         { value: 'service complete', tone: 'info' },
         { value: 'projection below zero; chain stopped', tone: 'error' }
       ]
+    });
+  });
+
+  it('keeps exact boundary and service feasibility math separate and full precision', async () => {
+    const boundary = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-boundary'
+    )).model;
+    expect.soft(boundary.status).toBe('fuel/boundary feasibility workbench');
+    expect.soft(boundary.gridSections[0].headers).toEqual([
+      'Scenario', 'Bucket', 'Range', 'Safe', 'Next lap', 'Desired / add', 'Room / clamp', 'Shortfall', 'Max', 'State'
+    ]);
+    expect.soft(gridRow(boundary, 'Stress / Exact 3-lap edge')).toMatchObject({
+      tone: 'info',
+      cells: [
+        { value: 'Last' },
+        { value: '3.000000 laps' },
+        { value: '3' },
+        { value: '10.00000 L' },
+        { value: '50.00 L / 40.00 L' },
+        { value: '50.00 L / 40.00 L' },
+        { value: '0.00000 L' },
+        { value: '6' },
+        { value: 'range: available; target: feasible; exact-lap-boundary' }
+      ]
+    });
+    expect.soft(gridRow(boundary, 'Stress / Below displayed 3.00')?.cells.slice(1, 4))
+      .toEqual([
+        { value: '2.999999 laps', tone: 'info' },
+        { value: '2', tone: 'info' },
+        { value: '0.00001 L', tone: 'info' }
+      ]);
+    expect.soft(gridRow(boundary, 'Stress / Above displayed 3.00')?.cells.slice(1, 4))
+      .toEqual([
+        { value: '3.000001 laps', tone: 'info' },
+        { value: '3', tone: 'info' },
+        { value: '9.99999 L', tone: 'info' }
+      ]);
+    expect.soft(gridRow(boundary, 'Stress / Known zero facts')).toMatchObject({
+      tone: 'info',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '0.000000 laps' }),
+        expect.objectContaining({ value: '0' }),
+        expect.objectContaining({ value: '10.00000 L' }),
+        expect.objectContaining({ value: 'range: known-zero; target: feasible; exact-lap-boundary, known-zero-range, known-zero-service' })
+      ])
+    });
+    expect.soft(gridRow(boundary, 'Stress / Tank-limited target')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '60.00 L / 50.00 L' }),
+        expect.objectContaining({ value: '40.00 L / 40.00 L' }),
+        expect.objectContaining({ value: '10.00000 L' }),
+        expect.objectContaining({ value: '5' }),
+        expect.objectContaining({ value: 'range: available; target: unachievable; exact-lap-boundary, tank-limited' })
+      ])
+    });
+    expect.soft(gridRow(boundary, 'Stress / Margin flips feasibility')?.cells.slice(6, 9))
+      .toEqual([
+        { value: '0.00010 L', tone: 'error' },
+        { value: '4', tone: 'error' },
+        { value: 'range: available; target: unachievable; exact-lap-boundary, tank-limited', tone: 'error' }
+      ]);
+    expect.soft(gridRow(boundary, 'Stress / Missing current only')?.cells[8])
+      .toMatchObject({ value: 'range: unavailable; target: feasible', tone: 'warning' });
+    expect.soft(gridRow(boundary, 'Stress / Missing at-box only')?.cells.slice(4, 9).map((cell) => cell.value))
+      .toEqual(['20.00 L / --', '-- / --', '--', '6', 'range: available; target: unavailable; exact-lap-boundary']);
+    expect.soft(gridRow(boundary, 'Stress / Missing capacity')?.cells.slice(4, 9).map((cell) => cell.value))
+      .toEqual(['20.00 L / 10.00 L', '-- / --', '--', '--', 'range: available; target: unavailable; exact-lap-boundary']);
+    expect.soft(gridRow(boundary, 'Stress / Conflicting capacity')?.cells[8])
+      .toMatchObject({ value: 'range: available; target: capacity-conflicted; exact-lap-boundary', tone: 'error' });
+    expect.soft(gridRow(boundary, 'Stress / Invalid reserve')?.cells[8])
+      .toMatchObject({ value: 'range: available; target: invalid; exact-lap-boundary', tone: 'error' });
+    expect.soft(gridRow(boundary, 'Stress / Invalid current telemetry')?.cells[8])
+      .toMatchObject({ value: 'range: invalid; target: feasible', tone: 'error' });
+    expect.soft(gridRow(boundary, 'Stress / Invalid at-box telemetry')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '2.000000 laps' }),
+        expect.objectContaining({ value: '20.00 L / --' }),
+        expect.objectContaining({ value: 'range: available; target: invalid; exact-lap-boundary' })
+      ])
+    });
+    expect.soft(gridRow(boundary, 'Stress / Invalid capacity evidence')?.cells[8])
+      .toMatchObject({ value: 'range: available; target: invalid; exact-lap-boundary', tone: 'error' });
+    expect.soft(gridRow(boundary, 'Stress / Incomplete burn evidence')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: 'Last', tone: 'error' }),
+        expect.objectContaining({ value: 'range: invalid; target: invalid' })
+      ])
+    });
+    expect.soft(gridRow(boundary, 'Stress / Finite overflow edge')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '--', tone: 'error' }),
+        expect.objectContaining({ value: 'range: invalid; target: unavailable' })
+      ])
+    });
+    expect.soft(gridRow(boundary, 'Stress / Seed-only evidence')).toMatchObject({
+      tone: 'info',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: 'Quali seeded', tone: 'warning' }),
+        expect.objectContaining({ value: '2.000000 laps' }),
+        expect.objectContaining({ value: 'range: available; target: feasible; exact-lap-boundary' })
+      ])
     });
   });
 

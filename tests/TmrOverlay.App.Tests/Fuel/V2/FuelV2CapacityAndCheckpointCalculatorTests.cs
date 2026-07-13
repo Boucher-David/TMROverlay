@@ -277,6 +277,7 @@ public sealed class FuelV2CapacityAndCheckpointCalculatorTests
                 PlannedServiceAddLiters: 10d));
 
         Assert.Contains(FuelV2FuelCheckpointStateFlag.InvalidInput, snapshot.StateFlags);
+        Assert.Contains(FuelV2FuelCheckpointInputKind.ExpectedFuelToBox, snapshot.InvalidInputKinds);
         Assert.Null(snapshot.ExpectedAtBox);
         Assert.Null(snapshot.ServiceComplete);
     }

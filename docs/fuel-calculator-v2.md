@@ -2928,6 +2928,67 @@ controls before `Stint N` consumes this snapshot. Production renderer,
 screenshot/manifest, settings, migration, and release coverage remain in the
 later explicit promotion pass.
 
+Gate 6 completion - 2026-07-13:
+
+- `FuelV2SharedContractTests` compares the composed Boundary, Range, Fuel To
+  Add/Pit Request, Target Usage, and Plan outputs structurally with the accepted
+  direct calculators for the same explicit owners. Capacity, checkpoints, burn
+  windows, and lap-budget projection remain inputs to composition rather than
+  being recalculated or reinterpreted by the composer.
+- Exact, just-below, just-above, and known-zero range controls prove that
+  composition preserves safe-whole-lap and next-complete-lap behavior without
+  display rounding changing a decision. Missing capacity remains unavailable,
+  while conflicting capacity remains conflicted; neither state can become a
+  feasible or trusted budget merely because diagnostic numeric math exists.
+- Dependency-isolation controls change Target Usage, Boundary reserve, and Plan
+  composition independently. Target changes do not alter Boundary, Range, Pit,
+  or Plan; reserve changes alter Boundary/Pit but not Range, Target, or Plan;
+  and removing Plan changes no factual top-half owner.
+- A seed-only control retains typed qualifying evidence for factual Boundary
+  and Target comparison while leaving Last and Plan absent. The composer does
+  not turn a visible, strategy-ineligible seed into an implicit selected Plan
+  profile.
+- The ordered checkpoint control proves the full factual sequence:
+  EffectiveCapacity, FirstGreen, Current, ExpectedAtBox, ServiceComplete, and
+  ExpectedPitExit. It also proves each consumer's explicit choice: FirstGreen
+  for Target Usage, Current plus ServiceComplete for current-checkpoint Plan,
+  ExpectedAtBox as the service baseline, and ServiceComplete as the Pit request
+  target.
+- Plan equivalence covers all named lap-budget values: primary actionable laps,
+  possible decimal laps, and estimated finish lap. Repeated composition of the
+  same inputs is deterministic, and mutating caller-owned target-lap and Plan-
+  flag lists after composition cannot mutate the retained snapshot.
+- The shared-snapshot browser workbench now includes an explicit live-shaped
+  populated control, the established VLN 4h replay-backed accepted-span control,
+  degraded and unavailable controls, missing/conflicting/invalid capacity and
+  checkpoint controls, exact/clamped/clean zero behavior, and seed-only
+  evidence. The VLN replay control derives Last `13.52`, 5L `13.50`, 10L
+  `13.36`, and Max `13.65` from the same accepted span list used by the existing
+  Fuel/Lap fixture. With no at-box evidence and no service target it correctly
+  produces no Pit request; its explicit FirstGreen plus full 5L selection
+  produces the factual `7 x4 + 3 / 4 stops` full-race Plan.
+- Existing focused Core and browser controls from Gates 1-5 remain the proof for
+  the accepted Lap, Fuel/Lap, Range, Target Usage, Fuel To Add, Plan, and current
+  Stint Targets cell contracts. Gate 6 adds the cross-owner composition proof;
+  it does not duplicate those suites as native/localhost conversion tests.
+
+Three independent review threads approved Gate 6 after one reviewer caught a
+false initial replay fixture that labeled five synthetic Dallara values as a
+capture-derived full 5L window. That fixture was removed and replaced with the
+already-established VLN accepted-span evidence before approval. The focused
+shared-snapshot contract, all 58 settings/effects tests, all 53 localhost tests,
+the browser data-contract test, JavaScript syntax, and diff hygiene pass. The
+new C# suite received a static compile-shape review, but execution remains the
+Windows/CI gate because the authoring Mac has no `dotnet` toolchain.
+
+Gate 6 completes the six-gate top-half foundation sequence. It deliberately
+does not add native Windows or localhost/OBS production wiring, screenshot or
+manifest assertions, settings persistence, migration coverage, or final visual
+geometry/copy tests. Those belong to the later V1-to-V2 promotion pass. Before
+starting `Stint N` or deciding whether the `V2` label remains necessary, perform
+the required preservation audit below against the pre-gate workbench commits
+and accepted cell tests.
+
 Phase 0 locks semantic product-cell behavior, not final pixels. Exact geometry,
 paint, final copy, settings UI, native Windows wiring, localhost/OBS wiring, and
 broad screenshot/manifest parity remain stabilization work. Gate 5's shared

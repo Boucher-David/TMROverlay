@@ -5263,7 +5263,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       title: 'Shared Snapshot V2',
       headers: ['Scenario', 'Lap budget', 'Capacity', 'Current / box', 'Range', 'Fuel to add', 'Target usage', 'Plan', 'Contract'],
       rows: [
-        fuelSharedSnapshotWorkbenchGridRow('Populated / explicit owners', {
+        fuelSharedSnapshotWorkbenchGridRow('Live control / explicit owners', {
           lapBudget: { primaryLapsRemaining: 12, possibleLapsRemaining: 11.5, canDriveFuelAdvice: true },
           checkpoints: {
             capacity: { physicalCapacityLiters: 100, driverCapPercent: 0.6, classCapPercent: 0.6 },
@@ -5293,6 +5293,59 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
             futureBurnBucketId: fuelV2BurnBucketId.fiveLapAverage
           },
           contractLabel: 'current→range; at-box→service; first-green/5L target; explicit current+future plan'
+        }),
+        fuelSharedSnapshotWorkbenchGridRow('Replay control / VLN 4h Mid S1', {
+          lapBudget: {
+            primaryLapsRemaining: 31,
+            possibleLapsRemaining: 30.96,
+            estimatedFinishLap: 31,
+            canDriveFuelAdvice: true
+          },
+          checkpoints: {
+            capacity: { physicalCapacityLiters: 104.94, driverCapPercent: 1, classCapPercent: 1 },
+            measuredFirstGreenFuelLiters: 102.8464,
+            currentFuelLiters: 61.64
+          },
+          burns: {
+            [fuelV2BurnBucketId.last]: {
+              value: 13.52,
+              burnSource: 'LiveLastLap',
+              sampleCount: 1,
+              source: 'VLN 4h replay last lap'
+            },
+            [fuelV2BurnBucketId.fiveLapAverage]: {
+              value: 13.5,
+              burnSource: 'LiveFiveLapAverage',
+              sampleCount: 5,
+              source: 'VLN 4h replay 5L average'
+            },
+            [fuelV2BurnBucketId.tenLapAverage]: {
+              value: 13.36,
+              burnSource: 'LiveTenLapAverage',
+              sampleCount: 10,
+              source: 'VLN 4h replay 10L average'
+            },
+            [fuelV2BurnBucketId.maximum]: {
+              value: 13.65,
+              burnSource: 'LiveMaximum',
+              sampleCount: 10,
+              source: 'VLN 4h replay maximum'
+            }
+          },
+          boundary: { targetLaps: null, reserveFuelLiters: 0, pitLaneFuelLiters: 0 },
+          targetUsage: {
+            fuelBudgetCheckpoint: 'firstGreen',
+            referenceBurnBucketId: fuelV2BurnBucketId.last,
+            targetLaps: [7, 8, 9]
+          },
+          plan: {
+            mode: 'full-race',
+            plannedRaceLapsSource: 'primaryLapsRemaining',
+            raceLapsRemainingSource: 'possibleLapsRemaining',
+            fuelBudgetCheckpoint: 'firstGreen',
+            burnBucketId: fuelV2BurnBucketId.fiveLapAverage
+          },
+          contractLabel: 'Replay-backed accepted spans support full Last/5L/10L/Max; absent at-box evidence does not invent a pit request'
         }),
         fuelSharedSnapshotWorkbenchGridRow('Degraded / no implicit fallback', {
           lapBudget: { primaryLapsRemaining: 12, possibleLapsRemaining: 11.5, canDriveFuelAdvice: true },
@@ -5330,6 +5383,23 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
           },
           plan: null,
           contractLabel: 'Typed unavailable facts; no fabricated capacity, checkpoint, bucket, request, target, or plan'
+        }),
+        fuelSharedSnapshotWorkbenchGridRow('Missing capacity / diagnostic request only', {
+          lapBudget: { primaryLapsRemaining: 2, possibleLapsRemaining: 2, canDriveFuelAdvice: true },
+          checkpoints: {
+            capacity: {},
+            currentFuelLiters: 20,
+            measuredAtBoxFuelLiters: 10
+          },
+          burns: { [fuelV2BurnBucketId.last]: 10 },
+          boundary: { targetLaps: 2, reserveFuelLiters: 0, pitLaneFuelLiters: 0 },
+          targetUsage: {
+            fuelBudgetCheckpoint: 'current',
+            referenceBurnBucketId: fuelV2BurnBucketId.last,
+            targetLaps: [2]
+          },
+          plan: null,
+          contractLabel: 'Range and desired add remain factual; missing capacity cannot claim clamp or feasibility'
         }),
         fuelSharedSnapshotWorkbenchGridRow('Unrequested projections / invalid upstreams stay unavailable', {
           lapBudget: { primaryLapsRemaining: 12, possibleLapsRemaining: 11.5, canDriveFuelAdvice: true },
@@ -5491,6 +5561,34 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
             burnBucketId: fuelV2BurnBucketId.last
           },
           contractLabel: 'Clean zero stays selectable; Target Usage still requires a positive budget and Plan retains zero'
+        }),
+        fuelSharedSnapshotWorkbenchGridRow('Seed-only / retained without implicit plan', {
+          lapBudget: { primaryLapsRemaining: 5, possibleLapsRemaining: 5, canDriveFuelAdvice: false },
+          checkpoints: {
+            capacity: { physicalCapacityLiters: 60, driverCapPercent: 1, classCapPercent: 1 },
+            measuredFirstGreenFuelLiters: 60,
+            currentFuelLiters: 24,
+            measuredAtBoxFuelLiters: 12
+          },
+          burns: {
+            [fuelV2BurnBucketId.qualifying]: {
+              value: 12,
+              burnSource: 'QualifyingSeed',
+              sampleCount: 1,
+              confidence: 'Seeded',
+              strategyEligible: false,
+              cleanBaselineEligible: false,
+              source: 'qualifying replay seed'
+            }
+          },
+          boundary: { targetLaps: 4, reserveFuelLiters: 0, pitLaneFuelLiters: 0 },
+          targetUsage: {
+            fuelBudgetCheckpoint: 'firstGreen',
+            referenceBurnBucketId: fuelV2BurnBucketId.qualifying,
+            targetLaps: [4, 5]
+          },
+          plan: null,
+          contractLabel: 'Quali remains typed contextual evidence; no Last bucket or Plan selection is invented'
         })
       ]
     }

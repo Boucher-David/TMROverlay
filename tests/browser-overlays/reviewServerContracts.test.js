@@ -699,7 +699,7 @@ describe('browser review server validation contracts', () => {
     expect.soft(snapshot.gridSections[0].headers).toEqual([
       'Scenario', 'Lap budget', 'Capacity', 'Current / box', 'Range', 'Fuel to add', 'Target usage', 'Plan', 'Contract'
     ]);
-    expect.soft(gridRow(snapshot, 'Populated / explicit owners')).toMatchObject({
+    expect.soft(gridRow(snapshot, 'Live control / explicit owners')).toMatchObject({
       tone: 'info',
       cells: [
         { value: '12 / 11.50', tone: 'info' },
@@ -710,6 +710,20 @@ describe('browser review server validation contracts', () => {
         { value: '58.00 L / 11.60 L @5', tone: 'success' },
         { value: '4 now + 5 x1 + 3 / 2 stops', tone: 'info' },
         { value: 'current→range; at-box→service; first-green/5L target; explicit current+future plan', tone: 'info' }
+      ]
+    });
+
+    expect.soft(gridRow(snapshot, 'Replay control / VLN 4h Mid S1')).toMatchObject({
+      tone: 'warning',
+      cells: [
+        { value: '31 / 30.96', tone: 'info' },
+        { value: '104.94 L', tone: 'info' },
+        { value: '61.64 L / --', tone: 'info' },
+        { value: '4.559172 laps', tone: 'info' },
+        { value: '--', tone: 'waiting' },
+        { value: '102.85 L / 14.69 L @7', tone: 'success' },
+        { value: '7 x4 + 3 / 4 stops', tone: 'info' },
+        { value: 'Replay-backed accepted spans support full Last/5L/10L/Max; absent at-box evidence does not invent a pit request', tone: 'warning' }
       ]
     });
 
@@ -738,6 +752,19 @@ describe('browser review server validation contracts', () => {
         { value: '-- / -- @1 [unavailable]' },
         { value: '--' },
         { value: 'Typed unavailable facts; no fabricated capacity, checkpoint, bucket, request, target, or plan' }
+      ]
+    });
+    expect.soft(gridRow(snapshot, 'Missing capacity / diagnostic request only')).toMatchObject({
+      tone: 'warning',
+      cells: [
+        { value: '2 / 2.00', tone: 'info' },
+        { value: '--', tone: 'warning' },
+        { value: '20.00 L / 10.00 L', tone: 'info' },
+        { value: '2.000000 laps', tone: 'info' },
+        { value: '10.00 L', tone: 'waiting' },
+        { value: '20.00 L / 10.00 L @2', tone: 'success' },
+        { value: '--', tone: 'waiting' },
+        { value: 'Range and desired add remain factual; missing capacity cannot claim clamp or feasibility', tone: 'warning' }
       ]
     });
     expect.soft(gridRow(snapshot, 'Unrequested projections / invalid upstreams stay unavailable')).toMatchObject({
@@ -802,6 +829,19 @@ describe('browser review server validation contracts', () => {
         { value: '-- / -- @2', tone: 'waiting' },
         { value: '-- / -- stops', tone: 'waiting' }
       ]);
+    expect.soft(gridRow(snapshot, 'Seed-only / retained without implicit plan')).toMatchObject({
+      tone: 'warning',
+      cells: [
+        { value: '5 / 5.00', tone: 'info' },
+        { value: '60.00 L', tone: 'info' },
+        { value: '24.00 L / 12.00 L', tone: 'info' },
+        { value: '--', tone: 'waiting' },
+        { value: '--', tone: 'waiting' },
+        { value: '60.00 L / 12.00 L @5', tone: 'success' },
+        { value: '--', tone: 'waiting' },
+        { value: 'Quali remains typed contextual evidence; no Last bucket or Plan selection is invented', tone: 'warning' }
+      ]
+    });
   });
 
   it('proves v1.0.2 non-race display contracts in practice and qualifying previews', async () => {

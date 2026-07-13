@@ -71,6 +71,47 @@ public sealed class FuelV2StintTargetsCalculatorTests
     }
 
     [Fact]
+    public void CleanFeasibleTargetReportsTrackingSuccess()
+    {
+        var snapshot = FuelV2StintTargetsCalculator.From(
+            currentFuelLiters: 20d,
+            referenceBurn: ReferenceBurn,
+            targetLaps: 2,
+            remainingLaps: 4d);
+
+        Assert.Equal(20d, snapshot.UsableFuelLiters);
+        Assert.Equal(2d, snapshot.CurrentRangeLaps);
+        Assert.Equal("tracking", snapshot.StatusLabel);
+        Assert.Equal(FuelV2WorkbenchTone.Success, snapshot.Tone);
+        var plan = Assert.Single(snapshot.Targets, cell => cell.Role == FuelV2StintTargetRole.Plan);
+        Assert.Equal(10d, plan.RequiredFuelPerLap.Value);
+        Assert.True(plan.DisplayEligible);
+        Assert.Equal("tracking", plan.ReasonLabel);
+        Assert.Equal(FuelV2WorkbenchTone.Success, plan.Tone);
+    }
+
+    [Fact]
+    public void ReserveAndPitLaneFuelAreRemovedBeforeRangeAndTargetCalculations()
+    {
+        var snapshot = FuelV2StintTargetsCalculator.From(
+            currentFuelLiters: 25d,
+            referenceBurn: ReferenceBurn,
+            targetLaps: 2,
+            remainingLaps: 4d,
+            options: new FuelV2StintTargetsOptions(
+                ReserveFuelLiters: 2d,
+                PitLaneFuelLiters: 3d));
+
+        Assert.Equal(25d, snapshot.CurrentFuelLiters);
+        Assert.Equal(20d, snapshot.UsableFuelLiters);
+        Assert.Equal(2d, snapshot.CurrentRangeLaps);
+        var plan = Assert.Single(snapshot.Targets, cell => cell.Role == FuelV2StintTargetRole.Plan);
+        Assert.Equal(10d, plan.RequiredFuelPerLap.Value);
+        Assert.Equal("tracking", snapshot.StatusLabel);
+        Assert.Equal(FuelV2WorkbenchTone.Success, snapshot.Tone);
+    }
+
+    [Fact]
     public void NegativeTimeEvidenceIsRejectedInsteadOfHidingCandidate()
     {
         var snapshot = FuelV2StintTargetsCalculator.From(

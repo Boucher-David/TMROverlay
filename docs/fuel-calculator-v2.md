@@ -2989,6 +2989,62 @@ starting `Stint N` or deciding whether the `V2` label remains necessary, perform
 the required preservation audit below against the pre-gate workbench commits
 and accepted cell tests.
 
+#### Post-Gate Top-Half Preservation Audit - 2026-07-13
+
+The required audit found no accidental deletion, reversion, or semantic loss in
+the accepted top-half workbench. The original cell commits (`0fe3d64`,
+`daae62c`, `3f29915`, `7bb1a9a`, `b6890cb`, `7e80ad6`, and `d1e970d`) all remain
+ancestors of the completed six-gate branch. A row-by-row comparison from the
+pre-gate baseline `ae5caa3` through Gate 6 confirms that the retained Lap,
+Range, Target Usage, Fuel To Add, Plan, and Stint Targets scenarios remain
+individually reviewable. Capacity, Checkpoint, Boundary, and Shared Snapshot
+sections are additive rather than replacements.
+
+Cell-by-cell result:
+
+- **Lap:** the raw decimal projection remains separate from the conservative or
+  held actionable budget. All original workbench inputs and rows remain. Typed
+  source, confidence, flags, and explicit non-actionable states are intentional
+  hardening, not a replacement calculation.
+- **Fuel/Lap:** this is the one intentional workbench redesign. Its old
+  seven-row engineering matrix had already become unrouted before the six-gate
+  baseline. The retained product cell is now restored as the explicit
+  `Last / 5L / 10L / Max` row with populated, degraded/learning, unavailable,
+  and trusted-seed states. The accepted rolling-window and provenance behavior
+  remains in focused Core tests; the obsolete V1-reference/multi-scenario table
+  is not part of the final product cell.
+- **Range:** the accepted `current fuel / burn` arithmetic and original rows
+  remain. Known-zero and explicit-unavailable controls are additive, and bucket
+  evidence now stays typed through the central boundary owner.
+- **Target Usage:** the budget-per-target arithmetic and original rows remain.
+  Ordered `N-1 / N / N+1` candidates, missing-reference behavior, comparator
+  bands, and explicit checkpoint/bucket dependencies are the approved
+  hardening.
+- **Fuel To Add:** the positive-input formula and all original rows remain.
+  Desired fuel, clamped add, room, shortfall, and feasibility now come from the
+  factual Boundary owner. `Max`, `Min`, and `Quali` require explicit typed
+  evidence; sector or sibling bucket values no longer silently manufacture an
+  extremum. Several old fixture objects still carry ignored `sectorBurn` copy,
+  including a now-misleading `Sector spike` label; that is non-semantic fixture
+  cleanup debt, not missing calculation behavior.
+- **Plan:** the full-race and current-checkpoint positive arithmetic and all
+  original rows remain. Factual zero and positive sub-lap capacities no longer
+  invent a one-lap stint, and composition now names its lap, checkpoint, and
+  bucket dependencies explicitly.
+- **Stint Targets:** all original experimental rows remain. Zero fuel, finished
+  race, 92%/85% boundaries, held/degraded context, time context, and unavailable
+  inputs are additive or corrective controls; they do not replace the accepted
+  current-tank target calculation.
+
+The audit found two proof gaps, not behavior defects: Core lacked a focused
+fully unavailable Lap staging assertion, and Stint Targets lacked focused clean
+tracking plus reserve/pit-lane subtraction assertions. Those tests were added
+without changing production code. Three independent review threads approved
+the resulting contract. The focused browser workbench suite remains green at
+23 tests and diff hygiene passes. The new C# assertions received static
+compile-shape and semantic review; execution remains a Windows/CI gate because
+the authoring Mac has no local `dotnet` toolchain.
+
 Phase 0 locks semantic product-cell behavior, not final pixels. Exact geometry,
 paint, final copy, settings UI, native Windows wiring, localhost/OBS wiring, and
 broad screenshot/manifest parity remain stabilization work. Gate 5's shared

@@ -108,6 +108,30 @@ public sealed class LiveRaceLapBudgetEstimatorTests
     }
 
     [Fact]
+    public void MissingActiveClockAndPaceRemainExplicitlyUnavailableAfterStaging()
+    {
+        var budget = LiveRaceLapBudgetEstimator.Estimate(
+            RaceContext("unlimited", "3600 sec"),
+            RaceSession(sessionState: 4, timeRemainingSeconds: -1d),
+            strategyCarProgressLaps: null,
+            overallLeaderProgressLaps: null,
+            classLeaderProgressLaps: null,
+            racePaceSeconds: null,
+            racePaceSource: "unavailable");
+
+        var staged = FuelV2LapBudgetStaging.FromBudget(budget);
+
+        Assert.Null(staged.PrimaryLapsRemaining);
+        Assert.Null(staged.PossibleLapsRemaining);
+        Assert.Null(staged.EstimatedFinishLap);
+        Assert.Equal(LiveRaceLapBudgetSource.MissingActiveClock, staged.ProjectionSource);
+        Assert.Equal(LiveRaceLapBudgetSource.MissingActiveClock, staged.ActionableSource);
+        Assert.Equal(LiveRaceLapBudgetConfidence.Blocked, staged.Confidence);
+        Assert.False(staged.CanDriveFuelAdvice);
+        Assert.Contains(LiveRaceLapBudgetStateFlag.ClockMissing, staged.StateFlags);
+    }
+
+    [Fact]
     public void NativeWorkbench_PreservesTwoDecimalLapProjection()
     {
         var model = FuelLapsWorkbenchViewModel.Create();

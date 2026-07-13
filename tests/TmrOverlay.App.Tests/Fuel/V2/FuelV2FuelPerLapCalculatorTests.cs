@@ -67,9 +67,13 @@ public sealed class FuelV2FuelPerLapCalculatorTests
         Assert.Null(fiveSamples.TenLapAverage);
         var partial = Assert.IsType<FuelV2Scalar>(sixSamples.TenLapAverage);
         Assert.Equal(3.5d, Assert.IsType<double>(partial.Value), precision: 6);
+        Assert.Equal(FuelV2BurnBucketId.TenLapAverage, partial.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.LiveTenLapAverage, partial.BurnSource);
+        Assert.Equal(6, partial.SampleCount);
         Assert.Contains(FuelV2SampleContextFlag.CleanRace, partial.ContextFlags);
         Assert.DoesNotContain(FuelV2SampleContextFlag.SeededSectorProfile, partial.ContextFlags);
         Assert.False(partial.CleanBaselineEligible);
+        Assert.False(partial.StrategyEligible);
     }
 
     [Fact]
@@ -90,7 +94,7 @@ public sealed class FuelV2FuelPerLapCalculatorTests
     }
 
     [Fact]
-    public void FromAcceptedLaps_MaxKeepsHigherLabeledSeed()
+    public void FromAcceptedLaps_MaxKeepsHigherQualifyingSeedEvidence()
     {
         var maxSeed = FuelV2Scalar.From(
             4d,
@@ -104,20 +108,31 @@ public sealed class FuelV2FuelPerLapCalculatorTests
             [FuelV2SampleContextFlag.SeededSectorProfile],
             displayEligible: false,
             cleanBaselineEligible: true);
+        var minSeed = FuelV2Scalar.From(
+            1d,
+            "hidden minimum seed",
+            FuelV2Confidence.Seeded,
+            displayEligible: false);
 
         var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
             [2d, 3d],
             new FuelV2FuelPerLapWindowOptions(
                 MaxSeed: maxSeed,
+                MinSeed: minSeed,
                 QualifyingSeed: qualifyingSeed));
 
         var max = Assert.IsType<FuelV2Scalar>(windows.Max);
         Assert.Equal(5d, max.Value);
         Assert.Equal("qualifying seed", max.Source);
         Assert.Equal(FuelV2Confidence.Seeded, max.Confidence);
+        Assert.Equal(FuelV2BurnBucketId.Maximum, max.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.QualifyingSeed, max.BurnSource);
         Assert.Equal([FuelV2SampleContextFlag.SeededSectorProfile], max.ContextFlags);
-        Assert.True(max.DisplayEligible);
+        Assert.False(max.DisplayEligible);
         Assert.False(max.CleanBaselineEligible);
+        Assert.False(max.StrategyEligible);
+        Assert.False(Assert.IsType<FuelV2Scalar>(windows.Min).DisplayEligible);
+        Assert.False(Assert.IsType<FuelV2Scalar>(windows.QualifyingSeed).DisplayEligible);
     }
 
     [Fact]
@@ -142,10 +157,67 @@ public sealed class FuelV2FuelPerLapCalculatorTests
         var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
             Enumerable.Range(1, 10).Select(value => (double)value).ToArray());
 
-        AssertCleanLiveWindow(windows.Last);
-        AssertCleanLiveWindow(windows.FiveLapAverage);
-        AssertCleanLiveWindow(windows.TenLapAverage);
-        AssertCleanLiveWindow(windows.Max);
+        AssertCleanLiveWindow(windows.Last, FuelV2BurnBucketId.Last, FuelV2BurnSource.LiveLastLap, 1);
+        AssertCleanLiveWindow(windows.FiveLapAverage, FuelV2BurnBucketId.FiveLapAverage, FuelV2BurnSource.LiveFiveLapAverage, 5);
+        AssertCleanLiveWindow(windows.TenLapAverage, FuelV2BurnBucketId.TenLapAverage, FuelV2BurnSource.LiveTenLapAverage, 10);
+        AssertCleanLiveWindow(windows.Max, FuelV2BurnBucketId.Maximum, FuelV2BurnSource.LiveMaximum, 10);
+        Assert.Equal(
+            new[]
+            {
+                FuelV2BurnBucketId.Last,
+                FuelV2BurnBucketId.FiveLapAverage,
+                FuelV2BurnBucketId.TenLapAverage,
+                FuelV2BurnBucketId.Maximum,
+                FuelV2BurnBucketId.Minimum
+            },
+            windows.AvailableBuckets.Select(bucket => bucket.BurnBucketId!.Value));
+    }
+
+    [Fact]
+    public void FromAcceptedLaps_SeedProvenanceAndStrategyEligibilitySurviveMaxRebinding()
+    {
+        var seed = FuelV2Scalar.From(
+            14d,
+            "12-session historical high",
+            FuelV2Confidence.Seeded,
+            [FuelV2SampleContextFlag.CleanRace],
+            displayEligible: true,
+            cleanBaselineEligible: false,
+            burnSource: FuelV2BurnSource.HistoricalSeed,
+            sampleCount: 12,
+            strategyEligible: true);
+
+        var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
+            [],
+            new FuelV2FuelPerLapWindowOptions(MaxSeed: seed));
+
+        var max = Assert.IsType<FuelV2Scalar>(windows.Max);
+        Assert.Equal(FuelV2BurnBucketId.Maximum, max.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.HistoricalSeed, max.BurnSource);
+        Assert.Equal(12, max.SampleCount);
+        Assert.Equal("12-session historical high", max.Source);
+        Assert.True(max.DisplayEligible);
+        Assert.False(max.CleanBaselineEligible);
+        Assert.True(max.StrategyEligible);
+    }
+
+    [Fact]
+    public void FromAcceptedLaps_MismatchedTypedSeedIsRejectedInsteadOfReclassified()
+    {
+        var lastLap = FuelV2Scalar.From(
+            14d,
+            "typed Last value",
+            FuelV2Confidence.CleanBaseline,
+            burnBucketId: FuelV2BurnBucketId.Last,
+            burnSource: FuelV2BurnSource.LiveLastLap,
+            sampleCount: 1,
+            strategyEligible: true);
+
+        var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
+            [],
+            new FuelV2FuelPerLapWindowOptions(MaxSeed: lastLap));
+
+        Assert.Null(windows.Max);
     }
 
     private static void AssertScalarValue(FuelV2Scalar? scalar, double expected)
@@ -154,14 +226,22 @@ public sealed class FuelV2FuelPerLapCalculatorTests
         Assert.Equal(expected, Assert.IsType<double>(value.Value), precision: 6);
     }
 
-    private static void AssertCleanLiveWindow(FuelV2Scalar? scalar)
+    private static void AssertCleanLiveWindow(
+        FuelV2Scalar? scalar,
+        FuelV2BurnBucketId expectedBucketId,
+        FuelV2BurnSource expectedBurnSource,
+        int expectedSampleCount)
     {
         var value = Assert.IsType<FuelV2Scalar>(scalar);
         Assert.True(value.HasValue);
         Assert.False(string.IsNullOrWhiteSpace(value.Source));
+        Assert.Equal(expectedBucketId, value.BurnBucketId);
+        Assert.Equal(expectedBurnSource, value.BurnSource);
+        Assert.Equal(expectedSampleCount, value.SampleCount);
         Assert.Equal(FuelV2Confidence.CleanBaseline, value.Confidence);
         Assert.Contains(FuelV2SampleContextFlag.CleanRace, value.ContextFlags);
         Assert.True(value.DisplayEligible);
         Assert.True(value.CleanBaselineEligible);
+        Assert.True(value.StrategyEligible);
     }
 }

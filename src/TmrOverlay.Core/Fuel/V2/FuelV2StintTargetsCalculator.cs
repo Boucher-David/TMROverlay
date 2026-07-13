@@ -19,7 +19,12 @@ internal static class FuelV2StintTargetsCalculator
         var usableFuel = currentFuel is { } fuel
             ? Math.Max(0d, fuel - reserve - pitLane)
             : (double?)null;
-        var burn = referenceBurn?.HasValue == true && referenceBurn.Value!.Value > 0d
+        var burn = referenceBurn is
+            {
+                HasTypedBurnEvidence: true,
+                HasValue: true,
+                Value: > 0d
+            }
             ? referenceBurn
             : null;
         var remaining = NonNegativeOrNull(remainingLaps);
@@ -114,6 +119,7 @@ internal static class FuelV2StintTargetsCalculator
             DisplayEligible: visibility.DisplayEligible,
             ReasonLabel: visibility.ReasonLabel,
             RequiredFuelPerLap: required,
+            ReferenceBurn: referenceBurn,
             SaveRequiredLitersPerLap: save,
             StrategyDeltaSeconds: strategyDelta,
             Tone: tone);

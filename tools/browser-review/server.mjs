@@ -2930,6 +2930,10 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
           return withChrome(fuelPerLapWorkbenchReviewModel('no-data'));
         }
 
+        if (fixture === 'fuel-laps-workbench-fuel-trusted-seed') {
+          return withChrome(fuelPerLapWorkbenchReviewModel('trusted-seed'));
+        }
+
         if (fixture === 'fuel-laps-workbench-laps') {
           return withChrome(fuelLapsWorkbenchReviewModel({ includeLapRows: true, activeWorkbench: 'range' }));
         }
@@ -4532,6 +4536,110 @@ function fuelDallara35mV1DisplayModel(overlayState, session) {
     [{ key: 'timeRemaining', value: '35:00' }]);
 }
 
+const fuelV2BurnBucketId = Object.freeze({
+  last: 'Last',
+  fiveLapAverage: 'FiveLapAverage',
+  tenLapAverage: 'TenLapAverage',
+  maximum: 'Maximum',
+  minimum: 'Minimum',
+  qualifying: 'Qualifying'
+});
+
+const fuelV2BurnBucketOrder = Object.freeze([
+  fuelV2BurnBucketId.last,
+  fuelV2BurnBucketId.fiveLapAverage,
+  fuelV2BurnBucketId.tenLapAverage,
+  fuelV2BurnBucketId.maximum,
+  fuelV2BurnBucketId.minimum,
+  fuelV2BurnBucketId.qualifying
+]);
+
+const fuelV2BurnBucketContract = Object.freeze({
+  [fuelV2BurnBucketId.last]: Object.freeze({ label: 'Last', burnSource: 'LiveLastLap', sampleCount: 1, confidence: 'CleanBaseline', strategyEligible: true, cleanBaselineEligible: true }),
+  [fuelV2BurnBucketId.fiveLapAverage]: Object.freeze({ label: '5L', burnSource: 'LiveFiveLapAverage', sampleCount: 5, confidence: 'CleanBaseline', strategyEligible: true, cleanBaselineEligible: true }),
+  [fuelV2BurnBucketId.tenLapAverage]: Object.freeze({ label: '10L', burnSource: 'LiveTenLapAverage', sampleCount: 10, confidence: 'CleanBaseline', strategyEligible: true, cleanBaselineEligible: true }),
+  [fuelV2BurnBucketId.maximum]: Object.freeze({ label: 'Max', burnSource: 'LiveMaximum', sampleCount: null, confidence: 'CleanBaseline', strategyEligible: true, cleanBaselineEligible: true }),
+  [fuelV2BurnBucketId.minimum]: Object.freeze({ label: 'Min', burnSource: 'LiveMinimum', sampleCount: null, confidence: 'CleanBaseline', strategyEligible: true, cleanBaselineEligible: true }),
+  [fuelV2BurnBucketId.qualifying]: Object.freeze({ label: 'Quali', burnSource: 'QualifyingSeed', sampleCount: 1, confidence: 'Seeded', strategyEligible: false, cleanBaselineEligible: false })
+});
+
+function fuelV2BurnEvidence(bucketId, raw = {}, defaults = {}, hasValue = true) {
+  const contract = fuelV2BurnBucketContract[bucketId];
+  if (!contract) throw new Error(`Unknown Fuel V2 burn bucket: ${bucketId}`);
+  const sampleCountInput = raw.sampleCount ?? defaults.sampleCount ?? contract.sampleCount;
+  const sampleCount = Number.isInteger(Number(sampleCountInput)) && Number(sampleCountInput) > 0
+    ? Number(sampleCountInput)
+    : null;
+  const contextFlags = raw.contextFlags ?? defaults.contextFlags ?? (hasValue ? ['CleanRace'] : []);
+  const strategyEligible = raw.strategyEligible
+    ?? defaults.strategyEligible
+    ?? contract.strategyEligible;
+  const cleanBaselineEligible = raw.cleanBaselineEligible
+    ?? defaults.cleanBaselineEligible
+    ?? contract.cleanBaselineEligible;
+  const confidence = raw.confidence
+    ?? defaults.confidence
+    ?? contract.confidence;
+  const burnSource = raw.burnSource
+    ?? defaults.burnSource
+    ?? contract.burnSource;
+  const source = raw.source
+    ?? defaults.source
+    ?? (hasValue ? burnSource : 'unavailable');
+
+  return {
+    id: bucketId,
+    label: contract.label,
+    source: hasValue ? String(source) : 'unavailable',
+    burnSource: hasValue ? String(burnSource) : 'Unavailable',
+    sampleCount: hasValue ? sampleCount : null,
+    confidence: hasValue ? String(confidence) : 'Unavailable',
+    contextFlags: hasValue ? [...new Set(contextFlags)] : [],
+    displayEligible: hasValue && (raw.displayEligible ?? defaults.displayEligible ?? true),
+    cleanBaselineEligible: hasValue && Boolean(cleanBaselineEligible),
+    strategyEligible: hasValue && Boolean(strategyEligible),
+    detailLabel: hasValue ? String(raw.label ?? defaults.detailLabel ?? '').trim() : ''
+  };
+}
+
+function fuelV2BurnBucket(bucketId, rawValue, defaults = {}) {
+  const raw = typeof rawValue === 'object' && rawValue !== null ? rawValue : { value: rawValue };
+  const numeric = raw.value === null || raw.value === undefined ? Number.NaN : Number(raw.value);
+  const hasValue = Number.isFinite(numeric) && numeric > 0;
+  return {
+    ...fuelV2BurnEvidence(bucketId, raw, defaults, hasValue),
+    value: hasValue ? numeric : null
+  };
+}
+
+function fuelV2DerivedBurnBucket(bucket, value, operationSource) {
+  const numeric = value === null || value === undefined ? Number.NaN : Number(value);
+  const hasValue = Number.isFinite(numeric);
+  return {
+    ...bucket,
+    value: hasValue ? numeric : null,
+    source: hasValue ? `${operationSource} <- ${bucket.source}` : 'unavailable',
+    confidence: hasValue ? bucket.confidence : 'Unavailable',
+    displayEligible: hasValue && bucket.displayEligible,
+    cleanBaselineEligible: false,
+    strategyEligible: hasValue && bucket.strategyEligible
+  };
+}
+
+function fuelV2BurnBucketEvidence(bucket) {
+  return {
+    burnBucketId: bucket.id,
+    burnSource: bucket.burnSource,
+    sampleCount: bucket.sampleCount,
+    confidence: bucket.confidence,
+    contextFlags: bucket.contextFlags,
+    displayEligible: bucket.displayEligible,
+    cleanBaselineEligible: bucket.cleanBaselineEligible,
+    strategyEligible: bucket.strategyEligible,
+    provenance: bucket.source
+  };
+}
+
 function fuelPerLapWorkbenchReviewModel(state = 'populated') {
   // Browser review mirrors the accepted Core Fuel/Lap window contract using
   // explicit accepted-span controls. Core remains the calculation authority;
@@ -4542,12 +4650,26 @@ function fuelPerLapWorkbenchReviewModel(state = 'populated') {
     : state === 'degraded'
       ? [13.54]
       : [0, -1, Number.NaN];
-  const windows = fuelPerLapWorkbenchWindows(fuelPerLapSamples);
+  const maximumSeed = state === 'trusted-seed'
+    ? {
+        value: 14.2,
+        source: 'trusted historical maximum',
+        burnSource: 'HistoricalSeed',
+        sampleCount: 12,
+        confidence: 'Seeded',
+        displayEligible: true,
+        cleanBaselineEligible: false,
+        strategyEligible: true
+      }
+    : null;
+  const windows = fuelPerLapWorkbenchWindows(fuelPerLapSamples, maximumSeed);
   const row = fuelPerLapWorkbenchRow(windows);
   const source = state === 'populated'
-    ? 'source: Fuel V2 workbench; VLN 4h capture-derived accepted clean-span control. Browser mirrors staged Core positive-finite filtering and trailing full Last/5L/10L plus live-or-seed Max semantics.'
+    ? 'source: Fuel V2 workbench; VLN 4h capture-derived accepted clean-span control. Browser mirrors staged Core positive-finite filtering, trailing full Last/5L/10L, live-or-seed Max semantics, and typed bucket provenance/eligibility.'
     : state === 'degraded'
       ? 'source: Fuel V2 workbench; Dallara 4L blip capture-derived single accepted clean-span control. Full 5L and 10L windows remain unavailable until they mature.'
+      : state === 'trusted-seed'
+        ? 'source: Fuel V2 workbench; explicit trusted historical Max seed proves strategy eligibility does not imply clean-baseline eligibility or clean confidence.'
       : 'source: Fuel V2 workbench; deterministic invalid-input control produces no accepted clean fuel spans. Fuel/Lap buckets remain unavailable rather than using edge-state or invented data.';
 
   return metricsModel(
@@ -4568,18 +4690,42 @@ function fuelPerLapWorkbenchWindows(fuelPerLapSamples, maxSeed = null) {
   const trailingAverage = (sampleCount) => samples.length >= sampleCount
     ? samples.slice(-sampleCount).reduce((total, value) => total + value, 0) / sampleCount
     : null;
-  const liveMax = samples.length > 0 ? Math.max(...samples) : null;
-  const validSeed = Number.isFinite(maxSeed) && maxSeed > 0 ? maxSeed : null;
+  const liveMax = samples.length > 0
+    ? fuelV2BurnBucket(
+        fuelV2BurnBucketId.maximum,
+        Math.max(...samples),
+        { sampleCount: samples.length, source: `live max (${samples.length})` })
+    : null;
+  const seedMax = fuelV2BurnBucket(
+    fuelV2BurnBucketId.maximum,
+    maxSeed,
+    { burnSource: 'HistoricalSeed', source: 'maximum seed', strategyEligible: false, cleanBaselineEligible: false, confidence: 'Seeded' });
+  const maximum = liveMax?.value !== null && liveMax?.value !== undefined && seedMax.value !== null
+    ? liveMax.value >= seedMax.value ? liveMax : seedMax
+    : liveMax ?? (seedMax.value ? seedMax : null);
 
   return {
-    last: samples.length > 0 ? samples.at(-1) : null,
-    five: trailingAverage(5),
-    ten: trailingAverage(10),
-    max: Number.isFinite(liveMax) && Number.isFinite(validSeed)
-      ? Math.max(liveMax, validSeed)
-      : Number.isFinite(liveMax)
-        ? liveMax
-        : validSeed
+    acceptedLapCount: samples.length,
+    buckets: {
+      [fuelV2BurnBucketId.last]: fuelV2BurnBucket(
+        fuelV2BurnBucketId.last,
+        samples.length > 0 ? samples.at(-1) : null,
+        { source: 'live last lap (1)' }),
+      [fuelV2BurnBucketId.fiveLapAverage]: fuelV2BurnBucket(
+        fuelV2BurnBucketId.fiveLapAverage,
+        trailingAverage(5),
+        { source: 'live 5L average (5)' }),
+      [fuelV2BurnBucketId.tenLapAverage]: fuelV2BurnBucket(
+        fuelV2BurnBucketId.tenLapAverage,
+        trailingAverage(10),
+        { source: 'live 10L average (10)' }),
+      [fuelV2BurnBucketId.maximum]: maximum ?? fuelV2BurnBucket(fuelV2BurnBucketId.maximum, null),
+      [fuelV2BurnBucketId.minimum]: fuelV2BurnBucket(
+        fuelV2BurnBucketId.minimum,
+        samples.length > 0 ? Math.min(...samples) : null,
+        { sampleCount: samples.length, source: `live min (${samples.length})` }),
+      [fuelV2BurnBucketId.qualifying]: fuelV2BurnBucket(fuelV2BurnBucketId.qualifying, null)
+    }
   };
 }
 
@@ -4619,7 +4765,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       fuel: 31.23,
       rangeV1: 2.29,
       last: 2.27,
-      five: '2.29 3/5',
+      five: { value: 2.29, suffix: '3/5', sampleCount: 3, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       ten: null,
       max: 2.26
     }),
@@ -4627,7 +4773,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       fuel: 33.29,
       rangeV1: 2.44,
       last: 2.42,
-      five: '2.44 3/5',
+      five: { value: 2.44, suffix: '3/5', sampleCount: 3, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       ten: null,
       max: 2.41
     }),
@@ -4635,7 +4781,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       fuel: 20.36,
       rangeV1: 1.50,
       last: 1.48,
-      five: '1.49 3/5',
+      five: { value: 1.49, suffix: '3/5', sampleCount: 3, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       ten: null,
       max: 1.48
     }),
@@ -4643,7 +4789,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       fuel: 30.98,
       rangeV1: 2.43,
       last: 2.51,
-      five: '2.45 3/5',
+      five: { value: 2.45, suffix: '3/5', sampleCount: 3, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       ten: null,
       max: 2.39
     }),
@@ -4651,7 +4797,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       fuel: 26.21,
       rangeV1: 2.05,
       last: 2.12,
-      five: '2.07 3/5',
+      five: { value: 2.07, suffix: '3/5', sampleCount: 3, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       ten: null,
       max: 2.02
     }),
@@ -4659,7 +4805,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       fuel: 15.27,
       rangeV1: 1.20,
       last: 1.24,
-      five: '1.21 3/5',
+      five: { value: 1.21, suffix: '3/5', sampleCount: 3, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       ten: null,
       max: 1.18
     }),
@@ -4709,7 +4855,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       last: null,
       five: null,
       ten: null,
-      max: 3.40
+      max: { value: 3.40, burnSource: 'QualifyingSeed', sampleCount: 1, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Seeded', source: 'qualifying seed' }
     }),
     fuelRangeWorkbenchRow('Stress / Known zero fuel', 'zero is factual', 'info', {
       fuel: 0,
@@ -4732,56 +4878,73 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
     fuelTargetUsageWorkbenchRow('VLN 4h team / 5-lap stretch', 'current fuel / no reserve', 'info', {
       budget: 61.6400,
       budgetLabel: 'Fuel',
-      referenceBurn: 13.5176
+      referenceBurn: 13.5176,
+      referenceBucketId: fuelV2BurnBucketId.last
     }),
     fuelTargetUsageWorkbenchRow('Dallara 45m / Stop edge', 'current fuel / no reserve', 'info', {
       budget: 33.2921,
       budgetLabel: 'Fuel',
-      referenceBurn: 13.7571
+      referenceBurn: 13.7571,
+      referenceBucketId: fuelV2BurnBucketId.last
     }),
     fuelTargetUsageWorkbenchRow('Dallara 4L full / 2-lap edge', 'current fuel / no reserve', 'info', {
       budget: 26.2104,
       budgetLabel: 'Fuel',
-      referenceBurn: 12.3634
+      referenceBurn: 12.3634,
+      referenceBucketId: fuelV2BurnBucketId.last
     }),
     fuelTargetUsageWorkbenchRow('Dallara 4L blip / Abnormal', 'abnormal stop / no reserve', 'warning', {
       budget: 29.5762,
       budgetLabel: 'Fuel',
-      referenceBurn: 13.5671
+      referenceBurn: 13.5671,
+      referenceBucketId: fuelV2BurnBucketId.last
     }),
     fuelTargetUsageWorkbenchRow('Stress / Round-centered candidates', '44.0 L / 10.0 L reference', 'info', {
       budget: 44.0,
       budgetLabel: 'Fuel',
-      referenceBurn: 10.0
+      referenceBurn: 10.0,
+      referenceBucketId: fuelV2BurnBucketId.last
     }),
     fuelTargetUsageWorkbenchRow('Stress / Missing reference', 'required burn remains factual', 'waiting', {
       budget: 44.0,
       budgetLabel: 'Fuel',
       referenceBurn: null,
+      referenceBucketId: fuelV2BurnBucketId.last,
       targetLaps: [5, -1, 4, 4, 3]
+    }),
+    fuelTargetUsageWorkbenchRow('Stress / Missing reference identity', 'numeric comparator fails closed', 'warning', {
+      budget: 44.0,
+      budgetLabel: 'Fuel',
+      referenceBurn: 10.0,
+      targetLaps: [3, 4, 5]
     })
   ];
   const targetUsageCapRows = [
     fuelTargetUsageWorkbenchRow('VLN 4h team / Green start', 'first green fuel / no reserve', 'info', {
       budget: 102.8464,
       budgetLabel: 'Green',
-      referenceBurn: 13.5176
+      referenceBurn: 13.5176,
+      referenceBucketId: fuelV2BurnBucketId.last
     }),
     fuelTargetUsageWorkbenchRow('Dallara 45m / Green start', 'first green fuel / no reserve', 'info', {
       budget: 58.9871,
       budgetLabel: 'Green',
-      referenceBurn: 13.7593
+      referenceBurn: 13.7593,
+      referenceBucketId: fuelV2BurnBucketId.last
     }),
     fuelTargetUsageWorkbenchRow('Dallara 4L full / Green start', 'first green fuel / no reserve', 'info', {
       budget: 50.1023,
       budgetLabel: 'Green',
-      referenceBurn: 12.3421
+      referenceBurn: 12.3421,
+      referenceBucketId: fuelV2BurnBucketId.last
     }),
     fuelTargetUsageWorkbenchRow('Dallara quali seed / Green est', 'expected green fuel / seed burn', 'warning', {
       budget: 50.1023,
       budgetLabel: 'Green',
       referenceBurn: 13.7982,
-      referenceLabel: 'Quali'
+      referenceBucketId: fuelV2BurnBucketId.qualifying,
+      referenceConfidence: 'Seeded',
+      referenceSource: 'qualifying seed'
     })
   ];
   const targetUsageSections = [
@@ -5366,7 +5529,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 61.64,
       tankCapacity: 104.94,
       targetLaps: 7,
-      startBurn: { value: 13.6372, label: 'seed' },
+      maxBurn: { value: 13.6372, label: 'seed' },
       sectorBurn: { value: 13.0838, label: 'sector' },
       lastBurn: 13.5175,
       fiveBurn: 13.4880,
@@ -5377,7 +5540,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: null,
       tankCapacity: 104.9,
       targetLaps: 7,
-      startBurn: { value: 14.2142, label: 'history' },
+      maxBurn: { value: 14.2142, label: 'history' },
       sectorBurn: { value: 14.2142, label: 'history' },
       lastBurn: null,
       fiveBurn: null,
@@ -5388,10 +5551,10 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 33.2921,
       tankCapacity: 60.0,
       targetLaps: 3,
-      startBurn: { value: 13.8141, label: 'seed' },
+      maxBurn: { value: 13.8141, label: 'seed' },
       sectorBurn: { value: 13.8978, label: 'sector' },
       lastBurn: 13.7571,
-      fiveBurn: { value: 13.6443, label: '3/5' },
+      fiveBurn: { value: 13.6443, label: '3/5', sampleCount: 3, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       tenBurn: null,
       v1Burn: 13.6443
     }),
@@ -5399,10 +5562,10 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 20.36,
       tankCapacity: 60.0,
       targetLaps: 2,
-      startBurn: { value: 13.7568, label: 'seed' },
+      maxBurn: { value: 13.7568, label: 'seed' },
       sectorBurn: { value: 13.8978, label: 'sector' },
       lastBurn: 13.7568,
-      fiveBurn: { value: 13.6644, label: '3/5' },
+      fiveBurn: { value: 13.6644, label: '3/5', sampleCount: 3, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       tenBurn: null,
       v1Burn: 13.5733
     }),
@@ -5410,10 +5573,10 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 15.27,
       tankCapacity: 51.0,
       targetLaps: 2,
-      startBurn: { value: 12.9407, label: 'seed' },
+      maxBurn: { value: 12.9407, label: 'seed' },
       sectorBurn: { value: 12.4393, label: 'sector' },
       lastBurn: 12.3145,
-      fiveBurn: { value: 12.6198, label: '3/5' },
+      fiveBurn: { value: 12.6198, label: '3/5', sampleCount: 3, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       tenBurn: null,
       v1Burn: 12.7250
     }),
@@ -5421,7 +5584,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 18.86,
       tankCapacity: 51.0,
       targetLaps: 2,
-      startBurn: { value: 13.5683, label: 'seed' },
+      maxBurn: { value: 13.5683, label: 'seed' },
       sectorBurn: { value: 13.3491, label: 'sector' },
       lastBurn: 13.5683,
       fiveBurn: null,
@@ -5432,7 +5595,8 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 0.0,
       tankCapacity: 51.0,
       targetLaps: 4,
-      startBurn: { value: 13.7982, label: 'quali' },
+      maxBurn: { value: 13.7982, label: 'quali', burnSource: 'QualifyingSeed', sampleCount: 1, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Seeded' },
+      qualiBurn: { value: 13.7982, label: 'quali', burnSource: 'QualifyingSeed', sampleCount: 1, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Seeded' },
       sectorBurn: { value: 13.7982, label: 'quali' },
       lastBurn: null,
       fiveBurn: null,
@@ -5451,6 +5615,16 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       minBurn: 10.0,
       qualiBurn: 10.0,
       v1Burn: null
+    }),
+    fuelPitRequestWorkbenchRow('Stress / No explicit extrema', '0.0 L / 1 lap / explicit buckets', 'warning', {
+      currentFuel: 0.0,
+      tankCapacity: 100.0,
+      targetLaps: 1,
+      sectorBurn: { value: 20.0, label: 'not a bucket' },
+      lastBurn: 10.0,
+      fiveBurn: 9.0,
+      tenBurn: 8.0,
+      v1Burn: null
     })
   ];
   const pitRequestMockRows = [
@@ -5458,7 +5632,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 18.0,
       tankCapacity: 104.9,
       targetLaps: 7,
-      startBurn: { value: 13.9, label: 'seed' },
+      maxBurn: { value: 13.9, label: 'seed' },
       sectorBurn: { value: 13.6, label: 'sector' },
       lastBurn: 13.50,
       fiveBurn: 13.45,
@@ -5471,7 +5645,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       targetLaps: 5,
       reserveFuel: 2.0,
       pitLaneFuel: 0.7,
-      startBurn: { value: 13.7, label: 'seed' },
+      maxBurn: { value: 13.7, label: 'seed' },
       sectorBurn: { value: 13.3, label: 'sector' },
       lastBurn: 13.45,
       fiveBurn: 13.38,
@@ -5482,7 +5656,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 37.5,
       tankCapacity: 104.9,
       targetLaps: 3,
-      startBurn: { value: 13.8, label: 'seed' },
+      maxBurn: { value: 13.8, label: 'seed' },
       sectorBurn: { value: 13.4, label: 'sector' },
       lastBurn: 13.35,
       fiveBurn: 13.42,
@@ -5493,7 +5667,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 25.0,
       tankCapacity: 104.9,
       targetLaps: 8,
-      startBurn: { value: 13.9, label: 'seed' },
+      maxBurn: { value: 13.9, label: 'seed' },
       sectorBurn: { value: 13.7, label: 'sector' },
       lastBurn: 13.60,
       fiveBurn: 13.50,
@@ -5504,7 +5678,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 33.0,
       tankCapacity: 104.9,
       targetLaps: 5,
-      startBurn: { value: 13.5, label: 'seed' },
+      maxBurn: { value: 13.5, label: 'seed' },
       sectorBurn: { value: 14.2, label: 'sector' },
       lastBurn: 13.45,
       fiveBurn: 13.40,
@@ -5516,7 +5690,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       tankCapacity: 104.9,
       targetLaps: 7,
       reserveFuel: 1.0,
-      startBurn: { value: 14.21, label: 'history' },
+      maxBurn: { value: 14.21, label: 'history' },
       sectorBurn: { value: 14.05, label: 'sector' },
       lastBurn: 14.10,
       fiveBurn: 14.18,
@@ -5529,7 +5703,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       targetLaps: 4,
       reserveFuel: 1.5,
       pitLaneFuel: 0.8,
-      startBurn: { value: 14.21, label: 'history' },
+      maxBurn: { value: 14.21, label: 'history' },
       sectorBurn: { value: 13.95, label: 'sector' },
       lastBurn: 14.05,
       fiveBurn: 14.18,
@@ -5540,7 +5714,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: null,
       tankCapacity: 104.9,
       targetLaps: 7,
-      startBurn: { value: 14.21, label: 'history' },
+      maxBurn: { value: 14.21, label: 'history' },
       sectorBurn: { value: 14.05, label: 'bridge' },
       lastBurn: null,
       fiveBurn: null,
@@ -5553,10 +5727,10 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       targetLaps: 5,
       reserveFuel: 1.0,
       pitLaneFuel: 0.6,
-      startBurn: { value: 14.21, label: 'history' },
+      maxBurn: { value: 14.21, label: 'history' },
       sectorBurn: { value: 14.60, label: 'bridge' },
-      lastBurn: { value: 14.10, label: 'bridge lap' },
-      fiveBurn: { value: 14.18, label: 'bridge 5L' },
+      lastBurn: { value: 14.10, label: 'bridge lap', burnSource: 'HistoricalSeed', sampleCount: 1, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
+      fiveBurn: { value: 14.18, label: 'bridge 5L', burnSource: 'HistoricalSeed', sampleCount: 5, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       tenBurn: null,
       v1Burn: null
     }),
@@ -5565,12 +5739,12 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       tankCapacity: 75.7,
       targetLaps: 68,
       reserveFuel: 0.5,
-      startBurn: { value: 1.12, label: 'seed' },
+      maxBurn: { value: 1.12, label: 'seed' },
       sectorBurn: { value: 0.86, label: 'caution' },
       lastBurn: 1.07,
       fiveBurn: 1.04,
       tenBurn: 1.02,
-      minBurn: { value: 0.86, label: 'caution' },
+      minBurn: { value: 0.86, label: 'caution', burnSource: 'HistoricalSeed', strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       v1Burn: 1.08
     }),
     fuelPitRequestWorkbenchRow('Mock NASCAR / 3 green + 2 caution', '72.1 L / 68 laps / 1.0L caution', 'warning', {
@@ -5578,12 +5752,12 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       tankCapacity: 75.7,
       targetLaps: 68,
       reserveFuel: 0.5,
-      startBurn: { value: 1.12, label: 'seed' },
+      maxBurn: { value: 1.12, label: 'seed' },
       sectorBurn: { value: 1.0, label: 'caution' },
-      lastBurn: { value: 1.0, label: 'caution' },
-      fiveBurn: { value: 1.046, label: '3G+2Y' },
+      lastBurn: { value: 1.0, label: 'caution', burnSource: 'HistoricalSeed', sampleCount: 1, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
+      fiveBurn: { value: 1.046, label: '3G+2Y', burnSource: 'HistoricalSeed', sampleCount: 5, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       tenBurn: null,
-      minBurn: { value: 1.0, label: 'caution' },
+      minBurn: { value: 1.0, label: 'caution', burnSource: 'HistoricalSeed', strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       v1Burn: 1.08
     }),
     fuelPitRequestWorkbenchRow('Mock NASCAR / 5L green + 1L caution', '72.1 L / 68 laps / stress mix', 'warning', {
@@ -5591,20 +5765,19 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       tankCapacity: 75.7,
       targetLaps: 68,
       reserveFuel: 0.5,
-      startBurn: { value: 5.0, label: 'green' },
-      sectorBurn: { value: 1.0, label: 'caution' },
-      lastBurn: { value: 1.0, label: 'caution' },
-      fiveBurn: { value: 3.4, label: '3G+2Y' },
-      tenBurn: null,
       maxBurn: { value: 5.0, label: 'green' },
-      minBurn: { value: 1.0, label: 'caution' },
+      sectorBurn: { value: 1.0, label: 'caution' },
+      lastBurn: { value: 1.0, label: 'caution', burnSource: 'HistoricalSeed', sampleCount: 1, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
+      fiveBurn: { value: 3.4, label: '3G+2Y', burnSource: 'HistoricalSeed', sampleCount: 5, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
+      tenBurn: null,
+      minBurn: { value: 1.0, label: 'caution', burnSource: 'HistoricalSeed', strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       v1Burn: 5.0
     }),
     fuelPitRequestWorkbenchRow('Mock GR86 Nord / 16-lap edge', '81.1 L / 16 laps / cap pressure', 'warning', {
       currentFuel: 81.1,
       tankCapacity: 83.3,
       targetLaps: 16,
-      startBurn: { value: 5.46, label: 'history' },
+      maxBurn: { value: 5.46, label: 'history' },
       sectorBurn: { value: 5.30, label: 'sector' },
       lastBurn: 5.21,
       fiveBurn: null,
@@ -5615,10 +5788,10 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       currentFuel: 45.0,
       tankCapacity: 67.0,
       targetLaps: 13,
-      startBurn: { value: 3.60, label: 'seed' },
+      maxBurn: { value: 3.60, label: 'seed' },
       sectorBurn: { value: 3.50, label: 'history' },
       lastBurn: 3.54,
-      fiveBurn: { value: 3.53, label: '3/5' },
+      fiveBurn: { value: 3.53, label: '3/5', sampleCount: 3, strategyEligible: false, cleanBaselineEligible: false, confidence: 'Contextual' },
       tenBurn: null,
       v1Burn: 3.54
     }),
@@ -5628,7 +5801,7 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
       targetLaps: 2,
       reserveFuel: 1.0,
       pitLaneFuel: 0.4,
-      startBurn: { value: 13.8, label: 'seed' },
+      maxBurn: { value: 13.8, label: 'seed' },
       sectorBurn: { value: 13.2, label: 'sector' },
       lastBurn: 13.5,
       fiveBurn: 13.45,
@@ -5839,13 +6012,13 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
   const workbenchSource = activeWorkbench === 'sector'
     ? 'source: Fuel V2 workbench; mirrors staged Core sector-burn logic. Rows are real SplitTimeInfo sector boundaries and cells show Live projected L/lap for each lap. Sector labels include median replay speed as context; green cell borders mark pit/refuel/service event-window overlap, not inherently bad sector numbers. Lap 1 uses low-confidence track-percent fallback; later laps hold at S0 and use prior-lap same-sector cumulative scaling from S0+S1 onward. Actual is completed lap burn.'
     : activeWorkbench === 'range'
-      ? 'source: Fuel V2 workbench; mirrors staged Core range logic. Current-tank range compares V1 selected burn with V2 Last/5L/10L/Max windows'
+      ? 'source: Fuel V2 workbench; mirrors staged Core range logic. Current-tank range compares V1 selected burn with explicit V2 Last/5L/10L/Max bucket IDs while retaining each bucket source, samples, and strategy eligibility.'
       : activeWorkbench === 'capacity'
         ? 'source: Fuel V2 workbench; mirrors the typed Core effective-capacity resolver. Physical tank size is never silently treated as usable session fuel when cap evidence is missing or conflicting.'
       : activeWorkbench === 'checkpoints'
         ? 'source: Fuel V2 workbench; mirrors the typed Core fuel-checkpoint flow. Effective cap, first green, current, at-box, service-complete, and pit-exit fuel remain distinct; the pit request targets service-complete fuel and box-to-exit consumption is applied afterward once.'
       : activeWorkbench === 'pit'
-        ? 'source: Fuel V2 workbench; mirrors staged Core pit-request logic. Fuel To Add is target laps times selected burn plus optional reserve/pit-lane adjustment minus current fuel, clamped at zero and marked if the tank cannot hold the request. Visible cells use the shared burn buckets: Last, 5L, 10L, Max, Min, and Quali. Sector/live/bridge evidence can feed a labeled bucket, but it is no longer a standalone display column. Real capture rows keep reserve and learned pit-lane burn at zero; hypothetical rows may exercise those inputs.'
+        ? 'source: Fuel V2 workbench; mirrors staged Core pit-request logic. Fuel To Add is target laps times selected burn plus optional reserve/pit-lane adjustment minus current fuel, clamped at zero and marked if the tank cannot hold the request. Visible cells use explicit shared burn-bucket IDs: Last, 5L, 10L, Max, Min, and Quali. Sector/live/bridge evidence may be assigned to a bucket only by the fixture contract; display copy never infers bucket identity and missing Max/Min/Quali are not synthesized. Real capture rows keep reserve and learned pit-lane burn at zero; hypothetical rows may exercise those inputs.'
         : activeWorkbench === 'plan'
         ? 'source: Fuel V2 workbench; V1 Plan rows are shown first for direct comparison, then V2 splits green-start/full-race planning from current-checkpoint planning. Current checkpoints use the live tank to reach the next stop and full/refueled capacity for later stints.'
           : activeWorkbench === 'stint'
@@ -6944,13 +7117,14 @@ function fuelLapsWorkbenchTone(value, realValue) {
 }
 
 function fuelPerLapWorkbenchRow(windows) {
-  const windowValues = [windows.last, windows.five, windows.ten, windows.max];
-  const segments = ['Last', '5L', '10L', 'Max']
-    .map((label, index) => metricSegment(
-      label,
-      fuelPerLapWorkbenchValue(windowValues[index]),
-      Number.isFinite(windowValues[index]) ? 'info' : 'waiting'));
-  const availableValues = windowValues.filter(Number.isFinite);
+  const displayedBucketIds = fuelV2BurnBucketOrder.slice(0, 4);
+  const buckets = displayedBucketIds.map((bucketId) => windows.buckets[bucketId]);
+  const segments = buckets.map((bucket) => metricSegment(
+    bucket.label,
+    fuelPerLapWorkbenchValue(bucket.value),
+    Number.isFinite(bucket.value) ? 'info' : 'waiting',
+    fuelV2BurnBucketEvidence(bucket)));
+  const availableValues = buckets.map((bucket) => bucket.value).filter(Number.isFinite);
 
   return metricRow(
     'Fuel/Lap',
@@ -6965,14 +7139,57 @@ function fuelPerLapWorkbenchValue(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)} L/lap` : '--';
 }
 
+function fuelRangeWorkbenchBucket(bucketId, rawRange) {
+  const raw = typeof rawRange === 'object' && rawRange !== null
+    ? rawRange
+    : { value: rawRange };
+  const numeric = raw.value === null || raw.value === undefined ? Number.NaN : Number(raw.value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return fuelV2BurnBucket(bucketId, null);
+  }
+
+  const evidence = {
+    ...fuelV2BurnEvidence(bucketId, raw, {
+    burnSource: raw.burnSource,
+    sampleCount: raw.sampleCount,
+    strategyEligible: raw.strategyEligible,
+    confidence: raw.confidence,
+    contextFlags: raw.contextFlags,
+      source: raw.source
+    }, true),
+    value: null
+  };
+  return {
+    ...fuelV2DerivedBurnBucket(evidence, numeric, `range from ${evidence.label}`),
+    displaySuffix: String(raw.suffix ?? '').trim()
+  };
+}
+
+function fuelRangeWorkbenchSegment(bucket) {
+  const formattedRange = fuelRangeLaps(bucket.value);
+  const value = formattedRange === '--' || !bucket.displaySuffix
+    ? formattedRange
+    : `${formattedRange} ${bucket.displaySuffix}`;
+  const tone = !Number.isFinite(bucket.value)
+    ? 'waiting'
+    : bucket.id === fuelV2BurnBucketId.maximum || !bucket.strategyEligible
+      ? 'warning'
+      : 'info';
+  return metricSegment(bucket.label, value, tone, fuelV2BurnBucketEvidence(bucket));
+}
+
 function fuelRangeWorkbenchRow(label, value, tone, range) {
+  const last = fuelRangeWorkbenchBucket(fuelV2BurnBucketId.last, range.last);
+  const five = fuelRangeWorkbenchBucket(fuelV2BurnBucketId.fiveLapAverage, range.five);
+  const ten = fuelRangeWorkbenchBucket(fuelV2BurnBucketId.tenLapAverage, range.ten);
+  const maximum = fuelRangeWorkbenchBucket(fuelV2BurnBucketId.maximum, range.max);
   const segments = [
     metricSegment('Fuel', fuelRangeVolume(range.fuel), fuelRangeValueTone(range.fuel)),
     metricSegment('V1 Ref', fuelRangeLaps(range.rangeV1), fuelRangeValueTone(range.rangeV1)),
-    metricSegment('Last', fuelRangeLaps(range.last), fuelRangeV2WindowTone(range.last, 'last')),
-    metricSegment('5L', fuelRangeLaps(range.five), fuelRangeV2WindowTone(range.five, 'five')),
-    metricSegment('10L', fuelRangeLaps(range.ten), fuelRangeV2WindowTone(range.ten, 'ten')),
-    metricSegment('Max', fuelRangeLaps(range.max), fuelRangeV2WindowTone(range.max, 'max'))
+    fuelRangeWorkbenchSegment(last),
+    fuelRangeWorkbenchSegment(five),
+    fuelRangeWorkbenchSegment(ten),
+    fuelRangeWorkbenchSegment(maximum)
   ];
 
   return metricRow(
@@ -6983,15 +7200,48 @@ function fuelRangeWorkbenchRow(label, value, tone, range) {
 }
 
 function fuelTargetUsageWorkbenchRow(label, value, tone, targetUsage) {
-  const referenceLabel = targetUsage.referenceLabel || 'Last';
-  const referenceTone = fuelTargetUsageReferenceTone(targetUsage);
-  const targetSegments = fuelTargetUsageTargetLaps(targetUsage)
+  const referenceBucketId = targetUsage.referenceBucketId;
+  const referenceBurn = fuelV2BurnBucketContract[referenceBucketId]
+    ? fuelV2BurnBucket(referenceBucketId, targetUsage.referenceBurn, {
+        burnSource: targetUsage.referenceBurnSource,
+        sampleCount: targetUsage.referenceSampleCount,
+        strategyEligible: targetUsage.referenceStrategyEligible,
+        confidence: targetUsage.referenceConfidence,
+        source: targetUsage.referenceSource
+      })
+    : {
+        id: null,
+        label: 'Reference',
+        value: null,
+        source: 'unavailable: missing burn bucket identity',
+        burnSource: 'Unavailable',
+        sampleCount: null,
+        confidence: 'Unavailable',
+        contextFlags: [],
+        displayEligible: false,
+        cleanBaselineEligible: false,
+        strategyEligible: false,
+        detailLabel: ''
+      };
+  const referenceTone = fuelTargetUsageReferenceTone(referenceBurn);
+  const targetSegments = fuelTargetUsageTargetLaps(targetUsage, referenceBurn.value)
     .map((laps) => {
       const requiredBurn = fuelTargetUsageRequiredBurn(targetUsage.budget, laps);
       return metricSegment(
         fuelTargetUsageLapLabel(laps),
         fuelRangeFuelPerLap(requiredBurn),
-        fuelTargetUsageTone(requiredBurn, targetUsage.referenceBurn));
+        fuelTargetUsageTone(requiredBurn, referenceBurn.value),
+        {
+          referenceBurnBucketId: referenceBurn.id,
+          referenceBurnSource: referenceBurn.burnSource,
+          referenceSampleCount: referenceBurn.sampleCount,
+          referenceConfidence: referenceBurn.confidence,
+          referenceContextFlags: referenceBurn.contextFlags,
+          referenceDisplayEligible: referenceBurn.displayEligible,
+          referenceCleanBaselineEligible: referenceBurn.cleanBaselineEligible,
+          referenceStrategyEligible: referenceBurn.strategyEligible,
+          referenceProvenance: referenceBurn.source
+        });
     });
   const segments = [
     metricSegment(
@@ -6999,9 +7249,10 @@ function fuelTargetUsageWorkbenchRow(label, value, tone, targetUsage) {
       fuelRangeVolume(targetUsage.budget),
       fuelRangeValueTone(targetUsage.budget)),
     metricSegment(
-      referenceLabel,
-      fuelRangeFuelPerLap(targetUsage.referenceBurn),
-      referenceTone),
+      referenceBurn.label,
+      fuelRangeFuelPerLap(referenceBurn.value),
+      referenceTone,
+      fuelV2BurnBucketEvidence(referenceBurn)),
     ...targetSegments
   ];
 
@@ -7013,14 +7264,14 @@ function fuelTargetUsageWorkbenchRow(label, value, tone, targetUsage) {
 }
 
 function fuelPitRequestWorkbenchRow(label, value, tone, request) {
-  const segments = [
-    metricSegment('Last', fuelPitRequestAddLabel(request, request.lastBurn, 'last'), fuelPitRequestTone(request, request.lastBurn, 'last')),
-    metricSegment('5L', fuelPitRequestAddLabel(request, request.fiveBurn, 'five'), fuelPitRequestTone(request, request.fiveBurn, 'five')),
-    metricSegment('10L', fuelPitRequestAddLabel(request, request.tenBurn, 'ten'), fuelPitRequestTone(request, request.tenBurn, 'ten')),
-    metricSegment('Max', fuelPitRequestAddLabel(request, fuelPitRequestMaxBurn(request), 'max'), fuelPitRequestTone(request, fuelPitRequestMaxBurn(request), 'max')),
-    metricSegment('Min', fuelPitRequestAddLabel(request, fuelPitRequestMinBurn(request), 'min'), fuelPitRequestTone(request, fuelPitRequestMinBurn(request), 'min')),
-    metricSegment('Quali', fuelPitRequestAddLabel(request, fuelPitRequestQualiBurn(request), 'quali'), fuelPitRequestTone(request, fuelPitRequestQualiBurn(request), 'quali'))
-  ];
+  const segments = fuelPitRequestBuckets(request).map((bucket) => metricSegment(
+    bucket.label,
+    fuelPitRequestAddLabel(request, bucket),
+    fuelPitRequestTone(request, bucket),
+    fuelV2BurnBucketEvidence(fuelV2DerivedBurnBucket(
+      bucket,
+      fuelPitRequestAddAmount(request, bucket)?.amount,
+      `pit add from ${bucket.label}`))));
 
   return metricRow(
     label,
@@ -7265,12 +7516,12 @@ function fuelSectorProjectionChartRange(series) {
   return max > min ? { min, max } : { min: min - 0.25, max: max + 0.25 };
 }
 
-function fuelTargetUsageReferenceTone(targetUsage) {
-  if (!Number.isFinite(targetUsage.referenceBurn)) return 'waiting';
-  return targetUsage.referenceLabel ? 'warning' : 'info';
+function fuelTargetUsageReferenceTone(referenceBurn) {
+  if (!Number.isFinite(referenceBurn?.value)) return 'waiting';
+  return referenceBurn.strategyEligible ? 'info' : 'warning';
 }
 
-function fuelTargetUsageTargetLaps(targetUsage) {
+function fuelTargetUsageTargetLaps(targetUsage, normalizedReferenceBurn) {
   if (Array.isArray(targetUsage.targetLaps) && targetUsage.targetLaps.length > 0) {
     return [...new Set(targetUsage.targetLaps
       .map((laps) => Number(laps))
@@ -7279,7 +7530,7 @@ function fuelTargetUsageTargetLaps(targetUsage) {
   }
 
   const fuelBudget = Number(targetUsage.budget);
-  const referenceBurn = Number(targetUsage.referenceBurn);
+  const referenceBurn = Number(normalizedReferenceBurn);
   if (!Number.isFinite(fuelBudget) || fuelBudget <= 0 || !Number.isFinite(referenceBurn) || referenceBurn <= 0) {
     return [];
   }
@@ -7315,48 +7566,28 @@ function fuelTargetUsageTone(requiredBurn, referenceBurn) {
   return ratio >= 0.95 ? 'warning' : 'error';
 }
 
-function fuelPitRequestMaxBurn(request) {
-  if (request?.maxBurn !== undefined) return request.maxBurn;
-  return fuelPitRequestExtremeBurn([
-    request?.lastBurn,
-    request?.fiveBurn,
-    request?.tenBurn,
-    request?.startBurn,
-    request?.sectorBurn,
-    request?.qualiBurn
-  ], 'max');
+function fuelPitRequestBuckets(request) {
+  return [
+    fuelV2BurnBucket(fuelV2BurnBucketId.last, request?.lastBurn),
+    fuelV2BurnBucket(fuelV2BurnBucketId.fiveLapAverage, request?.fiveBurn),
+    fuelV2BurnBucket(fuelV2BurnBucketId.tenLapAverage, request?.tenBurn),
+    fuelV2BurnBucket(fuelV2BurnBucketId.maximum, request?.maxBurn, {
+      burnSource: 'HistoricalSeed',
+      strategyEligible: false,
+      cleanBaselineEligible: false,
+      confidence: 'Seeded'
+    }),
+    fuelV2BurnBucket(fuelV2BurnBucketId.minimum, request?.minBurn),
+    fuelV2BurnBucket(fuelV2BurnBucketId.qualifying, request?.qualiBurn, {
+      burnSource: 'QualifyingSeed',
+      strategyEligible: false,
+      cleanBaselineEligible: false,
+      confidence: 'Seeded'
+    })
+  ];
 }
 
-function fuelPitRequestMinBurn(request) {
-  if (request?.minBurn !== undefined) return request.minBurn;
-  return fuelPitRequestExtremeBurn([
-    request?.lastBurn,
-    request?.fiveBurn,
-    request?.tenBurn
-  ], 'min');
-}
-
-function fuelPitRequestQualiBurn(request) {
-  if (request?.qualiBurn !== undefined) return request.qualiBurn;
-  return fuelPitRequestBurnLabel(request?.startBurn).toLowerCase() === 'quali'
-    ? request.startBurn
-    : null;
-}
-
-function fuelPitRequestExtremeBurn(burns, mode) {
-  const candidates = burns
-    .map((burn) => ({ burn, value: fuelPitRequestBurnValue(burn) }))
-    .filter((candidate) => Number.isFinite(candidate.value) && candidate.value > 0);
-  if (candidates.length === 0) return null;
-
-  return candidates.reduce((selected, candidate) => {
-    return mode === 'min'
-      ? candidate.value < selected.value ? candidate : selected
-      : candidate.value > selected.value ? candidate : selected;
-  }).burn;
-}
-
-function fuelPitRequestAddLabel(request, burn, window) {
+function fuelPitRequestAddLabel(request, burn) {
   const add = fuelPitRequestAddAmount(request, burn);
   if (!add) return '--';
   const suffix = fuelPitRequestBurnLabel(burn);
@@ -7368,13 +7599,18 @@ function fuelPitRequestAddLabel(request, burn, window) {
     : value;
 }
 
-function fuelPitRequestTone(request, burn, window) {
+function fuelPitRequestTone(request, burn) {
   const add = fuelPitRequestAddAmount(request, burn);
   if (!add) return 'waiting';
   if (add.limited) return 'error';
   if (add.amount <= 0.001) return 'success';
-  if (fuelPitRequestBurnLabel(burn)) return 'warning';
-  return window === 'max' || window === 'min' || window === 'quali' ? 'warning' : 'info';
+  if (!burn.strategyEligible
+    || burn.id === fuelV2BurnBucketId.maximum
+    || burn.id === fuelV2BurnBucketId.minimum
+    || burn.id === fuelV2BurnBucketId.qualifying) {
+    return 'warning';
+  }
+  return 'info';
 }
 
 function fuelPitRequestAddAmount(request, burn) {
@@ -7422,7 +7658,7 @@ function fuelPitRequestBurnValue(burn) {
 
 function fuelPitRequestBurnLabel(burn) {
   if (typeof burn === 'object' && burn !== null) {
-    return String(burn.label || '').trim();
+    return String(burn.id ? burn.detailLabel : burn.label || '').trim();
   }
 
   return '';
@@ -7436,12 +7672,6 @@ function fuelPitRequestNonNegative(value) {
 
 function fuelRangeValueTone(value) {
   return Number.isFinite(value) ? 'info' : 'waiting';
-}
-
-function fuelRangeV2WindowTone(value, window) {
-  if (typeof value === 'string' && value.includes('/')) return 'warning';
-  if (!Number.isFinite(value)) return 'waiting';
-  return window === 'max' ? 'warning' : 'info';
 }
 
 function fuelRangeVolume(value) {

@@ -18,9 +18,67 @@ public sealed class FuelV2PitRequestAndPlanCalculatorTests
 
         var cell = Assert.IsType<FuelV2PitRequestCell>(snapshot.Last);
         Assert.True(snapshot.AdjustmentsValid);
+        Assert.Equal(FuelV2BurnBucketId.Last, cell.BurnBucketId);
         Assert.Equal(21.5d, Assert.IsType<double>(cell.TargetFuelLiters.Value), precision: 6);
         Assert.Equal(21.5d, Assert.IsType<double>(cell.FuelToAddLiters.Value), precision: 6);
+        Assert.Equal(FuelV2BurnBucketId.Last, cell.FuelToAddLiters.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.LiveLastLap, cell.FuelToAddLiters.BurnSource);
+        Assert.Equal(1, cell.FuelToAddLiters.SampleCount);
+        Assert.True(cell.FuelToAddLiters.StrategyEligible);
+        Assert.Contains("pit add from Last", cell.FuelToAddLiters.Source);
+        Assert.Contains("live last lap", cell.FuelToAddLiters.Source);
+        Assert.Equal(FuelV2BurnBucketId.Last, cell.TargetFuelLiters.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.LiveLastLap, cell.TargetFuelLiters.BurnSource);
         Assert.False(cell.TankLimited);
+    }
+
+    [Fact]
+    public void PitRequest_OptionalBucketsUseExplicitIdentityWithoutLabelInference()
+    {
+        var historicalMax = FuelV2Scalar.From(
+            14d,
+            "historical maximum",
+            FuelV2Confidence.Seeded,
+            burnSource: FuelV2BurnSource.HistoricalSeed,
+            sampleCount: 12,
+            strategyEligible: true);
+        var historicalMin = FuelV2Scalar.From(
+            9d,
+            "historical minimum",
+            FuelV2Confidence.Seeded,
+            burnSource: FuelV2BurnSource.HistoricalSeed,
+            sampleCount: 8);
+        var qualifying = FuelV2Scalar.From(
+            12d,
+            "display copy deliberately does not say quali",
+            FuelV2Confidence.Seeded,
+            burnSource: FuelV2BurnSource.QualifyingSeed,
+            sampleCount: 1);
+        var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
+            [],
+            new FuelV2FuelPerLapWindowOptions(
+                MaxSeed: historicalMax,
+                MinSeed: historicalMin,
+                QualifyingSeed: qualifying));
+
+        var snapshot = FuelV2PitRequestCalculator.From(
+            currentFuelLiters: 0d,
+            targetLaps: 1,
+            windows: windows,
+            tankCapacityLiters: 100d);
+
+        var maximum = Assert.IsType<FuelV2PitRequestCell>(snapshot.Max);
+        var minimum = Assert.IsType<FuelV2PitRequestCell>(snapshot.Min);
+        var quali = Assert.IsType<FuelV2PitRequestCell>(snapshot.QualifyingSeed);
+        Assert.Equal(FuelV2BurnBucketId.Maximum, maximum.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.HistoricalSeed, maximum.FuelToAddLiters.BurnSource);
+        Assert.Equal(12, maximum.FuelToAddLiters.SampleCount);
+        Assert.True(maximum.FuelToAddLiters.StrategyEligible);
+        Assert.Equal(FuelV2BurnBucketId.Minimum, minimum.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.HistoricalSeed, minimum.FuelToAddLiters.BurnSource);
+        Assert.Equal(FuelV2BurnBucketId.Qualifying, quali.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.QualifyingSeed, quali.FuelToAddLiters.BurnSource);
+        Assert.Equal("Quali", quali.Label);
     }
 
     [Theory]
@@ -90,7 +148,7 @@ public sealed class FuelV2PitRequestAndPlanCalculatorTests
     [Fact]
     public void Plan_SubLapFuelDoesNotInventOneLapOfFutureCapacity()
     {
-        var burn = FuelV2Scalar.From(10d, "reference", FuelV2Confidence.CleanBaseline);
+        var burn = TypedBurn(10d);
 
         var snapshot = FuelV2PlanCalculator.FromFuelBudget(
             plannedRaceLaps: 10d,
@@ -107,7 +165,7 @@ public sealed class FuelV2PitRequestAndPlanCalculatorTests
     [Fact]
     public void Plan_CurrentRangeAndFutureWholeLapCapacityStayDistinctAtSubLapFuel()
     {
-        var burn = FuelV2Scalar.From(10d, "reference", FuelV2Confidence.CleanBaseline);
+        var burn = TypedBurn(10d);
 
         var snapshot = FuelV2PlanCalculator.FromCurrentCheckpointFuelBudget(
             plannedRaceLaps: 10d,
@@ -126,7 +184,7 @@ public sealed class FuelV2PitRequestAndPlanCalculatorTests
     [Fact]
     public void Plan_KnownZeroFuelRemainsFactualAtRaceStart()
     {
-        var burn = FuelV2Scalar.From(10d, "reference", FuelV2Confidence.CleanBaseline);
+        var burn = TypedBurn(10d);
 
         var snapshot = FuelV2PlanCalculator.FromFuelBudget(
             plannedRaceLaps: 2d,
@@ -143,7 +201,7 @@ public sealed class FuelV2PitRequestAndPlanCalculatorTests
     [Fact]
     public void Plan_KnownZeroFuelRemainsFactualAtCurrentCheckpoint()
     {
-        var burn = FuelV2Scalar.From(10d, "reference", FuelV2Confidence.CleanBaseline);
+        var burn = TypedBurn(10d);
 
         var snapshot = FuelV2PlanCalculator.FromCurrentCheckpointFuelBudget(
             plannedRaceLaps: 2d,
@@ -157,5 +215,41 @@ public sealed class FuelV2PitRequestAndPlanCalculatorTests
         Assert.Equal(0d, snapshot.FutureStintCapacityLaps);
         Assert.Null(snapshot.PlannedStopCount);
         Assert.Equal(FuelV2WorkbenchTone.Waiting, snapshot.Tone);
+    }
+
+    [Fact]
+    public void Plan_UntypedPositiveBurnFailsClosedInsteadOfProducingCapacity()
+    {
+        var untypedBurn = FuelV2Scalar.From(
+            10d,
+            "numeric burn without bucket identity",
+            FuelV2Confidence.CleanBaseline,
+            burnSource: FuelV2BurnSource.LiveLastLap,
+            sampleCount: 1,
+            strategyEligible: true);
+
+        var snapshot = FuelV2PlanCalculator.FromFuelBudget(
+            plannedRaceLaps: 10d,
+            raceLapsRemaining: 10d,
+            usableStintFuelLiters: 100d,
+            stintBurn: untypedBurn);
+
+        Assert.Null(snapshot.StintBurn);
+        Assert.Null(snapshot.StintCapacityLaps);
+        Assert.Null(snapshot.PlannedStintCount);
+        Assert.Equal(FuelV2WorkbenchTone.Waiting, snapshot.Tone);
+    }
+
+    private static FuelV2Scalar TypedBurn(double value)
+    {
+        return FuelV2Scalar.From(
+            value,
+            "reference",
+            FuelV2Confidence.CleanBaseline,
+            [FuelV2SampleContextFlag.CleanRace],
+            burnBucketId: FuelV2BurnBucketId.Last,
+            burnSource: FuelV2BurnSource.LiveLastLap,
+            sampleCount: 1,
+            strategyEligible: true);
     }
 }

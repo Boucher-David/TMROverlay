@@ -28,6 +28,43 @@ internal enum FuelV2BurnSource
     LiveMinimum = 12
 }
 
+internal enum FuelV2BurnBucketId
+{
+    Last = 0,
+    FiveLapAverage = 1,
+    TenLapAverage = 2,
+    Maximum = 3,
+    Minimum = 4,
+    Qualifying = 5
+}
+
+internal static class FuelV2BurnBucketCatalog
+{
+    public static IReadOnlyList<FuelV2BurnBucketId> Ordered { get; } =
+    [
+        FuelV2BurnBucketId.Last,
+        FuelV2BurnBucketId.FiveLapAverage,
+        FuelV2BurnBucketId.TenLapAverage,
+        FuelV2BurnBucketId.Maximum,
+        FuelV2BurnBucketId.Minimum,
+        FuelV2BurnBucketId.Qualifying
+    ];
+
+    public static string Label(FuelV2BurnBucketId bucketId)
+    {
+        return bucketId switch
+        {
+            FuelV2BurnBucketId.Last => "Last",
+            FuelV2BurnBucketId.FiveLapAverage => "5L",
+            FuelV2BurnBucketId.TenLapAverage => "10L",
+            FuelV2BurnBucketId.Maximum => "Max",
+            FuelV2BurnBucketId.Minimum => "Min",
+            FuelV2BurnBucketId.Qualifying => "Quali",
+            _ => bucketId.ToString()
+        };
+    }
+}
+
 internal enum FuelV2SampleContextFlag
 {
     CleanRace = 0,
@@ -72,7 +109,19 @@ internal sealed record FuelV2Scalar(
     bool DisplayEligible,
     bool CleanBaselineEligible)
 {
+    public FuelV2BurnBucketId? BurnBucketId { get; init; }
+
+    public FuelV2BurnSource BurnSource { get; init; } = FuelV2BurnSource.Unavailable;
+
+    public int? SampleCount { get; init; }
+
+    public bool StrategyEligible { get; init; }
+
     public bool HasValue => Value is { } value && IsFinite(value);
+
+    public bool HasTypedBurnEvidence => BurnBucketId is { } bucketId
+        && Enum.IsDefined(typeof(FuelV2BurnBucketId), bucketId)
+        && BurnSource != FuelV2BurnSource.Unavailable;
 
     public static FuelV2Scalar Unavailable(string source = "unavailable")
     {
@@ -91,15 +140,26 @@ internal sealed record FuelV2Scalar(
         FuelV2Confidence confidence,
         IEnumerable<FuelV2SampleContextFlag>? contextFlags = null,
         bool displayEligible = true,
-        bool cleanBaselineEligible = false)
+        bool cleanBaselineEligible = false,
+        FuelV2BurnBucketId? burnBucketId = null,
+        FuelV2BurnSource burnSource = FuelV2BurnSource.Unavailable,
+        int? sampleCount = null,
+        bool strategyEligible = false)
     {
+        var finite = IsFinite(value);
         return new FuelV2Scalar(
             Value: IsFinite(value) ? value : null,
-            Source: source,
-            Confidence: IsFinite(value) ? confidence : FuelV2Confidence.Unavailable,
+            Source: string.IsNullOrWhiteSpace(source) ? "unavailable" : source,
+            Confidence: finite ? confidence : FuelV2Confidence.Unavailable,
             ContextFlags: DistinctFlags(contextFlags),
-            DisplayEligible: displayEligible && IsFinite(value),
-            CleanBaselineEligible: cleanBaselineEligible && IsFinite(value));
+            DisplayEligible: displayEligible && finite,
+            CleanBaselineEligible: cleanBaselineEligible && finite)
+        {
+            BurnBucketId = burnBucketId,
+            BurnSource = burnSource,
+            SampleCount = sampleCount is > 0 ? sampleCount : null,
+            StrategyEligible = strategyEligible && finite
+        };
     }
 
     public FuelV2Scalar WithContext(params FuelV2SampleContextFlag[] flags)
@@ -108,6 +168,30 @@ internal sealed record FuelV2Scalar(
         {
             ContextFlags = DistinctFlags(ContextFlags.Concat(flags))
         };
+    }
+
+    public FuelV2Scalar Derive(
+        double? value,
+        string operationSource,
+        IEnumerable<FuelV2SampleContextFlag>? additionalContextFlags = null,
+        bool displayEligible = true)
+    {
+        var source = string.IsNullOrWhiteSpace(operationSource)
+            ? Source
+            : string.IsNullOrWhiteSpace(Source)
+                ? operationSource
+                : $"{operationSource} <- {Source}";
+        return From(
+            value,
+            source,
+            Confidence,
+            ContextFlags.Concat(additionalContextFlags ?? Enumerable.Empty<FuelV2SampleContextFlag>()),
+            displayEligible: DisplayEligible && displayEligible,
+            cleanBaselineEligible: false,
+            burnBucketId: BurnBucketId,
+            burnSource: BurnSource,
+            sampleCount: SampleCount,
+            strategyEligible: StrategyEligible);
     }
 
     private static IReadOnlyList<FuelV2SampleContextFlag> DistinctFlags(IEnumerable<FuelV2SampleContextFlag>? flags)
@@ -130,7 +214,35 @@ internal sealed record FuelV2FuelPerLapWindows(
     FuelV2Scalar? Max,
     FuelV2Scalar? Min,
     FuelV2Scalar? QualifyingSeed,
-    int AcceptedLapCount);
+    int AcceptedLapCount)
+{
+    public FuelV2Scalar? Bucket(FuelV2BurnBucketId bucketId)
+    {
+        var bucket = bucketId switch
+        {
+            FuelV2BurnBucketId.Last => Last,
+            FuelV2BurnBucketId.FiveLapAverage => FiveLapAverage,
+            FuelV2BurnBucketId.TenLapAverage => TenLapAverage,
+            FuelV2BurnBucketId.Maximum => Max,
+            FuelV2BurnBucketId.Minimum => Min,
+            FuelV2BurnBucketId.Qualifying => QualifyingSeed,
+            _ => null
+        };
+        if (bucket is null)
+        {
+            return null;
+        }
+
+        return bucket.BurnBucketId == bucketId && bucket.HasTypedBurnEvidence
+            ? bucket
+            : null;
+    }
+
+    public IReadOnlyList<FuelV2Scalar> AvailableBuckets => FuelV2BurnBucketCatalog.Ordered
+        .Select(Bucket)
+        .OfType<FuelV2Scalar>()
+        .ToArray();
+}
 
 internal sealed record FuelV2RangeSnapshot(
     double? CurrentFuelLiters,
@@ -148,6 +260,7 @@ internal sealed record FuelV2TargetUsageSnapshot(
 internal sealed record FuelV2TargetUsageCell(
     int TargetLaps,
     FuelV2Scalar RequiredFuelPerLap,
+    FuelV2Scalar? ReferenceBurn,
     FuelV2WorkbenchTone Tone);
 
 internal sealed record FuelV2StintTargetsSnapshot(
@@ -169,6 +282,7 @@ internal sealed record FuelV2StintTargetCell(
     bool DisplayEligible,
     string ReasonLabel,
     FuelV2Scalar RequiredFuelPerLap,
+    FuelV2Scalar? ReferenceBurn,
     double? SaveRequiredLitersPerLap,
     double? StrategyDeltaSeconds,
     FuelV2WorkbenchTone Tone);
@@ -231,6 +345,7 @@ internal sealed record FuelV2PitRequestSnapshot(
     FuelV2PitRequestCell? QualifyingSeed);
 
 internal sealed record FuelV2PitRequestCell(
+    FuelV2BurnBucketId BurnBucketId,
     string Label,
     FuelV2Scalar FuelToAddLiters,
     FuelV2Scalar TargetFuelLiters,

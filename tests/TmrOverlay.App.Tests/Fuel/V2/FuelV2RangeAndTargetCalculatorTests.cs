@@ -33,6 +33,83 @@ public sealed class FuelV2RangeAndTargetCalculatorTests
         Assert.Null(range.Last);
     }
 
+    [Fact]
+    public void Range_DerivedCellsRetainTypedBurnEvidenceAndSourceChain()
+    {
+        var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
+            Enumerable.Range(1, 10).Select(value => 10d + value / 10d).ToArray());
+
+        var range = FuelV2RangeCalculator.From(100d, windows);
+
+        var last = Assert.IsType<FuelV2Scalar>(range.Last);
+        Assert.Equal(FuelV2BurnBucketId.Last, last.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.LiveLastLap, last.BurnSource);
+        Assert.Equal(1, last.SampleCount);
+        Assert.Equal(FuelV2Confidence.CleanBaseline, last.Confidence);
+        Assert.Contains(FuelV2SampleContextFlag.CleanRace, last.ContextFlags);
+        Assert.True(last.DisplayEligible);
+        Assert.True(last.StrategyEligible);
+        Assert.Contains("range from Last", last.Source);
+        Assert.Contains("live last lap", last.Source);
+
+        var maximum = Assert.IsType<FuelV2Scalar>(range.Max);
+        Assert.Equal(FuelV2BurnBucketId.Maximum, maximum.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.LiveMaximum, maximum.BurnSource);
+        Assert.Equal(10, maximum.SampleCount);
+        Assert.True(maximum.StrategyEligible);
+    }
+
+    [Fact]
+    public void Range_MismatchedBucketIdentityIsRejectedInsteadOfRelabeled()
+    {
+        var misplacedMaximum = FuelV2Scalar.From(
+            10d,
+            "misplaced maximum",
+            FuelV2Confidence.CleanBaseline,
+            burnBucketId: FuelV2BurnBucketId.Maximum,
+            burnSource: FuelV2BurnSource.LiveMaximum,
+            sampleCount: 5,
+            strategyEligible: true);
+        var windows = new FuelV2FuelPerLapWindows(
+            Last: misplacedMaximum,
+            FiveLapAverage: null,
+            TenLapAverage: null,
+            Max: null,
+            Min: null,
+            QualifyingSeed: null,
+            AcceptedLapCount: 5);
+
+        var range = FuelV2RangeCalculator.From(50d, windows);
+
+        Assert.Null(windows.Bucket(FuelV2BurnBucketId.Last));
+        Assert.Null(range.Last);
+    }
+
+    [Fact]
+    public void Range_MissingBucketIdentityIsRejectedInsteadOfInferredFromRecordPosition()
+    {
+        var untypedBurn = FuelV2Scalar.From(
+            10d,
+            "legacy untyped burn",
+            FuelV2Confidence.CleanBaseline,
+            burnSource: FuelV2BurnSource.LiveLastLap,
+            sampleCount: 1,
+            strategyEligible: true);
+        var windows = new FuelV2FuelPerLapWindows(
+            Last: untypedBurn,
+            FiveLapAverage: null,
+            TenLapAverage: null,
+            Max: null,
+            Min: null,
+            QualifyingSeed: null,
+            AcceptedLapCount: 1);
+
+        var range = FuelV2RangeCalculator.From(50d, windows);
+
+        Assert.Null(windows.Bucket(FuelV2BurnBucketId.Last));
+        Assert.Null(range.Last);
+    }
+
     [Theory]
     [InlineData(4.4d, 3, 4, 5)]
     [InlineData(4.5d, 4, 5, 6)]
@@ -58,7 +135,15 @@ public sealed class FuelV2RangeAndTargetCalculatorTests
     [Fact]
     public void TargetUsage_UsesComparatorBandsWithoutMakingMissingReferenceUnavailable()
     {
-        var reference = FuelV2Scalar.From(10d, "reference", FuelV2Confidence.CleanBaseline);
+        var reference = FuelV2Scalar.From(
+            10d,
+            "reference",
+            FuelV2Confidence.CleanBaseline,
+            [FuelV2SampleContextFlag.CleanRace],
+            burnBucketId: FuelV2BurnBucketId.Last,
+            burnSource: FuelV2BurnSource.LiveLastLap,
+            sampleCount: 1,
+            strategyEligible: true);
 
         var success = SingleTarget(10d, reference);
         var warning = SingleTarget(9.6d, reference);
@@ -69,6 +154,34 @@ public sealed class FuelV2RangeAndTargetCalculatorTests
         Assert.Equal(FuelV2WorkbenchTone.Warning, warning.Tone);
         Assert.Equal(FuelV2WorkbenchTone.Error, error.Tone);
         Assert.Equal(FuelV2WorkbenchTone.Info, noReference.Tone);
+        Assert.Same(reference, success.ReferenceBurn);
+        Assert.Equal(FuelV2BurnBucketId.Last, success.ReferenceBurn?.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.LiveLastLap, success.ReferenceBurn?.BurnSource);
+        Assert.True(success.ReferenceBurn!.StrategyEligible);
+        Assert.Null(noReference.ReferenceBurn);
+    }
+
+    [Fact]
+    public void TargetUsage_UntypedPositiveReferenceFailsClosedInsteadOfDrivingComparatorTone()
+    {
+        var untypedReference = FuelV2Scalar.From(
+            10d,
+            "numeric comparator without bucket identity",
+            FuelV2Confidence.CleanBaseline,
+            burnSource: FuelV2BurnSource.LiveLastLap,
+            sampleCount: 1,
+            strategyEligible: true);
+
+        var snapshot = FuelV2TargetUsageCalculator.From(
+            10d,
+            "control budget",
+            untypedReference,
+            [1]);
+
+        var target = Assert.Single(snapshot.Targets);
+        Assert.Null(snapshot.ReferenceBurn);
+        Assert.Null(target.ReferenceBurn);
+        Assert.Equal(FuelV2WorkbenchTone.Info, target.Tone);
     }
 
     private static FuelV2TargetUsageCell SingleTarget(double budget, FuelV2Scalar? referenceBurn)

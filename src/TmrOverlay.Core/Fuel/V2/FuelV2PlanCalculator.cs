@@ -25,7 +25,12 @@ internal static class FuelV2PlanCalculator
         FuelV2PlanOptions? options = null)
     {
         var fuel = NonNegativeOrNull(usableStintFuelLiters);
-        var burn = stintBurn?.HasValue == true && stintBurn.Value > 0d
+        var burn = stintBurn is
+            {
+                HasTypedBurnEvidence: true,
+                HasValue: true,
+                Value: > 0d
+            }
             ? stintBurn
             : null;
         var capacity = StintCapacityFromFuel(fuel, burn);
@@ -223,8 +228,12 @@ internal static class FuelV2PlanCalculator
     private static double? StintCapacityFromFuel(double? usableStintFuelLiters, FuelV2Scalar? burn)
     {
         if (usableStintFuelLiters is not { } fuel
-            || burn?.HasValue != true
-            || burn?.Value is not { } burnValue
+            || burn is not
+            {
+                HasTypedBurnEvidence: true,
+                HasValue: true,
+                Value: { } burnValue
+            }
             || burnValue <= 0d)
         {
             return null;
@@ -236,8 +245,12 @@ internal static class FuelV2PlanCalculator
     private static double? StintRangeFromFuel(double? usableStintFuelLiters, FuelV2Scalar? burn)
     {
         if (usableStintFuelLiters is not { } fuel
-            || burn?.HasValue != true
-            || burn?.Value is not { } burnValue
+            || burn is not
+            {
+                HasTypedBurnEvidence: true,
+                HasValue: true,
+                Value: { } burnValue
+            }
             || burnValue <= 0d)
         {
             return null;

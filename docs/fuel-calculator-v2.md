@@ -2354,6 +2354,11 @@ are added. It does not approve every current output. Classify behavior as:
 
 Cross-cutting inventory:
 
+The inventory below is the historical Phase 0A audit that justified the six
+gates. Present-tense drift statements in this inventory describe the staged
+state at audit time; Gate 1, Gate 2, and Gate 3 completion notes later in this
+document supersede the corresponding corrected items.
+
 - The browser Fuel V2 workbench remains the existing branch-gated Fuel overlay
   fixture in `tools/browser-review/server.mjs`; staged calculations remain under
   `src/TmrOverlay.Core/Fuel/V2/`. Do not create a second workbench or overlay for
@@ -2623,6 +2628,14 @@ Review protocol for these gates:
   are calculation controls only; runtime facts continue to come from normalized
   live telemetry and capture/replay evidence.
 
+Post-gate naming decision: after Gate 6, review how much of the `V2` label is
+still necessary. Separate internal namespace/type isolation, durable schema or
+artifact versioning, workbench fixture names, and user-facing overlay copy; they
+do not need the same answer. The promotion discussion should compare the
+migration and maintenance cost of retaining `V2` indefinitely against removing
+development-only labels once this workbench becomes the sole Fuel Calculator
+contract.
+
 Gate 1 completion - 2026-07-13:
 
 - Core, native workbench formatting, and the browser mirror now agree on the
@@ -2695,9 +2708,9 @@ Gate 2 completion - 2026-07-13:
   capacity fields.
 
 This is still a factual foundation, not strategy selection. Configured margin,
-reserve policy, service feasibility/clamping, bucket choice, and per-stint
-meaning remain owned by Gates 3, 4, and 6. Native/browser/localhost production
-promotion remains the later explicit stabilization pass.
+reserve policy, service feasibility/clamping, preferred bucket choice, and
+per-stint meaning remain owned by Gates 4 and 6. Native/browser/localhost
+production promotion remains the later explicit stabilization pass.
 
 Three independent review threads approved the corrected capacity/checkpoint
 contract after finding and verifying fixes for cross-session observed-fuel
@@ -2706,6 +2719,63 @@ chains, descendant conflict provenance, single-cap confidence inflation, stale
 capacity notes, and the older pit-exit-target formula. Targeted browser,
 settings, localhost, syntax, and diff-hygiene checks pass. C# execution remains
 the Windows/CI gate because the authoring Mac has no `dotnet` toolchain.
+
+Gate 3 completion - 2026-07-13:
+
+- Burn windows now carry a stable `FuelV2BurnBucketId`: `Last`,
+  `FiveLapAverage`, `TenLapAverage`, `Maximum`, `Minimum`, or `Qualifying`.
+  `FuelV2BurnBucketCatalog` owns their deterministic order and display labels;
+  calculators no longer discover bucket meaning from copy such as `5L` or
+  `quali`.
+- The existing `FuelV2Scalar` remains the staged value/evidence carrier rather
+  than introducing a parallel burn-profile model. Its optional burn evidence
+  now retains bucket ID, typed `FuelV2BurnSource`, positive sample count,
+  confidence/context, display eligibility, and an independent
+  `StrategyEligible` decision. `CleanBaselineEligible` continues to describe
+  whether a sample can train the clean baseline; it is not reused as the
+  downstream strategy-eligibility flag.
+- Accepted clean live windows are both display- and strategy-eligible. Partial
+  windows remain visible contextual evidence but are not strategy-eligible.
+  Historical or qualifying seeds retain their actual typed source, sample
+  count, and explicit strategy-eligibility decision when rebound to `Max`,
+  `Min`, or `Quali`; a trusted seed may be strategy-eligible without being
+  relabeled as a clean-baseline sample.
+- `FuelV2Scalar.Derive` retains bucket identity and burn evidence while adding
+  an ordered operation/source chain. Range and Fuel To Add derivatives use
+  this path. Target Usage and the current Stint Targets experiment retain the
+  full reference-burn scalar on each candidate so their comparison source is
+  not lost behind a numeric required-usage result.
+- `FuelV2FuelPerLapWindows.Bucket` is the typed access boundary. A scalar with
+  a missing or mismatched bucket ID is rejected instead of inferring identity
+  from record position or silently relabeling it. This makes cross-wired or
+  incompletely normalized bucket data fail closed.
+- Target Usage, Plan fuel-budget calculations, and the current Stint Targets
+  experiment likewise reject a numeric burn without both a valid bucket ID and
+  typed burn source. Their other factual inputs remain available, but an
+  untyped number cannot manufacture Last provenance or drive comparison,
+  capacity, save, range, or target-status semantics.
+- The browser workbench mirrors the same ordered IDs and evidence fields in
+  model output for Fuel/Lap, Range, Target Usage, and Fuel To Add. Optional
+  `Min` and `Quali` are explicit inputs. Fixture display labels remain useful
+  context only: they do not select a bucket, infer `Quali`, or manufacture
+  local `Max`/`Min` values from Last/5L/10L, sector, or seed-like fields. A
+  deterministic no-explicit-extrema control proves those cells remain
+  unavailable.
+- This gate does not select a preferred strategy profile, centralize tank
+  feasibility, compose the final immutable overlay snapshot, or promote the
+  workbench into the production native/localhost runtime. Those remain Gates
+  4, 5, 6, and the later explicit promotion pass.
+
+Three independent review threads approved the corrected contract after finding
+and verifying fixes for implicit browser Target Usage `Last` identity,
+confidence/baseline eligibility inferred from strategy eligibility, hidden seed
+display promotion, stale Phase 0A drift copy, Core/browser untyped Target
+comparison divergence, and untyped Plan/Stint burn consumption. The final
+negative controls prove that numeric values without a valid bucket ID and typed
+burn source cannot acquire provenance or drive downstream calculations.
+Targeted settings/effects, localhost, browser data-contract, focused workbench,
+JavaScript syntax, and diff-hygiene checks pass. C# execution remains the
+Windows/CI gate because the authoring Mac has no `dotnet` toolchain.
 
 Phase 0 locks semantic product-cell behavior, not final pixels. Exact geometry,
 paint, final copy, settings UI, native Windows wiring, localhost/OBS wiring, and

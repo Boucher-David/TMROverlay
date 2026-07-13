@@ -10,13 +10,32 @@ internal static class FuelV2FuelPerLapCalculator
         var samples = acceptedFuelPerLapLiters
             .Where(IsPositiveFinite)
             .ToArray();
+        var maxSeed = SeedEvidence(
+            safeOptions.MaxSeed,
+            FuelV2BurnBucketId.Maximum,
+            FuelV2BurnSource.HistoricalSeed);
+        var minSeed = SeedEvidence(
+            safeOptions.MinSeed,
+            FuelV2BurnBucketId.Minimum,
+            FuelV2BurnSource.HistoricalSeed);
+        var qualifyingSeed = SeedEvidence(
+            safeOptions.QualifyingSeed,
+            FuelV2BurnBucketId.Qualifying,
+            FuelV2BurnSource.QualifyingSeed);
 
         return new FuelV2FuelPerLapWindows(
             Last: samples.Length >= 1
-                ? WindowValue(samples[^1], "live last lap", FuelV2BurnSource.LiveLastLap, sampleCount: 1, cleanBaselineEligible: true)
+                ? WindowValue(
+                    samples[^1],
+                    FuelV2BurnBucketId.Last,
+                    "live last lap",
+                    FuelV2BurnSource.LiveLastLap,
+                    sampleCount: 1,
+                    cleanBaselineEligible: true)
                 : null,
             FiveLapAverage: AverageWindow(
                 samples,
+                FuelV2BurnBucketId.FiveLapAverage,
                 requiredSampleCount: 5,
                 partialMinimumSampleCount: safeOptions.PartialFiveLapMinimumSampleCount,
                 allowPartial: safeOptions.AllowPartialWindows,
@@ -24,19 +43,25 @@ internal static class FuelV2FuelPerLapCalculator
                 label: "live 5L average"),
             TenLapAverage: AverageWindow(
                 samples,
+                FuelV2BurnBucketId.TenLapAverage,
                 requiredSampleCount: 10,
                 partialMinimumSampleCount: safeOptions.PartialTenLapMinimumSampleCount,
                 allowPartial: safeOptions.AllowPartialWindows,
                 source: FuelV2BurnSource.LiveTenLapAverage,
                 label: "live 10L average"),
-            Max: MaxWindow(samples, HigherSeed(safeOptions.MaxSeed, safeOptions.QualifyingSeed)),
-            Min: MinWindow(samples, safeOptions.MinSeed),
-            QualifyingSeed: SeedWindow(safeOptions.QualifyingSeed, "qualifying seed"),
+            Max: MaxWindow(samples, HigherSeed(maxSeed, qualifyingSeed)),
+            Min: MinWindow(samples, minSeed),
+            QualifyingSeed: SeedWindow(
+                qualifyingSeed,
+                FuelV2BurnBucketId.Qualifying,
+                "qualifying seed",
+                FuelV2BurnSource.QualifyingSeed),
             AcceptedLapCount: samples.Length);
     }
 
     private static FuelV2Scalar? AverageWindow(
         IReadOnlyList<double> samples,
+        FuelV2BurnBucketId bucketId,
         int requiredSampleCount,
         int partialMinimumSampleCount,
         bool allowPartial,
@@ -47,6 +72,7 @@ internal static class FuelV2FuelPerLapCalculator
         {
             return WindowValue(
                 samples.TakeLast(requiredSampleCount).Average(),
+                bucketId,
                 label,
                 source,
                 requiredSampleCount,
@@ -60,6 +86,7 @@ internal static class FuelV2FuelPerLapCalculator
 
         return WindowValue(
             samples.Average(),
+            bucketId,
             $"{label} partial {samples.Count}/{requiredSampleCount}",
             source,
             samples.Count,
@@ -71,6 +98,7 @@ internal static class FuelV2FuelPerLapCalculator
         FuelV2Scalar? liveMax = samples.Count >= 1
             ? WindowValue(
                 samples.Max(),
+                FuelV2BurnBucketId.Maximum,
                 "live max",
                 FuelV2BurnSource.LiveMaximum,
                 samples.Count,
@@ -89,8 +117,8 @@ internal static class FuelV2FuelPerLapCalculator
 
         return seed with
         {
+            BurnBucketId = FuelV2BurnBucketId.Maximum,
             Source = string.IsNullOrWhiteSpace(seed.Source) ? "seed max" : seed.Source,
-            DisplayEligible = true,
             CleanBaselineEligible = false
         };
     }
@@ -115,6 +143,7 @@ internal static class FuelV2FuelPerLapCalculator
         FuelV2Scalar? liveMin = samples.Count >= 1
             ? WindowValue(
                 samples.Min(),
+                FuelV2BurnBucketId.Minimum,
                 "live min",
                 FuelV2BurnSource.LiveMinimum,
                 samples.Count,
@@ -131,10 +160,18 @@ internal static class FuelV2FuelPerLapCalculator
             return liveMin;
         }
 
-        return SeedWindow(seed, string.IsNullOrWhiteSpace(seed.Source) ? "seed min" : seed.Source);
+        return SeedWindow(
+            seed,
+            FuelV2BurnBucketId.Minimum,
+            string.IsNullOrWhiteSpace(seed.Source) ? "seed min" : seed.Source,
+            FuelV2BurnSource.HistoricalSeed);
     }
 
-    private static FuelV2Scalar? SeedWindow(FuelV2Scalar? seed, string fallbackSource)
+    private static FuelV2Scalar? SeedWindow(
+        FuelV2Scalar? seed,
+        FuelV2BurnBucketId bucketId,
+        string fallbackSource,
+        FuelV2BurnSource fallbackBurnSource)
     {
         if (!IsPositiveScalar(seed))
         {
@@ -143,14 +180,37 @@ internal static class FuelV2FuelPerLapCalculator
 
         return seed with
         {
+            BurnBucketId = bucketId,
+            BurnSource = seed.BurnSource == FuelV2BurnSource.Unavailable
+                ? fallbackBurnSource
+                : seed.BurnSource,
             Source = string.IsNullOrWhiteSpace(seed.Source) ? fallbackSource : seed.Source,
-            DisplayEligible = true,
             CleanBaselineEligible = false
+        };
+    }
+
+    private static FuelV2Scalar? SeedEvidence(
+        FuelV2Scalar? seed,
+        FuelV2BurnBucketId acceptedBucketId,
+        FuelV2BurnSource fallbackBurnSource)
+    {
+        if (!IsPositiveScalar(seed)
+            || (seed!.BurnBucketId is { } actualBucketId && actualBucketId != acceptedBucketId))
+        {
+            return null;
+        }
+
+        return seed with
+        {
+            BurnSource = seed.BurnSource == FuelV2BurnSource.Unavailable
+                ? fallbackBurnSource
+                : seed.BurnSource
         };
     }
 
     private static FuelV2Scalar WindowValue(
         double value,
+        FuelV2BurnBucketId bucketId,
         string label,
         FuelV2BurnSource source,
         int sampleCount,
@@ -163,7 +223,11 @@ internal static class FuelV2FuelPerLapCalculator
             cleanBaselineEligible ? FuelV2Confidence.CleanBaseline : FuelV2Confidence.Contextual,
             contextFlags.Prepend(FuelV2SampleContextFlag.CleanRace),
             displayEligible: true,
-            cleanBaselineEligible: cleanBaselineEligible);
+            cleanBaselineEligible: cleanBaselineEligible,
+            burnBucketId: bucketId,
+            burnSource: source,
+            sampleCount: sampleCount,
+            strategyEligible: cleanBaselineEligible);
     }
 
     private static bool IsPositiveFinite(double value)

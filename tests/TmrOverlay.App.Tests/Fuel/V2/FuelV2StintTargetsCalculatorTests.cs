@@ -8,7 +8,12 @@ public sealed class FuelV2StintTargetsCalculatorTests
     private static readonly FuelV2Scalar ReferenceBurn = FuelV2Scalar.From(
         10d,
         "reference",
-        FuelV2Confidence.CleanBaseline);
+        FuelV2Confidence.CleanBaseline,
+        [FuelV2SampleContextFlag.CleanRace],
+        burnBucketId: FuelV2BurnBucketId.Last,
+        burnSource: FuelV2BurnSource.LiveLastLap,
+        sampleCount: 1,
+        strategyEligible: true);
 
     [Fact]
     public void KnownZeroFuelProducesFactualZeroAndInfeasibleCandidates()
@@ -27,6 +32,10 @@ public sealed class FuelV2StintTargetsCalculatorTests
         Assert.Equal(FuelV2WorkbenchTone.Error, plan.Tone);
         Assert.False(plan.DisplayEligible);
         Assert.Equal("unrealistic", plan.ReasonLabel);
+        Assert.Same(ReferenceBurn, plan.ReferenceBurn);
+        Assert.Equal(FuelV2BurnBucketId.Last, plan.ReferenceBurn?.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.LiveLastLap, plan.ReferenceBurn?.BurnSource);
+        Assert.True(plan.ReferenceBurn!.StrategyEligible);
     }
 
     [Fact]
@@ -132,5 +141,30 @@ public sealed class FuelV2StintTargetsCalculatorTests
 
         Assert.Equal("learning", snapshot.StatusLabel);
         Assert.Equal(FuelV2WorkbenchTone.Warning, snapshot.Tone);
+    }
+
+    [Fact]
+    public void UntypedPositiveReferenceFailsClosedInsteadOfDrivingStintTargets()
+    {
+        var untypedReference = FuelV2Scalar.From(
+            10d,
+            "numeric comparator without bucket identity",
+            FuelV2Confidence.CleanBaseline,
+            burnSource: FuelV2BurnSource.LiveLastLap,
+            sampleCount: 1,
+            strategyEligible: true);
+
+        var snapshot = FuelV2StintTargetsCalculator.From(
+            currentFuelLiters: 20d,
+            referenceBurn: untypedReference,
+            targetLaps: 2,
+            remainingLaps: 4d);
+
+        Assert.Null(snapshot.ReferenceBurn);
+        Assert.Null(snapshot.CurrentRangeLaps);
+        var plan = Assert.Single(snapshot.Targets, cell => cell.Role == FuelV2StintTargetRole.Plan);
+        Assert.Null(plan.ReferenceBurn);
+        Assert.Null(plan.SaveRequiredLitersPerLap);
+        Assert.Equal(FuelV2WorkbenchTone.Info, plan.Tone);
     }
 }

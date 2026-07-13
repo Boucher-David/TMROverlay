@@ -8,26 +8,25 @@ internal static class FuelV2RangeCalculator
     {
         return new FuelV2RangeSnapshot(
             CurrentFuelLiters: IsNonNegativeFinite(currentFuelLiters) ? currentFuelLiters : null,
-            Last: RangeFrom(currentFuelLiters, windows.Last, "range from Last"),
-            FiveLapAverage: RangeFrom(currentFuelLiters, windows.FiveLapAverage, "range from 5L"),
-            TenLapAverage: RangeFrom(currentFuelLiters, windows.TenLapAverage, "range from 10L"),
-            Max: RangeFrom(currentFuelLiters, windows.Max, "range from Max"));
+            Last: RangeFrom(currentFuelLiters, FuelV2BurnBucketId.Last, windows.Bucket(FuelV2BurnBucketId.Last)),
+            FiveLapAverage: RangeFrom(currentFuelLiters, FuelV2BurnBucketId.FiveLapAverage, windows.Bucket(FuelV2BurnBucketId.FiveLapAverage)),
+            TenLapAverage: RangeFrom(currentFuelLiters, FuelV2BurnBucketId.TenLapAverage, windows.Bucket(FuelV2BurnBucketId.TenLapAverage)),
+            Max: RangeFrom(currentFuelLiters, FuelV2BurnBucketId.Maximum, windows.Bucket(FuelV2BurnBucketId.Maximum)));
     }
 
-    private static FuelV2Scalar? RangeFrom(double? currentFuelLiters, FuelV2Scalar? burn, string source)
+    private static FuelV2Scalar? RangeFrom(
+        double? currentFuelLiters,
+        FuelV2BurnBucketId bucketId,
+        FuelV2Scalar? burn)
     {
         if (!IsNonNegativeFinite(currentFuelLiters) || burn?.HasValue != true || burn.Value <= 0d)
         {
             return null;
         }
 
-        return FuelV2Scalar.From(
+        return burn.Derive(
             currentFuelLiters!.Value / burn.Value!.Value,
-            source,
-            burn.Confidence,
-            burn.ContextFlags,
-            displayEligible: burn.DisplayEligible,
-            cleanBaselineEligible: false);
+            $"range from {FuelV2BurnBucketCatalog.Label(bucketId)}");
     }
 
     private static bool IsNonNegativeFinite(double? value)
@@ -45,17 +44,18 @@ internal static class FuelV2TargetUsageCalculator
         FuelV2Scalar? referenceBurn,
         IReadOnlyList<int> targetLaps)
     {
+        var normalizedReferenceBurn = TypedReferenceBurn(referenceBurn);
         var targets = targetLaps
             .Where(laps => laps > 0)
             .Distinct()
             .Order()
-            .Select(laps => TargetCell(fuelBudgetLiters, referenceBurn, laps))
+            .Select(laps => TargetCell(fuelBudgetLiters, normalizedReferenceBurn, laps))
             .ToArray();
 
         return new FuelV2TargetUsageSnapshot(
             FuelBudgetLiters: IsPositiveFinite(fuelBudgetLiters) ? fuelBudgetLiters : null,
             BudgetSource: string.IsNullOrWhiteSpace(budgetSource) ? "fuel budget" : budgetSource,
-            ReferenceBurn: referenceBurn,
+            ReferenceBurn: normalizedReferenceBurn,
             Targets: targets);
     }
 
@@ -91,6 +91,7 @@ internal static class FuelV2TargetUsageCalculator
         return new FuelV2TargetUsageCell(
             TargetLaps: targetLaps,
             RequiredFuelPerLap: required,
+            ReferenceBurn: referenceBurn,
             Tone: TargetTone(required, referenceBurn));
     }
 
@@ -110,6 +111,11 @@ internal static class FuelV2TargetUsageCalculator
         return ratio >= 0.95d
             ? FuelV2WorkbenchTone.Warning
             : FuelV2WorkbenchTone.Error;
+    }
+
+    private static FuelV2Scalar? TypedReferenceBurn(FuelV2Scalar? referenceBurn)
+    {
+        return referenceBurn?.HasTypedBurnEvidence == true ? referenceBurn : null;
     }
 
     private static bool IsPositiveFinite(double? value)

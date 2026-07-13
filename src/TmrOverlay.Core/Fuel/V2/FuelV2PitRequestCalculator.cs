@@ -17,6 +17,16 @@ internal static class FuelV2PitRequestCalculator
         var adjustmentsValid = reserve.HasValue && pitLaneFuel.HasValue;
         var normalizedReserve = reserve.GetValueOrDefault();
         var normalizedPitLaneFuel = pitLaneFuel.GetValueOrDefault();
+        FuelV2PitRequestCell? Bucket(FuelV2BurnBucketId bucketId) => adjustmentsValid
+            ? Cell(
+                bucketId,
+                currentFuel,
+                targetLaps,
+                windows.Bucket(bucketId),
+                tankCapacity,
+                normalizedReserve,
+                normalizedPitLaneFuel)
+            : null;
 
         return new FuelV2PitRequestSnapshot(
             CurrentFuelLiters: currentFuel,
@@ -25,16 +35,16 @@ internal static class FuelV2PitRequestCalculator
             ReserveLiters: normalizedReserve,
             PitLaneFuelLiters: normalizedPitLaneFuel,
             AdjustmentsValid: adjustmentsValid,
-            Last: adjustmentsValid ? Cell("Last", currentFuel, targetLaps, windows.Last, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null,
-            FiveLapAverage: adjustmentsValid ? Cell("5L", currentFuel, targetLaps, windows.FiveLapAverage, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null,
-            TenLapAverage: adjustmentsValid ? Cell("10L", currentFuel, targetLaps, windows.TenLapAverage, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null,
-            Max: adjustmentsValid ? Cell("Max", currentFuel, targetLaps, windows.Max, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null,
-            Min: adjustmentsValid ? Cell("Min", currentFuel, targetLaps, windows.Min, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null,
-            QualifyingSeed: adjustmentsValid ? Cell("Quali", currentFuel, targetLaps, windows.QualifyingSeed, tankCapacity, normalizedReserve, normalizedPitLaneFuel) : null);
+            Last: Bucket(FuelV2BurnBucketId.Last),
+            FiveLapAverage: Bucket(FuelV2BurnBucketId.FiveLapAverage),
+            TenLapAverage: Bucket(FuelV2BurnBucketId.TenLapAverage),
+            Max: Bucket(FuelV2BurnBucketId.Maximum),
+            Min: Bucket(FuelV2BurnBucketId.Minimum),
+            QualifyingSeed: Bucket(FuelV2BurnBucketId.Qualifying));
     }
 
     private static FuelV2PitRequestCell? Cell(
-        string label,
+        FuelV2BurnBucketId bucketId,
         double? currentFuelLiters,
         int targetLaps,
         FuelV2Scalar? burn,
@@ -59,28 +69,24 @@ internal static class FuelV2PitRequestCalculator
         var tankLimited = tankRoom is { } room && unclippedAdd > room + 0.001d;
         var fuelToAdd = tankLimited ? tankRoom!.Value : unclippedAdd;
         var context = ContextFlags(burn, pitLaneFuelLiters);
+        var label = FuelV2BurnBucketCatalog.Label(bucketId);
 
         return new FuelV2PitRequestCell(
+            BurnBucketId: bucketId,
             Label: label,
-            FuelToAddLiters: FuelV2Scalar.From(
+            FuelToAddLiters: burn.Derive(
                 fuelToAdd,
                 $"pit add from {label}",
-                burn.Confidence,
-                context,
-                displayEligible: burn.DisplayEligible,
-                cleanBaselineEligible: false),
-            TargetFuelLiters: FuelV2Scalar.From(
+                context),
+            TargetFuelLiters: burn.Derive(
                 targetFuel,
                 $"target fuel from {label}",
-                burn.Confidence,
-                context,
-                displayEligible: burn.DisplayEligible,
-                cleanBaselineEligible: false),
+                context),
             TankLimited: tankLimited,
-            Tone: Tone(label, burn, tankLimited));
+            Tone: Tone(bucketId, burn, tankLimited));
     }
 
-    private static FuelV2WorkbenchTone Tone(string label, FuelV2Scalar burn, bool tankLimited)
+    private static FuelV2WorkbenchTone Tone(FuelV2BurnBucketId bucketId, FuelV2Scalar burn, bool tankLimited)
     {
         if (tankLimited)
         {
@@ -92,7 +98,7 @@ internal static class FuelV2PitRequestCalculator
             return FuelV2WorkbenchTone.Waiting;
         }
 
-        if (label is "Max" or "Min" or "Quali"
+        if (bucketId is FuelV2BurnBucketId.Maximum or FuelV2BurnBucketId.Minimum or FuelV2BurnBucketId.Qualifying
             || burn.Confidence <= FuelV2Confidence.Contextual
             || burn.ContextFlags.Any(flag => flag != FuelV2SampleContextFlag.CleanRace))
         {

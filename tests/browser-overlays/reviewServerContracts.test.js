@@ -146,7 +146,7 @@ describe('browser review server validation contracts', () => {
     expect.soft(populated.status).toBe('fuel/lap workbench');
     expect.soft(metricSectionTitles(populated)).toEqual(['Fuel/Lap Workbench']);
     expect.soft(metricRowLabels(populated, 'Fuel/Lap Workbench')).toEqual(['Fuel/Lap']);
-    expect.soft(populated.metricSections[0].rows[0].segments).toEqual([
+    expect.soft(metricSegmentDisplay(populated.metricSections[0].rows[0].segments)).toEqual([
       { label: 'Last', value: '13.52 L/lap', tone: 'info' },
       { label: '5L', value: '13.50 L/lap', tone: 'info' },
       { label: '10L', value: '13.36 L/lap', tone: 'info' },
@@ -159,7 +159,7 @@ describe('browser review server validation contracts', () => {
     )).model;
     expect.soft(degraded.status).toBe('fuel/lap workbench');
     expect.soft(metricSectionTitles(degraded)).toEqual(['Fuel/Lap Workbench']);
-    expect.soft(degraded.metricSections[0].rows[0].segments).toEqual([
+    expect.soft(metricSegmentDisplay(degraded.metricSections[0].rows[0].segments)).toEqual([
       { label: 'Last', value: '13.54 L/lap', tone: 'info' },
       { label: '5L', value: '--', tone: 'waiting' },
       { label: '10L', value: '--', tone: 'waiting' },
@@ -173,7 +173,7 @@ describe('browser review server validation contracts', () => {
     expect.soft(noData.shouldRender).toBe(true);
     expect.soft(metricSectionTitles(noData)).toEqual(['Fuel/Lap Workbench']);
     expect.soft(metricRowLabels(noData, 'Fuel/Lap Workbench')).toEqual(['Fuel/Lap']);
-    expect.soft(noData.metricSections[0].rows[0].segments).toEqual([
+    expect.soft(metricSegmentDisplay(noData.metricSections[0].rows[0].segments)).toEqual([
       { label: 'Last', value: '--', tone: 'waiting' },
       { label: '5L', value: '--', tone: 'waiting' },
       { label: '10L', value: '--', tone: 'waiting' },
@@ -206,7 +206,7 @@ describe('browser review server validation contracts', () => {
     const range = (await reviewServer.getJson(
       '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-range'
     )).model;
-    expect.soft(metricRow(range, 'Fuel Range Workbench', 'Stress / Known zero fuel')?.segments).toEqual([
+    expect.soft(metricSegmentDisplay(metricRow(range, 'Fuel Range Workbench', 'Stress / Known zero fuel')?.segments)).toEqual([
       { label: 'Fuel', value: '0.0 L', tone: 'info' },
       { label: 'V1 Ref', value: '--', tone: 'waiting' },
       { label: 'Last', value: '0.00', tone: 'info' },
@@ -220,14 +220,14 @@ describe('browser review server validation contracts', () => {
     const target = (await reviewServer.getJson(
       '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-target'
     )).model;
-    expect.soft(metricRow(target, 'Target Usage - Current Edges', 'Stress / Round-centered candidates')?.segments).toEqual([
+    expect.soft(metricSegmentDisplay(metricRow(target, 'Target Usage - Current Edges', 'Stress / Round-centered candidates')?.segments)).toEqual([
       { label: 'Fuel', value: '44.0 L', tone: 'info' },
       { label: 'Last', value: '10.00 L', tone: 'info' },
       { label: '3 laps', value: '14.67 L', tone: 'success' },
       { label: '4 laps', value: '11.00 L', tone: 'success' },
       { label: '5 laps', value: '8.80 L', tone: 'error' }
     ]);
-    expect.soft(metricRow(target, 'Target Usage - Current Edges', 'Stress / Missing reference')?.segments).toEqual([
+    expect.soft(metricSegmentDisplay(metricRow(target, 'Target Usage - Current Edges', 'Stress / Missing reference')?.segments)).toEqual([
       { label: 'Fuel', value: '44.0 L', tone: 'info' },
       { label: 'Last', value: '--', tone: 'waiting' },
       { label: '3 laps', value: '14.67 L', tone: 'info' },
@@ -350,6 +350,115 @@ describe('browser review server validation contracts', () => {
     const zeroPitFuel = metricRow(pit, 'Fuel To Add Workbench', 'Dallara quali seed / 4-lap target');
     expect.soft(zeroPitFuel.segments[3]).toMatchObject({ value: '51.0 L cap quali', tone: 'error' });
     expect.soft(zeroPitFuel.segments[5]).toMatchObject({ value: '51.0 L cap quali', tone: 'error' });
+  });
+
+  it('retains stable burn-bucket identity and provenance without synthesizing extrema', async () => {
+    const fuel = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-fuel'
+    )).model;
+    expect.soft(fuel.metricSections[0].rows[0].segments).toMatchObject([
+      { burnBucketId: 'Last', burnSource: 'LiveLastLap', sampleCount: 1, displayEligible: true, strategyEligible: true },
+      { burnBucketId: 'FiveLapAverage', burnSource: 'LiveFiveLapAverage', sampleCount: 5, displayEligible: true, strategyEligible: true },
+      { burnBucketId: 'TenLapAverage', burnSource: 'LiveTenLapAverage', sampleCount: 10, displayEligible: true, strategyEligible: true },
+      { burnBucketId: 'Maximum', burnSource: 'LiveMaximum', sampleCount: 10, displayEligible: true, strategyEligible: true }
+    ]);
+
+    const trustedSeed = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-fuel-trusted-seed'
+    )).model;
+    expect.soft(trustedSeed.metricSections[0].rows[0].segments[3]).toMatchObject({
+      label: 'Max',
+      value: '14.20 L/lap',
+      burnBucketId: 'Maximum',
+      burnSource: 'HistoricalSeed',
+      sampleCount: 12,
+      confidence: 'Seeded',
+      displayEligible: true,
+      cleanBaselineEligible: false,
+      strategyEligible: true
+    });
+
+    const range = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-range'
+    )).model;
+    const partialRange = metricRow(range, 'Fuel Range Workbench', 'Dallara 45m / Mid S1')?.segments[3];
+    expect.soft(partialRange).toMatchObject({
+      label: '5L',
+      value: '2.29 3/5',
+      burnBucketId: 'FiveLapAverage',
+      burnSource: 'LiveFiveLapAverage',
+      sampleCount: 3,
+      displayEligible: true,
+      strategyEligible: false
+    });
+    expect.soft(partialRange?.provenance).toContain('range from 5L');
+
+    const target = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-target'
+    )).model;
+    const qualifyingTarget = metricRow(target, 'Target Usage - Green Start', 'Dallara quali seed / Green est');
+    expect.soft(qualifyingTarget?.segments[1]).toMatchObject({
+      label: 'Quali',
+      burnBucketId: 'Qualifying',
+      burnSource: 'QualifyingSeed',
+      sampleCount: 1,
+      strategyEligible: false
+    });
+    expect.soft(qualifyingTarget?.segments[2]).toMatchObject({
+      referenceBurnBucketId: 'Qualifying',
+      referenceBurnSource: 'QualifyingSeed',
+      referenceSampleCount: 1,
+      referenceConfidence: 'Seeded',
+      referenceCleanBaselineEligible: false,
+      referenceStrategyEligible: false
+    });
+    const missingIdentity = metricRow(target, 'Target Usage - Current Edges', 'Stress / Missing reference identity');
+    expect.soft(missingIdentity?.segments[1]).toMatchObject({
+      label: 'Reference',
+      value: '--',
+      burnBucketId: null,
+      burnSource: 'Unavailable',
+      displayEligible: false,
+      strategyEligible: false
+    });
+    expect.soft(missingIdentity?.segments[2]).toMatchObject({
+      referenceBurnBucketId: null,
+      referenceBurnSource: 'Unavailable',
+      referenceStrategyEligible: false
+    });
+
+    const pit = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-pit'
+    )).model;
+    const qualifyingPit = metricRow(pit, 'Fuel To Add Workbench', 'Dallara quali seed / 4-lap target');
+    expect.soft(qualifyingPit?.segments.map((segment) => segment.burnBucketId)).toEqual([
+      'Last', 'FiveLapAverage', 'TenLapAverage', 'Maximum', 'Minimum', 'Qualifying'
+    ]);
+    expect.soft(qualifyingPit?.segments[3]).toMatchObject({
+      burnBucketId: 'Maximum',
+      burnSource: 'QualifyingSeed',
+      sampleCount: 1,
+      strategyEligible: false
+    });
+    expect.soft(qualifyingPit?.segments[5]).toMatchObject({
+      burnBucketId: 'Qualifying',
+      burnSource: 'QualifyingSeed',
+      sampleCount: 1,
+      strategyEligible: false
+    });
+
+    const noExtrema = metricRow(pit, 'Fuel To Add Workbench', 'Stress / No explicit extrema');
+    expect.soft(noExtrema?.segments.map((segment) => segment.value)).toEqual([
+      '+10.0 L', '+9.0 L', '+8.0 L', '--', '--', '--'
+    ]);
+    expect.soft(noExtrema?.segments.slice(3).map((segment) => ({
+      id: segment.burnBucketId,
+      source: segment.burnSource
+    }))).toEqual([
+      { id: 'Maximum', source: 'Unavailable' },
+      { id: 'Minimum', source: 'Unavailable' },
+      { id: 'Qualifying', source: 'Unavailable' }
+    ]);
   });
 
   it('keeps effective capacity and ordered fuel checkpoints typed and distinct', async () => {
@@ -1169,6 +1278,10 @@ function metricRow(model, sectionTitle, rowLabel) {
   return (model.metricSections || [])
     .find((section) => section.title === sectionTitle)
     ?.rows?.find((row) => row.label === rowLabel);
+}
+
+function metricSegmentDisplay(segments = []) {
+  return segments.map(({ label, value, tone }) => ({ label, value, tone }));
 }
 
 function gridRow(model, rowLabel) {

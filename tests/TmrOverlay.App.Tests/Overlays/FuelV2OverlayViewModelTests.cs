@@ -289,7 +289,8 @@ public sealed class FuelV2OverlayViewModelTests
             {
                 Session = current.Models.Session with { SessionType = "Offline Testing" },
                 DriverDirectory = current.Models.DriverDirectory with { FocusCarIdx = null },
-                Reference = current.Models.Reference with { FocusCarIdx = null, FocusIsPlayer = false }
+                Reference = current.Models.Reference with { FocusCarIdx = null, FocusIsPlayer = false },
+                IsLiveSampleModel = true
             }
         };
         var factory = new BrowserOverlayModelFactory(

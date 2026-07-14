@@ -1170,7 +1170,8 @@ function settingsContentRows(id, overlayState = {}) {
         enabled('Fuel', true, { key: 'fuel-calculator.race.fuel.enabled' }),
         enabled('Stint targets', true, { key: 'fuel-calculator.race.stint-targets.enabled' }),
         enabled('Fuel range', true, { key: 'fuel-calculator.range.fuel.enabled' }),
-        enabled('Fuel usage', true, { key: 'fuel-calculator.usage.enabled' })
+        enabled('Fuel usage', true, { key: 'fuel-calculator.usage.enabled' }),
+        enabled('Model readiness', true, { key: 'fuel-calculator.model-readiness.enabled' })
       ];
     case 'track-map':
       return [
@@ -1311,7 +1312,8 @@ function settingsContentOptionKey(id, label) {
       Fuel: 'fuel-calculator.race.fuel.enabled',
       'Stint targets': 'fuel-calculator.race.stint-targets.enabled',
       'Fuel range': 'fuel-calculator.range.fuel.enabled',
-      'Fuel usage': 'fuel-calculator.usage.enabled'
+      'Fuel usage': 'fuel-calculator.usage.enabled',
+      'Model readiness': 'fuel-calculator.model-readiness.enabled'
     },
     'track-map': {
       'Sector boundaries': 'track-map.sector-boundaries.enabled',

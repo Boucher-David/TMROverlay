@@ -267,6 +267,8 @@ PitServiceRouteObservation
   HasCompleteRoute: bool
   HasObservedBoxEntry: bool
   HasObservedBoxExit: bool
+  HasQualifiedBoxToExitLeg: bool
+  HasQualifiedEntryToBoxLeg: bool
   MaxFrameGapSeconds: double?
   PitEntry: PitServiceRouteCheckpoint
   PitExit: PitServiceRouteCheckpoint

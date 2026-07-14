@@ -46,7 +46,7 @@ describe('data contract settings mapping', () => {
     expect(contentRow(relative, 'Pit status').enabled).toBe(false);
 
     const fuel = overlay(config, 'fuel-calculator');
-    expect(fuel.contentRows.map((row) => row.label)).toEqual(['Plan', 'Fuel', 'Stint targets', 'Fuel range', 'Fuel usage']);
+    expect(fuel.contentRows.map((row) => row.label)).toEqual(['Plan', 'Fuel', 'Stint targets', 'Fuel range', 'Fuel usage', 'Model readiness']);
     expect(fuel.footerRows).toEqual([]);
 
     const sessionWeather = overlay(config, 'session-weather');

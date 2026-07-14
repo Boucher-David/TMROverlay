@@ -25,7 +25,11 @@ public sealed class FuelV2WhiteRoom24HourScenarioTests
                 ResolvedHistoryRoot = Path.Combine(root, "fuel-v2-history")
             };
             var store = new FuelV2HistoryStore(fuelHistoryOptions);
-            await store.SaveAsync(fixture.ToSyntheticHistorySummary(), CancellationToken.None);
+            var syntheticHistory = fixture.ToSyntheticHistorySummary();
+            Assert.True(syntheticHistory.SessionIntegrity.IsClassifiedForHistory);
+            Assert.Equal("race", syntheticHistory.SessionIntegrity.SessionFamily);
+            Assert.Equal($"sha256-{syntheticHistory.SourceArtifact.Sha256}", syntheticHistory.SummaryId);
+            await store.SaveAsync(syntheticHistory, CancellationToken.None);
             var normalHistory = new FuelV2HistoryNormalBurnQueryService(fuelHistoryOptions, store);
             var history = new SessionHistoryQueryService(new SessionHistoryOptions
             {
@@ -40,6 +44,13 @@ public sealed class FuelV2WhiteRoom24HourScenarioTests
                 history,
                 fuelV2OverlayOptions: new FuelV2OverlayOptions(true),
                 fuelV2NormalHistoryQueryService: normalHistory);
+
+            var workbenchHistory = normalHistory.Lookup(fixture.ToSnapshot(fixture.Checkpoints[0], 1).Context);
+            Assert.True(workbenchHistory.IsAvailable);
+            Assert.Equal("race", workbenchHistory.SelectedSessionFamily);
+            Assert.Equal(fixture.History.FuelPerLapLiters, workbenchHistory.Burn?.Value);
+            Assert.True(workbenchHistory.CanSeedPlan);
+            Assert.False(workbenchHistory.CanDriveAdvice);
 
             foreach (var (checkpoint, ordinal) in fixture.Checkpoints.Select((checkpoint, index) => (checkpoint, index + 1)))
             {

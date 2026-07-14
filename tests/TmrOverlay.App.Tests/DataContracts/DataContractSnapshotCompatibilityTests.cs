@@ -562,15 +562,15 @@ public sealed class DataContractSnapshotCompatibilityTests
 
     private static string V123SnapshotPath(params string[] parts)
     {
-        return SnapshotPath(V123SnapshotRelativePath, parts);
+        return SnapshotPathFromRoot(V123SnapshotRelativePath, parts);
     }
 
     private static string V130SnapshotPath(params string[] parts)
     {
-        return SnapshotPath(V130SnapshotRelativePath, parts);
+        return SnapshotPathFromRoot(V130SnapshotRelativePath, parts);
     }
 
-    private static string SnapshotPath(string relativeRoot, params string[] parts)
+    private static string SnapshotPathFromRoot(string relativeRoot, params string[] parts)
     {
         var root = FindRepoRootDirectory(relativeRoot);
         var allParts = new string[parts.Length + 1];

@@ -1043,7 +1043,7 @@
     .sector-chart-line.series-1,
     .sector-chart-swatch.series-1 { color: #80ed99; stroke: #80ed99; background: #80ed99; }
     .sector-chart-line.series-2,
-    .sector-chart-swatch.series-2 { color: #ffd166; stroke: #ffd166; background: #ffd166; }
+    .sector-chart-swatch.series-2 { color: var(--tmr-amber); stroke: var(--tmr-amber); background: var(--tmr-amber); }
     .sector-chart-line.series-3,
     .sector-chart-swatch.series-3 { color: #ff6b6b; stroke: #ff6b6b; background: #ff6b6b; }
     .sector-chart-line.series-4,

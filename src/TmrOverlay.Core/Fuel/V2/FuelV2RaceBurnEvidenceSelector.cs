@@ -7,6 +7,13 @@ namespace TmrOverlay.Core.Fuel.V2;
 // changes, so a prior selection cannot leak into a different race.
 internal static class FuelV2RaceBurnEvidenceSelector
 {
+    // The five- and ten-lap values are independently averaged, so mathematically
+    // equal windows can differ by a few floating-point units. Treat only that
+    // noise as a tie: a genuinely higher recent burn must still win for fuel
+    // safety, while an equal result should retain the longer confirmed window.
+    private const double ConservativeTieAbsoluteTolerance = 0.000000001d;
+    private const double ConservativeTieRelativeTolerance = 0.000000001d;
+
     public static FuelV2RaceBurnEvidenceSelection From(
         FuelV2FuelPerLapWindows windows,
         FuelV2RaceBurnEvidenceSelection? previous = null,
@@ -168,7 +175,30 @@ internal static class FuelV2RaceBurnEvidenceSelector
             return first;
         }
 
-        return first.Burn.Value >= second.Burn.Value ? first : second;
+        // Candidate() admits only positive finite values, so the default is
+        // unreachable; GetValueOrDefault keeps that established invariant
+        // explicit without duplicating validation in this policy method.
+        var firstValue = first.Burn.Value.GetValueOrDefault();
+        var secondValue = second.Burn.Value.GetValueOrDefault();
+        if (AreEffectivelyEqual(firstValue, secondValue))
+        {
+            // The caller orders the normal live windows as ten then five, but
+            // use the evidence metadata rather than that call-site detail so
+            // a future equal comparison also chooses the stronger sample.
+            var firstSamples = first.Burn.SampleCount ?? 0;
+            var secondSamples = second.Burn.SampleCount ?? 0;
+            return secondSamples > firstSamples ? second : first;
+        }
+
+        return firstValue > secondValue ? first : second;
+    }
+
+    private static bool AreEffectivelyEqual(double first, double second)
+    {
+        var allowedDifference = Math.Max(
+            ConservativeTieAbsoluteTolerance,
+            Math.Max(Math.Abs(first), Math.Abs(second)) * ConservativeTieRelativeTolerance);
+        return Math.Abs(first - second) <= allowedDifference;
     }
 
     private static FuelV2RaceBurnCandidate? PriorUsable(

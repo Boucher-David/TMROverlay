@@ -227,6 +227,13 @@ internal sealed class FuelV2WhiteRoomFixture
     public FuelV2HistorySummary ToSyntheticHistorySummary()
     {
         var context = ToContext();
+        var sourceArtifact = new FuelV2HistorySourceArtifact
+        {
+            Path = $"constructed-white-room/{FixtureId}/history.json",
+            Sha256 = "constructed-white-room",
+            ByteLength = 0,
+            LastWriteTimeUtc = History.FinishedAtUtc
+        };
         var car = FuelV2HistoryIdentity.Car(context.Car.CarId, context.Car.CarPath);
         var layout = FuelV2HistoryIdentity.TrackLayout(
             context.Track.TrackId,
@@ -258,17 +265,14 @@ internal sealed class FuelV2WhiteRoomFixture
         return new FuelV2HistorySummary
         {
             SourceId = $"{FixtureId}-history",
-            SummaryId = $"{FixtureId}-history-summary",
+            // The white-room record is output-owned, but it must still obey
+            // the classified-summary identity rule so the real history store
+            // indexes it instead of silently discarding it as malformed.
+            SummaryId = $"sha256-{sourceArtifact.Sha256}",
             StartedAtUtc = historyStartedAtUtc,
             FinishedAtUtc = History.FinishedAtUtc,
             ImportedAtUtc = History.FinishedAtUtc,
-            SourceArtifact = new FuelV2HistorySourceArtifact
-            {
-                Path = $"constructed-white-room/{FixtureId}/history.json",
-                Sha256 = "constructed-white-room",
-                ByteLength = 0,
-                LastWriteTimeUtc = History.FinishedAtUtc
-            },
+            SourceArtifact = sourceArtifact,
             SourceVersions = new FuelV2HistorySourceVersions
             {
                 CaptureFormatVersion = FuelV2HistoryDataVersions.SummaryVersion,

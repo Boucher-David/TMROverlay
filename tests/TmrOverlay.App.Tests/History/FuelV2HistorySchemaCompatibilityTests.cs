@@ -218,8 +218,8 @@ PitServiceRequestShape
   Tearoff: bool
 PitServiceStationaryServiceObservation
   DurationSeconds: double
-  EndedAtUtc: DateTimeOffset
   EndSessionTimeSeconds: double?
+  EndedAtUtc: DateTimeOffset
   EntryFuelLiters: double?
   EntryRawFlags: int?
   EntryRawStatus: int?
@@ -313,8 +313,8 @@ FuelV2HistoryAggregate
   LapBudgetMissingSignalCounts: Dictionary<string, int>
   LapBudgetSourceCounts: Dictionary<string, int>
   LastFinishedAtUtc: DateTimeOffset?
-  LegacyUnclassifiedSessionCount: int
   LearningEligibleSessionCount: int
+  LegacyUnclassifiedSessionCount: int
   LocalDriverStintFuelPerLapLiters: FuelV2HistoryMetric
   LocalDriverStintLaps: FuelV2HistoryMetric
   PitFuelAddedLiters: FuelV2HistoryMetric

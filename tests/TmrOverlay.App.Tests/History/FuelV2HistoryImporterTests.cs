@@ -557,6 +557,7 @@ public sealed class FuelV2HistoryImporterTests
         {
             var storage = CreateStorage(root);
             var artifactPath = Path.Combine(root, "frozen-v123-sidecar.json");
+            Directory.CreateDirectory(root);
             File.Copy(
                 V123FixturePath("capture", "fuel-v2-diagnostics.json"),
                 artifactPath);
@@ -877,10 +878,20 @@ public sealed class FuelV2HistoryImporterTests
             var result = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
 
             Assert.True(result.Imported);
-            var sessionDirectory = SessionDirectory(storage, "track-2-example");
+            var expectedLayout = FuelV2HistoryIdentity.TrackLayout(
+                incompleteLayoutScope.Track.TrackId,
+                incompleteLayoutScope.Track.TrackName,
+                incompleteLayoutScope.Track.TrackDisplayName,
+                incompleteLayoutScope.Track.TrackConfigName);
+            Assert.Equal("track-2-test-track", expectedLayout.Key);
+            Assert.Equal("track-id-and-name-fallback", expectedLayout.Source);
+            Assert.False(expectedLayout.IsExact);
+            var sessionDirectory = SessionDirectory(storage, expectedLayout.Key);
             var summaryPath = Assert.Single(Directory.EnumerateFiles(Path.Combine(sessionDirectory, "summaries"), "*.json"));
             var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(File.ReadAllText(summaryPath), JsonOptions);
             Assert.NotNull(summary);
+            Assert.Equal(expectedLayout.Key, summary.Scope.Combo.TrackLayoutKey);
+            Assert.Equal(expectedLayout.Source, summary.Scope.Combo.TrackLayoutIdentitySource);
             Assert.False(summary.SessionIntegrity.IsClassifiedForHistory);
             Assert.False(summary.SessionIntegrity.ExactTrackLayoutVerified);
         }

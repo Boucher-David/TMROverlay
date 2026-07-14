@@ -51,6 +51,39 @@ public sealed class FuelV2RaceBurnEvidenceSelectorTests
     }
 
     [Fact]
+    public void Selector_TreatsFloatingPointEquivalentLiveWindowsAsATieAndKeepsTheLongerWindow()
+    {
+        var history = History(13.50d);
+        var held = FuelV2RaceBurnEvidenceSelector.From(
+            WindowsWithLiveBurns(fiveLapValue: 13.04d, tenLapValue: null, history));
+        var confirmed = FuelV2RaceBurnEvidenceSelector.From(
+            WindowsWithLiveBurns(
+                fiveLapValue: 13.0400000001d,
+                tenLapValue: 13.04d,
+                history),
+            held);
+
+        Assert.Equal(FuelV2RaceBurnEvidenceSelectionState.HeldConservative, held.State);
+        Assert.Equal(FuelV2RaceBurnEvidenceSelectionState.LiveConfirmed, confirmed.State);
+        Assert.Equal(FuelV2BurnBucketId.TenLapAverage, confirmed.BurnBucketId);
+        Assert.Equal(13.04d, Assert.IsType<double>(confirmed.Burn?.Value), precision: 6);
+    }
+
+    [Fact]
+    public void Selector_PreservesAMateriallyHigherRecentFiveLapBurnOverTheLongerWindow()
+    {
+        var selection = FuelV2RaceBurnEvidenceSelector.From(
+            WindowsWithLiveBurns(
+                fiveLapValue: 13.0401d,
+                tenLapValue: 13.04d,
+                History(13.00d)));
+
+        Assert.Equal(FuelV2RaceBurnEvidenceSelectionState.LiveConfirmed, selection.State);
+        Assert.Equal(FuelV2BurnBucketId.FiveLapAverage, selection.BurnBucketId);
+        Assert.Equal(13.0401d, selection.Burn?.Value);
+    }
+
+    [Fact]
     public void Selector_PromotesAHigherFiveLapLiveBurnImmediatelyBecauseItCannotReduceFuelSafety()
     {
         var selection = FuelV2RaceBurnEvidenceSelector.From(
@@ -160,6 +193,44 @@ public sealed class FuelV2RaceBurnEvidenceSelectorTests
         return FuelV2FuelPerLapCalculator.FromAcceptedLaps(
             samples,
             new FuelV2FuelPerLapWindowOptions(HistoricalNormalSeed: history));
+    }
+
+    private static FuelV2FuelPerLapWindows WindowsWithLiveBurns(
+        double? fiveLapValue,
+        double? tenLapValue,
+        FuelV2Scalar history)
+    {
+        return new FuelV2FuelPerLapWindows(
+            Last: null,
+            FiveLapAverage: fiveLapValue is { } five
+                ? LiveBurn(five, FuelV2BurnBucketId.FiveLapAverage, FuelV2BurnSource.LiveFiveLapAverage, 5)
+                : null,
+            TenLapAverage: tenLapValue is { } ten
+                ? LiveBurn(ten, FuelV2BurnBucketId.TenLapAverage, FuelV2BurnSource.LiveTenLapAverage, 10)
+                : null,
+            Max: null,
+            Min: null,
+            QualifyingSeed: null,
+            AcceptedLapCount: tenLapValue is null ? 5 : 10)
+        {
+            HistoricalNormal = history
+        };
+    }
+
+    private static FuelV2Scalar LiveBurn(
+        double value,
+        FuelV2BurnBucketId bucketId,
+        FuelV2BurnSource source,
+        int sampleCount)
+    {
+        return FuelV2Scalar.From(
+            value,
+            "typed live burn",
+            FuelV2Confidence.CleanBaseline,
+            burnBucketId: bucketId,
+            burnSource: source,
+            sampleCount: sampleCount,
+            strategyEligible: true);
     }
 
     private static FuelV2Scalar History(double value)

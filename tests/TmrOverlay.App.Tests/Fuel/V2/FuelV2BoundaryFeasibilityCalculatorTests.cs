@@ -187,7 +187,7 @@ public sealed class FuelV2BoundaryFeasibilityCalculatorTests
             burnLitersPerLap: 10d);
 
         var cell = snapshot.Bucket(FuelV2BurnBucketId.Last);
-        Assert.Equal(51d, snapshot.Capacity.EffectiveCapacityLiters);
+        Assert.Equal(51d, Assert.IsType<double>(snapshot.Capacity.EffectiveCapacityLiters), precision: 10);
         Assert.Equal(FuelV2TargetFeasibilityState.CapacityConflicted, cell.FeasibilityState);
         Assert.Equal(41d, Value(cell.TankRoomLiters));
         Assert.Equal(40d, Value(cell.ClampedAddLiters));

@@ -27,7 +27,7 @@ public sealed class FuelV2CapacityAndCheckpointCalculatorTests
     {
         var capacity = FuelV2EffectiveCapacityResolver.From(75d, 0.68d, null);
 
-        Assert.Equal(51d, capacity.EffectiveCapacityLiters);
+        Assert.Equal(51d, Assert.IsType<double>(capacity.EffectiveCapacityLiters), precision: 10);
         Assert.Equal(FuelV2CapacitySource.DriverCarCap, capacity.Source);
         Assert.Equal(FuelV2CapacityConfidence.High, capacity.Confidence);
         Assert.True(capacity.CanDriveFuelAdvice);
@@ -38,7 +38,7 @@ public sealed class FuelV2CapacityAndCheckpointCalculatorTests
     {
         var capacity = FuelV2EffectiveCapacityResolver.From(75d, null, 0.68d);
 
-        Assert.Equal(51d, capacity.EffectiveCapacityLiters);
+        Assert.Equal(51d, Assert.IsType<double>(capacity.EffectiveCapacityLiters), precision: 10);
         Assert.Equal(FuelV2CapacitySource.CarClassCap, capacity.Source);
         Assert.Equal(FuelV2CapacityConfidence.High, capacity.Confidence);
         Assert.True(capacity.CanDriveFuelAdvice);
@@ -85,7 +85,7 @@ public sealed class FuelV2CapacityAndCheckpointCalculatorTests
     {
         var capacity = FuelV2EffectiveCapacityResolver.From(75d, 0.8d, 0.68d);
 
-        Assert.Equal(51d, capacity.EffectiveCapacityLiters);
+        Assert.Equal(51d, Assert.IsType<double>(capacity.EffectiveCapacityLiters), precision: 10);
         Assert.Equal(0.68d, capacity.AppliedFuelPercent);
         Assert.Equal(FuelV2CapacitySource.MostRestrictiveReportedCap, capacity.Source);
         Assert.Equal(FuelV2CapacityConfidence.Conflicted, capacity.Confidence);
@@ -98,7 +98,7 @@ public sealed class FuelV2CapacityAndCheckpointCalculatorTests
     {
         var capacity = FuelV2EffectiveCapacityResolver.From(75d, 0.68d, 0.68d, 52d);
 
-        Assert.Equal(51d, capacity.EffectiveCapacityLiters);
+        Assert.Equal(51d, Assert.IsType<double>(capacity.EffectiveCapacityLiters), precision: 10);
         Assert.Contains(FuelV2CapacityStateFlag.ObservedFuelAboveResolvedCapacity, capacity.StateFlags);
         Assert.Equal(FuelV2CapacityConfidence.Conflicted, capacity.Confidence);
         Assert.False(capacity.CanDriveFuelAdvice);

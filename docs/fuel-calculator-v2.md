@@ -3105,16 +3105,20 @@ calculator.
 When enabled, the presentation consumes the fresh, local-context-qualified
 `FuelV2LiveSnapshotComposer` output and shows only factual top-half material:
 
-- race only: Lap context and current/effective fuel capacity;
-- every supported active session: the aligned
+- race: Lap context and current/effective Fuel State when their existing content
+  blocks are enabled;
+- Test, Practice, Qualifying, and Race: Fuel State plus the aligned
   `Last / 5L / 10L / History / Max / Min / Quali` fuel-per-lap and range
-  comparison. `History` is populated only from an exact classified
-  race/practice reader and remains visibly modeled; and
-- practice/qualifying deliberately omit race-plan, fuel-state, and stint
-  language, preserving the existing usage/range-only contract.
+  comparison when their corresponding evidence/content block exists. `History`
+  is populated only from an exact classified race/practice/test reader and
+  remains visibly modeled; and
+- a fresh grid/pit transition with no progress focus may render exactly Fuel
+  State only after the non-spectator session `DriverCarIdx` exactly matches the
+  raw camera. It cannot expose usage, range, history, lap context, plan,
+  target, add, stint, or tire content.
 
-It must render nothing for stale, disconnected, non-local, garage, or
-pre-session-context telemetry. The native gate deliberately uses the sectioned
+It must render nothing for stale, disconnected, garage, spectator, conflicting
+camera/session identity, or pre-session-context telemetry. The native gate deliberately uses the sectioned
 DesignV2 renderer even when the legacy-renderer environment switch is off; the
 legacy table cannot preserve metric sections/segments or Fuel's hidden no-data
 policy. Localhost uses the same view model through the browser model factory.

@@ -758,7 +758,11 @@ internal sealed class OverlayManager : IDisposable
                 var overlayLiveTelemetryAvailable = liveTelemetryAvailable || settingsPreview;
                 var contextAvailability = EvaluateOverlayContext(registration.Definition, liveSnapshot);
                 var contextAllowed = settingsPreview || contextAvailability.IsAvailable;
-                var contentAllowed = HasEnabledOverlayContent(registration.Definition, settings, currentSession);
+                var contentAllowed = HasEnabledOverlayContent(
+                    registration.Definition,
+                    settings,
+                    currentSession,
+                    contextAvailability);
                 var shouldShow = settingsPreview || (settings.Enabled && sessionAllowed && contextAllowed && contentAllowed);
 
                 if (string.Equals(registration.Definition.Id, FlagsOverlayDefinition.Definition.Id, StringComparison.Ordinal))
@@ -1303,10 +1307,21 @@ internal sealed class OverlayManager : IDisposable
         return OverlayAvailabilityEvaluator.FromSnapshot(snapshot, DateTimeOffset.UtcNow).IsAvailable;
     }
 
-    private static LiveLocalStrategyContextSnapshot EvaluateOverlayContext(
+    private LiveLocalStrategyContextSnapshot EvaluateOverlayContext(
         OverlayDefinition definition,
         LiveTelemetrySnapshot snapshot)
     {
+        if (_fuelV2OverlayOptions.Enabled
+            && string.Equals(
+                definition.Id,
+                FuelCalculatorOverlayDefinition.Definition.Id,
+                StringComparison.Ordinal))
+        {
+            return LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+                snapshot,
+                DateTimeOffset.UtcNow);
+        }
+
         return LiveLocalStrategyContext.ForRequirement(
             snapshot,
             DateTimeOffset.UtcNow,
@@ -1465,11 +1480,26 @@ internal sealed class OverlayManager : IDisposable
             ScaleDimension(baseSize.Height, settings.Scale));
     }
 
-    private static bool HasEnabledOverlayContent(
+    private bool HasEnabledOverlayContent(
         OverlayDefinition definition,
         OverlaySettings settings,
-        OverlaySessionKind? sessionKind = null)
+        OverlaySessionKind? sessionKind,
+        LiveLocalStrategyContextSnapshot contextAvailability)
     {
+        if (_fuelV2OverlayOptions.Enabled
+            && string.Equals(
+                definition.Id,
+                FuelCalculatorOverlayDefinition.Definition.Id,
+                StringComparison.Ordinal))
+        {
+            return FuelContentPolicy.From(settings, sessionKind).HasV2RenderableContent(
+                sessionKind,
+                factualStateOnly: string.Equals(
+                    contextAvailability.Reason,
+                    "session_driver_camera_identity_fallback",
+                    StringComparison.Ordinal));
+        }
+
         return (OverlayContentSizing.HasRenderableContent(definition, settings, sessionKind)
                 || CanRenderChromeWithoutBodyData(definition, settings, sessionKind))
             && GapWindowEnabled(definition, settings);

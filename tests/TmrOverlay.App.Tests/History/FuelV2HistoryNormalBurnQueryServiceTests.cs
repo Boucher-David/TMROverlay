@@ -61,6 +61,51 @@ public sealed class FuelV2HistoryNormalBurnQueryServiceTests
     }
 
     [Fact]
+    public void Lookup_RaceFallsBackToExactOfflineTestingOnlyAfterRaceAndPractice()
+    {
+        var root = TempRoot();
+        try
+        {
+            var (store, query) = CreateQuery(root);
+            WriteAggregate(store, Combo("test"), mean: 13.5d);
+            WriteAggregate(store, Combo("qualifying"), mean: 99d);
+
+            var selection = query.Lookup(RaceContext());
+
+            Assert.True(selection.IsAvailable);
+            Assert.Equal("test", selection.SelectedSessionFamily);
+            Assert.Equal(13.5d, selection.Burn?.Value);
+            Assert.Equal(FuelV2BurnSource.HistoricalNormal, selection.Burn?.BurnSource);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public void Lookup_OfflineTestingPrefersItsOwnExactFamilyOverPractice()
+    {
+        var root = TempRoot();
+        try
+        {
+            var (store, query) = CreateQuery(root);
+            WriteAggregate(store, Combo("test"), mean: 13.5d);
+            WriteAggregate(store, Combo("practice"), mean: 12.9d);
+
+            var selection = query.Lookup(TestContext());
+
+            Assert.True(selection.IsAvailable);
+            Assert.Equal("test", selection.SelectedSessionFamily);
+            Assert.Equal(13.5d, selection.Burn?.Value);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
     public void Lookup_RejectsInexactAndMisfiledHistory()
     {
         var root = TempRoot();
@@ -222,6 +267,23 @@ public sealed class FuelV2HistoryNormalBurnQueryServiceTests
                 TrackConfigName = trackConfig
             },
             Session = new HistoricalSessionIdentity { SessionType = "Race" },
+            Conditions = new HistoricalSessionInfoConditions()
+        };
+    }
+
+    private static HistoricalSessionContext TestContext()
+    {
+        return new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity { CarId = 1, CarPath = "test-car" },
+            Track = new HistoricalTrackIdentity
+            {
+                TrackId = 2,
+                TrackName = "test-track",
+                TrackDisplayName = "Test Track",
+                TrackConfigName = "Full"
+            },
+            Session = new HistoricalSessionIdentity { SessionType = "Offline Testing" },
             Conditions = new HistoricalSessionInfoConditions()
         };
     }

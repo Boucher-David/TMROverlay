@@ -7,10 +7,13 @@ namespace TmrOverlay.Core.Fuel.V2;
 
 internal static class FuelV2HistoryDataVersions
 {
-    public const int ManifestVersion = 3;
-    public const int SummaryVersion = 5;
-    public const int AggregateVersion = 2;
-    public const int ImportModelVersion = 5;
+    // Version 6 promotes clean Offline Testing evidence into a distinct
+    // practice-like family. It remains separate from race/practice provenance,
+    // but can be selected only through the explicit family fallback order.
+    public const int ManifestVersion = 4;
+    public const int SummaryVersion = 6;
+    public const int AggregateVersion = 3;
+    public const int ImportModelVersion = 6;
 
     public static bool IsReadableSummary(int summaryVersion, int importModelVersion)
     {
@@ -18,6 +21,7 @@ internal static class FuelV2HistoryDataVersions
             || (summaryVersion == 2 && importModelVersion == 2)
             || (summaryVersion == 3 && importModelVersion == 3)
             || (summaryVersion == 4 && importModelVersion == 4)
+            || (summaryVersion == 5 && importModelVersion == 5)
             || (summaryVersion == SummaryVersion && importModelVersion == ImportModelVersion);
     }
 }
@@ -246,6 +250,15 @@ internal static class FuelV2HistoryIdentity
             return "practice";
         }
 
+        // iRacing's Offline Testing is useful clean local evidence, but it is
+        // not a race or ordinary hosted practice session. Keep provenance
+        // explicit and let the selector opt into it as practice-like evidence.
+        if (value.Contains("offline testing", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("offline test", StringComparison.OrdinalIgnoreCase))
+        {
+            return "test";
+        }
+
         if (value.Contains("warmup", StringComparison.OrdinalIgnoreCase))
         {
             return "warmup";
@@ -315,7 +328,7 @@ internal sealed class FuelV2HistorySessionIntegrity
         && SessionOccurrenceVerified
         && ExactTrackLayoutVerified
         && ExactCarVerified
-        && SessionFamily is "race" or "practice" or "qualifying";
+        && SessionFamily is "race" or "practice" or "test" or "qualifying";
 
     public static FuelV2HistorySessionIntegrity LegacyUnclassified()
     {

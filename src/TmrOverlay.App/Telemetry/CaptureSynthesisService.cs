@@ -9,6 +9,10 @@ namespace TmrOverlay.App.Telemetry;
 internal static class CaptureSynthesisService
 {
     private const string SynthesisFileName = "capture-synthesis.json";
+    // Version 2 adds DriverInfo.DriverCarIdx through the normalized session
+    // context so post-capture diagnostics can distinguish a verified local
+    // driver/camera identity from transient SDK focus availability.
+    private const int CurrentSynthesisVersion = 2;
     private const int FileHeaderBytes = 32;
     private const int FrameHeaderBytes = 32;
     private const int MaxSampledFrames = 20_000;
@@ -323,7 +327,7 @@ internal static class CaptureSynthesisService
             .ToArray();
 
         return new CaptureSynthesisDocument(
-            SynthesisVersion: 1,
+            SynthesisVersion: CurrentSynthesisVersion,
             GeneratedAtUtc: DateTimeOffset.UtcNow,
             CaptureId: manifest?.CaptureId ?? new DirectoryInfo(captureDirectory).Name,
             Context: sessionContext,

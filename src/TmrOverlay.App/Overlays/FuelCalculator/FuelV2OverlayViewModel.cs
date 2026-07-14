@@ -26,7 +26,7 @@ internal sealed record FuelV2OverlayViewModel(
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        var localContext = LiveLocalStrategyContext.ForFuelCalculator(snapshot, now);
+        var localContext = LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now);
         if (!localContext.IsAvailable)
         {
             return Waiting(localContext.StatusText);
@@ -58,9 +58,13 @@ internal sealed record FuelV2OverlayViewModel(
             OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
         var isRace = OverlayAvailabilityEvaluator.NormalizeSessionKind(
             OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot)) == OverlaySessionKind.Race;
+        var isFactualFallback = string.Equals(
+            localContext.Reason,
+            "session_driver_camera_identity_fallback",
+            StringComparison.Ordinal);
         var sections = new List<SimpleTelemetryMetricSectionViewModel>();
 
-        if (isRace && content.ShowRacePlan && HasLapContext(composed.LapBudget))
+        if (!isFactualFallback && isRace && content.ShowRacePlan && HasLapContext(composed.LapBudget))
         {
             sections.Add(new SimpleTelemetryMetricSectionViewModel(
                 "Race Information",
@@ -78,7 +82,13 @@ internal sealed record FuelV2OverlayViewModel(
                 }]));
         }
 
-        if (isRace && content.ShowRaceFuel)
+        // Fuel state is factual live telemetry, not race strategy. Race uses
+        // the existing Fuel content block; Test/Practice/Qualifying use the
+        // existing Fuel Range block. That makes the V2 surface available in
+        // every session without silently changing a user's content choices.
+        var showFuelState = content.ShowFuelState(
+            OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot));
+        if (showFuelState)
         {
             var capacity = composed.Capacity.EffectiveCapacityLiters;
             sections.Add(new SimpleTelemetryMetricSectionViewModel(
@@ -97,7 +107,7 @@ internal sealed record FuelV2OverlayViewModel(
                 }]));
         }
 
-        if (content.ShowFuelUsage && composed.BurnWindows.AvailableBuckets.Count > 0)
+        if (!isFactualFallback && content.ShowFuelUsage && composed.BurnWindows.AvailableBuckets.Count > 0)
         {
             sections.Add(new SimpleTelemetryMetricSectionViewModel(
                 "Fuel Usage",
@@ -110,7 +120,7 @@ internal sealed record FuelV2OverlayViewModel(
                 }]));
         }
 
-        if (content.ShowFuelRange && HasRange(composed))
+        if (!isFactualFallback && content.ShowFuelRange && HasRange(composed))
         {
             sections.Add(new SimpleTelemetryMetricSectionViewModel(
                 "Fuel Range",

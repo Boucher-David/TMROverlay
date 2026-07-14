@@ -22,6 +22,11 @@ internal sealed class HistoricalSessionContext
 
     public HistoricalFuelCapacityRules FuelCapacityRules { get; init; } = new();
 
+    // DriverInfo.DriverCarIdx is the session-declared local entry. It is kept
+    // apart from transient PlayerCarIdx/CamCarIdx telemetry so a narrow
+    // display-only local identity proof can handle SDK focus gaps safely.
+    public int? DriverCarIdx { get; init; }
+
     public IReadOnlyList<HistoricalSessionDriver> Drivers { get; init; } = [];
 
     public IReadOnlyList<HistoricalSessionTireCompound> TireCompounds { get; init; } = [];

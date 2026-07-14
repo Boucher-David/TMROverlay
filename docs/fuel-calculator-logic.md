@@ -40,11 +40,21 @@ choice. When enabled it replaces only that renderer instance with the shared
 factual V2 presenter on Windows native, localhost, and production-model replay;
 it does not change V1's default behavior. The V2 top half shows capacity/lap
 context plus aligned `Last / 5L / 10L / History / Max / Min / Quali` fuel and
-range cells. `History` may use only exact classified race/practice Fuel V2
-history and is rendered as modeled evidence. It cannot select a plan, produce
-fuel-to-add/pit advice, or expose lower-half Stint rows. See
+range cells. `History` may use only exact classified race, practice, or
+quality-gated Offline Testing (`test`) Fuel V2 history; `test` remains visibly
+separate provenance and is selected only after the matching race/practice
+family. It cannot select a plan, produce fuel-to-add/pit advice, or expose
+lower-half Stint rows. See
 `docs/fuel-calculator-v2.md` for the stricter replay-history cutoff and V2
 promotion rules.
+
+V1 continues to require the normal local player/focus context. V2 alone may
+display the factual `Fuel State` in Test, Practice, Qualifying, or Race when
+fresh telemetry proves the non-spectator session `DriverCarIdx` is exactly the
+raw camera car, but no progress-based focus exists yet. That fallback is
+display-only: it never shows burn, range, history, lap, plan, target, add, or
+stint information, and it rejects stale, garage, conflicting identity, or
+spectator data.
 
 ## Refresh Loop
 

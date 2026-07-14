@@ -101,8 +101,9 @@ public sealed class DataContractSnapshotCompatibilityTests
                 1,
                 v123Document.RootElement.GetProperty("durableContracts").GetProperty("fuelV2History").GetProperty("summaryVersion").GetInt32());
             Assert.Equal(
-                FuelV2HistoryDataVersions.SummaryVersion,
+                5,
                 v130Document.RootElement.GetProperty("durableContracts").GetProperty("fuelV2History").GetProperty("summaryVersion").GetInt32());
+            Assert.Equal(6, FuelV2HistoryDataVersions.SummaryVersion);
 
             var v130SummaryPath = V130SnapshotPath(
                 "history",
@@ -160,7 +161,7 @@ public sealed class DataContractSnapshotCompatibilityTests
             Assert.Equal(1, legacyOnlyManifest.SummaryCount);
             Assert.Equal(1, legacyOnlyManifest.LegacyUnclassifiedSummaryCount);
             Assert.Equal(1, legacyOnlyAggregate.LegacyUnclassifiedSessionCount);
-            Assert.Equal(2, legacyOnlyAggregate.AggregateVersion);
+            Assert.Equal(FuelV2HistoryDataVersions.AggregateVersion, legacyOnlyAggregate.AggregateVersion);
             Assert.Equal(legacySummaryBeforeMaintenance, File.ReadAllText(legacySummaryPath));
 
             await store.SaveAsync(v130Summary, CancellationToken.None);

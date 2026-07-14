@@ -82,7 +82,7 @@ maps, parse diagnostic metadata, and map the release settings into browser,
 localhost, and native overlay consumers.
 
 `fixtures/data-contracts/v1.2.3/` is the released Fuel V2 format-1
-connection-history baseline. `fixtures/data-contracts/v1.3.0/` is the current
+connection-history baseline. `fixtures/data-contracts/v1.3.0/` is the released
 format-5 classified, exact-car/exact-layout session-history contract, including
 a confirmed front-tire stationary-service counter example. The current reader loads the v1.2.3
 fixture's frozen raw sidecar and summary as `legacy-unclassified` without
@@ -176,15 +176,16 @@ Fuel V2 format-5 capture writes independent session segments and bounded
 stationary-service observations. The importer
 classifies one for learned history only when it has an injective exact-car
 identity, exact `TrackId + TrackConfigName` layout identity,
-race/practice/qualifying family, and verified occurrence that cross-check
+race/practice/qualifying/test family, and verified occurrence that cross-check
 against the raw scope. Planned lap/time race length, fuel BoP/effective
 capacity, setup, weather, and special-session effects are summary context—not
 storage partitions. Format-4 observations add raw entry/exit and delta snapshots
 for total, side, axle, and exact four-corner tire counters when available, which
 lets a later Core reader distinguish requested `LF`, `Front`, `Left`, or `4 tires`
 from an executed result. It also preserves raw `WeekendInfo.DCRuleSet` in the
-session identity. Capture and summary/import versions are `5`; manifest is `3`
-and the fuel-burn aggregate remains `2`. `DCRuleSet` is retained as raw
+session identity. Capture versions remain `5`; history summary/import versions
+are now `6`, manifest is `4`, and rebuilt fuel-burn aggregates are `3` so clean
+Offline Testing can be retained as its separate `test` family. `DCRuleSet` is retained as raw
 provenance only; it cannot classify sequential/parallel service execution or
 unlock service timing. Counter evidence remains source evidence only: it
 cannot infer service overlap/order or timing advice.

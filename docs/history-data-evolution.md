@@ -173,7 +173,7 @@ The current implementation is intentionally narrow:
   keeps V1 fuel strategy from reading these records.
 - Fuel V2 format 2 hardens this intake into immutable session segments. New
   records are classified only when exact car, exact `TrackId + TrackConfigName`
-  layout, normalized Race/Practice/Qualifying family, and a current/session
+  layout, normalized Race/Practice/Qualifying/Offline-Testing family, and a current/session
   occurrence number agree throughout the accepted frames. The reusable family
   is car + layout; race length and fuel-cap/BoP remain explicit summary context
   for later ranking/live adjustment rather than path keys. Version-1 Fuel V2
@@ -215,6 +215,15 @@ The current implementation is intentionally narrow:
   seconds or “free tires” claim. Summary/import versions are `5`; manifest is
   still `3` and the fuel-burn aggregate is still `2`; older formats remain
   readable under their original evidence limits.
+- Fuel V2 history format 6 promotes clean `Offline Testing` sidecars into a
+  distinct `test` family using the existing Practice-equivalent accepted-lap
+  quality gates. Normal history selection remains exact car + layout and keeps
+  provenance explicit: Race reads `race`, then `practice`, then `test`;
+  Practice reads `practice`, then `test`; Test reads `test`, then `practice`.
+  Test evidence is never silently relabeled as Race or Practice. Summary/import
+  versions are `6`, manifest is `4`, and rebuilt aggregates are `3`; compatible
+  format-5 summaries remain readable and their aggregates rebuild without
+  rewriting the immutable summaries.
 - `HistorySchemaCompatibilityTests` snapshots durable summary, aggregate, and analysis model shapes so schema changes force a compatibility review during test validation
 
 Radar calibration history is car-scoped, not track/session-scoped. Summaries may store clean `CarLeftRight` side-window durations, identity-backed body-length estimates, and confidence flags. The car-level aggregate stops accepting new learned samples once the body-length metric is trusted. Live radar uses exact bundled car specifications first, trusted user calibration second, low-confidence bundled estimates third, and the hard-coded default only when none of those are available.

@@ -82,6 +82,7 @@ internal static class SessionInfoSummaryParser
                     ? null
                     : ReadDouble(exactDriver, "CarClassMaxFuelPct")
             },
+            DriverCarIdx = ReadInt(parsed.DriverInfo, "DriverCarIdx"),
             Drivers = parsed.Drivers
                 .Select(ToDriver)
                 .Where(driver => driver.CarIdx is not null)

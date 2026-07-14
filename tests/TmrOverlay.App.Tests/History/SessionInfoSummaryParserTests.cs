@@ -26,12 +26,15 @@ DriverInfo:
  DriverCarMaxFuelPct: 0.800
  Drivers:
  - CarIdx: 10
+   IsSpectator: 0
    CarClassMaxFuelPct: 0.800 %
  - CarIdx: 12
    CarClassMaxFuelPct: 0.680 %
 """);
 
         Assert.Equal(75d, context.Car.DriverCarFuelMaxLiters);
+        Assert.Equal(10, context.DriverCarIdx);
+        Assert.Equal(false, Assert.Single(context.Drivers, driver => driver.CarIdx == 10).IsSpectator);
         Assert.Equal(0.8d, context.FuelCapacityRules.DriverCarMaxFuelPercent);
         Assert.Equal(0.8d, context.FuelCapacityRules.CarClassMaxFuelPercent);
     }

@@ -829,6 +829,24 @@ internal sealed record FuelContentPolicy(
     bool ShowFuelRange,
     bool ShowFuelUsage)
 {
+    // Fuel State is a factual capacity/current-fuel readout. It deliberately
+    // reuses the existing persisted Fuel block in Race and Fuel Range block in
+    // Test/Practice/Qualifying, so V2 does not invent another user setting.
+    public bool ShowFuelState(OverlaySessionKind? sessionKind)
+    {
+        return OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) == OverlaySessionKind.Race
+            ? ShowRaceFuel
+            : ShowFuelRange;
+    }
+
+    public bool HasV2RenderableContent(
+        OverlaySessionKind? sessionKind,
+        bool factualStateOnly)
+    {
+        return ShowFuelState(sessionKind)
+            || (!factualStateOnly && (ShowFuelUsage || ShowFuelRange));
+    }
+
     public static FuelContentPolicy From(OverlaySettings? settings, OverlaySessionKind? sessionKind)
     {
         if (settings is null

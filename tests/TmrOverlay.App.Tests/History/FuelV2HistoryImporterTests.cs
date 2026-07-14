@@ -159,6 +159,58 @@ public sealed class FuelV2HistoryImporterTests
     }
 
     [Fact]
+    public async Task ImportAsync_CleanOfflineTestingRemainsTestProvenanceAndSeedsRaceOnlyAfterPractice()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var baseScope = CreateSessionScope();
+            var artifact = CreateArtifact() with
+            {
+                SessionScope = baseScope with
+                {
+                    Combo = baseScope.Combo with { SessionKey = "test" },
+                    Session = baseScope.Session with
+                    {
+                        SessionType = "Offline Testing",
+                        SessionName = "Offline Testing",
+                        EventType = "Test"
+                    }
+                },
+                SessionLineage = ClassifiedLineage() with { SessionFamily = "test" }
+            };
+            var options = CreateOptions(storage);
+            var store = new FuelV2HistoryStore(options);
+            var importer = new FuelV2HistoryImporter(
+                options,
+                store,
+                NullLogger<FuelV2HistoryImporter>.Instance);
+
+            var imported = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+            var summaryPath = Assert.Single(Directory.EnumerateFiles(
+                Path.Combine(SessionDirectory(storage, family: "test"), "summaries"),
+                "*.json"));
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(File.ReadAllText(summaryPath), JsonOptions);
+            var selection = new FuelV2HistoryNormalBurnQueryService(options, store).Lookup(CreateHistoricalRaceContext());
+
+            Assert.True(imported.Imported);
+            Assert.NotNull(summary);
+            Assert.Equal("test", summary.Scope.Combo.SessionKey);
+            Assert.Equal("test", summary.SessionIntegrity.SessionFamily);
+            Assert.True(summary.SessionIntegrity.IsClassifiedForHistory);
+            Assert.True(summary.Quality.ContributesToLearning);
+            Assert.True(selection.IsAvailable);
+            Assert.Equal("test", selection.SelectedSessionFamily);
+            Assert.Equal(3.1d, selection.Burn?.Value);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
     public async Task ImportAsync_FormatFourRetainsExactTireCounterEvidenceWithoutCreatingTimingAdvice()
     {
         var root = TempRoot();
@@ -1827,7 +1879,10 @@ public sealed class FuelV2HistoryImporterTests
             ExactCarVerified: true);
     }
 
-    private static string SessionDirectory(AppStorageOptions storage, string trackLayoutKey = "track-id-2-config-46756c6c")
+    private static string SessionDirectory(
+        AppStorageOptions storage,
+        string trackLayoutKey = "track-id-2-config-46756c6c",
+        string family = "race")
     {
         return Path.Combine(
             storage.UserHistoryRoot,
@@ -1837,7 +1892,7 @@ public sealed class FuelV2HistoryImporterTests
             "tracks",
             trackLayoutKey,
             "sessions",
-            "race");
+            family);
     }
 
     private static string TempRoot()

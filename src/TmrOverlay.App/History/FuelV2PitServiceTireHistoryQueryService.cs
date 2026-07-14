@@ -72,8 +72,11 @@ internal sealed class FuelV2PitServiceTireHistoryQueryService
             context.Session.EventType);
         var candidateFamilies = requestedFamily switch
         {
-            "race" => new[] { "race", "practice" },
-            "practice" => new[] { "practice" },
+            // Offline Testing has practice-equivalent collection quality but
+            // remains a separately labeled provenance family.
+            "race" => new[] { "race", "practice", "test" },
+            "practice" => new[] { "practice", "test" },
+            "test" => new[] { "test", "practice" },
             _ => Array.Empty<string>()
         };
         if (candidateFamilies.Length == 0)
@@ -82,7 +85,7 @@ internal sealed class FuelV2PitServiceTireHistoryQueryService
                 FuelV2TireServiceHistorySelectionStatus.UnsupportedSessionFamily,
                 shape,
                 ruleScope,
-                "Only race and practice sessions can read tire-service history.");
+                "Only race, practice, and Offline Testing sessions can read tire-service history.");
         }
 
         var cacheKey = CacheKey(car.Key, layout, requestedFamily, shape, ruleScope);

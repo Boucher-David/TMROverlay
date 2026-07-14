@@ -2709,7 +2709,7 @@ internal sealed class BrowserOverlayModelFactory
         };
     }
 
-    private static bool TryBuildHiddenProductModel(
+    private bool TryBuildHiddenProductModel(
         OverlayDefinition definition,
         LiveTelemetrySnapshot snapshot,
         ApplicationSettings settings,
@@ -2754,19 +2754,24 @@ internal sealed class BrowserOverlayModelFactory
         return true;
     }
 
-    private static string? ProductHiddenStatus(
+    private string? ProductHiddenStatus(
         OverlayDefinition definition,
         OverlaySettings overlay,
         OverlaySessionKind? sessionKind,
         LiveTelemetrySnapshot snapshot,
         DateTimeOffset now)
     {
+        var isFuelV2 = IsFuelV2(definition);
         if (!overlay.Enabled)
         {
             return "disabled | product hidden";
         }
 
-        if (!OverlayEnabledForSession(overlay, sessionKind))
+        // Fuel V2 is intentionally session-neutral while the factual overlay
+        // gate is enabled. Its per-session content blocks still decide what
+        // can render; legacy Fuel and every other product surface retain the
+        // persisted overlay session switches.
+        if (!isFuelV2 && !OverlayEnabledForSession(overlay, sessionKind))
         {
             return "hidden | session disabled";
         }
@@ -2782,14 +2787,21 @@ internal sealed class BrowserOverlayModelFactory
             return "hidden | no enabled content";
         }
 
-        if (!OverlayContentSizing.HasRenderableContent(definition, overlay, sessionKind))
+        var fuelV2Context = isFuelV2
+            ? LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now)
+            : null;
+        if (!(isFuelV2
+                ? HasFuelV2RenderableContent(overlay, sessionKind, fuelV2Context!)
+                : OverlayContentSizing.HasRenderableContent(definition, overlay, sessionKind)))
         {
             return CanRenderChromeWithoutBodyData(definition, overlay, snapshot, sessionKind)
                 ? null
                 : "hidden | no enabled content";
         }
 
-        var context = LiveLocalStrategyContext.ForRequirement(snapshot, now, definition.ContextRequirement);
+        var context = isFuelV2
+            ? fuelV2Context!
+            : LiveLocalStrategyContext.ForRequirement(snapshot, now, definition.ContextRequirement);
         if (!context.IsAvailable)
         {
             return $"hidden | {context.StatusText}";
@@ -2802,6 +2814,28 @@ internal sealed class BrowserOverlayModelFactory
         }
 
         return null;
+    }
+
+    private bool IsFuelV2(OverlayDefinition definition)
+    {
+        return _fuelV2OverlayOptions.Enabled
+            && string.Equals(
+                definition.Id,
+                FuelCalculatorOverlayDefinition.Definition.Id,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasFuelV2RenderableContent(
+        OverlaySettings settings,
+        OverlaySessionKind? sessionKind,
+        LiveLocalStrategyContextSnapshot context)
+    {
+        return FuelContentPolicy.From(settings, sessionKind).HasV2RenderableContent(
+            sessionKind,
+            factualStateOnly: string.Equals(
+                context.Reason,
+                "session_driver_camera_identity_fallback",
+                StringComparison.Ordinal));
     }
 
     private static bool CanRenderChromeWithoutBodyData(
@@ -2876,7 +2910,7 @@ internal sealed class BrowserOverlayModelFactory
             .ToArray();
     }
 
-    private static BrowserOverlayEffectiveSettings EffectiveSettingsEvidence(
+    private BrowserOverlayEffectiveSettings EffectiveSettingsEvidence(
         BrowserOverlayDisplayModel model,
         string overlayId,
         ApplicationSettings settings,
@@ -2925,14 +2959,20 @@ internal sealed class BrowserOverlayModelFactory
         var browserRootOpacity = hasDefinition
             ? BrowserRootOpacity(definition, overlay)
             : clampedOpacity;
+        var fuelV2SessionNeutral = hasDefinition && IsFuelV2(definition);
         var effectiveSettings = new List<BrowserOverlayEffectiveSetting>
         {
             new("overlayEnabled", overlay.Enabled),
-            new($"session.{session}.enabled", OverlayEnabledForSession(overlay, sessionKind)),
+            new($"session.{session}.enabled", fuelV2SessionNeutral || OverlayEnabledForSession(overlay, sessionKind)),
             new("general.unitSystem", UnitSystem(settings)),
             new("scalePercent", (int)Math.Round(clampedScale * 100d)),
             new("opacityPercent", (int)Math.Round(clampedOpacity * 100d))
         };
+
+        if (fuelV2SessionNeutral)
+        {
+            effectiveSettings.Add(new BrowserOverlayEffectiveSetting("fuelV2.sessionNeutral", true));
+        }
 
         AddContentEffectiveSettings(effectiveSettings, overlay, sessionKind, session);
         AddOverlaySpecificEffectiveSettings(effectiveSettings, overlayId, overlay, settings, sessionKind, session, now);

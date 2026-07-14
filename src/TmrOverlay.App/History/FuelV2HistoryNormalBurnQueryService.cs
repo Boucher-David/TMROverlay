@@ -59,15 +59,19 @@ internal sealed class FuelV2HistoryNormalBurnQueryService
             context.Session.EventType);
         var candidateFamilies = requestedFamily switch
         {
-            "race" => new[] { "race", "practice" },
-            "practice" => new[] { "practice" },
+            // Test is deliberately a separate evidence family. It is useful
+            // practice-like fuel evidence, never relabeled as race evidence,
+            // and comes after the more directly matching family.
+            "race" => new[] { "race", "practice", "test" },
+            "practice" => new[] { "practice", "test" },
+            "test" => new[] { "test", "practice" },
             _ => Array.Empty<string>()
         };
         if (candidateFamilies.Length == 0)
         {
             return FuelV2HistoryNormalBurnSelection.Unavailable(
                 FuelV2HistoryNormalBurnSelectionStatus.UnsupportedSessionFamily,
-                "Only race and practice sessions can select normal Fuel V2 history.");
+                "Only race, practice, and Offline Testing sessions can select normal Fuel V2 history.");
         }
 
         var cacheKey = CacheKey(car.Key, layout, requestedFamily, purpose);
@@ -163,7 +167,7 @@ internal sealed class FuelV2HistoryNormalBurnQueryService
             (lastNonMissingFailure ?? lastFailure)?.Status ?? FuelV2HistoryAggregateReadStatus.Missing);
         return FuelV2HistoryNormalBurnSelection.Unavailable(
             status,
-            $"No usable exact race/practice Fuel V2 history ({status}).");
+            $"No usable exact race/practice/test Fuel V2 history ({status}).");
     }
 
     private static string CacheKey(

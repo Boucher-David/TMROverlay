@@ -263,6 +263,109 @@ public sealed class OverlayAvailabilityEvaluatorTests
         Assert.Equal("available", context.Reason);
     }
 
+    [Fact]
+    public void FuelV2FactualDisplay_AllowsVerifiedSessionDriverCameraFallbackWithoutPromotingStrategy()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sample = LocalTelemetrySample(now, playerCarIdx: -1, focusCarIdx: null) with
+        {
+            RawCamCarIdx = 0,
+            SpeedMetersPerSecond = 0d,
+            LapCompleted = -1,
+            LapDistPct = -1d
+        };
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Context = new HistoricalSessionContext
+            {
+                Car = new HistoricalCarIdentity(),
+                Track = new HistoricalTrackIdentity(),
+                Session = new HistoricalSessionIdentity { SessionType = "Offline Testing" },
+                Conditions = new HistoricalSessionInfoConditions(),
+                DriverCarIdx = 0,
+                Drivers = [new HistoricalSessionDriver { CarIdx = 0, IsSpectator = false }]
+            },
+            LatestSample = sample,
+            Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = true, FuelLevelLiters = 25d }
+        };
+
+        var strategy = LiveLocalStrategyContext.ForFuelCalculator(snapshot, now);
+        var factual = LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now);
+
+        Assert.False(strategy.IsAvailable);
+        Assert.Equal("player_car_unavailable", strategy.Reason);
+        Assert.True(factual.IsAvailable);
+        Assert.Equal("session_driver_camera_identity_fallback", factual.Reason);
+    }
+
+    [Fact]
+    public void FuelV2FactualDisplay_RejectsSpectatorOrConflictingCameraIdentity()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sample = LocalTelemetrySample(now, playerCarIdx: -1, focusCarIdx: null) with { RawCamCarIdx = 0 };
+        var context = new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity(),
+            Track = new HistoricalTrackIdentity(),
+            Session = new HistoricalSessionIdentity(),
+            Conditions = new HistoricalSessionInfoConditions(),
+            DriverCarIdx = 0,
+            Drivers = [new HistoricalSessionDriver { CarIdx = 0, IsSpectator = true }]
+        };
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Context = context,
+            LatestSample = sample,
+            Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = true, FuelLevelLiters = 25d }
+        };
+
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now).IsAvailable);
+
+        var mismatchedCamera = snapshot with { LatestSample = sample with { RawCamCarIdx = 1 } };
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(mismatchedCamera, now).IsAvailable);
+    }
+
+    [Fact]
+    public void FuelV2FactualDisplay_FailsClosedForStaleGarageFuelAndExplicitFocusConflicts()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sample = LocalTelemetrySample(now, playerCarIdx: -1, focusCarIdx: null) with { RawCamCarIdx = 0 };
+        var context = new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity(),
+            Track = new HistoricalTrackIdentity(),
+            Session = new HistoricalSessionIdentity(),
+            Conditions = new HistoricalSessionInfoConditions(),
+            DriverCarIdx = 0,
+            Drivers = [new HistoricalSessionDriver { CarIdx = 0, IsSpectator = false }]
+        };
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Context = context,
+            LatestSample = sample,
+            Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = true, FuelLevelLiters = 25d }
+        };
+
+        Assert.True(LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { LastUpdatedAtUtc = now.AddSeconds(-2) }, now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { LatestSample = sample with { IsInGarage = true, IsOnTrack = false } }, now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = false, FuelLevelLiters = null } }, now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { LatestSample = sample with { FocusCarIdx = 1 } }, now).IsAvailable);
+    }
+
     private static LiveTelemetrySnapshot SnapshotForSession(string sessionType)
     {
         return LiveTelemetrySnapshot.Empty with

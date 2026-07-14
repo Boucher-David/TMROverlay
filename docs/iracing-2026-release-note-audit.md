@@ -19,6 +19,17 @@ TmrOverlay does **not** write the user's iRacing `app.ini`. To collect all activ
 
 Season 3 describes series-specific fuel/tire-service arrangements. Format-5 Fuel V2 capture already retains `WeekendInfo.DCRuleSet` in raw session scope and immutable history. That field is useful provenance, but it is not a verified machine-readable service-order contract. The current reader therefore keeps every value as `Unknown` for sequential/parallel timing and cannot unlock tire duration, overlap, or strategy advice from it alone.
 
+### Pace-car camera identity — hardened in this branch
+
+[Season 3 Patch 3](https://support.iracing.com/support/solutions/articles/31000179134-2026-season-3-patch-3-release-notes-2026-07-10-04-)
+notes a `CamCarIdx` correction while watching the pace car. Raw camera identity
+is therefore not a general local-driver signal. The factual Fuel V2 fallback
+accepts it only when fresh telemetry exactly matches the session-declared
+`DriverInfo.DriverCarIdx`, that driver row explicitly says `IsSpectator=false`,
+and no resolved player/focus identity conflicts. It remains a Fuel-State-only
+display fallback; strategy, burn, range, history, and every other local overlay
+continue to require normal local focus/progress.
+
 ## 2026 release-note disposition
 
 | Release group | Impact | Disposition |
@@ -28,7 +39,7 @@ Season 3 describes series-specific fuel/tire-service arrangements. Format-5 Fuel
 | Season 2 initial through Patch 4 Hotfix | Fuel-economy/BoP changes, pit UI, reconnect fixes | Fresh effective capacity and live clean burn outrank history; reconnect lineage/deduplication remains applicable. No published SDK schema addition requiring a V2 change. |
 | Season 3 initial | Series-specific service arrangements and pit-rule changes | Preserve `DCRuleSet` only as raw provenance; no inferred timing model. |
 | Season 3 Patch 1 | Dynamic all-car `CarIdx` arrays | Implemented above. |
-| Season 3 Patch 2 and Patch 3 | Pit-speed/rules behaviour, multi-pace starts, driver-swap/lap-count and pace-car camera fixes, corrected GT3 telemetry values | Existing raw/session capture preserves the evidence. Future race-control/pit-route work should use new real captures; no named SDK field change was published. |
+| Season 3 Patch 2 and Patch 3 | Pit-speed/rules behaviour, multi-pace starts, driver-swap/lap-count and pace-car camera fixes, corrected GT3 telemetry values | Existing raw/session capture preserves the evidence. Patch 3 now has a narrow verified session-driver/raw-camera Fuel State fallback; camera identity alone remains untrusted. Future race-control/pit-route work should use new real captures; no named SDK field change was published. |
 
 ## Follow-up evidence to collect
 

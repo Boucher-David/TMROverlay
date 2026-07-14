@@ -73,9 +73,10 @@ public sealed class FuelV2OverlayViewModelTests
     }
 
     [Theory]
+    [InlineData("Test")]
     [InlineData("Practice")]
     [InlineData("Qualifying")]
-    public void From_NonRaceSession_PreservesTheUsageAndRangeOnlyContentContract(string sessionType)
+    public void From_NonRaceSession_PreservesFactualFuelStateAndEvidenceOnlyContent(string sessionType)
     {
         var current = CurrentFuelSnapshot();
         var snapshot = current with
@@ -94,11 +95,60 @@ public sealed class FuelV2OverlayViewModelTests
         var viewModel = FuelV2OverlayViewModel.From(snapshot, "Metric", snapshot.LastUpdatedAtUtc!.Value);
 
         Assert.Equal(
-            new[] { "Fuel Usage", "Fuel Range" },
+            new[] { "Fuel State", "Fuel Usage", "Fuel Range" },
             viewModel.Overlay.MetricSections.Select(section => section.Title).ToArray());
         Assert.DoesNotContain(viewModel.Overlay.MetricSections, section => section.Title == "Race Information");
-        Assert.DoesNotContain(viewModel.Overlay.MetricSections, section => section.Title == "Fuel State");
         Assert.DoesNotContain(viewModel.Overlay.MetricSections, section => section.Title == "Stint Targets");
+    }
+
+    [Fact]
+    public void From_TestSessionWithOnlyCurrentFuel_RendersFuelStateWithoutStrategyClaims()
+    {
+        var current = CurrentFuelSnapshot();
+        var snapshot = current with
+        {
+            FuelPerLapWindow = LiveFuelPerLapWindow.Empty,
+            Models = current.Models with
+            {
+                Session = current.Models.Session with { SessionType = "Offline Testing" }
+            }
+        };
+
+        var viewModel = FuelV2OverlayViewModel.From(snapshot, "Metric", snapshot.LastUpdatedAtUtc!.Value);
+
+        var section = Assert.Single(viewModel.Overlay.MetricSections);
+        Assert.Equal("Fuel State", section.Title);
+        Assert.Contains(section.Rows.Single().Segments, segment => segment.Label == "Current" && segment.Value == "40.0 L");
+        Assert.DoesNotContain(viewModel.Overlay.Rows, row => row.Label.Contains("Plan", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(viewModel.Overlay.Rows, row => row.Label.Contains("Target", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(viewModel.Overlay.Rows, row => row.Label.Contains("Add", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void From_VerifiedSessionDriverCameraFallback_RendersFactualFuelButNotStrategy()
+    {
+        var current = CurrentFuelSnapshot();
+        var snapshot = current with
+        {
+            LatestSample = FocusUnavailableFuelSample(current.LastUpdatedAtUtc!.Value),
+            Models = current.Models with
+            {
+                DriverDirectory = current.Models.DriverDirectory with { FocusCarIdx = null },
+                Reference = current.Models.Reference with { FocusCarIdx = null, FocusIsPlayer = false }
+            }
+        };
+
+        Assert.False(LiveLocalStrategyContext.ForFuelCalculator(snapshot, snapshot.LastUpdatedAtUtc!.Value).IsAvailable);
+
+        var viewModel = FuelV2OverlayViewModel.From(snapshot, "Metric", snapshot.LastUpdatedAtUtc!.Value);
+
+        var section = Assert.Single(viewModel.Overlay.MetricSections);
+        Assert.Equal("Fuel State", section.Title);
+        Assert.DoesNotContain(viewModel.Overlay.Rows, row => row.Label.Contains("Plan", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(viewModel.Overlay.Rows, row => row.Label.Contains("Target", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(viewModel.Overlay.Rows, row => row.Label.Contains("Add", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(viewModel.Overlay.MetricSections, section => section.Title == "Fuel Usage");
+        Assert.DoesNotContain(viewModel.Overlay.MetricSections, section => section.Title == "Fuel Range");
     }
 
     [Fact]
@@ -141,6 +191,54 @@ public sealed class FuelV2OverlayViewModelTests
         Assert.False(staleResponse.Model.ShouldRender);
         Assert.NotNull(staleResponse.Model.MetricSections);
         Assert.Empty(staleResponse.Model.MetricSections!);
+    }
+
+    [Fact]
+    public void BrowserFactory_V2RendersVerifiedStationaryFuelInOfflineTestingDespiteLegacySessionToggle()
+    {
+        var history = new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        });
+        var settings = new ApplicationSettings();
+        var overlay = settings.GetOrAddOverlay("fuel-calculator", 503, 298);
+        overlay.Enabled = true;
+        overlay.ShowInPractice = false;
+        overlay.ShowInTest = false;
+        var current = CurrentFuelSnapshot();
+        var snapshot = current with
+        {
+            LatestSample = FocusUnavailableFuelSample(current.LastUpdatedAtUtc!.Value),
+            Models = current.Models with
+            {
+                Session = current.Models.Session with { SessionType = "Offline Testing" },
+                DriverDirectory = current.Models.DriverDirectory with { FocusCarIdx = null },
+                Reference = current.Models.Reference with { FocusCarIdx = null, FocusIsPlayer = false }
+            }
+        };
+        var factory = new BrowserOverlayModelFactory(
+            history,
+            fuelV2OverlayOptions: new FuelV2OverlayOptions(true));
+
+        var legacyFactory = new BrowserOverlayModelFactory(history);
+        Assert.True(legacyFactory.TryBuild("fuel-calculator", snapshot, settings, snapshot.LastUpdatedAtUtc!.Value, out var legacyResponse));
+        Assert.False(legacyResponse.Model.ShouldRender);
+
+        Assert.True(factory.TryBuild("fuel-calculator", snapshot, settings, snapshot.LastUpdatedAtUtc!.Value, out var response));
+        Assert.True(response.Model.ShouldRender);
+        Assert.NotNull(response.Model.MetricSections);
+        Assert.Equal(new[] { "Fuel State" }, response.Model.MetricSections!.Select(section => section.Title).ToArray());
+        Assert.NotNull(response.Model.FuelStrategyEvidence);
+        Assert.Equal("unavailable", response.Model.FuelStrategyEvidence!.AdditionalFuelNeedState);
+        Assert.NotNull(response.Model.EffectiveSettings);
+        Assert.Contains(
+            response.Model.EffectiveSettings!.Settings,
+            setting => setting.Key == "session.practice.enabled" && Equals(setting.Value, true));
+        Assert.Contains(
+            response.Model.EffectiveSettings.Settings,
+            setting => setting.Key == "fuelV2.sessionNeutral" && Equals(setting.Value, true));
     }
 
     [Fact]
@@ -289,6 +387,11 @@ public sealed class FuelV2OverlayViewModelTests
                 SessionType = "Race"
             },
             Conditions = new HistoricalSessionInfoConditions(),
+            DriverCarIdx = 10,
+            Drivers =
+            [
+                new HistoricalSessionDriver { CarIdx = 10, IsSpectator = false }
+            ],
             FuelCapacityRules = new HistoricalFuelCapacityRules
             {
                 DriverCarMaxFuelPercent = 1d,
@@ -357,5 +460,37 @@ public sealed class FuelV2OverlayViewModelTests
                 }
             }
         };
+    }
+
+    private static HistoricalTelemetrySample FocusUnavailableFuelSample(DateTimeOffset now)
+    {
+        return new HistoricalTelemetrySample(
+            CapturedAtUtc: now,
+            SessionTime: 10d,
+            SessionTick: 1,
+            SessionInfoUpdate: 1,
+            IsOnTrack: true,
+            IsInGarage: false,
+            OnPitRoad: false,
+            PitstopActive: false,
+            PlayerCarInPitStall: false,
+            FuelLevelLiters: 40d,
+            FuelLevelPercent: 0.4d,
+            FuelUsePerHourKg: 0d,
+            SpeedMetersPerSecond: 0d,
+            Lap: -1,
+            LapCompleted: -1,
+            LapDistPct: -1d,
+            LapLastLapTimeSeconds: null,
+            LapBestLapTimeSeconds: null,
+            AirTempC: 20d,
+            TrackTempCrewC: 24d,
+            TrackWetness: 0,
+            WeatherDeclaredWet: false,
+            PlayerTireCompound: 0,
+            PlayerCarIdx: -1,
+            RawCamCarIdx: 10,
+            FocusCarIdx: null,
+            PlayerTrackSurface: -1);
     }
 }

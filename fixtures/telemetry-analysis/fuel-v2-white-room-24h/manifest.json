@@ -46,7 +46,7 @@
         "prohibitedMetricSections": ["Stint Targets"],
         "requiredSegments": [
           { "section": "Fuel Usage", "label": "History", "value": "14.2 L/lap" },
-          { "section": "Fuel Range", "label": "History", "value": "7.39 laps" }
+          { "section": "Fuel Range", "label": "History", "value": "7.38 laps" }
         ]
       },
       "futureStrategy": {

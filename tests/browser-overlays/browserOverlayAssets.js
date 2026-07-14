@@ -447,6 +447,10 @@ function geometryCssVariables() {
     '--tmr-metric-grid-cell-gap': px(metricRows.metricGridCellGap),
     '--tmr-metric-grid-cell-min-width': px(metricRows.metricGridCellMinimumWidth),
     '--tmr-metric-grid-cell-height': px(metricRows.metricGridCellHeight),
+    '--tmr-metric-fuel-v2-workbench-width': px(metricRows.fuelV2WorkbenchWidth),
+    '--tmr-metric-fuel-v2-workbench-label-column-width': px(metricRows.fuelV2WorkbenchLabelColumnWidth),
+    '--tmr-metric-fuel-v2-workbench-segmented-row-height': px(metricRows.fuelV2WorkbenchSegmentedRowHeight),
+    '--tmr-metric-fuel-v2-workbench-value-segment-minimum-height': px(metricRows.fuelV2WorkbenchValueSegmentMinimumHeight),
     '--tmr-stream-chat-overlay-width': px(streamChat.overlayWidth),
     '--tmr-stream-chat-overlay-height': px(streamChat.overlayHeight),
     '--tmr-stream-chat-header-height': px(streamChat.headerHeight),
@@ -1621,7 +1625,9 @@ function fuelLocalContext(live) {
 }
 
 function validCarIdx(value) {
-  return Number.isInteger(value) && value >= 0 && value < 64 ? value : null;
+  // The normalized native model has already checked the session's dynamic
+  // CarIdx schema bound. Browser review must not reapply the legacy 64 limit.
+  return Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 function isPitRoadTrackSurface(value) {

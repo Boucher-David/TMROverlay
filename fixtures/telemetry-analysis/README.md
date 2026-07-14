@@ -52,3 +52,6 @@ If local iRacing SDK output exposes fields or declared shapes that are not in th
 - `forensics-smoke/`
   - Tiny synthetic `overlay_forensics.py` input packages derived from the Garage Cover policy cases.
   - Used by Python unittest CI to validate report/readiness classification without committing full raw capture folders, diagnostics zips, or `telemetry.bin`.
+- `fuel-v2-white-room-24h/manifest.json`
+  - Deterministic, schema-level 24-hour Fuel V2 scenario family: history-only start, agreeing live burn, higher live burn, and a first-stint condition-change pit reset.
+  - The replay emitter runs it through the real V2 composer/history reader/presenter/browser factory while marking every row constructed and non-capture-specific. It is not raw-telemetry or strategy-advice evidence.

@@ -220,6 +220,50 @@ public sealed class FuelV2FuelPerLapCalculatorTests
         Assert.Null(windows.Max);
     }
 
+    [Fact]
+    public void FromAcceptedLaps_HistoricalNormalRemainsAnExplicitSeparateBucket()
+    {
+        var history = FuelV2Scalar.From(
+            13.5d,
+            "classified race history; 1 accepted lap windows; 1 learning-eligible sessions",
+            FuelV2Confidence.Seeded,
+            burnBucketId: FuelV2BurnBucketId.HistoricalNormal,
+            burnSource: FuelV2BurnSource.HistoricalNormal,
+            sampleCount: 1,
+            strategyEligible: false);
+
+        var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
+            [],
+            new FuelV2FuelPerLapWindowOptions(HistoricalNormalSeed: history));
+
+        var selected = Assert.IsType<FuelV2Scalar>(windows.Bucket(FuelV2BurnBucketId.HistoricalNormal));
+        Assert.Equal(13.5d, selected.Value);
+        Assert.Equal(FuelV2BurnSource.HistoricalNormal, selected.BurnSource);
+        Assert.False(selected.CleanBaselineEligible);
+        Assert.False(selected.StrategyEligible);
+        Assert.Null(windows.Bucket(FuelV2BurnBucketId.Maximum));
+        Assert.Null(windows.Bucket(FuelV2BurnBucketId.FiveLapAverage));
+    }
+
+    [Fact]
+    public void FromAcceptedLaps_RejectsHistoricalNormalSeedMisbucketedAsLiveEvidence()
+    {
+        var live = FuelV2Scalar.From(
+            13.5d,
+            "live last lap",
+            FuelV2Confidence.Live,
+            burnBucketId: FuelV2BurnBucketId.Last,
+            burnSource: FuelV2BurnSource.LiveLastLap,
+            sampleCount: 1,
+            strategyEligible: true);
+
+        var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
+            [],
+            new FuelV2FuelPerLapWindowOptions(HistoricalNormalSeed: live));
+
+        Assert.Null(windows.Bucket(FuelV2BurnBucketId.HistoricalNormal));
+    }
+
     private static void AssertScalarValue(FuelV2Scalar? scalar, double expected)
     {
         var value = Assert.IsType<FuelV2Scalar>(scalar);

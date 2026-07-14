@@ -184,7 +184,8 @@ internal static class OverlayContentSizing
         OverlaySettings settings,
         OverlaySessionKind? sessionKind,
         IReadOnlyList<SimpleTelemetryMetricSectionViewModel> metricSections,
-        bool clampToDefaultHeight = true)
+        bool clampToDefaultHeight = true,
+        int? contentWidth = null)
     {
         var visibleSections = metricSections
             .Where(section => section.Rows.Count > 0)
@@ -196,7 +197,7 @@ internal static class OverlayContentSizing
 
         var rowCount = visibleSections.Sum(section => section.Rows.Count);
         var baseSize = new Size(
-            definition.DefaultWidth,
+            contentWidth is > 0 ? contentWidth.Value : definition.DefaultWidth,
             FuelCalculatorHeightForContent(rowCount, visibleSections.Length, clampToDefaultHeight));
         return ApplyChromeHeight(definition, settings, sessionKind, baseSize);
     }

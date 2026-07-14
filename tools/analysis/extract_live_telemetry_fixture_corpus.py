@@ -299,7 +299,7 @@ def drivers_by_car_idx(data: dict[str, Any]) -> dict[int, dict[str, Any]]:
     drivers: dict[int, dict[str, Any]] = {}
     for driver in ((data.get("DriverInfo") or {}).get("Drivers") or []):
         car_idx = driver.get("CarIdx")
-        if isinstance(car_idx, int) and 0 <= car_idx < 64:
+        if isinstance(car_idx, int) and car_idx >= 0:
             drivers[car_idx] = {
                 "carIdx": car_idx,
                 "carNumber": str(driver.get("CarNumber") or ""),
@@ -393,7 +393,7 @@ def normalize_position(raw: Any, zero_based: bool) -> int | None:
 
 
 def normalize_result_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    valid = [row for row in rows if isinstance(row.get("CarIdx"), int) and 0 <= row["CarIdx"] < 64]
+    valid = [row for row in rows if isinstance(row.get("CarIdx"), int) and row["CarIdx"] >= 0]
     zero_based_overall = any(row.get("Position") == 0 for row in valid)
     zero_based_class = any(row.get("ClassPosition") == 0 for row in valid)
     return [
@@ -488,8 +488,15 @@ def array_value(values: dict[str, list[Any]], name: str, car_idx: int) -> Any:
     return array[car_idx] if 0 <= car_idx < len(array) else None
 
 
+def car_idx_slot_count(values: dict[str, list[Any]]) -> int:
+    return max(
+        (len(array) for name, array in values.items() if name.startswith("CarIdx") and isinstance(array, list)),
+        default=0,
+    )
+
+
 def car_progress(values: dict[str, list[Any]], car_idx: int, require_lap_progress: bool = False) -> CarProgress | None:
-    if car_idx < 0 or car_idx >= 64:
+    if car_idx < 0 or car_idx >= car_idx_slot_count(values):
         return None
     lap_completed_raw = array_value(values, "CarIdxLapCompleted", car_idx)
     lap_dist_pct_raw = array_value(values, "CarIdxLapDistPct", car_idx)
@@ -541,7 +548,7 @@ def has_standing_or_timing(
 
 
 def all_timing_cars(values: dict[str, list[Any]]) -> list[CarProgress]:
-    return [progress for car_idx in range(64) if (progress := car_progress(values, car_idx)) is not None]
+    return [progress for car_idx in range(car_idx_slot_count(values)) if (progress := car_progress(values, car_idx)) is not None]
 
 
 def leader_progress(cars: Iterable[CarProgress]) -> CarProgress | None:
@@ -732,7 +739,7 @@ def focus_selection(raw: dict[str, Any], cars_by_idx: dict[int, CarProgress]) ->
     cam_car_idx = raw.get("CamCarIdx") if isinstance(raw.get("CamCarIdx"), int) else None
     if cam_car_idx is None:
         return None, None, "cam_car_idx_missing"
-    if cam_car_idx < 0 or cam_car_idx >= 64:
+    if cam_car_idx < 0:
         return cam_car_idx, None, "cam_car_idx_invalid"
     if cam_car_idx in cars_by_idx:
         return cam_car_idx, cam_car_idx, None
@@ -865,7 +872,7 @@ def build_state(
     cars = all_timing_cars(values)
     cars_by_idx = {car.car_idx: car for car in cars}
     raw_cam_car_idx, focus_car_idx, focus_unavailable_reason = focus_selection(raw, cars_by_idx)
-    player_car_idx = raw.get("PlayerCarIdx") if isinstance(raw.get("PlayerCarIdx"), int) and 0 <= raw.get("PlayerCarIdx") < 64 else None
+    player_car_idx = raw.get("PlayerCarIdx") if isinstance(raw.get("PlayerCarIdx"), int) and raw.get("PlayerCarIdx") >= 0 else None
     player = cars_by_idx.get(player_car_idx) if player_car_idx is not None else None
     focus = cars_by_idx.get(focus_car_idx) if focus_car_idx is not None else None
     reference_class = focus.car_class if focus is not None else player.car_class if player is not None else None

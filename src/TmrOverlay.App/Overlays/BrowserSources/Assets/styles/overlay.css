@@ -197,6 +197,16 @@
       height: var(--fuel-content-height, 540px);
     }
 
+    /* The V2 composition is intended to become the product overlay. Its
+       seven-column width is explicit, but it intentionally retains the
+       shared metric label and row geometry used by the native renderer.
+       That keeps this production-shaped review surface from drifting into a
+       browser-only workbench layout. */
+    body.fuel-calculator-page .overlay.fuel-v2-comparison {
+      width: min(var(--tmr-metric-fuel-v2-workbench-width), calc(100vw - 16px));
+      height: auto;
+    }
+
     body.fuel-calculator-page .overlay.fuel-non-race {
       height: min(var(--fuel-content-height, var(--tmr-metric-fuel-non-race-height)), calc(100vh - 16px));
     }
@@ -724,6 +734,16 @@
       padding-bottom: 4px;
     }
 
+    /* Match the Pit Service grid: only the decisive stint cell carries a
+       semantic tint.  The row label stays a stable scan anchor. */
+    body.fuel-calculator-page .overlay.fuel-v2-comparison .tire-grid-row.info .tire-grid-label,
+    body.fuel-calculator-page .overlay.fuel-v2-comparison .tire-grid-row.success .tire-grid-label,
+    body.fuel-calculator-page .overlay.fuel-v2-comparison .tire-grid-row.warning .tire-grid-label,
+    body.fuel-calculator-page .overlay.fuel-v2-comparison .tire-grid-row.error .tire-grid-label {
+      background: transparent;
+      color: var(--tmr-text-secondary);
+    }
+
     .wind-arrow {
       display: inline-block;
       position: relative;
@@ -819,6 +839,23 @@
       overflow: hidden;
     }
 
+    .tire-grid-summary {
+      display: flex;
+      align-items: center;
+      min-height: var(--tmr-metric-grid-row-height);
+      border-radius: var(--tmr-metric-row-radius);
+      padding: 4px 8px;
+      overflow: hidden;
+      background: rgba(var(--tmr-text-muted-rgb), 0.08);
+      box-shadow: inset 0 0 0 1px var(--tmr-border-muted);
+      color: var(--tmr-text);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .tire-grid-header,
     .tire-grid-label,
     .tire-grid-cell {
@@ -872,24 +909,28 @@
     }
 
     .tire-grid-cell.info,
+    .tire-grid-summary.info,
     .tire-grid-row.info .tire-grid-label {
       background: rgba(var(--tmr-cyan-rgb), 0.13);
       color: var(--tmr-cyan);
     }
 
     .tire-grid-cell.success,
+    .tire-grid-summary.success,
     .tire-grid-row.success .tire-grid-label {
       background: rgba(var(--tmr-green-rgb), 0.13);
       color: var(--tmr-green);
     }
 
     .tire-grid-cell.warning,
+    .tire-grid-summary.warning,
     .tire-grid-row.warning .tire-grid-label {
       background: rgba(var(--tmr-amber-rgb), 0.15);
       color: var(--tmr-amber);
     }
 
     .tire-grid-cell.error,
+    .tire-grid-summary.error,
     .tire-grid-row.error .tire-grid-label {
       background: rgba(var(--tmr-error-rgb), 0.14);
       color: var(--tmr-error);

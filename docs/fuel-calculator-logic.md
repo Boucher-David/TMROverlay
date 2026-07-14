@@ -33,6 +33,19 @@ For V1, the visible overlay deliberately stops there. Rhythm optimization and ti
 
 It uses model-v2 live telemetry first, then exact user history for the same car/track/session combo, then optional baseline history only when baseline lookup is enabled.
 
+## Gated Fuel V2 Presenter
+
+`FuelV2Overlay:Enabled` is a developer/replay gate, not a persisted user
+choice. When enabled it replaces only that renderer instance with the shared
+factual V2 presenter on Windows native, localhost, and production-model replay;
+it does not change V1's default behavior. The V2 top half shows capacity/lap
+context plus aligned `Last / 5L / 10L / History / Max / Min / Quali` fuel and
+range cells. `History` may use only exact classified race/practice Fuel V2
+history and is rendered as modeled evidence. It cannot select a plan, produce
+fuel-to-add/pit advice, or expose lower-half Stint rows. See
+`docs/fuel-calculator-v2.md` for the stricter replay-history cutoff and V2
+promotion rules.
+
 ## Refresh Loop
 
 The Windows fuel overlay refreshes once per second.

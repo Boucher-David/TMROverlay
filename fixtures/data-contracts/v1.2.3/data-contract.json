@@ -1,0 +1,24 @@
+{
+  "contractSnapshotVersion": 1,
+  "release": "v1.2.3",
+  "productVersion": "1.2.3",
+  "snapshotPurpose": "Released Fuel V2 connection-history compatibility baseline.",
+  "durableContracts": {
+    "fuelV2History": {
+      "manifestVersion": 1,
+      "summaryVersion": 1,
+      "aggregateVersion": 1,
+      "importModelVersion": 1,
+      "captureFormatVersion": 1,
+      "sampleRoot": "history/fuel-v2",
+      "currentReader": "FuelV2HistoryStore compatible summary reader",
+      "migrationRule": "Retain readable format-1 summary data at its existing path as legacy-unclassified diagnostics. Do not rewrite, infer a classified family, or use it for V2 strategy.",
+      "sampleFiles": [
+        "manifest.json",
+        "capture/fuel-v2-diagnostics.json",
+        "cars/legacy-car/tracks/legacy-track/sessions/race/summaries/legacy-v123.json",
+        "cars/legacy-car/tracks/legacy-track/sessions/race/aggregate.json"
+      ]
+    }
+  }
+}

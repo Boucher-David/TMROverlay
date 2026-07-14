@@ -1,0 +1,49 @@
+{
+  "aggregateVersion": 2,
+  "scope": {
+    "combo": {
+      "carKey": "car-id-1",
+      "trackKey": "track-2-example",
+      "trackLayoutKey": "track-id-2-config-46756C6C",
+      "trackLayoutIdentitySource": "track-id-and-config",
+      "sessionKey": "race"
+    },
+    "car": {
+      "carId": 1,
+      "carPath": "example-car"
+    },
+    "track": {
+      "trackId": 2,
+      "trackConfigName": "Full"
+    },
+    "session": {
+      "currentSessionNum": 2,
+      "sessionType": "Race",
+      "sessionId": 20,
+      "subSessionId": 21
+    },
+    "trackSectors": []
+  },
+  "updatedAtUtc": "2026-07-13T12:31:00+00:00",
+  "summaryCount": 1,
+  "classifiedSessionCount": 1,
+  "legacyUnclassifiedSessionCount": 0,
+  "unclassifiedV2SessionCount": 0,
+  "excludedDuplicateOccurrenceSummaryCount": 0,
+  "learningEligibleSessionCount": 1,
+  "totalAcceptedLapBurnWindows": 1,
+  "acceptedLapFuelPerLapLiters": {
+    "sampleCount": 1,
+    "mean": 3.1,
+    "minimum": 3.1,
+    "maximum": 3.1
+  },
+  "recentSources": [
+    {
+      "summaryId": "sha256-v130-example",
+      "sourceId": "capture-example-fuel-v2-s001-race",
+      "importedAtUtc": "2026-07-13T12:31:00+00:00",
+      "sourceArtifactSha256": "v130-example"
+    }
+  ]
+}

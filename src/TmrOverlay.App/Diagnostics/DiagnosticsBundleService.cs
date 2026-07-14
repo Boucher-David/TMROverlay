@@ -868,10 +868,15 @@ internal sealed class DiagnosticsBundleService
             archive,
             Path.Combine(captureDirectory, _liveOverlayDiagnosticsOptions.OutputFileName),
             $"latest-capture/{_liveOverlayDiagnosticsOptions.OutputFileName}");
-        AddFileIfExists(
+        // A Fuel V2 connection can now contain several classified session
+        // sidecars (practice, qualifying, race). Retain the legacy fixed-name
+        // sidecar when present, but never collapse the current segment files.
+        AddRecentFiles(
             archive,
-            FuelV2CapturePath(captureDirectory),
-            $"latest-capture/{_fuelV2CaptureOptions.CaptureDirectoryName}/{_fuelV2CaptureOptions.OutputFileName}");
+            Path.Combine(captureDirectory, _fuelV2CaptureOptions.CaptureDirectoryName),
+            $"*{_fuelV2CaptureOptions.OutputFileName}",
+            $"latest-capture/{_fuelV2CaptureOptions.CaptureDirectoryName}",
+            MaxRecentFuelV2CaptureFiles);
         AddRecentFiles(
             archive,
             Path.Combine(captureDirectory, "ibt-analysis"),
@@ -884,14 +889,6 @@ internal sealed class DiagnosticsBundleService
     {
         var snapshot = _captureState.Snapshot();
         return snapshot.CurrentCaptureDirectory ?? snapshot.LastCaptureDirectory;
-    }
-
-    private string FuelV2CapturePath(string captureDirectory)
-    {
-        return Path.Combine(
-            captureDirectory,
-            _fuelV2CaptureOptions.CaptureDirectoryName,
-            _fuelV2CaptureOptions.OutputFileName);
     }
 
     private object EvidenceQualityDiagnostics(LiveOverlayWindowCaptureManifest liveOverlays)
@@ -1022,7 +1019,8 @@ internal sealed class DiagnosticsBundleService
                 CaptureSynthesisExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, "capture-synthesis.json")),
                 LiveOverlayDiagnosticsExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, _liveOverlayDiagnosticsOptions.OutputFileName)),
                 LiveModelParityExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, _liveModelParityOptions.OutputFileName)),
-                FuelV2CaptureExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(FuelV2CapturePath(latestCapture)),
+                FuelV2CaptureExists = !string.IsNullOrWhiteSpace(latestCapture)
+                    && FuelV2CapturePaths(latestCapture).TotalCount > 0,
                 IbtStatusExists = !string.IsNullOrWhiteSpace(latestCapture) && File.Exists(Path.Combine(latestCapture, IbtAnalysisOutputDirectoryName(), "status.json"))
             }
         };
@@ -1063,8 +1061,9 @@ internal sealed class DiagnosticsBundleService
         var synthesis = TryReadJsonObject(synthesisPath);
         var liveOverlayDiagnosticsPath = Path.Combine(captureDirectory, _liveOverlayDiagnosticsOptions.OutputFileName);
         var liveOverlayDiagnostics = TryReadJsonObject(liveOverlayDiagnosticsPath);
-        var fuelV2CapturePath = FuelV2CapturePath(captureDirectory);
-        var fuelV2Capture = TryReadJsonObject(fuelV2CapturePath);
+        var fuelV2CapturePaths = FuelV2CapturePaths(captureDirectory);
+        var fuelV2CapturePath = fuelV2CapturePaths.RecentPaths.FirstOrDefault();
+        var fuelV2Capture = fuelV2CapturePath is null ? null : TryReadJsonObject(fuelV2CapturePath);
         var lapDeltaQuality = LapDeltaQualityFromDiagnostics(liveOverlayDiagnostics?["lapDelta"] as JsonObject);
         var lapProfileReadiness = LapProfileReadinessFromDiagnostics(liveOverlayDiagnostics?["lapProfile"] as JsonObject);
         var postRaceFuelEvidence = PostRaceFuelEvidence(synthesis, liveOverlayDiagnostics);
@@ -1119,7 +1118,7 @@ internal sealed class DiagnosticsBundleService
             FuelV2Capture = new
             {
                 Path = fuelV2CapturePath,
-                Exists = File.Exists(fuelV2CapturePath),
+                Exists = fuelV2CapturePath is not null,
                 fuelV2CaptureEvidence.FormatVersion,
                 fuelV2CaptureEvidence.FrameCount,
                 fuelV2CaptureEvidence.SampledFrameCount,
@@ -1132,7 +1131,27 @@ internal sealed class DiagnosticsBundleService
                 fuelV2CaptureEvidence.SessionFrameCounts,
                 fuelV2CaptureEvidence.ContextFlagCounts,
                 fuelV2CaptureEvidence.LapBudgetSourceCounts,
-                fuelV2CaptureEvidence.LapBudgetMissingSignalCounts
+                fuelV2CaptureEvidence.LapBudgetMissingSignalCounts,
+                // SegmentCount is the full durable capture count. Segments is
+                // deliberately capped for diagnostics-bundle size, and its
+                // count is reported separately so support does not mistake
+                // the included sample for the total history.
+                SegmentCount = fuelV2CapturePaths.TotalCount,
+                IncludedSegmentCount = fuelV2CapturePaths.RecentPaths.Count,
+                Segments = fuelV2CapturePaths.RecentPaths.Select(path =>
+                {
+                    var evidence = FuelV2CaptureEvidence(TryReadJsonObject(path));
+                    return new
+                    {
+                        Path = path,
+                        FileName = Path.GetFileName(path),
+                        evidence.FormatVersion,
+                        evidence.FrameCount,
+                        evidence.AcceptedLapBurnWindowCount,
+                        evidence.PitWindowCount,
+                        evidence.TeamStintCount
+                    };
+                }).ToArray()
             },
             LapDeltaQuality = lapDeltaQuality,
             LapProfileReadiness = lapProfileReadiness,
@@ -1231,6 +1250,24 @@ internal sealed class DiagnosticsBundleService
         {
             return null;
         }
+    }
+
+    private FuelV2CapturePathInventory FuelV2CapturePaths(string captureDirectory)
+    {
+        var directory = Path.Combine(captureDirectory, _fuelV2CaptureOptions.CaptureDirectoryName);
+        if (!Directory.Exists(directory))
+        {
+            return FuelV2CapturePathInventory.Empty;
+        }
+
+        var paths = Directory
+            .EnumerateFiles(directory, $"*{_fuelV2CaptureOptions.OutputFileName}", SearchOption.TopDirectoryOnly)
+            .OrderByDescending(path => File.GetLastWriteTimeUtc(path))
+            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return new FuelV2CapturePathInventory(
+            paths.Length,
+            paths.Take(MaxRecentFuelV2CaptureFiles).ToArray());
     }
 
     private static FuelV2CaptureEvidenceDiagnostics FuelV2CaptureEvidence(JsonObject? fuelV2Capture)
@@ -4532,7 +4569,10 @@ internal sealed class DiagnosticsBundleService
 
     private static bool HasSdkCarIdxSlot(HistoricalCarProximity car)
     {
-        return car.CarIdx is >= 0 and < 64;
+        // Car rows are emitted only after the live/replay reader validates
+        // them against the current schema. Their index need not fit the old
+        // fixed 64-slot SDK table.
+        return car.CarIdx >= 0;
     }
 
     private static bool HasCompetitorLikeSignal(HistoricalCarProximity car)
@@ -5209,6 +5249,13 @@ internal sealed record FuelV2CaptureEvidenceDiagnostics(
         ContextFlagCounts: null,
         LapBudgetSourceCounts: null,
         LapBudgetMissingSignalCounts: null);
+}
+
+internal sealed record FuelV2CapturePathInventory(
+    int TotalCount,
+    IReadOnlyList<string> RecentPaths)
+{
+    public static FuelV2CapturePathInventory Empty { get; } = new(0, []);
 }
 
 internal sealed record IbtAnalysisDiagnosticsSnapshot(

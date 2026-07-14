@@ -1,0 +1,92 @@
+{
+  "summaryVersion": 1,
+  "importModelVersion": 1,
+  "sourceId": "legacy-v123",
+  "startedAtUtc": "2026-06-30T12:00:00+00:00",
+  "finishedAtUtc": "2026-06-30T12:30:00+00:00",
+  "importedAtUtc": "2026-06-30T12:31:00+00:00",
+  "sourceArtifact": {
+    "path": "capture-legacy/fuel-v2-capture/fuel-v2-diagnostics.json",
+    "sha256": "legacy-v123-example-sha256",
+    "byteLength": 1024,
+    "lastWriteTimeUtc": "2026-06-30T12:30:01+00:00"
+  },
+  "sourceVersions": {
+    "captureFormatVersion": 1,
+    "historicalSummaryVersion": 1,
+    "historicalCollectionModelVersion": 1,
+    "historicalAggregateVersion": 3,
+    "liveModelContractVersion": 1
+  },
+  "scope": {
+    "combo": {
+      "carKey": "legacy-car",
+      "trackKey": "legacy-track",
+      "sessionKey": "race"
+    },
+    "car": {
+      "carPath": "legacy-car"
+    },
+    "track": {
+      "trackId": 2,
+      "trackName": "Legacy Track",
+      "trackConfigName": "Full"
+    },
+    "session": {
+      "currentSessionNum": 0,
+      "sessionNum": 0,
+      "sessionType": "Race",
+      "sessionName": "Race",
+      "eventType": "Race",
+      "sessionLapsText": "50 laps"
+    },
+    "trackSectors": []
+  },
+  "quality": {
+    "confidence": "low",
+    "contributesToLearning": false,
+    "syntheticReplaySuitable": false,
+    "reasons": [
+      "legacy-connection-capture"
+    ]
+  },
+  "evidence": {
+    "frameCount": 100,
+    "sampledFrameCount": 10,
+    "acceptedLapBurnWindowCount": 1,
+    "rejectedLapBurnWindowCount": 0,
+    "acceptedSectorWindowCount": 0,
+    "rejectedSectorWindowCount": 0,
+    "pitWindowCount": 0,
+    "pitWindowsWithFuelIncrease": 0,
+    "teamStintCount": 0,
+    "driverChangeEventCount": 0,
+    "framesWithLocalFuel": 90,
+    "framesWithTeamProgress": 90,
+    "framesWithTeamProgressWithoutLocalFuel": 0,
+    "contextFlagCounts": {},
+    "fuelEvidenceCounts": {},
+    "raceControlCounts": {},
+    "weatherCounts": {}
+  },
+  "fuelCapacity": {
+    "physicalTankCapacityLiters": 70,
+    "effectiveSessionCapacitySource": "not_available_in_current_models",
+    "limitation": "Effective event fuel-cap parsing is not implemented."
+  },
+  "lapBudget": {
+    "framesWithLapBudget": 0,
+    "framesWithRaceProjection": 0,
+    "sourceCounts": {},
+    "missingSignalCounts": {},
+    "estimatedFinishLap": {},
+    "estimatedTeamLapsRemaining": {},
+    "raceLapsRemaining": {}
+  },
+  "acceptedLapBurnWindows": [],
+  "rejectedLapBurnWindowReasonCounts": {},
+  "rejectedLapBurnWindowExamples": [],
+  "sectorBurnWindows": [],
+  "pitWindows": [],
+  "teamStints": []
+}

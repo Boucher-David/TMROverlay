@@ -1,4 +1,5 @@
 using TmrOverlay.App.Overlays.Standings;
+using TmrOverlay.Core.Fuel.V2;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Telemetry.Live;
 using Xunit;
@@ -73,6 +74,10 @@ public sealed class LiveTelemetryStoreTests
         Assert.Equal("measured-green-lap", snapshot.Fuel.Confidence);
         Assert.True(snapshot.Models.FuelPit.MeasuredBurnEvidence.IsUsable);
         Assert.Equal("rolling-local-fuel-delta", snapshot.Models.FuelPit.MeasuredBurnEvidence.Source);
+        Assert.Equal(1, snapshot.FuelPerLapWindow.AcceptedSampleCount);
+        Assert.Equal(2.5d, snapshot.FuelPerLapWindow.Last!.FuelPerLapLiters, precision: 3);
+        Assert.Null(snapshot.FuelPerLapWindow.FiveLapAverage);
+        Assert.Single(snapshot.FuelPerLapWindow.CleanSamples);
     }
 
     [Fact]
@@ -123,6 +128,7 @@ public sealed class LiveTelemetryStoreTests
         Assert.Equal(2.5d, snapshot.Fuel.FuelPerLapLiters!.Value, precision: 3);
         Assert.Equal(1, snapshot.Fuel.MeasuredFuelPerLapSampleCount);
         Assert.Equal("measured-green-lap", snapshot.Fuel.Confidence);
+        Assert.Equal(1, snapshot.FuelPerLapWindow.AcceptedSampleCount);
     }
 
     [Fact]
@@ -150,8 +156,16 @@ public sealed class LiveTelemetryStoreTests
             fuelLevelLiters: 47.5d));
 
         Assert.Equal("measured-green-lap", store.Snapshot().Fuel.Confidence);
+        Assert.Equal(1, store.Snapshot().FuelPerLapWindow.AcceptedSampleCount);
 
         ApplyRaceSession(store);
+        var transitioned = store.Snapshot();
+        Assert.Equal(0, transitioned.FuelPerLapWindow.AcceptedSampleCount);
+        Assert.Empty(transitioned.FuelPerLapWindow.CleanSamples);
+        Assert.False(transitioned.HasFrameForCurrentContext);
+        var quarantined = FuelV2LiveSnapshotComposer.From(transitioned);
+        Assert.Null(quarantined.FuelCheckpoints.Current);
+        Assert.False(quarantined.LapBudget.CanDriveFuelAdvice);
         store.RecordFrame(CreateSample(
             capturedAtUtc: startedAtUtc.AddMinutes(10),
             sessionTime: 0d,
@@ -166,6 +180,124 @@ public sealed class LiveTelemetryStoreTests
         Assert.Null(snapshot.Fuel.FuelPerLapLiters);
         Assert.Equal(0, snapshot.Fuel.MeasuredFuelPerLapSampleCount);
         Assert.Equal("level-only", snapshot.Fuel.Confidence);
+        Assert.Equal(0, snapshot.FuelPerLapWindow.AcceptedSampleCount);
+        Assert.True(snapshot.HasFrameForCurrentContext);
+        Assert.True(snapshot.HasSessionInfoForCurrentCollection);
+        Assert.NotNull(FuelV2LiveSnapshotComposer.From(snapshot).FuelCheckpoints.Current);
+    }
+
+    [Fact]
+    public void MarkCollectionStarted_ClearsPublishedV2FuelWindowWhenSourceChanges()
+    {
+        var store = new LiveTelemetryStore();
+        var startedAtUtc = DateTimeOffset.Parse("2026-05-17T12:00:00Z");
+        store.MarkCollectionStarted("source-a", startedAtUtc);
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc,
+            sessionTime: 0d,
+            sessionState: 4,
+            playerCarIdx: 10,
+            teamLapCompleted: 0,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 50d));
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc.AddSeconds(90),
+            sessionTime: 90d,
+            sessionState: 4,
+            playerCarIdx: 10,
+            teamLapCompleted: 1,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 47.5d));
+
+        Assert.Equal(1, store.Snapshot().FuelPerLapWindow.AcceptedSampleCount);
+
+        store.MarkCollectionStarted("source-b", startedAtUtc.AddMinutes(1));
+
+        var snapshot = store.Snapshot();
+        Assert.Equal("source-b", snapshot.SourceId);
+        Assert.Equal(0, snapshot.FuelPerLapWindow.AcceptedSampleCount);
+        Assert.Empty(snapshot.FuelPerLapWindow.CleanSamples);
+        Assert.False(snapshot.HasFrameForCurrentContext);
+        Assert.False(snapshot.HasSessionInfoForCurrentCollection);
+
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc.AddMinutes(1),
+            sessionTime: 0d,
+            sessionState: 4,
+            playerCarIdx: 10,
+            teamLapCompleted: 0,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 45d));
+
+        var frameBeforeSessionInfo = store.Snapshot();
+        Assert.True(frameBeforeSessionInfo.HasFrameForCurrentContext);
+        Assert.False(frameBeforeSessionInfo.HasSessionInfoForCurrentCollection);
+        Assert.Null(FuelV2LiveSnapshotComposer.From(frameBeforeSessionInfo).FuelCheckpoints.Current);
+    }
+
+    [Fact]
+    public void ApplySessionInfo_ResetsV2FuelWindowForKnownDistinctLayoutAndSessionOccurrence()
+    {
+        var store = new LiveTelemetryStore();
+        var startedAtUtc = DateTimeOffset.Parse("2026-05-17T12:00:00Z");
+        ApplyScopedRaceSession(store, "full", sessionId: 100, subSessionId: 200);
+        RecordAcceptedV2FuelLap(store, startedAtUtc);
+
+        Assert.Equal(1, store.Snapshot().FuelPerLapWindow.AcceptedSampleCount);
+
+        ApplyScopedRaceSession(store, "club", sessionId: 100, subSessionId: 200);
+
+        Assert.Empty(store.Snapshot().FuelPerLapWindow.CleanSamples);
+        Assert.False(store.Snapshot().HasFrameForCurrentContext);
+
+        RecordAcceptedV2FuelLap(store, startedAtUtc.AddMinutes(10));
+
+        Assert.Equal(1, store.Snapshot().FuelPerLapWindow.AcceptedSampleCount);
+
+        ApplyScopedRaceSession(store, "club", sessionId: 100, subSessionId: 201);
+
+        Assert.Empty(store.Snapshot().FuelPerLapWindow.CleanSamples);
+        Assert.False(store.Snapshot().HasFrameForCurrentContext);
+
+        RecordAcceptedV2FuelLap(store, startedAtUtc.AddMinutes(20));
+
+        Assert.Equal(1, store.Snapshot().FuelPerLapWindow.AcceptedSampleCount);
+
+        ApplyScopedRaceSession(store, "club", sessionId: 101, subSessionId: 201);
+
+        Assert.Empty(store.Snapshot().FuelPerLapWindow.CleanSamples);
+        Assert.False(store.Snapshot().HasFrameForCurrentContext);
+    }
+
+    [Fact]
+    public void RecordFrame_DoesNotPublishYellowFamilyLapInV2FuelWindow()
+    {
+        var store = new LiveTelemetryStore();
+        var startedAtUtc = DateTimeOffset.Parse("2026-05-17T12:00:00Z");
+
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc,
+            sessionTime: 0d,
+            sessionState: 4,
+            sessionFlags: 0,
+            playerCarIdx: 10,
+            teamLapCompleted: 0,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 50d));
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc.AddSeconds(90),
+            sessionTime: 90d,
+            sessionState: 4,
+            sessionFlags: 0x00000008,
+            playerCarIdx: 10,
+            teamLapCompleted: 1,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 47.5d));
+
+        var snapshot = store.Snapshot();
+
+        Assert.Equal(0, snapshot.FuelPerLapWindow.AcceptedSampleCount);
+        Assert.Empty(snapshot.FuelPerLapWindow.CleanSamples);
     }
 
     [Fact]
@@ -1114,6 +1246,52 @@ SessionInfo:
 DriverInfo:
  DriverCarIdx: 10
 """);
+    }
+
+    private static void ApplyScopedRaceSession(
+        LiveTelemetryStore store,
+        string trackConfigName,
+        int sessionId,
+        int subSessionId)
+    {
+        store.ApplySessionInfo($$"""
+WeekendInfo:
+ EventType: Race
+ TrackName: synthetic
+ TrackConfigName: {{trackConfigName}}
+ SessionID: {{sessionId}}
+ SubSessionID: {{subSessionId}}
+SessionInfo:
+ CurrentSessionNum: 0
+ Sessions:
+ - SessionNum: 0
+   SessionType: Race
+   SessionName: RACE
+   SessionTime: 3600 sec
+   SessionLaps: unlimited
+DriverInfo:
+ DriverCarIdx: 10
+""");
+    }
+
+    private static void RecordAcceptedV2FuelLap(LiveTelemetryStore store, DateTimeOffset startedAtUtc)
+    {
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc,
+            sessionTime: 0d,
+            sessionState: 4,
+            playerCarIdx: 10,
+            teamLapCompleted: 0,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 50d));
+        store.RecordFrame(CreateSample(
+            capturedAtUtc: startedAtUtc.AddSeconds(90),
+            sessionTime: 90d,
+            sessionState: 4,
+            playerCarIdx: 10,
+            teamLapCompleted: 1,
+            teamLapDistPct: 0.25d,
+            fuelLevelLiters: 47.5d));
     }
 
     private static void ApplyPracticeSession(LiveTelemetryStore store)
@@ -3596,6 +3774,7 @@ QualifyResultsInfo:
         int? sessionLapsRemainEx = null,
         int? sessionLapsTotal = null,
         int? sessionState = null,
+        int? sessionFlags = null,
         IReadOnlyList<HistoricalCarProximity>? focusClassCars = null,
         IReadOnlyList<HistoricalCarProximity>? nearbyCars = null,
         IReadOnlyList<HistoricalCarProximity>? allCars = null,
@@ -3651,6 +3830,7 @@ QualifyResultsInfo:
             SessionLapsRemainEx: sessionLapsRemainEx,
             SessionLapsTotal: sessionLapsTotal,
             SessionState: sessionState,
+            SessionFlags: sessionFlags,
             IsGarageVisible: isGarageVisible,
             PlayerCarIdx: playerCarIdx,
             FocusCarIdx: resolvedFocusCarIdx,

@@ -60,6 +60,34 @@ public sealed class FuelV2RangeAndTargetCalculatorTests
     }
 
     [Fact]
+    public void Range_ProjectsExactHistoricalNormalIntoItsOwnAlignedBucket()
+    {
+        var history = FuelV2Scalar.From(
+            13.5d,
+            "classified race history",
+            FuelV2Confidence.Seeded,
+            burnBucketId: FuelV2BurnBucketId.HistoricalNormal,
+            burnSource: FuelV2BurnSource.HistoricalNormal,
+            sampleCount: 4,
+            strategyEligible: false);
+        var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
+            [],
+            new FuelV2FuelPerLapWindowOptions(HistoricalNormalSeed: history));
+
+        var range = FuelV2RangeCalculator.From(40d, windows);
+
+        var historicalRange = Assert.IsType<FuelV2Scalar>(range.HistoricalNormal);
+        Assert.Equal(FuelV2BurnBucketId.HistoricalNormal, historicalRange.BurnBucketId);
+        Assert.Equal(FuelV2BurnSource.HistoricalNormal, historicalRange.BurnSource);
+        Assert.Equal(FuelV2Confidence.Seeded, historicalRange.Confidence);
+        Assert.Equal(4, historicalRange.SampleCount);
+        Assert.Equal(40d / 13.5d, Assert.IsType<double>(historicalRange.Value), precision: 6);
+        Assert.Same(historicalRange, range.Bucket(FuelV2BurnBucketId.HistoricalNormal));
+        Assert.Null(range.Last);
+        Assert.Null(range.Max);
+    }
+
+    [Fact]
     public void Range_MismatchedBucketIdentityIsRejectedInsteadOfRelabeled()
     {
         var misplacedMaximum = FuelV2Scalar.From(

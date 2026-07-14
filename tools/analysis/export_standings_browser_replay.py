@@ -248,7 +248,7 @@ def driver_directory(session_data: dict[str, Any]) -> dict[int, dict[str, Any]]:
     source_drivers = [
         driver
         for driver in ((session_data.get("DriverInfo") or {}).get("Drivers") or [])
-        if isinstance(driver.get("CarIdx"), int) and 0 <= driver["CarIdx"] < 64
+        if isinstance(driver.get("CarIdx"), int) and driver["CarIdx"] >= 0
     ]
     class_names = class_names_by_id(source_drivers)
     drivers: dict[int, dict[str, Any]] = {}
@@ -1356,7 +1356,7 @@ def build_live_snapshot(
     timing_rows = timing_lookup(values, gridded_car_idxs)
     drivers = driver_directory(session_data)
     focus_idx = reference_car_idx(raw, timing_rows)
-    player_idx = raw.get("PlayerCarIdx") if isinstance(raw.get("PlayerCarIdx"), int) and 0 <= raw.get("PlayerCarIdx") < 64 else None
+    player_idx = raw.get("PlayerCarIdx") if isinstance(raw.get("PlayerCarIdx"), int) and raw.get("PlayerCarIdx") >= 0 else None
     reference = timing_rows.get(focus_idx) if focus_idx is not None else None
     reference_live = enrich_live_row(reference, drivers.get(focus_idx), focus_idx, player_idx) if reference and focus_idx is not None else None
     selected_source, selected_rows = selected_scoring_rows(session_data, raw, selected, all_timing_cars(values))
@@ -1595,7 +1595,7 @@ def build_live_snapshot(
 
 def reference_car_idx(raw: dict[str, Any], timing_rows: dict[int, dict[str, Any]]) -> int | None:
     raw_cam = raw.get("CamCarIdx")
-    if isinstance(raw_cam, int) and 0 <= raw_cam < 64 and raw_cam in timing_rows:
+    if isinstance(raw_cam, int) and raw_cam >= 0 and raw_cam in timing_rows:
         return raw_cam
     return None
 

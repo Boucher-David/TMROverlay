@@ -154,6 +154,9 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private readonly ILiveTelemetrySource _liveTelemetrySource;
     private readonly TrackMapStore _trackMapStore;
     private readonly SessionHistoryQueryService _historyQueryService;
+    private readonly FuelV2OverlayOptions _fuelV2OverlayOptions;
+    private readonly FuelV2PitServiceTireHistoryQueryService? _fuelV2TireHistoryQueryService;
+    private readonly FuelV2HistoryNormalBurnQueryService? _fuelV2NormalHistoryQueryService;
     private readonly StreamChatOverlaySource _streamChatSource;
     private readonly AppPerformanceState _performanceState;
     private readonly ILogger _logger;
@@ -215,7 +218,10 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         OverlaySettings settings,
         string fontFamily,
         string unitSystem,
-        Action saveSettings)
+        Action saveSettings,
+        FuelV2OverlayOptions? fuelV2OverlayOptions = null,
+        FuelV2PitServiceTireHistoryQueryService? fuelV2TireHistoryQueryService = null,
+        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null)
         : base(settings, saveSettings, definition.DefaultWidth, definition.DefaultHeight)
     {
         _kind = kind;
@@ -223,6 +229,9 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         _liveTelemetrySource = liveTelemetrySource;
         _trackMapStore = trackMapStore;
         _historyQueryService = historyQueryService;
+        _fuelV2OverlayOptions = fuelV2OverlayOptions ?? FuelV2OverlayOptions.Disabled;
+        _fuelV2TireHistoryQueryService = fuelV2TireHistoryQueryService;
+        _fuelV2NormalHistoryQueryService = fuelV2NormalHistoryQueryService;
         _streamChatSource = streamChatSource;
         _performanceState = performanceState;
         _logger = logger;
@@ -939,6 +948,25 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private DesignV2OverlayModel BuildFuelModel(LiveTelemetrySnapshot snapshot, DateTimeOffset now)
     {
+        if (_fuelV2OverlayOptions.Enabled)
+        {
+            var tireHistory = _fuelV2TireHistoryQueryService?.Lookup(
+                snapshot.Context,
+                snapshot.Models.PitService.Request);
+            var normalHistory = _fuelV2NormalHistoryQueryService?.Lookup(snapshot.Context);
+            var v2ViewModel = FuelV2OverlayViewModel.From(
+                snapshot,
+                _unitSystem,
+                now,
+                _settings,
+                tireHistory,
+                normalHistory);
+            return FromSimple(v2ViewModel.Overlay) with
+            {
+                FuelV2TireHistory = v2ViewModel.TireHistory
+            };
+        }
+
         var strategyModel = LiveFuelStrategyModel.From(snapshot, now, LookupHistory);
         if (!strategyModel.IsAvailable && !FuelLapsWorkbenchViewModel.Enabled)
         {
@@ -3940,7 +3968,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             16);
         var valueRect = MetricValueRect(rowRect, row.Segments.Count > 0);
         var segments = new List<DesignV2LayoutMetricSegment>();
-        var count = Math.Min(6, row.Segments.Count);
+        var count = Math.Min(geometry.MaximumMetricSegmentColumns, row.Segments.Count);
         if (count > 0)
         {
             var gap = geometry.ValueSegmentGap;
@@ -5639,7 +5667,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         RectangleF rect,
         IReadOnlyList<DesignV2MetricSegment> segments)
     {
-        var count = Math.Min(6, segments.Count);
+        var count = Math.Min(MetricGeometry.MaximumMetricSegmentColumns, segments.Count);
         if (count <= 0)
         {
             return;
@@ -9240,7 +9268,8 @@ internal sealed record DesignV2OverlayModel(
     string? HeaderText = null,
     bool ShowFooter = true,
     bool ShouldRender = true,
-    bool ShowHeader = true);
+    bool ShowHeader = true,
+    FuelV2TireHistoryCellViewModel? FuelV2TireHistory = null);
 
 internal abstract record DesignV2Body;
 

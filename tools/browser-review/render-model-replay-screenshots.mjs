@@ -235,9 +235,18 @@ function selectModelRow(rows, searchParams) {
     return null;
   }
 
-  const requestedFrame = Number.parseInt(searchParams.get('frame') || searchParams.get('frameIndex') || '', 10);
-  if (Number.isInteger(requestedFrame)) {
-    return rows.find((row) => row.frameIndex === requestedFrame) || rows[0];
+  const requestedFrameValue = searchParams.has('frame')
+    ? searchParams.get('frame')
+    : searchParams.has('frameIndex')
+      ? searchParams.get('frameIndex')
+      : null;
+  if (requestedFrameValue !== null) {
+    const requestedFrame = Number(requestedFrameValue);
+    if (!Number.isInteger(requestedFrame)) {
+      return null;
+    }
+
+    return rows.find((row) => row.frameIndex === requestedFrame) || null;
   }
 
   return rows[0];

@@ -1,9 +1,13 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging.Abstractions;
 using TmrOverlay.App.History;
 using TmrOverlay.App.Overlays.BrowserSources;
+using TmrOverlay.App.Overlays.FuelCalculator;
 using TmrOverlay.App.Replay;
+using TmrOverlay.App.Telemetry;
 using TmrOverlay.Core.Settings;
 using TmrOverlay.Core.Telemetry.Live;
 
@@ -18,7 +22,7 @@ internal static class Program
         WriteIndented = false
     };
 
-    private static int Main(string[] args)
+    private static async Task<int> Main(string[] args)
     {
         try
         {
@@ -28,7 +32,7 @@ internal static class Program
                 return 2;
             }
 
-            Run(options);
+            await RunAsync(options).ConfigureAwait(false);
             return 0;
         }
         catch (Exception exception)
@@ -38,19 +42,36 @@ internal static class Program
         }
     }
 
-    private static void Run(OverlayModelReplayOptions options)
+    private static async Task RunAsync(OverlayModelReplayOptions options)
     {
-        var replay = RawCaptureSemanticReplayReader.Open(options.CaptureDirectory);
-        var selectedSamples = SamplePlan.Load(options.SamplePlanPath);
+        if (options.WhiteRoomFixturePath is not null)
+        {
+            await WhiteRoomFuelV2ScenarioReplay.RunAsync(options).ConfigureAwait(false);
+            return;
+        }
+
+        var replay = RawCaptureSemanticReplayReader.Open(options.CaptureDirectory!);
+        var selectedSamples = SamplePlan.Load(options.SamplePlanPath!);
         if (selectedSamples.Count == 0)
         {
             throw new InvalidOperationException("Sample plan did not select any frames.");
         }
 
-        var samplePlanHash = Sha256File(options.SamplePlanPath);
+        var samplePlanHash = Sha256File(options.SamplePlanPath!);
         var selectedFrameIndexes = selectedSamples.Keys.ToHashSet();
         var maxSelectedFrame = selectedFrameIndexes.Max();
         var replayFilter = options.ToSemanticFilter(maxSelectedFrame);
+        var emittedFrameTimes = replay.ReadFrames(replayFilter)
+            .Where(semanticFrame => selectedFrameIndexes.Contains(semanticFrame.Frame.FrameIndex))
+            .Select(semanticFrame => new ReplaySelectedFrameTime(
+                semanticFrame.Frame.FrameIndex,
+                semanticFrame.Frame.CapturedAtUtc))
+            .ToArray();
+        // Do not trust a manually edited sample-plan timestamp for historical
+        // causality. This is the earliest actual raw-capture frame that this
+        // invocation will emit, read through the same semantic filter as the
+        // production model loop below.
+        var earliestSelectedSampleAtUtc = EarliestEmittedFrameAtUtc(selectedFrameIndexes, emittedFrameTimes);
         var overlays = options.Overlays.Count == 0
             ? BrowserOverlayCatalog.Pages.Select(page => page.Id).ToArray()
             : options.Overlays;
@@ -63,7 +84,18 @@ internal static class Program
             ResolvedUserHistoryRoot = options.OutputDirectory,
             ResolvedBaselineHistoryRoot = options.OutputDirectory
         });
-        var modelFactory = new BrowserOverlayModelFactory(history);
+        var fuelV2ReplayHistory = await PrepareFuelV2ReplayHistoryAsync(
+                options,
+                earliestSelectedSampleAtUtc,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+        var modelFactory = new BrowserOverlayModelFactory(
+            history,
+            fuelV2OverlayOptions: options.FuelV2OverlayEnabled
+                ? new FuelV2OverlayOptions(true)
+                : FuelV2OverlayOptions.Disabled,
+            fuelV2TireHistoryQueryService: fuelV2ReplayHistory.TireHistoryQueryService,
+            fuelV2NormalHistoryQueryService: fuelV2ReplayHistory.NormalHistoryQueryService);
         var writers = overlays.ToDictionary(
             overlayId => overlayId,
             overlayId => CreateWriter(options.OutputDirectory, overlayId),
@@ -110,7 +142,9 @@ internal static class Program
                             overlayId,
                             options.CadenceLabel,
                             samplePlanHash,
-                            ReplaySourceFiles.From(replay.Manifest));
+                            ReplaySourceFiles.From(replay.Manifest),
+                            options.FuelV2OverlayEnabled,
+                            fuelV2ReplayHistory.Provenance);
                         emitted++;
                         nextPrimeAt[overlayId] = frame.SessionTime + refreshIntervals[overlayId];
                     }
@@ -147,8 +181,177 @@ internal static class Program
             emittedModelRows = emitted,
             primedModelBuilds = primed,
             cadence = options.CadenceLabel,
+            fuelV2OverlayEnabled = options.FuelV2OverlayEnabled,
+            fuelV2HistoryReplay = fuelV2ReplayHistory.Provenance,
             generatedAtUtc = DateTimeOffset.UtcNow
         });
+    }
+
+    private static async Task<FuelV2ReplayHistory> PrepareFuelV2ReplayHistoryAsync(
+        OverlayModelReplayOptions options,
+        DateTimeOffset earliestSelectedSampleAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (options.FuelV2HistoryArtifacts.Count == 0)
+        {
+            if (options.FuelV2HistoryAsOfUtc is not null)
+            {
+                throw new ArgumentException("--fuel-v2-history-as-of requires --fuel-v2-history-artifacts.");
+            }
+
+            return FuelV2ReplayHistory.Disabled(earliestSelectedSampleAtUtc);
+        }
+
+        if (!options.FuelV2OverlayEnabled)
+        {
+            throw new ArgumentException("--fuel-v2-history-artifacts requires --fuel-v2-overlay true.");
+        }
+
+        var asOfUtc = options.FuelV2HistoryAsOfUtc ?? earliestSelectedSampleAtUtc;
+        if (asOfUtc > earliestSelectedSampleAtUtc)
+        {
+            throw new ArgumentException(
+                "--fuel-v2-history-as-of cannot be later than the earliest emitted replay frame; "
+                + "a replay uses one staged history set for every selected frame.");
+        }
+
+        var artifacts = new List<ReplayFuelV2ArtifactInput>();
+        foreach (var artifactPath in options.FuelV2HistoryArtifacts)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var artifact = await ReadFuelV2ArtifactInputAsync(artifactPath, cancellationToken).ConfigureAwait(false);
+            if (artifact.FinishedAtUtc > asOfUtc)
+            {
+                throw new ArgumentException(
+                    $"Fuel V2 history artifact {artifact.Sha256[..12]} finished at "
+                    + $"{artifact.FinishedAtUtc:O}, after replay history cutoff {asOfUtc:O}. "
+                    + "Refusing future-session evidence.");
+            }
+
+            artifacts.Add(artifact);
+        }
+
+        var duplicateSourceId = artifacts
+            .GroupBy(artifact => artifact.SourceId, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateSourceId is not null)
+        {
+            throw new ArgumentException(
+                $"Fuel V2 replay history contains more than one artifact for source '{duplicateSourceId.Key}'. "
+                + "Select one immutable sidecar per captured session.");
+        }
+
+        // Each run uses a fresh, output-owned staging root. The importer only
+        // sees staged copies, so the replay neither writes user history nor
+        // records the caller's local artifact paths in its durable summaries.
+        var stagingRoot = Path.Combine(
+            options.OutputDirectory,
+            "replay-fuel-v2-history",
+            Guid.NewGuid().ToString("N"));
+        var artifactsDirectory = Path.Combine(stagingRoot, "artifacts");
+        Directory.CreateDirectory(artifactsDirectory);
+
+        var historyOptions = new FuelV2HistoryOptions
+        {
+            Enabled = true,
+            UseForStrategy = false,
+            ResolvedHistoryRoot = Path.Combine(stagingRoot, "history")
+        };
+        var historyStore = new FuelV2HistoryStore(historyOptions);
+        var importer = new FuelV2HistoryImporter(
+            historyOptions,
+            historyStore,
+            NullLogger<FuelV2HistoryImporter>.Instance);
+        var imports = new List<FuelV2ReplayHistoryImport>();
+        for (var index = 0; index < artifacts.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var artifact = artifacts[index];
+            var stagedFileName = $"artifact-{index + 1:D2}-{artifact.Sha256[..12]}.json";
+            var stagedPath = Path.Combine(artifactsDirectory, stagedFileName);
+            File.Copy(artifact.SourcePath, stagedPath, overwrite: false);
+            var result = await importer.ImportAsync(stagedPath, cancellationToken).ConfigureAwait(false);
+            if (!result.Imported)
+            {
+                throw new InvalidOperationException(
+                    $"Fuel V2 replay history artifact {artifact.Sha256[..12]} was not imported: {result.Reason}.");
+            }
+
+            imports.Add(new FuelV2ReplayHistoryImport(
+                artifact.Sha256,
+                artifact.FinishedAtUtc,
+                "imported"));
+        }
+
+        var provenance = new FuelV2ReplayHistoryProvenance(
+            Enabled: true,
+            Mode: "isolated-staged-sidecars",
+            AsOfUtc: asOfUtc,
+            EarliestSelectedSampleAtUtc: earliestSelectedSampleAtUtc,
+            StagingRoot: Path.GetRelativePath(options.OutputDirectory, stagingRoot),
+            Imports: imports);
+        return new FuelV2ReplayHistory(
+            new FuelV2HistoryNormalBurnQueryService(historyOptions, historyStore),
+            new FuelV2PitServiceTireHistoryQueryService(historyOptions, historyStore),
+            provenance);
+    }
+
+    internal static DateTimeOffset EarliestEmittedFrameAtUtc(
+        IReadOnlyCollection<int> selectedFrameIndexes,
+        IReadOnlyCollection<ReplaySelectedFrameTime> emittedFrameTimes)
+    {
+        ArgumentNullException.ThrowIfNull(selectedFrameIndexes);
+        ArgumentNullException.ThrowIfNull(emittedFrameTimes);
+        var missingSelectedFrames = selectedFrameIndexes
+            .Except(emittedFrameTimes.Select(frame => frame.FrameIndex))
+            .Order()
+            .ToArray();
+        if (missingSelectedFrames.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Sample plan selected frame(s) excluded by the replay filter or missing from the capture: "
+                + string.Join(", ", missingSelectedFrames));
+        }
+
+        return emittedFrameTimes.Min(frame => frame.CapturedAtUtc);
+    }
+
+    private static async Task<ReplayFuelV2ArtifactInput> ReadFuelV2ArtifactInputAsync(
+        string artifactPath,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(artifactPath))
+        {
+            throw new ArgumentException($"Fuel V2 history artifact was not found: {artifactPath}");
+        }
+
+        FuelV2CaptureArtifact? artifact;
+        try
+        {
+            await using var stream = File.OpenRead(artifactPath);
+            artifact = await JsonSerializer.DeserializeAsync<FuelV2CaptureArtifact>(
+                    stream,
+                    JsonOptions,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (JsonException exception)
+        {
+            throw new ArgumentException($"Fuel V2 history artifact is not valid JSON: {artifactPath}", exception);
+        }
+
+        if (artifact is null
+            || string.IsNullOrWhiteSpace(artifact.SourceId)
+            || artifact.FinishedAtUtc == default)
+        {
+            throw new ArgumentException($"Fuel V2 history artifact lacks source or finish metadata: {artifactPath}");
+        }
+
+        return new ReplayFuelV2ArtifactInput(
+            artifact.SourceId,
+            artifact.FinishedAtUtc,
+            Path.GetFullPath(artifactPath),
+            Sha256File(artifactPath));
     }
 
     private static ApplicationSettings LoadSettings(string? settingsPath)
@@ -203,7 +406,9 @@ internal static class Program
         string overlayId,
         string cadenceLabel,
         string samplePlanHash,
-        ReplaySourceFiles sourceFiles)
+        ReplaySourceFiles sourceFiles,
+        bool fuelV2OverlayEnabled,
+        FuelV2ReplayHistoryProvenance fuelV2HistoryReplay)
     {
         var frame = semanticFrame.Frame;
         var built = modelFactory.TryBuild(overlayId, snapshot, settings, frame.CapturedAtUtc, out var response);
@@ -226,6 +431,8 @@ internal static class Program
             focusCarIdx = semanticFrame.Sample.FocusCarIdx,
             rawCamCarIdx = semanticFrame.Sample.RawCamCarIdx,
             cadence = cadenceLabel,
+            fuelV2OverlayEnabled,
+            fuelV2HistoryReplay,
             samplePlanHash,
             sampleReasons = samplePlanEntry.Reasons,
             sampleEventIds = samplePlanEntry.EventIds,
@@ -247,6 +454,8 @@ internal static class Program
             sessionTick = frame.SessionTick,
             sessionInfoUpdate = frame.SessionInfoUpdate,
             samplePlan = samplePlanEntry,
+            fuelV2OverlayEnabled,
+            fuelV2HistoryReplay,
             replayProvenance,
             buildStatus = built ? "built" : "not-found",
             shouldRender = built ? response.Model.ShouldRender : (bool?)null,
@@ -283,9 +492,14 @@ internal static class Program
 
 internal sealed class OverlayModelReplayOptions
 {
-    public required string CaptureDirectory { get; init; }
+    public string? CaptureDirectory { get; init; }
 
-    public required string SamplePlanPath { get; init; }
+    public string? SamplePlanPath { get; init; }
+
+    // A constructed, schema-level test scenario is deliberately distinct from
+    // raw capture replay. It never writes user history and its emitted rows
+    // carry constructed provenance rather than capture/frame claims.
+    public string? WhiteRoomFixturePath { get; init; }
 
     public required string OutputDirectory { get; init; }
 
@@ -294,6 +508,12 @@ internal sealed class OverlayModelReplayOptions
     public IReadOnlyList<string> Overlays { get; init; } = [];
 
     public string CadenceLabel { get; init; } = "route-refresh-interval";
+
+    public bool FuelV2OverlayEnabled { get; init; }
+
+    public IReadOnlyList<string> FuelV2HistoryArtifacts { get; init; } = [];
+
+    public DateTimeOffset? FuelV2HistoryAsOfUtc { get; init; }
 
     public int? StartFrameIndex { get; init; }
 
@@ -332,9 +552,40 @@ internal sealed class OverlayModelReplayOptions
             values[arg[2..]] = args[++index];
         }
 
-        if (!values.TryGetValue("capture", out var capture) || string.IsNullOrWhiteSpace(capture)
-            || !values.TryGetValue("sample-plan", out var samplePlan) || string.IsNullOrWhiteSpace(samplePlan)
-            || !values.TryGetValue("output", out var output) || string.IsNullOrWhiteSpace(output))
+        if (!values.TryGetValue("output", out var output) || string.IsNullOrWhiteSpace(output))
+        {
+            PrintUsage();
+            return null;
+        }
+
+        var whiteRoomFixture = values.TryGetValue("white-room-fixture", out var whiteRoom)
+            && !string.IsNullOrWhiteSpace(whiteRoom)
+                ? Path.GetFullPath(whiteRoom)
+                : null;
+        var hasRawCapture = values.TryGetValue("capture", out var capture) && !string.IsNullOrWhiteSpace(capture);
+        var hasSamplePlan = values.TryGetValue("sample-plan", out var samplePlan) && !string.IsNullOrWhiteSpace(samplePlan);
+        if (whiteRoomFixture is not null)
+        {
+            if (hasRawCapture || hasSamplePlan)
+            {
+                throw new ArgumentException("--white-room-fixture cannot be combined with --capture or --sample-plan.");
+            }
+
+            if (values.ContainsKey("settings")
+                || values.ContainsKey("fuel-v2-history-artifacts")
+                || values.ContainsKey("fuel-v2-history-as-of"))
+            {
+                throw new ArgumentException(
+                    "--white-room-fixture owns its deterministic settings and synthetic history; "
+                    + "do not pass settings or Fuel V2 history artifacts.");
+            }
+
+            if (ParseBoolean(values, "fuel-v2-overlay") == false)
+            {
+                throw new ArgumentException("--white-room-fixture always renders the explicit Fuel V2 developer gate.");
+            }
+        }
+        else if (!hasRawCapture || !hasSamplePlan)
         {
             PrintUsage();
             return null;
@@ -342,8 +593,9 @@ internal sealed class OverlayModelReplayOptions
 
         return new OverlayModelReplayOptions
         {
-            CaptureDirectory = Path.GetFullPath(capture),
-            SamplePlanPath = Path.GetFullPath(samplePlan),
+            CaptureDirectory = hasRawCapture ? Path.GetFullPath(capture!) : null,
+            SamplePlanPath = hasSamplePlan ? Path.GetFullPath(samplePlan!) : null,
+            WhiteRoomFixturePath = whiteRoomFixture,
             OutputDirectory = Path.GetFullPath(output),
             SettingsPath = values.TryGetValue("settings", out var settings) && !string.IsNullOrWhiteSpace(settings)
                 ? Path.GetFullPath(settings)
@@ -351,6 +603,15 @@ internal sealed class OverlayModelReplayOptions
             Overlays = values.TryGetValue("overlays", out var overlays)
                 ? SplitCsv(overlays)
                 : [],
+            FuelV2OverlayEnabled = whiteRoomFixture is not null
+                || (ParseBoolean(values, "fuel-v2-overlay") ?? false),
+            FuelV2HistoryArtifacts = values.TryGetValue("fuel-v2-history-artifacts", out var fuelV2HistoryArtifacts)
+                ? SplitCsv(fuelV2HistoryArtifacts)
+                    .Select(Path.GetFullPath)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+                : [],
+            FuelV2HistoryAsOfUtc = ParseNullableDateTimeOffset(values, "fuel-v2-history-as-of"),
             StartFrameIndex = ParseNullableInt(values, "start-frame", "start-frame-index"),
             EndFrameIndex = ParseNullableInt(values, "end-frame", "end-frame-index"),
             StartSessionTimeSeconds = ParseNullableDouble(values, "start-session-time", "start-session-time-seconds"),
@@ -407,6 +668,48 @@ internal sealed class OverlayModelReplayOptions
         return null;
     }
 
+    private static DateTimeOffset? ParseNullableDateTimeOffset(
+        IReadOnlyDictionary<string, string> values,
+        params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (!values.TryGetValue(key, out var value))
+            {
+                continue;
+            }
+
+            if (DateTimeOffset.TryParse(
+                    value,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out var parsed))
+            {
+                return parsed;
+            }
+
+            throw new ArgumentException(
+                $"Expected an ISO-8601 UTC timestamp for --{key}, received '{value}'.");
+        }
+
+        return null;
+    }
+
+    private static bool? ParseBoolean(IReadOnlyDictionary<string, string> values, string key)
+    {
+        if (!values.TryGetValue(key, out var value))
+        {
+            return null;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "true" or "1" or "yes" or "on" => true,
+            "false" or "0" or "no" or "off" => false,
+            _ => throw new ArgumentException($"Expected a boolean value for --{key}, received '{value}'.")
+        };
+    }
+
     private static IReadOnlySet<string> ParseSessionTypes(string value)
     {
         return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -439,9 +742,52 @@ internal sealed class OverlayModelReplayOptions
 
     private static void PrintUsage()
     {
-        Console.Error.WriteLine("Usage: TmrOverlay.OverlayModelReplay --capture <capture-dir> --sample-plan <sample-plan.json> --output <forensics-output> [--overlays standings,relative] [--settings settings.json] [--start-frame N] [--end-frame N] [--start-session-time seconds] [--end-session-time seconds] [--session-types race,qualifying,practice] [--focus-car-idx N]");
+        Console.Error.WriteLine("Usage: TmrOverlay.OverlayModelReplay (--capture <capture-dir> --sample-plan <sample-plan.json> | --white-room-fixture <fixture.json>) --output <forensics-output> [--overlays standings,relative] [--settings settings.json] [--fuel-v2-overlay true|false] [--fuel-v2-history-artifacts prior-sidecar-a.json,prior-sidecar-b.json] [--fuel-v2-history-as-of 2026-07-14T12:00:00Z] [--start-frame N] [--end-frame N] [--start-session-time seconds] [--end-session-time seconds] [--session-types race,qualifying,practice] [--focus-car-idx N]");
     }
 }
+
+internal sealed record FuelV2ReplayHistory(
+    FuelV2HistoryNormalBurnQueryService? NormalHistoryQueryService,
+    FuelV2PitServiceTireHistoryQueryService? TireHistoryQueryService,
+    FuelV2ReplayHistoryProvenance Provenance)
+{
+    public static FuelV2ReplayHistory Disabled(DateTimeOffset earliestSelectedSampleAtUtc)
+    {
+        return new FuelV2ReplayHistory(
+            NormalHistoryQueryService: null,
+            TireHistoryQueryService: null,
+            Provenance: new FuelV2ReplayHistoryProvenance(
+                Enabled: false,
+                Mode: "none",
+                AsOfUtc: earliestSelectedSampleAtUtc,
+                EarliestSelectedSampleAtUtc: earliestSelectedSampleAtUtc,
+                StagingRoot: null,
+                Imports: []));
+    }
+}
+
+internal sealed record FuelV2ReplayHistoryProvenance(
+    bool Enabled,
+    string Mode,
+    DateTimeOffset AsOfUtc,
+    DateTimeOffset EarliestSelectedSampleAtUtc,
+    string? StagingRoot,
+    IReadOnlyList<FuelV2ReplayHistoryImport> Imports);
+
+internal sealed record FuelV2ReplayHistoryImport(
+    string Sha256,
+    DateTimeOffset FinishedAtUtc,
+    string Outcome);
+
+internal sealed record ReplayFuelV2ArtifactInput(
+    string SourceId,
+    DateTimeOffset FinishedAtUtc,
+    string SourcePath,
+    string Sha256);
+
+internal sealed record ReplaySelectedFrameTime(
+    int FrameIndex,
+    DateTimeOffset CapturedAtUtc);
 
 internal sealed record ReplayFilterSummary(
     int? StartFrameIndex,

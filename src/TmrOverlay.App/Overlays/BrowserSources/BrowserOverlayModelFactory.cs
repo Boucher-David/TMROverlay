@@ -59,6 +59,9 @@ internal sealed class BrowserOverlayModelFactory
     private const int GapOnTrackSurface = 3;
     private const double TrackMapReloadIntervalSeconds = 10d;
     private readonly SessionHistoryQueryService _historyQueryService;
+    private readonly FuelV2OverlayOptions _fuelV2OverlayOptions;
+    private readonly FuelV2PitServiceTireHistoryQueryService? _fuelV2TireHistoryQueryService;
+    private readonly FuelV2HistoryNormalBurnQueryService? _fuelV2NormalHistoryQueryService;
     private readonly TrackMapStore? _trackMapStore;
     private readonly StreamChatOverlaySource? _streamChatSource;
     private readonly SessionWeatherOverlayViewModel.StatefulBuilder _sessionWeatherBuilder;
@@ -97,11 +100,17 @@ internal sealed class BrowserOverlayModelFactory
     public BrowserOverlayModelFactory(
         SessionHistoryQueryService historyQueryService,
         TrackMapStore? trackMapStore = null,
-        StreamChatOverlaySource? streamChatSource = null)
+        StreamChatOverlaySource? streamChatSource = null,
+        FuelV2OverlayOptions? fuelV2OverlayOptions = null,
+        FuelV2PitServiceTireHistoryQueryService? fuelV2TireHistoryQueryService = null,
+        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null)
     {
         _historyQueryService = historyQueryService;
         _trackMapStore = trackMapStore;
         _streamChatSource = streamChatSource;
+        _fuelV2OverlayOptions = fuelV2OverlayOptions ?? FuelV2OverlayOptions.Disabled;
+        _fuelV2TireHistoryQueryService = fuelV2TireHistoryQueryService;
+        _fuelV2NormalHistoryQueryService = fuelV2NormalHistoryQueryService;
         _sessionWeatherBuilder = SessionWeatherOverlayViewModel.CreateStatefulBuilder();
         _pitServiceBuilder = PitServiceOverlayViewModel.CreateStatefulBuilder();
     }
@@ -433,6 +442,35 @@ internal sealed class BrowserOverlayModelFactory
         var overlay = FindOverlay(settings, FuelCalculatorOverlayDefinition.Definition.Id);
         var effectiveOverlay = OverlayOrDefault(settings, FuelCalculatorOverlayDefinition.Definition);
         const bool showFooter = false;
+        if (_fuelV2OverlayOptions.Enabled)
+        {
+            var tireHistory = _fuelV2TireHistoryQueryService?.Lookup(
+                snapshot.Context,
+                snapshot.Models.PitService.Request);
+            var normalHistory = _fuelV2NormalHistoryQueryService?.Lookup(snapshot.Context);
+            var v2ViewModel = FuelV2OverlayViewModel.From(
+                snapshot,
+                unitSystem,
+                now,
+                effectiveOverlay,
+                tireHistory,
+                normalHistory);
+            var v2HeaderItems = HeaderItems(overlay, snapshot, v2ViewModel.Overlay.Status, SimpleChromeTone(v2ViewModel.Overlay.Tone));
+            return FromSimple(
+                FuelCalculatorOverlayDefinition.Definition.Id,
+                v2ViewModel.Overlay,
+                v2HeaderItems,
+                SourceText(overlay, snapshot, v2ViewModel.Overlay.Source),
+                shouldRender: HasSimpleTelemetryContent(v2ViewModel.Overlay)) with
+            {
+                FuelStrategyEvidence = new BrowserOverlayFuelStrategyEvidence(
+                    AdditionalFuelNeedState: "unavailable",
+                    SuccessCopyRequiresMeasuredNeed: true,
+                    TireService: TireServiceEvidence(v2ViewModel.TireHistory),
+                    HistoricalFuel: HistoricalFuelEvidence(normalHistory))
+            };
+        }
+
         var strategyModel = LiveFuelStrategyModel.From(snapshot, now, LookupHistory);
         if (!strategyModel.IsAvailable && !FuelLapsWorkbenchViewModel.Enabled)
         {
@@ -3175,6 +3213,37 @@ internal sealed class BrowserOverlayModelFactory
             AbsurdIntervalCount: timingValues.Count(value => Math.Abs(value) > 600d));
     }
 
+    private static BrowserOverlayTireServiceEvidence TireServiceEvidence(FuelV2TireHistoryCellViewModel cell)
+    {
+        ArgumentNullException.ThrowIfNull(cell);
+        return new BrowserOverlayTireServiceEvidence(
+            State: cell.HasConfirmedExactOutcome
+                ? "confirmed-exact-history"
+                : cell.ShouldRender
+                    ? "requested-only-history"
+                    : "unavailable",
+            Value: cell.Value,
+            Detail: cell.Detail,
+            CanCalibrateServiceTime: cell.CanCalibrateServiceTime,
+            ServiceTimeAdviceExposed: false);
+    }
+
+    private static BrowserOverlayHistoricalFuelEvidence HistoricalFuelEvidence(
+        FuelV2HistoryNormalBurnSelection? selection)
+    {
+        return new BrowserOverlayHistoricalFuelEvidence(
+            State: selection?.IsAvailable == true
+                ? "selected-exact-history"
+                : "unavailable",
+            BurnBucket: selection?.IsAvailable == true
+                ? FuelV2BurnBucketCatalog.Label(FuelV2BurnBucketId.HistoricalNormal)
+                : null,
+            SelectedSessionFamily: selection?.SelectedSessionFamily,
+            AcceptedLapBurnSampleCount: selection?.AcceptedLapBurnSampleCount,
+            CanSeedPlan: selection?.CanSeedPlan == true,
+            CanDriveAdvice: false);
+    }
+
     private static BrowserOverlayFuelStrategyEvidence FuelStrategyEvidence(FuelStrategySnapshot? strategy)
     {
         if (strategy is null || !HasTrustedFuelStrategy(strategy) || strategy.AdditionalFuelNeededLiters is null)
@@ -4173,7 +4242,24 @@ internal sealed record BrowserOverlayTimingSanityEvidence(
 
 internal sealed record BrowserOverlayFuelStrategyEvidence(
     string AdditionalFuelNeedState,
-    bool SuccessCopyRequiresMeasuredNeed);
+    bool SuccessCopyRequiresMeasuredNeed,
+    BrowserOverlayTireServiceEvidence? TireService = null,
+    BrowserOverlayHistoricalFuelEvidence? HistoricalFuel = null);
+
+internal sealed record BrowserOverlayTireServiceEvidence(
+    string State,
+    string Value,
+    string Detail,
+    bool CanCalibrateServiceTime,
+    bool ServiceTimeAdviceExposed);
+
+internal sealed record BrowserOverlayHistoricalFuelEvidence(
+    string State,
+    string? BurnBucket,
+    string? SelectedSessionFamily,
+    int? AcceptedLapBurnSampleCount,
+    bool CanSeedPlan,
+    bool CanDriveAdvice);
 
 internal sealed record BrowserOverlayLayoutEvidence(
     int ContentRowCount,

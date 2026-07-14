@@ -25,7 +25,11 @@ internal enum FuelV2BurnSource
     ReconstructedFlow = 9,
     ReconstructedDecrement = 10,
     ManualWorkbench = 11,
-    LiveMinimum = 12
+    LiveMinimum = 12,
+    // A learned, classified race/practice aggregate. This deliberately stays
+    // distinct from the legacy generic HistoricalSeed and the qualifying
+    // upper-bound seed so downstream composition can select it explicitly.
+    HistoricalNormal = 13
 }
 
 internal enum FuelV2BurnBucketId
@@ -35,7 +39,8 @@ internal enum FuelV2BurnBucketId
     TenLapAverage = 2,
     Maximum = 3,
     Minimum = 4,
-    Qualifying = 5
+    Qualifying = 5,
+    HistoricalNormal = 6
 }
 
 internal static class FuelV2BurnBucketCatalog
@@ -45,6 +50,7 @@ internal static class FuelV2BurnBucketCatalog
         FuelV2BurnBucketId.Last,
         FuelV2BurnBucketId.FiveLapAverage,
         FuelV2BurnBucketId.TenLapAverage,
+        FuelV2BurnBucketId.HistoricalNormal,
         FuelV2BurnBucketId.Maximum,
         FuelV2BurnBucketId.Minimum,
         FuelV2BurnBucketId.Qualifying
@@ -60,6 +66,7 @@ internal static class FuelV2BurnBucketCatalog
             FuelV2BurnBucketId.Maximum => "Max",
             FuelV2BurnBucketId.Minimum => "Min",
             FuelV2BurnBucketId.Qualifying => "Quali",
+            FuelV2BurnBucketId.HistoricalNormal => "History",
             _ => bucketId.ToString()
         };
     }
@@ -216,6 +223,11 @@ internal sealed record FuelV2FuelPerLapWindows(
     FuelV2Scalar? QualifyingSeed,
     int AcceptedLapCount)
 {
+    // Retain the original positional constructor so existing staged tests and
+    // callers cannot accidentally shift AcceptedLapCount. History is a named,
+    // opt-in composition input rather than a hidden live-window fallback.
+    public FuelV2Scalar? HistoricalNormal { get; init; }
+
     public FuelV2Scalar? Bucket(FuelV2BurnBucketId bucketId)
     {
         var bucket = RawBucket(bucketId);
@@ -239,6 +251,7 @@ internal sealed record FuelV2FuelPerLapWindows(
             FuelV2BurnBucketId.Maximum => Max,
             FuelV2BurnBucketId.Minimum => Min,
             FuelV2BurnBucketId.Qualifying => QualifyingSeed,
+            FuelV2BurnBucketId.HistoricalNormal => HistoricalNormal,
             _ => null
         };
     }
@@ -254,7 +267,33 @@ internal sealed record FuelV2RangeSnapshot(
     FuelV2Scalar? Last,
     FuelV2Scalar? FiveLapAverage,
     FuelV2Scalar? TenLapAverage,
-    FuelV2Scalar? Max);
+    FuelV2Scalar? Max)
+{
+    // Keep the original positional constructor stable. These are named
+    // projections of the already-typed burn buckets, not a second history or
+    // selection path. The factual V2 overlay uses them to keep Fuel/Lap and
+    // Range columns aligned from the first exact-history sample onward.
+    public FuelV2Scalar? HistoricalNormal { get; init; }
+
+    public FuelV2Scalar? Min { get; init; }
+
+    public FuelV2Scalar? Qualifying { get; init; }
+
+    public FuelV2Scalar? Bucket(FuelV2BurnBucketId bucketId)
+    {
+        return bucketId switch
+        {
+            FuelV2BurnBucketId.Last => Last,
+            FuelV2BurnBucketId.FiveLapAverage => FiveLapAverage,
+            FuelV2BurnBucketId.TenLapAverage => TenLapAverage,
+            FuelV2BurnBucketId.HistoricalNormal => HistoricalNormal,
+            FuelV2BurnBucketId.Maximum => Max,
+            FuelV2BurnBucketId.Minimum => Min,
+            FuelV2BurnBucketId.Qualifying => Qualifying,
+            _ => null
+        };
+    }
+}
 
 internal sealed record FuelV2TargetUsageSnapshot(
     double? FuelBudgetLiters,

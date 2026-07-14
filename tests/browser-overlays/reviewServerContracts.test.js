@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startReviewServer } from './reviewServerTestHost.js';
@@ -18,6 +19,100 @@ afterAll(async () => {
 });
 
 describe('browser review server validation contracts', () => {
+  it('keeps the actual current V1 Fuel overlay available as a workbench tab beside V2', async () => {
+    const v1 = await reviewServer.getText('/review/workbenches/fuel-stint-n?tab=v1');
+    const v2 = await reviewServer.getText('/review/workbenches/fuel-stint-n?tab=v2&scenario=short-finish');
+
+    expect(v1).toContain('Current V1 overlay - Dallara 35-minute race start');
+    expect(v1).toContain('fixture=fuel-dallara-35m-v1');
+    expect(v1).toContain('class="workbench-tab active"');
+    expect(v1).not.toContain('fuel-v2-bottom-half-dallara-four-lap');
+    expect(v2).toContain('fixture=fuel-v2-bottom-half-dallara-four-lap');
+    expect(v2).toContain('V2 workbench - Dallara fixed four-lap start');
+  });
+
+  it('aligns the V2 burn-comparison rows on one explicit shared bucket grid', async () => {
+    const model = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-v2-composite-dallara-35m'
+    )).model;
+    const rows = ['Fuel/Lap', 'Laps In Tank', 'Fuel To Add']
+      .map((label) => metricRow(model, 'Top Half - Approved Cell Baseline', label));
+    const expectedLabels = ['Last', '5L', '10L', 'History', 'Max', 'Min', 'Quali'];
+
+    for (const row of rows) {
+      expect.soft(row?.segmentColumnCount).toBe(7);
+      expect.soft(row?.segments.map((segment) => segment.label)).toEqual(expectedLabels);
+    }
+  });
+
+  it('replays an externally generated production model response without Node fixture rewriting', async () => {
+    const replayRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tmr-overlay-production-model-replay-'));
+    const rowsDirectory = path.join(replayRoot, 'overlays', 'fuel-calculator');
+    fs.mkdirSync(rowsDirectory, { recursive: true });
+    const response = {
+      generatedAtUtc: '2026-07-14T12:00:00Z',
+      model: {
+        overlayId: 'fuel-calculator',
+        title: 'Fuel Calculator',
+        status: 'factual V2 source',
+        source: 'source: production C# replay',
+        bodyKind: 'metrics',
+        columns: [],
+        rows: [],
+        metrics: [],
+        points: [],
+        headerItems: [],
+        gridSections: [],
+        metricSections: [
+          {
+            title: 'Fuel Usage',
+            rows: [
+              {
+                label: 'Fuel/Lap',
+                value: '13.6 L/lap',
+                tone: 'info',
+                segments: [
+                  { label: 'Last', value: '13.6 L/lap', tone: 'info' },
+                  { label: '5L', value: '--', tone: 'waiting' }
+                ]
+              }
+            ]
+          }
+        ],
+        shouldRender: true,
+        rootOpacity: 1,
+        effectiveSettings: null,
+        fuelStrategyEvidence: {
+          additionalFuelNeedState: 'unavailable',
+          successCopyRequiresMeasuredNeed: true
+        }
+      }
+    };
+    fs.writeFileSync(
+      path.join(rowsDirectory, 'models.jsonl'),
+      `${JSON.stringify({ overlayId: 'fuel-calculator', frameIndex: 42, response })}\n`,
+      'utf8');
+
+    const replayServer = await startReviewServer({
+      environment: { TMR_BROWSER_REVIEW_MODEL_REPLAY_ROOT: replayRoot }
+    });
+    try {
+      const payload = await replayServer.getJson(
+        '/api/overlay-model/fuel-calculator?fixture=production-model-replay&frame=42');
+
+      expect(payload).toEqual(response);
+      expect(allMetricText(payload.model)).not.toMatch(/workbench|V1 Ref|Stint Targets/i);
+
+      const missingFrame = await fetch(
+        `${replayServer.baseUrl}/api/overlay-model/fuel-calculator?fixture=production-model-replay&frame=999`);
+      expect(missingFrame.status).toBe(404);
+      expect(await missingFrame.text()).toMatch(/frame 999 was not found/i);
+    } finally {
+      await replayServer.stop();
+      fs.rmSync(replayRoot, { recursive: true, force: true });
+    }
+  });
+
   it('exposes effective settings evidence beside model output', async () => {
     await reviewServer.postReviewPatch({
       kind: 'number',
@@ -150,6 +245,7 @@ describe('browser review server validation contracts', () => {
       { label: 'Last', value: '13.52 L/lap', tone: 'info' },
       { label: '5L', value: '13.50 L/lap', tone: 'info' },
       { label: '10L', value: '13.36 L/lap', tone: 'info' },
+      { label: 'History', value: '--', tone: 'waiting' },
       { label: 'Max', value: '13.65 L/lap', tone: 'info' }
     ]);
     expect.soft(allMetricText(populated)).not.toMatch(/V1 Ref|Fuel Range Workbench|Target Usage|Fuel To Add|Plan V2|Stint Targets V2/);
@@ -163,6 +259,7 @@ describe('browser review server validation contracts', () => {
       { label: 'Last', value: '13.54 L/lap', tone: 'info' },
       { label: '5L', value: '--', tone: 'waiting' },
       { label: '10L', value: '--', tone: 'waiting' },
+      { label: 'History', value: '--', tone: 'waiting' },
       { label: 'Max', value: '13.54 L/lap', tone: 'info' }
     ]);
 
@@ -177,6 +274,7 @@ describe('browser review server validation contracts', () => {
       { label: 'Last', value: '--', tone: 'waiting' },
       { label: '5L', value: '--', tone: 'waiting' },
       { label: '10L', value: '--', tone: 'waiting' },
+      { label: 'History', value: '--', tone: 'waiting' },
       { label: 'Max', value: '--', tone: 'waiting' }
     ]);
 
@@ -364,13 +462,14 @@ describe('browser review server validation contracts', () => {
       { burnBucketId: 'Last', burnSource: 'LiveLastLap', sampleCount: 1, displayEligible: true, strategyEligible: true },
       { burnBucketId: 'FiveLapAverage', burnSource: 'LiveFiveLapAverage', sampleCount: 5, displayEligible: true, strategyEligible: true },
       { burnBucketId: 'TenLapAverage', burnSource: 'LiveTenLapAverage', sampleCount: 10, displayEligible: true, strategyEligible: true },
+      { burnBucketId: 'HistoricalNormal', burnSource: 'Unavailable', sampleCount: null, displayEligible: false, strategyEligible: false },
       { burnBucketId: 'Maximum', burnSource: 'LiveMaximum', sampleCount: 10, displayEligible: true, strategyEligible: true }
     ]);
 
     const trustedSeed = (await reviewServer.getJson(
       '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-fuel-trusted-seed'
     )).model;
-    expect.soft(trustedSeed.metricSections[0].rows[0].segments[3]).toMatchObject({
+    expect.soft(trustedSeed.metricSections[0].rows[0].segments[4]).toMatchObject({
       label: 'Max',
       value: '14.20 L/lap',
       burnBucketId: 'Maximum',

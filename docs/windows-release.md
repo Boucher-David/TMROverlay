@@ -45,6 +45,26 @@ python3 tools/validate_overlay_screenshots.py --profile release-tutorial --root 
 
 Manual workflow dispatch can still produce package artifacts for a branch test run, but it does not create a GitHub Release unless the run is for a `vMAJOR.MINOR.PATCH` tag.
 
+## Pull-Request Test Build
+
+Every pull request also publishes a downloadable
+`tmroverlay-pr-<number>-windows-x64` workflow artifact after the Windows
+self-contained publish audit and Velopack dry run succeed. Download it from
+the pull request's **Build/Test** workflow run, extract it into a normal
+user-writable folder, and run `TMROverlay.exe` from the `pr-publish-check`
+folder. It is a portable `win-x64` test build; it does not require a .NET
+runtime and is retained for 14 days.
+
+This artifact deliberately contains only the audited portable publish output
+and its manifest. It does not contain a Velopack MSI, `.nupkg`, or
+`releases.win-x64.json`, is never attached to a GitHub Release, and cannot be
+read by the installed application's update feed. Treat it as a branch-test
+download, not an install/update package.
+
+PR artifacts use only committed fixtures. Private raw captures and locally
+saved replay histories remain outside CI; add a compact, sanitized fixture
+when a replay scenario needs CI coverage.
+
 ## Local Branch Installer Build
 
 On Windows, a branch can produce an MSI without waiting for a tag by using the same Velopack path as the workflow. Use a unique prerelease/test version so the package identity does not collide with an installed release being validated:

@@ -98,7 +98,10 @@ internal static class LiveLocalRadarContext
 
     private static int? ValidCarIdx(int? carIdx)
     {
-        return carIdx is >= 0 and < 64 ? carIdx : null;
+        // The normalized producer has already validated this against the
+        // session's CarIdx arrays. Do not reapply iRacing's former 64-slot
+        // limit after the SDK expanded those arrays dynamically.
+        return carIdx is >= 0 ? carIdx : null;
     }
 
     private static bool IsPitRoadTrackSurface(int? trackSurface)

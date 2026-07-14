@@ -171,6 +171,55 @@ public sealed class FuelV2SnapshotComposerTests
     }
 
     [Fact]
+    public void Composer_HistoricalNormalDrivesOnlyTheExplicitTargetAndPlanSelections()
+    {
+        var capacity = FuelV2EffectiveCapacityResolver.From(75d, 0.68d, 0.68d);
+        var checkpoints = FuelV2FuelCheckpointCalculator.From(
+            capacity,
+            new FuelV2FuelCheckpointInputs(
+                MeasuredFirstGreenFuelLiters: 49.6766d,
+                CurrentFuelLiters: 49.6766d));
+        var history = FuelV2Scalar.From(
+            13.5d,
+            "classified race history; 1 accepted lap windows; 1 learning-eligible sessions",
+            FuelV2Confidence.Seeded,
+            burnBucketId: FuelV2BurnBucketId.HistoricalNormal,
+            burnSource: FuelV2BurnSource.HistoricalNormal,
+            sampleCount: 1);
+        var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
+            [12.63d],
+            new FuelV2FuelPerLapWindowOptions(HistoricalNormalSeed: history));
+
+        var snapshot = FuelV2SnapshotComposer.From(new FuelV2SnapshotCompositionInputs(
+            LapBudget: LapBudget() with
+            {
+                PrimaryLapsRemaining = 4d,
+                PossibleLapsRemaining = 4d,
+                EstimatedFinishLap = 4d
+            },
+            FuelCheckpoints: checkpoints,
+            BurnWindows: windows,
+            Boundary: new FuelV2BoundaryComposition(3, 0d, 0d),
+            TargetUsage: new FuelV2TargetUsageComposition(
+                FuelV2FuelCheckpointKind.FirstGreen,
+                FuelV2BurnBucketId.HistoricalNormal,
+                [3, 4]),
+            Plan: new FuelV2FullRacePlanComposition(
+                FuelV2LapBudgetValueKind.PrimaryLapsRemaining,
+                FuelV2LapBudgetValueKind.PossibleLapsRemaining,
+                FuelV2FuelCheckpointKind.FirstGreen,
+                FuelV2BurnBucketId.HistoricalNormal,
+                Options: null)));
+
+        Assert.Same(windows.HistoricalNormal, snapshot.TargetUsage.ReferenceBurn);
+        Assert.Equal(12.41915d, Value(snapshot.TargetUsage.Targets.Single(target => target.TargetLaps == 4).RequiredFuelPerLap), precision: 5);
+        Assert.Same(windows.HistoricalNormal, snapshot.PlanDependencies?.Burn);
+        Assert.Equal(FuelV2BurnBucketId.HistoricalNormal, snapshot.PlanDependencies?.BurnBucketId);
+        Assert.Equal(3d, snapshot.Plan?.StintCapacityLaps);
+        Assert.NotSame(windows.Last, snapshot.PlanDependencies?.Burn);
+    }
+
+    [Fact]
     public void Composer_ConflictedCapacityCannotEscapeIntoTargetUsageOrPlan()
     {
         var capacity = FuelV2EffectiveCapacityResolver.From(75d, 0.8d, 0.68d);

@@ -390,7 +390,7 @@ def has_track_surface(track_surface: Any) -> bool:
 
 
 def car_progress(arrays: dict[str, list[Any]], car_idx: int, require_lap_progress: bool = True) -> CarProgress | None:
-    if car_idx < 0 or car_idx >= 64:
+    if car_idx < 0 or car_idx >= car_idx_slot_count(arrays):
         return None
     lap_completed = array_value(arrays, "CarIdxLapCompleted", car_idx)
     lap_dist_pct = array_value(arrays, "CarIdxLapDistPct", car_idx)
@@ -430,9 +430,16 @@ def array_value(arrays: dict[str, list[Any]], name: str, index: int) -> Any:
     return values[index]
 
 
+def car_idx_slot_count(arrays: dict[str, list[Any]]) -> int:
+    return max(
+        (len(values) for name, values in arrays.items() if name.startswith("CarIdx") and isinstance(values, list)),
+        default=0,
+    )
+
+
 def leader_progress(arrays: dict[str, list[Any]]) -> CarProgress | None:
     best: CarProgress | None = None
-    for car_idx in range(64):
+    for car_idx in range(car_idx_slot_count(arrays)):
         car = car_progress(arrays, car_idx, require_lap_progress=False)
         if car is None:
             continue
@@ -448,7 +455,7 @@ def class_leader_progress(arrays: dict[str, list[Any]], reference_car_idx: int) 
     if not isinstance(reference_class, int):
         return None
     best: CarProgress | None = None
-    for car_idx in range(64):
+    for car_idx in range(car_idx_slot_count(arrays)):
         if array_value(arrays, "CarIdxClass", car_idx) != reference_class:
             continue
         car = car_progress(arrays, car_idx, require_lap_progress=False)

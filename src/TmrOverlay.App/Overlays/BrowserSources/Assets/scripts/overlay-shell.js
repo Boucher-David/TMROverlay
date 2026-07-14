@@ -289,8 +289,12 @@
       const hasSegments = segments.length > 0;
       const hasDirectionalSegment = segments.some((segment) => Number.isFinite(Number(segment?.rotationDegrees)));
       const rowColor = metricColorStyle(row?.rowColorHex || row?.carClassColorHex);
+      const requestedSegmentCount = Number(row?.segmentColumnCount);
+      const segmentColumnCount = Number.isInteger(requestedSegmentCount) && requestedSegmentCount >= segments.length
+        ? requestedSegmentCount
+        : segments.length;
       const valueHtml = hasSegments
-        ? `<div class="value value-segments" style="--tmr-segment-count: ${Math.min(segments.length, 6)};">${segments.map(metricSegment).join('')}</div>`
+        ? `<div class="value value-segments" style="--tmr-segment-count: ${Math.min(segmentColumnCount, metricGeometryNumber('maximumMetricSegmentColumns', 7))};">${segments.map(metricSegment).join('')}</div>`
         : `<div class="value">${escapeHtml(row?.value || '--')}</div>`;
       return `
         <div class="metric ${tone}${highlight}${hasSegments ? ' segmented' : ''}${hasDirectionalSegment ? ' directional' : ''}${rowColor ? ' class-colored' : ''}"${rowColor}>
@@ -347,21 +351,28 @@
     }
 
     function gridSection(section) {
-      const headers = Array.isArray(section?.headers) && section.headers.length
+      const headers = Array.isArray(section?.headers)
         ? section.headers
         : ['Info', 'FL', 'FR', 'RL', 'RR'];
+      const hasHeaders = headers.length > 0;
       const rows = Array.isArray(section?.rows) ? section.rows : [];
       if (!rows.length) return '';
       const columns = `repeat(${Math.max(1, headers.length)}, minmax(${metricGeometryNumber('metricGridCellMinimumWidth', 42)}px, 1fr))`;
-      const headerHtml = headers
+      const headerHtml = hasHeaders ? headers
         .map((header, index) => {
           const text = index === 0 ? (section?.title || header || '') : (header || '');
           const classes = index === 0 ? 'tire-grid-header metric-section-title tire-grid-section-title' : 'tire-grid-header';
           return `<div class="${classes}">${escapeHtml(text)}</div>`;
         })
-        .join('');
+        .join('') : '';
+      const titleHtml = !hasHeaders && section?.title
+        ? `<div class="metric-section-title tire-grid-summary-title">${escapeHtml(section.title)}</div>`
+        : '';
       const rowHtml = rows.map((row) => {
         const rowTone = toneClass(row?.tone);
+        if (row?.summary) {
+          return `<div class="tire-grid-summary ${rowTone}">${escapeHtml(row.summary)}</div>`;
+        }
         const cells = Array.isArray(row?.cells) ? row.cells : [];
         const cellHtml = cells
           .slice(0, Math.max(0, headers.length - 1))
@@ -375,8 +386,9 @@
       }).join('');
       return `
         <section class="metric-section">
+          ${titleHtml}
           <div class="tire-grid" style="--tmr-grid-columns: ${escapeHtml(columns)};">
-            <div class="tire-grid-head">${headerHtml}</div>
+            ${hasHeaders ? `<div class="tire-grid-head">${headerHtml}</div>` : ''}
             ${rowHtml}
           </div>
         </section>`;
@@ -649,6 +661,7 @@
       if (!overlayEl) return;
       overlayEl.classList.toggle('fuel-non-race', isFuelNonRaceModel(model));
       overlayEl.classList.toggle('laps-workbench', isFuelLapsWorkbenchModel(model));
+      overlayEl.classList.toggle('fuel-v2-comparison', isFuelV2ComparisonModel(model));
       if (model?.overlayId === 'fuel-calculator') {
         overlayEl.style.setProperty('--fuel-content-height', `${fuelContentHeightForModel(model)}px`);
       } else {
@@ -831,8 +844,19 @@
         || status === 'fuel/target usage workbench'
         || status === 'fuel/plan workbench'
         || status === 'fuel/stint targets workbench'
+        || status === 'fuel/stint sequence workbench'
         || status === 'fuel/pit request workbench'
         || status === 'fuel/sector burn workbench';
+    }
+
+    function isFuelV2ComparisonModel(model) {
+      if (model?.overlayId !== 'fuel-calculator') return false;
+      const metricSections = Array.isArray(model?.metricSections) ? model.metricSections : [];
+      const hasV2ComparisonColumns = metricSections.some((section) =>
+        Array.isArray(section?.rows)
+        && section.rows.some((row) => Array.isArray(row?.segments) && row.segments.length >= 7));
+      return hasV2ComparisonColumns
+        || String(model?.status || '').trim().toLowerCase() === 'fuel/stint sequence workbench';
     }
 
     function gapPanelSizeForModel(model) {

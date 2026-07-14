@@ -44,6 +44,23 @@ public sealed class OverlayInputTransparencyTests
     }
 
     [Fact]
+    public void FuelV2DeveloperGate_UsesTheSectionedDesignV2NativeRendererEvenWhenLegacyIsSelected()
+    {
+        Assert.True(OverlayManager.ShouldUseDesignV2Renderer(
+            useDesignV2LiveOverlays: false,
+            kind: DesignV2LiveOverlayKind.FuelCalculator,
+            fuelV2OverlayEnabled: true));
+        Assert.False(OverlayManager.ShouldUseDesignV2Renderer(
+            useDesignV2LiveOverlays: false,
+            kind: DesignV2LiveOverlayKind.PitService,
+            fuelV2OverlayEnabled: true));
+        Assert.True(OverlayManager.ShouldUseDesignV2Renderer(
+            useDesignV2LiveOverlays: true,
+            kind: DesignV2LiveOverlayKind.PitService,
+            fuelV2OverlayEnabled: false));
+    }
+
+    [Fact]
     public void DesignV2StandingsRendersChromeOnlyWaitingState()
     {
         Assert.True(DesignV2LiveOverlayForm.ShouldRenderStandingsTable(columnCount: 8, rowCount: 0, hasChrome: true));

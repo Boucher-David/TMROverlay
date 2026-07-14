@@ -23,6 +23,8 @@ internal sealed class FuelV2CaptureOptions
 
     public int MaxPitWindows { get; init; } = 80;
 
+    public int MaxStationaryServiceObservations { get; init; } = 80;
+
     public int MaxTeamStints { get; init; } = 80;
 
     public string OutputFileName { get; init; } = "fuel-v2-diagnostics.json";
@@ -44,6 +46,7 @@ internal sealed class FuelV2CaptureOptions
             MaxRejectedLapWindows = ParseInt32(section["MaxRejectedLapWindows"], defaultValue: 120, minimumValue: 10),
             MaxSectorBurnSamples = ParseInt32(section["MaxSectorBurnSamples"], defaultValue: 240, minimumValue: 10),
             MaxPitWindows = ParseInt32(section["MaxPitWindows"], defaultValue: 80, minimumValue: 5),
+            MaxStationaryServiceObservations = ParseInt32(section["MaxStationaryServiceObservations"], defaultValue: 80, minimumValue: 5),
             MaxTeamStints = ParseInt32(section["MaxTeamStints"], defaultValue: 80, minimumValue: 5),
             OutputFileName = ParsePathSegment(section["OutputFileName"], defaultValue: "fuel-v2-diagnostics.json"),
             LogDirectoryName = ParsePathSegment(section["LogDirectoryName"], defaultValue: "fuel-v2-capture"),

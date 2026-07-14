@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
@@ -20,6 +20,7 @@ import {
 
 const port = Number.parseInt(process.env.TMR_BROWSER_REVIEW_PORT || '5177', 10);
 const initialReviewUnitSystem = normalizeUnitSystem(process.env.TMR_REVIEW_UNIT_SYSTEM || process.env.TMR_UNIT_SYSTEM || 'Metric');
+const productionModelReplayRoot = resolveOptionalDirectory(process.env.TMR_BROWSER_REVIEW_MODEL_REPLAY_ROOT);
 const reviewAppState = createReviewAppState();
 const reviewNurburgringTrackMap = JSON.parse(readFileSync(
   resolve(repoRoot, 'fixtures/screenshot-scenarios/track-map-nurburgring-24h.json'),
@@ -41,6 +42,12 @@ const trackMapFocusPracticeSnapshot = JSON.parse(readFileSync(
   'utf8'));
 const trackMapPlayerFocusClassColorSnapshot = JSON.parse(readFileSync(
   resolve(repoRoot, 'fixtures/telemetry-analysis/overlay-real-data-snapshots/track-map-player-focus-class-color-real-data.json'),
+  'utf8'));
+const fuelV2BottomHalfRealHistoryReferences = JSON.parse(readFileSync(
+  resolve(repoRoot, 'fixtures/telemetry-analysis/fuel-v2-bottom-half-real-history/manifest.json'),
+  'utf8'));
+const fuelV2HistoryBridgeFixture = JSON.parse(readFileSync(
+  resolve(repoRoot, 'fixtures/telemetry-analysis/fuel-v2-history-bridge/dallara-classified-13.50.json'),
   'utf8'));
 const clients = new Set();
 const productionOverlayModelIds = new Set(browserOverlayPages()
@@ -244,6 +251,14 @@ const sectionOffContentLabelsByFixture = new Map([
 ]);
 let reloadTimer = null;
 
+class ReviewHttpError extends Error {
+  constructor(statusCode, message) {
+    super(message);
+    this.name = 'ReviewHttpError';
+    this.statusCode = statusCode;
+  }
+}
+
 const server = createServer((request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host || `localhost:${port}`}`);
   const path = normalizePath(url.pathname);
@@ -312,6 +327,11 @@ const server = createServer((request, response) => {
       return;
     }
 
+    if (path === '/review/workbenches/fuel-stint-n') {
+      serveHtml(response, withLiveReload(renderFuelStintNWorkbenchHtml(url.searchParams)));
+      return;
+    }
+
     const overlayId = overlayIdFromPath(path);
     if (overlayId) {
       serveHtml(response, withLiveReload(renderOverlayHtml(overlayId)));
@@ -320,7 +340,8 @@ const server = createServer((request, response) => {
 
     serveText(response, 404, 'Not found');
   } catch (error) {
-    serveText(response, 500, error instanceof Error ? error.stack || error.message : String(error));
+    const statusCode = error instanceof ReviewHttpError ? error.statusCode : 500;
+    serveText(response, statusCode, error instanceof Error ? error.stack || error.message : String(error));
   }
 });
 
@@ -331,6 +352,115 @@ server.listen(port, '127.0.0.1', () => {
 });
 
 startAssetPolling();
+
+function renderFuelStintNWorkbenchHtml(searchParams = new URLSearchParams()) {
+  const selectedTab = searchParams.get('tab') === 'v1' ? 'v1' : 'v2';
+  const workbenches = [
+    {
+      id: 'short-finish',
+      title: 'V2 workbench - Dallara fixed four-lap start',
+      detail: 'Short-finish shape: Current Stint, Final Stint, and a compact Strategy row. Fuel Target is a consumption threshold; its colour reflects the live feasibility state. Tires below uses exact-shape evidence language only; no service seconds are implied until rules are proven.',
+      fixture: 'fuel-v2-bottom-half-dallara-four-lap',
+      version: 'v2'
+    },
+    {
+      id: 'endurance-stint-five',
+      title: 'V2 workbench - Endurance race at Stint 5',
+      detail: 'Four-row cap: Stint 5, Stint 6, Final Stint, and Strategy. This synthetic no-tire-evidence case proves that the entire Tires column disappears, rather than showing unknown cells.',
+      fixture: 'fuel-v2-bottom-half-endurance-stint-five',
+      version: 'v2'
+    },
+    {
+      id: 'endurance-stint-six',
+      title: 'V2 workbench - Endurance race after the Stint 5 stop',
+      detail: 'The same no-tire-evidence plan has rolled forward gracefully: Stint 6, Stint 7, Final Stint, and Strategy.',
+      fixture: 'fuel-v2-bottom-half-endurance-stint-six',
+      version: 'v2'
+    }
+  ];
+  const requestedScenario = searchParams.get('scenario');
+  const workbench = workbenches.find((candidate) => candidate.id === requestedScenario)
+    || workbenches[0];
+  const v1Workbench = {
+    title: 'Current V1 overlay - Dallara 35-minute race start',
+    detail: 'This is the actual current V1 Fuel Calculator review model and layout—not V1 data restyled as V2. It remains here as a visual/content reference while V2 lower-half choices are still being made.',
+    fixture: 'fuel-dallara-35m-v1',
+    version: 'v1'
+  };
+  const displayedWorkbenches = selectedTab === 'v1' ? [v1Workbench] : [workbench];
+  const cards = displayedWorkbenches.map((candidate) => `
+    <section class="workbench-card ${candidate.version}">
+      <header>
+        <h2>${candidate.title}</h2>
+        <p>${candidate.detail}</p>
+        <a href="/review/overlays/fuel-calculator?preview=race&amp;fixture=${candidate.fixture}" target="_blank" rel="noreferrer">Open alone</a>
+      </header>
+      <iframe
+        title="${candidate.title}"
+        src="/review/overlays/fuel-calculator?preview=race&amp;fixture=${candidate.fixture}"></iframe>
+    </section>`).join('');
+  const tabLinks = [
+    { id: 'v1', label: 'Current V1' },
+    { id: 'v2', label: 'V2 workbench' }
+  ].map((tab) => {
+    const active = tab.id === selectedTab ? ' active' : '';
+    const query = tab.id === 'v2' && requestedScenario
+      ? `?tab=v2&amp;scenario=${encodeURIComponent(requestedScenario)}`
+      : `?tab=${tab.id}`;
+    return `<a class="workbench-tab${active}" href="/review/workbenches/fuel-stint-n${query}">${tab.label}</a>`;
+  }).join('');
+  const scenarioLinks = workbenches.map((candidate) => {
+    const active = candidate.id === workbench.id ? ' active' : '';
+    return `<a class="scenario-link${active}" href="/review/workbenches/fuel-stint-n?tab=v2&amp;scenario=${candidate.id}">${candidate.id.replaceAll('-', ' ')}</a>`;
+  }).join('');
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fuel V2 - Stint N Workbench</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #080b10; color: #f3f6fb; }
+      main { min-width: 0; padding: 18px; }
+      .page-header { margin: 0 0 16px; }
+      h1, h2, p { margin: 0; }
+      h1 { font-size: 20px; letter-spacing: 0.02em; }
+      .page-header p, .workbench-card p { margin-top: 5px; color: #94a0b3; font-size: 12px; line-height: 1.45; }
+      .workbench-tabs, .scenario-switcher { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+      .workbench-tab { border: 1px solid #4c576a; border-radius: 6px 6px 0 0; color: #b8cbe1; font-size: 12px; font-weight: 700; padding: 6px 10px; text-decoration: none; }
+      .workbench-tab.active { border-color: #62d9f5; background: #123543; color: #e7fbff; }
+      .scenario-link { border: 1px solid #33445d; border-radius: 999px; color: #b8cbe1; font-size: 11px; padding: 4px 8px; text-decoration: none; text-transform: capitalize; }
+      .scenario-link.active { border-color: #4fbddc; background: #123543; color: #dff8ff; }
+      .comparison-grid { display: grid; grid-template-columns: minmax(560px, 1fr); gap: 16px; align-items: start; }
+      .workbench-card { min-width: 0; border: 1px solid #253044; border-radius: 8px; background: #0d121b; overflow: hidden; }
+      .workbench-card header { min-height: 66px; padding: 12px 14px; border-bottom: 1px solid #253044; }
+      .workbench-card h2 { font-size: 14px; }
+      .workbench-card a { display: inline-block; margin-top: 8px; color: #62d9f5; font-size: 11px; font-weight: 700; text-decoration: none; }
+      .workbench-card a:hover { text-decoration: underline; }
+      iframe { display: block; width: 100%; height: 720px; border: 0; background: #080b10; }
+      @media (max-width: 900px) {
+        .comparison-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="page-header">
+        <h1>Fuel Calculator - V1 / V2 workbench</h1>
+        <p>${selectedTab === 'v1'
+          ? 'Use this tab to inspect the current V1 overlay in its real layout before deciding what content or hierarchy V2 should retain.'
+          : 'The V2 pane preserves the approved top half, then caps the lower half at Current Stint, Next Stint, Final Stint, and Strategy. Final never duplicates Current or Next; Tires remains an explicit evidence-gated column.'}</p>
+        <nav class="workbench-tabs" aria-label="Fuel workbench version">${tabLinks}</nav>
+        ${selectedTab === 'v2' ? `<nav class="scenario-switcher" aria-label="V2 workbench scenario">${scenarioLinks}</nav>` : ''}
+      </header>
+      <div class="comparison-grid">${cards}</div>
+    </main>
+  </body>
+</html>`;
+}
 
 function createReviewAppState() {
   return {
@@ -707,6 +837,11 @@ function reviewApiResponse(path, searchParams = new URLSearchParams()) {
       return null;
     }
 
+    const replayResponse = productionModelReplayResponse(overlayId, searchParams);
+    if (replayResponse) {
+      return replayResponse;
+    }
+
     const page = browserOverlayPage(overlayId);
     return { model: reviewDisplayModelWithRootOpacity(page.page.id, previewMode, searchParams) };
   }
@@ -723,6 +858,67 @@ function reviewApiResponse(path, searchParams = new URLSearchParams()) {
       ? reviewDisplayModelWithRootOpacity(page.page.id, previewMode, searchParams)
       : null
   });
+}
+
+function resolveOptionalDirectory(value) {
+  const normalized = String(value || '').trim();
+  return normalized ? resolve(normalized) : null;
+}
+
+function productionModelReplayResponse(overlayId, searchParams) {
+  if (fixtureVariant(searchParams) !== 'production-model-replay') {
+    return null;
+  }
+
+  if (!productionModelReplayRoot) {
+    throw new Error(
+      'fixture=production-model-replay requires TMR_BROWSER_REVIEW_MODEL_REPLAY_ROOT to point at a production model-replay output directory.');
+  }
+
+  const modelRowsPath = resolve(productionModelReplayRoot, 'overlays', overlayId, 'models.jsonl');
+  if (!existsSync(modelRowsPath)) {
+    throw new Error(`Production model-replay rows not found for ${overlayId}: ${modelRowsPath}`);
+  }
+
+  const rows = readFileSync(modelRowsPath, 'utf8')
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+    .map((line, index) => {
+      try {
+        return JSON.parse(line);
+      } catch (error) {
+        throw new Error(`Invalid production model-replay JSON at ${modelRowsPath}:${index + 1}: ${formatError(error)}`);
+      }
+    })
+    .filter((row) => row?.overlayId === overlayId && row?.response?.model);
+  if (rows.length === 0) {
+    throw new Error(`No serialized production model response for ${overlayId} in ${modelRowsPath}`);
+  }
+
+  const requestedFrameValue = searchParams.has('frame')
+    ? searchParams.get('frame')
+    : searchParams.has('frameIndex')
+      ? searchParams.get('frameIndex')
+      : null;
+  if (requestedFrameValue === null) {
+    return rows[0].response;
+  }
+
+  const requestedFrame = Number(requestedFrameValue);
+  if (!Number.isInteger(requestedFrame)) {
+    throw new ReviewHttpError(400, `Production model-replay frame must be an integer: ${requestedFrameValue}`);
+  }
+
+  const selected = rows.find((row) => row.frameIndex === requestedFrame);
+  if (!selected) {
+    throw new ReviewHttpError(404, `Production model-replay frame ${requestedFrame} was not found for ${overlayId}`);
+  }
+
+  // Do not run fixture rows through the Node review builders, content filters,
+  // chrome logic, opacity synthesis, or evidence wrapper. This response was
+  // produced by the C# live store plus BrowserOverlayModelFactory and must be
+  // rendered byte-for-byte as its browser model contract.
+  return selected.response;
 }
 
 function startAssetPolling() {
@@ -2028,6 +2224,7 @@ function isFuelLapsWorkbenchModel(model) {
     || status === 'fuel/target usage workbench'
     || status === 'fuel/plan workbench'
     || status === 'fuel/stint targets workbench'
+    || status === 'fuel/stint sequence workbench'
     || status === 'fuel/pit request workbench'
     || status === 'fuel/sector burn workbench';
 }
@@ -2972,6 +3169,47 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
 
         if (fixture === 'fuel-laps-workbench-plan') {
           return withChrome(fuelLapsWorkbenchReviewModel({ activeWorkbench: 'plan' }));
+        }
+
+        if (fixture === 'fuel-v2-composite-dallara-35m') {
+          return withChrome(fuelV2CompositeWorkbenchReviewModel('dallara-35m'));
+        }
+
+        if (fixture === 'fuel-laps-workbench-stint-n'
+            || fixture === 'fuel-v2-composite-vln-full-race') {
+          return withChrome(fuelV2CompositeWorkbenchReviewModel('vln-full-race'));
+        }
+
+        if (fixture === 'fuel-v2-composite-current-service') {
+          return withChrome(fuelV2CompositeWorkbenchReviewModel('current-service'));
+        }
+
+        if (fixture === 'fuel-v2-bottom-half-no-data') {
+          return withChrome(fuelV2BottomHalfStateGateReviewModel('no-data'));
+        }
+
+        if (fixture === 'fuel-v2-bottom-half-dallara-three-lap-control') {
+          return withChrome(fuelV2BottomHalfStateGateReviewModel('dallara-three-lap-control'));
+        }
+
+        if (fixture === 'fuel-v2-bottom-half-dallara-four-lap') {
+          return withChrome(fuelV2BottomHalfStateGateReviewModel('dallara-four-lap'));
+        }
+
+        if (fixture === 'fuel-v2-bottom-half-endurance-stint-five') {
+          return withChrome(fuelV2BottomHalfStateGateReviewModel('endurance-stint-five'));
+        }
+
+        if (fixture === 'fuel-v2-bottom-half-endurance-stint-six') {
+          return withChrome(fuelV2BottomHalfStateGateReviewModel('endurance-stint-six'));
+        }
+
+        if (fixture === 'fuel-v2-bottom-half-dallara-timed') {
+          return withChrome(fuelV2BottomHalfStateGateReviewModel('dallara-timed'));
+        }
+
+        if (fixture === 'fuel-v2-bottom-half-charlotte-degraded') {
+          return withChrome(fuelV2BottomHalfStateGateReviewModel('charlotte-degraded'));
         }
 
         if (fixture === 'fuel-laps-workbench' || fixture === 'fuel-laps-workbench-stint') {
@@ -4548,6 +4786,7 @@ const fuelV2BurnBucketId = Object.freeze({
   last: 'Last',
   fiveLapAverage: 'FiveLapAverage',
   tenLapAverage: 'TenLapAverage',
+  historicalNormal: 'HistoricalNormal',
   maximum: 'Maximum',
   minimum: 'Minimum',
   qualifying: 'Qualifying'
@@ -4557,6 +4796,7 @@ const fuelV2BurnBucketOrder = Object.freeze([
   fuelV2BurnBucketId.last,
   fuelV2BurnBucketId.fiveLapAverage,
   fuelV2BurnBucketId.tenLapAverage,
+  fuelV2BurnBucketId.historicalNormal,
   fuelV2BurnBucketId.maximum,
   fuelV2BurnBucketId.minimum,
   fuelV2BurnBucketId.qualifying
@@ -4566,6 +4806,7 @@ const fuelV2BurnBucketContract = Object.freeze({
   [fuelV2BurnBucketId.last]: Object.freeze({ label: 'Last', burnSource: 'LiveLastLap', sampleCount: 1, confidence: 'CleanBaseline', strategyEligible: true, cleanBaselineEligible: true }),
   [fuelV2BurnBucketId.fiveLapAverage]: Object.freeze({ label: '5L', burnSource: 'LiveFiveLapAverage', sampleCount: 5, confidence: 'CleanBaseline', strategyEligible: true, cleanBaselineEligible: true }),
   [fuelV2BurnBucketId.tenLapAverage]: Object.freeze({ label: '10L', burnSource: 'LiveTenLapAverage', sampleCount: 10, confidence: 'CleanBaseline', strategyEligible: true, cleanBaselineEligible: true }),
+  [fuelV2BurnBucketId.historicalNormal]: Object.freeze({ label: 'History', burnSource: 'HistoricalNormal', sampleCount: null, confidence: 'Seeded', strategyEligible: false, cleanBaselineEligible: false }),
   [fuelV2BurnBucketId.maximum]: Object.freeze({ label: 'Max', burnSource: 'LiveMaximum', sampleCount: null, confidence: 'CleanBaseline', strategyEligible: true, cleanBaselineEligible: true }),
   [fuelV2BurnBucketId.minimum]: Object.freeze({ label: 'Min', burnSource: 'LiveMinimum', sampleCount: null, confidence: 'CleanBaseline', strategyEligible: true, cleanBaselineEligible: true }),
   [fuelV2BurnBucketId.qualifying]: Object.freeze({ label: 'Quali', burnSource: 'QualifyingSeed', sampleCount: 1, confidence: 'Seeded', strategyEligible: false, cleanBaselineEligible: false })
@@ -4606,7 +4847,7 @@ function fuelV2BurnEvidence(bucketId, raw = {}, defaults = {}, hasValue = true) 
     displayEligible: hasValue && (raw.displayEligible ?? defaults.displayEligible ?? true),
     cleanBaselineEligible: hasValue && Boolean(cleanBaselineEligible),
     strategyEligible: hasValue && Boolean(strategyEligible),
-    detailLabel: hasValue ? String(raw.label ?? defaults.detailLabel ?? '').trim() : ''
+    detailLabel: hasValue ? String(raw.detailLabel ?? raw.label ?? defaults.detailLabel ?? '').trim() : ''
   };
 }
 
@@ -4691,7 +4932,7 @@ function fuelPerLapWorkbenchReviewModel(state = 'populated') {
     [{ key: 'timeRemaining', value: 'Fuel/Lap V2', tone: 'info' }]);
 }
 
-function fuelPerLapWorkbenchWindows(fuelPerLapSamples, maxSeed = null) {
+function fuelPerLapWorkbenchWindows(fuelPerLapSamples, maxSeed = null, historicalNormalSeed = null) {
   const samples = (fuelPerLapSamples || [])
     .map(Number)
     .filter((value) => Number.isFinite(value) && value > 0);
@@ -4711,6 +4952,10 @@ function fuelPerLapWorkbenchWindows(fuelPerLapSamples, maxSeed = null) {
   const maximum = liveMax?.value !== null && liveMax?.value !== undefined && seedMax.value !== null
     ? liveMax.value >= seedMax.value ? liveMax : seedMax
     : liveMax ?? (seedMax.value ? seedMax : null);
+  const history = fuelV2BurnBucket(
+    fuelV2BurnBucketId.historicalNormal,
+    historicalNormalSeed,
+    { burnSource: 'HistoricalNormal', source: 'classified history normal', strategyEligible: false, cleanBaselineEligible: false, confidence: 'Seeded' });
 
   return {
     acceptedLapCount: samples.length,
@@ -4727,6 +4972,7 @@ function fuelPerLapWorkbenchWindows(fuelPerLapSamples, maxSeed = null) {
         fuelV2BurnBucketId.tenLapAverage,
         trailingAverage(10),
         { source: 'live 10L average (10)' }),
+      [fuelV2BurnBucketId.historicalNormal]: history,
       [fuelV2BurnBucketId.maximum]: maximum ?? fuelV2BurnBucket(fuelV2BurnBucketId.maximum, null),
       [fuelV2BurnBucketId.minimum]: fuelV2BurnBucket(
         fuelV2BurnBucketId.minimum,
@@ -6581,6 +6827,774 @@ function fuelLapsWorkbenchReviewModel({ includeLapRows = false, activeWorkbench 
     chartSections);
 }
 
+function fuelV2CompositeWorkbenchReviewModel(scenarioId) {
+  const scenario = fuelV2CompositeWorkbenchScenario(scenarioId);
+  const windows = fuelPerLapWorkbenchWindows(
+    scenario.acceptedBurnSpans,
+    scenario.maximumSeed,
+    scenario.historicalNormalSeed);
+  const sharedInputs = {
+    ...scenario.inputs,
+    burns: windows.buckets
+  };
+  const fullRaceSnapshot = fuelSharedSnapshot({
+    ...sharedInputs,
+    targetUsage: scenario.greenTargetUsage,
+    plan: scenario.fullRacePlan
+  });
+  const currentSnapshot = fuelSharedSnapshot({
+    ...sharedInputs,
+    targetUsage: scenario.currentTargetUsage,
+    plan: scenario.currentPlan
+  });
+  const topHalfRows = [
+    fuelV2CompositeLapRow(currentSnapshot, scenario.lapSourceLabel),
+    fuelV2CompositeFuelPerLapRow(windows),
+    fuelV2CompositeRangeRow(currentSnapshot),
+    fuelV2CompositeTargetUsageRow(
+      'Target Usage - Green',
+      fullRaceSnapshot,
+      'Green',
+      scenario.greenTargetUsage.referenceBurnBucketId),
+    fuelV2CompositeTargetUsageRow(
+      'Target Usage - Current',
+      currentSnapshot,
+      'Fuel',
+      scenario.currentTargetUsage.referenceBurnBucketId),
+    fuelV2CompositeFuelToAddRow(currentSnapshot),
+    fuelV2CompositePlanRow('Plan - Full Race', fullRaceSnapshot),
+    fuelV2CompositePlanRow('Plan - From Here', currentSnapshot)
+  ];
+  const lowerHalfRows = [
+    fuelV2CompositeStintTargetsRow(currentSnapshot, scenario.stintTargets)
+  ];
+  const gridSections = [
+    {
+      title: 'Stint N - Contract Pending',
+      headers: ['Stint', 'Start', 'Target', 'Burn', 'Required', 'Add', 'End', 'Feasibility', 'Save', 'Evidence'],
+      rows: [
+        gridRow('Stint N', [
+          '--',
+          '--',
+          '--',
+          '--',
+          '--',
+          '--',
+          '--',
+          '--',
+          gridCell('not modeled', 'warning')
+        ], 'waiting')
+      ]
+    }
+  ];
+  const metricSections = [
+    { title: 'Top Half - Approved Cell Baseline', rows: topHalfRows },
+    { title: 'Stint Targets', rows: lowerHalfRows }
+  ];
+
+  return metricsModel(
+    'fuel-calculator',
+    'Fuel Calculator',
+    'fuel/stint sequence workbench',
+    [...topHalfRows, ...lowerHalfRows],
+    'source: Fuel V2 browser-only composition baseline. Approved cell calculations are projected from shared typed snapshots in their established order; V1 references and engineering proof tables remain outside V2. Exact copy, geometry, and keep/hide choices are intentionally still open. Stint N remains shape-only and does not issue strategy advice.',
+    gridSections,
+    metricSections,
+    [{ key: 'timeRemaining', value: scenario.title, tone: 'info' }],
+    true);
+}
+
+function fuelV2BottomHalfStateGateReviewModel(stateId) {
+  const base = fuelV2CompositeWorkbenchReviewModel('dallara-35m');
+  const topHalf = base.metricSections.find((section) => section.title === 'Top Half - Approved Cell Baseline');
+  const drivingTopHalfRows = fuelV2DrivingOverlayTopHalfRows(topHalf?.rows || []);
+  const state = fuelV2BottomHalfState(stateId);
+  const metricSections = [{ title: 'Race Overview', rows: drivingTopHalfRows }];
+  const gridSections = state.showBottomHalf
+    ? [{
+        title: 'Stint Targets',
+        headers: state.headers ?? fuelV2StintTargetHeaders(state.hasTireServiceEvidence),
+        rows: state.gridRows
+      }]
+    : [];
+  const rows = metricSections.flatMap((section) => section.rows);
+
+  return metricsModel(
+    'fuel-calculator',
+    'Fuel Calculator',
+    'fuel/stint sequence workbench',
+    rows,
+    'source: Fuel V2 driving-candidate workbench. The compact Race Overview reuses approved Plan and Fuel/Lap snapshot cells; Range, Target Usage, Fuel To Add, and separate Plan variants remain retained diagnostic models. Provisional Stint Targets use the explicit classified History seed from the deterministic format-2 bridge fixture; sanitized V1 references remain observed comparison evidence only. A next-stop refuel is a typed predicted pit-entry calculation, never a future observed fact. This browser-only workbench cannot drive runtime strategy.',
+    gridSections,
+    metricSections,
+    [{ key: 'timeRemaining', value: state.title, tone: state.tone }],
+    true);
+}
+
+function fuelV2DrivingOverlayTopHalfRows(rows) {
+  const planFullRace = rows.find((row) => row.label === 'Plan - Full Race');
+  const planFromHere = rows.find((row) => row.label === 'Plan - From Here');
+  const fuelPerLap = rows.find((row) => row.label === 'Fuel/Lap');
+  const overview = fuelV2DrivingPlanOverviewRow(planFullRace, planFromHere);
+  return [overview, fuelPerLap].filter(Boolean);
+}
+
+function fuelV2DrivingPlanOverviewRow(fullRacePlan, currentPlan) {
+  if (!fullRacePlan && !currentPlan) return null;
+  const full = Array.isArray(fullRacePlan?.segments) ? fullRacePlan.segments : [];
+  const current = Array.isArray(currentPlan?.segments) ? currentPlan.segments : [];
+  const segmentAt = (segments, index, label) => {
+    const source = segments[index];
+    return metricSegment(label, source?.value || '--', source?.tone || 'waiting');
+  };
+  const tone = fullRacePlan?.tone === 'error' || currentPlan?.tone === 'error'
+    ? 'error'
+    : fullRacePlan?.tone === 'waiting' && currentPlan?.tone === 'waiting'
+      ? 'waiting'
+      : 'info';
+  return metricRow('Plan', 'race overview', tone, [
+    segmentAt(full, 0, 'Race'),
+    segmentAt(current, 1, 'Remain'),
+    segmentAt(full, 2, 'Rhythm'),
+    segmentAt(full, 3, 'Stops'),
+    segmentAt(full, 4, 'Final')
+  ], { segmentColumnCount: 5 });
+}
+
+function fuelV2BottomHalfState(stateId) {
+  const fixedFourLap = fuelV2BottomHalfRealHistoryScenario('dallara-nurburgring-fixed-four-lap');
+  const fixedStartFuel = Number(fixedFourLap?.fuel?.firstCleanStintStartFuelLiters);
+  const fixedHistoryBurn = Number(fuelV2HistoryNormalSeed()?.value);
+  const fixedSafeLaps = Number.isFinite(fixedStartFuel) && Number.isFinite(fixedHistoryBurn)
+    ? Math.floor(fixedStartFuel / fixedHistoryBurn)
+    : null;
+  const fixedRequiredBurn = (targetLaps) => Number.isFinite(fixedStartFuel) && targetLaps > 0
+    ? fixedStartFuel / targetLaps
+    : null;
+  const fuelLabel = (value) => Number.isFinite(value) ? `${value.toFixed(2)} L` : '--';
+  const burnLabel = (value) => Number.isFinite(value) ? `${value.toFixed(2)} L/lap` : '--';
+
+  if (stateId === 'no-data') {
+    return {
+      title: 'V2 - Bottom half unavailable',
+      tone: 'waiting',
+      showBottomHalf: false,
+      gridRows: []
+    };
+  }
+
+  if (stateId === 'dallara-three-lap-control') {
+    const targetLaps = 3;
+    return fuelV2BottomHalfStintRows({
+      title: 'V2 - Dallara three-lap control',
+      tone: 'success',
+      headers: [],
+      rows: [
+        gridSummaryRow(
+          `No pit stop needed — ${targetLaps} laps fit at ${burnLabel(fixedHistoryBurn)}. Keep the current tire set.`,
+          'success')
+      ]
+    });
+  }
+
+  if (stateId === 'dallara-four-lap') {
+    const targetLaps = 4;
+    const required = fixedRequiredBurn(targetLaps);
+    const firstStintLaps = fixedSafeLaps;
+    const finalStintLaps = Number.isInteger(firstStintLaps) ? targetLaps - firstStintLaps : null;
+    const predictedAtBox = Number.isInteger(firstStintLaps)
+      && Number.isFinite(fixedStartFuel)
+      && Number.isFinite(fixedHistoryBurn)
+      ? fixedStartFuel - firstStintLaps * fixedHistoryBurn
+      : null;
+    const finalFuelNeed = Number.isInteger(finalStintLaps) && finalStintLaps > 0 && Number.isFinite(fixedHistoryBurn)
+      ? finalStintLaps * fixedHistoryBurn
+      : null;
+    const predictedRefuel = Number.isFinite(predictedAtBox) && Number.isFinite(finalFuelNeed)
+      ? Math.max(0, finalFuelNeed - predictedAtBox)
+      : null;
+    const saveAgainstHistory = Number.isFinite(required) && Number.isFinite(fixedHistoryBurn)
+      ? fixedHistoryBurn - required
+      : null;
+    return fuelV2BottomHalfStintRows({
+      title: 'V2 - Dallara fixed four-lap start',
+      tone: 'warning',
+      hasTireServiceEvidence: true,
+      rows: [
+        gridRow('Stint 1', fuelV2StintTargetCells(true,
+        gridCell(`${firstStintLaps ?? '--'} laps`, 'info'),
+        gridCell(Number.isFinite(required) ? `≤ ${burnLabel(required)}` : '--', 'warning'),
+        gridCell('Keep tires', 'info'),
+        gridCell(Number.isFinite(saveAgainstHistory) ? `Save ${burnLabel(saveAgainstHistory)}` : 'Awaiting live fuel', 'warning')
+        ), 'normal'),
+        gridRow('Final Stint', fuelV2StintTargetCells(true,
+          gridCell(`${finalStintLaps ?? '--'} lap${finalStintLaps === 1 ? '' : 's'}`, 'info'),
+          gridCell(Number.isFinite(finalFuelNeed) ? `≤ ${burnLabel(finalFuelNeed)}` : '--', 'info'),
+          gridCell('Front tires — observed', 'info'),
+          gridCell(
+            Number.isFinite(predictedRefuel)
+              ? `Add ${fuelLabel(predictedRefuel)} at pit`
+              : 'Awaiting pit-entry fuel forecast',
+            Number.isFinite(predictedRefuel) ? 'warning' : 'waiting')
+        ), 'normal'),
+        gridRow('Strategy', fuelV2StintTargetCells(true,
+          gridCell('1 planned stop', 'warning'),
+          gridCell(`${burnLabel(fixedHistoryBurn)} baseline`, 'info'),
+          gridCell('4 tires — collect sample', 'waiting'),
+          gridCell('Replan at pit exit', 'info')
+        ), 'normal')
+      ]
+    });
+  }
+
+  if (stateId === 'endurance-stint-five') {
+    return fuelV2BottomHalfEnduranceRows(5, 20);
+  }
+
+  if (stateId === 'endurance-stint-six') {
+    return fuelV2BottomHalfEnduranceRows(6, 20);
+  }
+
+  if (stateId === 'dallara-timed') {
+    return {
+      title: 'V2 - Dallara timed forty-five-minute reference',
+      tone: 'warning',
+      showBottomHalf: false,
+      gridRows: []
+    };
+  }
+
+  if (stateId === 'charlotte-degraded') {
+    return {
+      title: 'V2 - Charlotte tire-service reference',
+      tone: 'warning',
+      showBottomHalf: false,
+      gridRows: []
+    };
+  }
+
+  throw new Error(`Unknown Fuel V2 bottom-half state fixture: ${stateId}`);
+}
+
+function fuelV2BottomHalfStintRows({ title, tone, rows, headers, hasTireServiceEvidence = false }) {
+  return {
+    title,
+    tone,
+    showBottomHalf: true,
+    gridRows: rows,
+    hasTireServiceEvidence,
+    ...(headers !== undefined ? { headers } : {})
+  };
+}
+
+function fuelV2BottomHalfEnduranceRows(currentStintNumber, finalStintNumber) {
+  const nextStintNumber = currentStintNumber + 1;
+  const plannedStintLaps = 28;
+  const finalStintLaps = 11;
+  const plannedBurnTarget = '≤ 3.80 L/lap';
+  const rows = [];
+  if (currentStintNumber >= finalStintNumber) {
+    rows.push(gridRow('Final Stint', fuelV2StintTargetCells(false,
+      gridCell(`${finalStintLaps} laps`, 'info'),
+      gridCell(plannedBurnTarget, 'info'),
+      null,
+      gridCell('Tracking live fuel', 'info')
+    ), 'normal'));
+  } else {
+    rows.push(gridRow(`Stint ${currentStintNumber}`, fuelV2StintTargetCells(false,
+      gridCell(`${plannedStintLaps} laps`, 'info'),
+      gridCell(plannedBurnTarget, 'info'),
+      null,
+      gridCell('Tracking live fuel', 'info')
+    ), 'normal'));
+  }
+
+  if (nextStintNumber < finalStintNumber) {
+    rows.push(gridRow(`Stint ${nextStintNumber}`, fuelV2StintTargetCells(false,
+      gridCell(`${plannedStintLaps} laps`, 'info'),
+      gridCell(plannedBurnTarget, 'info'),
+      null,
+      gridCell('Planned after pit', 'info')
+    ), 'normal'));
+  }
+
+  if (finalStintNumber > currentStintNumber && finalStintNumber !== nextStintNumber) {
+    rows.push(gridRow('Final Stint', fuelV2StintTargetCells(false,
+      gridCell(`${finalStintLaps} laps`, 'info'),
+      gridCell(plannedBurnTarget, 'info'),
+      null,
+      gridCell('Forecast only', 'info')
+    ), 'normal'));
+  } else if (nextStintNumber === finalStintNumber) {
+    rows.push(gridRow('Final Stint', fuelV2StintTargetCells(false,
+      gridCell(`${finalStintLaps} laps`, 'info'),
+      gridCell(plannedBurnTarget, 'info'),
+      null,
+      gridCell('Forecast only', 'info')
+    ), 'normal'));
+  }
+
+  rows.push(gridRow('Strategy', fuelV2StintTargetCells(false,
+    gridCell(`${finalStintNumber - 1} planned stops`, 'info'),
+    gridCell(`${plannedBurnTarget.replace('≤ ', '')} baseline`, 'info'),
+    null,
+    gridCell('Replan at pit exit', 'info')
+  ), 'normal'));
+  return fuelV2BottomHalfStintRows({
+    title: `V2 - Endurance row shape at Stint ${currentStintNumber}`,
+    tone: 'info',
+    rows
+  });
+}
+
+function fuelV2BottomHalfRealHistoryScenario(id) {
+  const scenario = fuelV2BottomHalfRealHistoryReferences?.scenarios?.find((candidate) => candidate.id === id);
+  if (!scenario) {
+    throw new Error(`Missing Fuel V2 bottom-half real-history reference: ${id}`);
+  }
+
+  return scenario;
+}
+
+function fuelV2HistoryNormalSeed() {
+  // Browser mirror of FuelV2HistoryNormalBurnQueryService: accept only the
+  // current aggregate version, exact car/layout identity, a race/practice
+  // family, classified/learning evidence, and a positive finite aggregate
+  // mean. This fixture has one Race family; Qualifying is deliberately never
+  // considered normal-history fallback.
+  const fixture = fuelV2HistoryBridgeFixture;
+  const context = fixture?.queryContext;
+  const aggregate = fixture?.persistedAggregate;
+  const combo = aggregate?.scope?.combo;
+  const metric = aggregate?.acceptedLapFuelPerLapLiters;
+  const expected = fixture?.expectedSelection;
+  const config = String(context?.trackConfigName || '').trim();
+  const configHex = Array.from(new TextEncoder().encode(config))
+    .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
+    .join('');
+  const requestedFamily = String(context?.sessionFamily || '').trim().toLowerCase();
+  const exactIdentity = Number.isInteger(context?.carId)
+    && Number.isInteger(context?.trackId)
+    && config.length > 0
+    && combo?.carKey === `car-id-${context.carId}`
+    && combo?.trackLayoutKey === `track-id-${context.trackId}-config-${configHex}`
+    && combo?.trackLayoutIdentitySource === 'track-id-and-config';
+  const exactFamily = requestedFamily === 'race'
+    && ['race', 'practice'].includes(combo?.sessionKey)
+    || requestedFamily === 'practice' && combo?.sessionKey === 'practice';
+  const mean = Number(metric?.mean);
+  const sampleCount = Number(metric?.sampleCount);
+  const usable = fixture?.rawCaptureExpectation?.formatVersion === 2
+    && aggregate?.aggregateVersion === 2
+    && expected?.status === 'Selected'
+    && expected?.burnBucketId === fuelV2BurnBucketId.historicalNormal
+    && expected?.burnSource === 'HistoricalNormal'
+    && exactIdentity
+    && exactFamily
+    && Number(aggregate?.classifiedSessionCount) > 0
+    && Number(aggregate?.learningEligibleSessionCount) > 0
+    && Number.isFinite(mean) && mean > 0
+    && Number.isInteger(sampleCount) && sampleCount > 0;
+  if (!usable) return null;
+
+  return {
+    value: mean,
+    source: `classified ${combo.sessionKey} history; ${sampleCount} accepted lap windows; ${aggregate.learningEligibleSessionCount} learning-eligible sessions`,
+    burnSource: 'HistoricalNormal',
+    sampleCount,
+    confidence: 'Seeded',
+    displayEligible: true,
+    cleanBaselineEligible: false,
+    strategyEligible: false,
+    detailLabel: `${combo.sessionKey} (${sampleCount})`
+  };
+}
+
+function fuelV2CompositeWorkbenchScenario(scenarioId) {
+  if (scenarioId === 'dallara-35m') {
+    const historicalNormalSeed = fuelV2HistoryNormalSeed();
+    return {
+      title: 'V2 - Dallara 35m',
+      lapSourceLabel: 'seed',
+      acceptedBurnSpans: [],
+      maximumSeed: {
+        value: 13.7982,
+        label: 'quali seed',
+        source: 'matching qualifying seed',
+        burnSource: 'HistoricalSeed',
+        sampleCount: 1,
+        confidence: 'Seeded',
+        strategyEligible: false,
+        cleanBaselineEligible: false
+      },
+      historicalNormalSeed,
+      inputs: {
+        lapBudget: {
+          primaryLapsRemaining: 4,
+          possibleLapsRemaining: 4,
+          estimatedFinishLap: 4,
+          canDriveFuelAdvice: true
+        },
+        checkpoints: {
+          capacity: { physicalCapacityLiters: 75, driverCapPercent: 0.68, classCapPercent: 0.68 },
+          measuredFirstGreenFuelLiters: 49.6766,
+          currentFuelLiters: 49.6766
+        },
+        boundary: { targetLaps: 3, reserveFuelLiters: 0, pitLaneFuelLiters: 0 }
+      },
+      greenTargetUsage: {
+        fuelBudgetCheckpoint: 'firstGreen',
+        referenceBurnBucketId: fuelV2BurnBucketId.historicalNormal,
+        targetLaps: [3, 4, 5]
+      },
+      currentTargetUsage: {
+        fuelBudgetCheckpoint: 'current',
+        referenceBurnBucketId: fuelV2BurnBucketId.historicalNormal,
+        targetLaps: [3, 4, 5]
+      },
+      fullRacePlan: {
+        mode: 'full-race',
+        plannedRaceLapsSource: 'primaryLapsRemaining',
+        raceLapsRemainingSource: 'possibleLapsRemaining',
+        fuelBudgetCheckpoint: 'firstGreen',
+        burnBucketId: fuelV2BurnBucketId.historicalNormal
+      },
+      currentPlan: {
+        mode: 'current-checkpoint',
+        plannedRaceLapsSource: 'primaryLapsRemaining',
+        raceLapsRemainingSource: 'possibleLapsRemaining',
+        currentFuelCheckpoint: 'current',
+        currentBurnBucketId: fuelV2BurnBucketId.historicalNormal,
+        futureFuelCheckpoint: 'effectiveCapacity',
+        futureBurnBucketId: fuelV2BurnBucketId.historicalNormal
+      },
+      stintTargets: {
+        referenceBurnBucketId: fuelV2BurnBucketId.historicalNormal,
+        targetLaps: 3,
+        planLabel: 'classified History seed — confirm live',
+        flags: ['degraded']
+      }
+    };
+  }
+
+  if (scenarioId === 'current-service') {
+    return {
+      title: 'V2 - Current + Service',
+      lapSourceLabel: 'control',
+      acceptedBurnSpans: [9.8, 10.1, 10.0, 9.9, 10.0],
+      maximumSeed: null,
+      inputs: {
+        lapBudget: {
+          primaryLapsRemaining: 12,
+          possibleLapsRemaining: 11.5,
+          estimatedFinishLap: 12,
+          canDriveFuelAdvice: true
+        },
+        checkpoints: {
+          capacity: { physicalCapacityLiters: 100, driverCapPercent: 0.6, classCapPercent: 0.6 },
+          measuredFirstGreenFuelLiters: 58,
+          currentFuelLiters: 40,
+          measuredAtBoxFuelLiters: 10,
+          measuredServiceCompleteFuelLiters: 50,
+          measuredPitExitFuelLiters: 49
+        },
+        boundary: { targetLaps: 5, reserveFuelLiters: 0, pitLaneFuelLiters: 0 }
+      },
+      greenTargetUsage: {
+        fuelBudgetCheckpoint: 'firstGreen',
+        referenceBurnBucketId: fuelV2BurnBucketId.fiveLapAverage,
+        targetLaps: [5, 6, 7]
+      },
+      currentTargetUsage: {
+        fuelBudgetCheckpoint: 'current',
+        referenceBurnBucketId: fuelV2BurnBucketId.last,
+        targetLaps: [3, 4, 5]
+      },
+      fullRacePlan: {
+        mode: 'full-race',
+        plannedRaceLapsSource: 'primaryLapsRemaining',
+        raceLapsRemainingSource: 'possibleLapsRemaining',
+        fuelBudgetCheckpoint: 'firstGreen',
+        burnBucketId: fuelV2BurnBucketId.fiveLapAverage
+      },
+      currentPlan: {
+        mode: 'current-checkpoint',
+        plannedRaceLapsSource: 'primaryLapsRemaining',
+        raceLapsRemainingSource: 'possibleLapsRemaining',
+        currentFuelCheckpoint: 'current',
+        currentBurnBucketId: fuelV2BurnBucketId.last,
+        futureFuelCheckpoint: 'serviceComplete',
+        futureBurnBucketId: fuelV2BurnBucketId.fiveLapAverage
+      },
+      stintTargets: {
+        referenceBurnBucketId: fuelV2BurnBucketId.last,
+        targetLaps: 4,
+        planLabel: 'current target'
+      }
+    };
+  }
+
+  return {
+    title: 'V2 - VLN Full Race',
+    lapSourceLabel: 'live',
+    acceptedBurnSpans: [12.95, 13.00, 13.20, 13.30, 13.65, 13.49, 13.49, 13.50, 13.50, 13.52],
+    maximumSeed: null,
+    inputs: {
+      lapBudget: {
+        primaryLapsRemaining: 31,
+        possibleLapsRemaining: 30.96,
+        estimatedFinishLap: 31,
+        canDriveFuelAdvice: true
+      },
+      checkpoints: {
+        capacity: { physicalCapacityLiters: 104.94, driverCapPercent: 1, classCapPercent: 1 },
+        measuredFirstGreenFuelLiters: 102.8464,
+        currentFuelLiters: 61.64
+      },
+      boundary: { targetLaps: 7, reserveFuelLiters: 0, pitLaneFuelLiters: 0 }
+    },
+    greenTargetUsage: {
+      fuelBudgetCheckpoint: 'firstGreen',
+      referenceBurnBucketId: fuelV2BurnBucketId.last,
+      targetLaps: [7, 8, 9]
+    },
+    currentTargetUsage: {
+      fuelBudgetCheckpoint: 'current',
+      referenceBurnBucketId: fuelV2BurnBucketId.last,
+      targetLaps: [4, 5, 6]
+    },
+    fullRacePlan: {
+      mode: 'full-race',
+      plannedRaceLapsSource: 'primaryLapsRemaining',
+      raceLapsRemainingSource: 'possibleLapsRemaining',
+      fuelBudgetCheckpoint: 'firstGreen',
+      burnBucketId: fuelV2BurnBucketId.fiveLapAverage
+    },
+    currentPlan: {
+      mode: 'current-checkpoint',
+      plannedRaceLapsSource: 'primaryLapsRemaining',
+      raceLapsRemainingSource: 'possibleLapsRemaining',
+      currentFuelCheckpoint: 'current',
+      currentBurnBucketId: fuelV2BurnBucketId.last,
+      futureFuelCheckpoint: 'serviceComplete',
+      futureBurnBucketId: fuelV2BurnBucketId.fiveLapAverage
+    },
+    stintTargets: {
+      referenceBurnBucketId: fuelV2BurnBucketId.last,
+      targetLaps: 5,
+      planLabel: 'current 5-lap stretch'
+    }
+  };
+}
+
+function fuelV2CompositeLapRow(snapshot, sourceLabel) {
+  const lapBudget = snapshot.lapBudget;
+  const projected = Number.isFinite(lapBudget?.estimatedFinishLap)
+    ? lapBudget.estimatedFinishLap.toFixed(2)
+    : '--';
+  const tone = fuelSharedLapBudgetTone(lapBudget);
+  const suffix = String(sourceLabel || '').trim();
+  return metricRow('Lap', projected === '--' || !suffix ? projected : `${projected} ${suffix}`, tone);
+}
+
+function fuelV2CompositeFuelPerLapRow(windows) {
+  const buckets = fuelV2BurnBucketOrder.map((bucketId) => windows.buckets[bucketId]);
+  const segments = buckets.map((bucket) => {
+    const seeded = bucket?.confidence === 'Seeded'
+      || bucket?.burnSource === 'HistoricalSeed'
+      || bucket?.burnSource === 'HistoricalNormal';
+    return metricSegment(
+      bucket.label,
+      seeded && Number.isFinite(bucket.value)
+        ? `${fuelPerLapWorkbenchValue(bucket.value)} ${bucket.detailLabel || 'seed'}`
+        : fuelPerLapWorkbenchValue(bucket.value),
+      Number.isFinite(bucket.value) ? 'info' : 'waiting',
+      fuelV2BurnBucketEvidence(bucket));
+  });
+  const available = buckets.some((bucket) => Number.isFinite(bucket.value));
+  return metricRow(
+    'Fuel/Lap',
+    available ? 'shared burn evidence' : '--',
+    available ? 'info' : 'waiting',
+    segments,
+    { segmentColumnCount: fuelV2BurnBucketOrder.length });
+}
+
+function fuelV2CompositeRangeRow(snapshot) {
+  const rangeKeys = [
+    [fuelV2BurnBucketId.last, 'last'],
+    [fuelV2BurnBucketId.fiveLapAverage, 'fiveLapAverage'],
+    [fuelV2BurnBucketId.tenLapAverage, 'tenLapAverage'],
+    [fuelV2BurnBucketId.historicalNormal, null],
+    [fuelV2BurnBucketId.maximum, 'maximum'],
+    [fuelV2BurnBucketId.minimum, null],
+    [fuelV2BurnBucketId.qualifying, null]
+  ];
+  const segments = rangeKeys.map(([bucketId, rangeKey]) => {
+    const burn = snapshot.burnBuckets[bucketId].bucket;
+    const range = fuelV2DerivedBurnBucket(burn, rangeKey ? snapshot.range[rangeKey] : null, `range from ${burn.label}`);
+    const segment = fuelRangeWorkbenchSegment({ ...range, displaySuffix: '' });
+    return {
+      ...segment,
+      tone: segment.value === '--' ? 'waiting' : 'info'
+    };
+  });
+  const available = segments.some((segment) => segment.value !== '--');
+  return metricRow(
+    'Laps In Tank',
+    available ? 'bucket ranges' : '--',
+    available ? 'info' : 'waiting',
+    segments,
+    { segmentColumnCount: fuelV2BurnBucketOrder.length });
+}
+
+function fuelV2CompositeTargetUsageRow(label, snapshot, budgetLabel, referenceBucketId) {
+  const targetUsage = snapshot.targetUsage;
+  const reference = targetUsage.referenceBurn
+    ?? fuelV2BurnBucket(referenceBucketId, null);
+  const segments = [
+    metricSegment(
+      budgetLabel,
+      fuelBoundaryLitersLabel(targetUsage.fuelBudgetLiters),
+      fuelStintNDependencyTone(targetUsage.fuelBudgetSelection.state)),
+    metricSegment(
+      reference.label,
+      fuelV2CompositeBurnValue(reference),
+      fuelTargetUsageReferenceTone(reference),
+      fuelV2BurnBucketEvidence(reference)),
+    ...targetUsage.targets.map((target) => metricSegment(
+      fuelTargetUsageLapLabel(target.targetLaps),
+      fuelPerLapWorkbenchValue(target.requiredFuelPerLap),
+      fuelTargetUsageTone(target.requiredFuelPerLap, reference.value),
+      fuelV2CompositeTargetReferenceEvidence(reference)))
+  ];
+  return metricRow(label, targetUsage.fuelBudgetSelection.state, fuelStintNDependencyTone(targetUsage.fuelBudgetSelection.state), segments);
+}
+
+function fuelV2CompositeBurnValue(burn) {
+  const value = fuelPerLapWorkbenchValue(burn?.value);
+  if (value === '--') return value;
+  const suffix = burn?.detailLabel || (burn?.confidence === 'Seeded' ? 'seed' : '');
+  return suffix ? `${value} ${suffix}` : value;
+}
+
+function fuelV2CompositeTargetReferenceEvidence(reference) {
+  return {
+    referenceBurnBucketId: reference.id,
+    referenceBurnSource: reference.burnSource,
+    referenceSampleCount: reference.sampleCount,
+    referenceConfidence: reference.confidence,
+    referenceContextFlags: reference.contextFlags,
+    referenceDisplayEligible: reference.displayEligible,
+    referenceCleanBaselineEligible: reference.cleanBaselineEligible,
+    referenceStrategyEligible: reference.strategyEligible,
+    referenceProvenance: reference.source
+  };
+}
+
+function fuelV2CompositeFuelToAddRow(snapshot) {
+  const bucketKeys = [
+    [fuelV2BurnBucketId.last, 'last'],
+    [fuelV2BurnBucketId.fiveLapAverage, 'fiveLapAverage'],
+    [fuelV2BurnBucketId.tenLapAverage, 'tenLapAverage'],
+    [fuelV2BurnBucketId.historicalNormal, null],
+    [fuelV2BurnBucketId.maximum, 'maximum'],
+    [fuelV2BurnBucketId.minimum, 'minimum'],
+    [fuelV2BurnBucketId.qualifying, 'qualifying']
+  ];
+  const segments = bucketKeys.map(([bucketId, requestKey]) => {
+    const burn = snapshot.burnBuckets[bucketId].bucket;
+    const request = requestKey ? snapshot.pitRequest?.[requestKey] ?? null : null;
+    const amount = request?.clampedAddLiters ?? request?.desiredAddLiters;
+    const limited = request?.stateFlags?.has('tank-limited') === true;
+    const value = Number.isFinite(amount)
+      ? limited ? `${amount.toFixed(2)} L cap` : `+${amount.toFixed(2)} L`
+      : '--';
+    const tone = fuelV2CompositeFuelToAddTone(request, burn, amount);
+    return metricSegment(
+      burn.label,
+      value,
+      tone,
+      fuelV2BurnBucketEvidence(fuelV2DerivedBurnBucket(burn, amount, `pit add from ${burn.label}`)));
+  });
+  const available = segments.some((segment) => segment.value !== '--');
+  return metricRow(
+    'Fuel To Add',
+    available ? 'explicit service target' : '--',
+    available ? 'info' : 'waiting',
+    segments,
+    { segmentColumnCount: fuelV2BurnBucketOrder.length });
+}
+
+function fuelV2CompositeFuelToAddTone(request, burn, amount) {
+  if (!request || !Number.isFinite(amount)) return 'waiting';
+  const feasibilityTone = fuelBoundaryFeasibilityTone(request.feasibilityState);
+  if (feasibilityTone === 'error' || feasibilityTone === 'waiting') return feasibilityTone;
+  if (amount <= 0.001) return 'success';
+  if (!burn.strategyEligible
+      || burn.id === fuelV2BurnBucketId.maximum
+      || burn.id === fuelV2BurnBucketId.minimum
+      || burn.id === fuelV2BurnBucketId.qualifying) return 'warning';
+  return 'info';
+}
+
+function fuelV2CompositePlanRow(label, snapshot) {
+  const plan = snapshot.plan;
+  const mode = snapshot.planDependencies?.mode;
+  const values = mode === 'current-checkpoint'
+    ? [
+        ['Total', plan?.raceLabel],
+        ['To go', plan?.remainLabel],
+        ['Now/Full', plan?.currentCapacityLabel],
+        ['Rhythm', plan?.rhythmLabel],
+        ['Stops', plan?.stopsLabel],
+        ['Final', plan?.finalLabel]
+      ]
+    : [
+        ['Race', plan?.raceLabel],
+        ['Start cap', plan?.stintCapacityLabel],
+        ['Rhythm', plan?.rhythmLabel],
+        ['Stops', plan?.stopsLabel],
+        ['Final', plan?.finalLabel]
+      ];
+  const tone = plan?.tone || 'waiting';
+  const segmentTone = tone === 'error' || tone === 'waiting' ? tone : 'normal';
+  const segments = values.map(([segmentLabel, value]) => metricSegment(
+    segmentLabel,
+    value || '--',
+    value && value !== '--' ? segmentTone : 'waiting'));
+  return metricRow(label, plan?.rhythmLabel || '--', tone, segments);
+}
+
+function fuelV2CompositeStintTargetsRow(snapshot, config) {
+  const currentFuel = fuelSharedCheckpointSelection(snapshot.checkpoints, 'current');
+  const referenceBurn = snapshot.burnBuckets[config.referenceBurnBucketId]?.bucket ?? null;
+  const row = fuelStintTargetV2WorkbenchGridRow('Stint Targets', {
+    remainingLaps: snapshot.lapBudget?.possibleLapsRemaining
+      ?? snapshot.lapBudget?.primaryLapsRemaining,
+    currentFuelLiters: currentFuel.calculationLiters,
+    reserveFuelLiters: config.reserveFuelLiters || 0,
+    pitLaneFuelLiters: config.pitLaneFuelLiters || 0,
+    referenceBurnLitersPerLap: referenceBurn,
+    targetLaps: config.targetLaps,
+    planLabel: config.planLabel,
+    flags: config.flags || [],
+    targetTimeContexts: config.targetTimeContexts
+  });
+  const labels = ['To go', 'Tank', 'Short', 'Plan', 'Stretch', 'Extra', 'Live', 'Status'];
+  const segments = labels.map((segmentLabel, index) => metricSegment(
+    segmentLabel,
+    row.cells[index]?.value || '--',
+    row.cells[index]?.tone || row.tone));
+  return metricRow('Stint Targets', row.cells.at(-1)?.value || '--', row.tone, segments);
+}
+
+function fuelStintNDependencyTone(state) {
+  if (state === 'available') return 'info';
+  if (state === 'invalid' || state === 'conflicted') return 'error';
+  return 'waiting';
+}
+
 function fuelCapacityWorkbenchGridRow(label, inputs) {
   const snapshot = fuelCapacitySnapshot(inputs);
   return gridRow(label, [
@@ -8258,7 +9272,16 @@ function fuelLapsWorkbenchTone(value, realValue) {
 }
 
 function fuelPerLapWorkbenchRow(windows) {
-  const displayedBucketIds = fuelV2BurnBucketOrder.slice(0, 4);
+  // Preserve the established live Last/5L/10L/Max cells and add the typed
+  // History seed as its own visible V2 workbench cell. Min/Quali remain
+  // intentionally out of this compact top-half row.
+  const displayedBucketIds = [
+    fuelV2BurnBucketId.last,
+    fuelV2BurnBucketId.fiveLapAverage,
+    fuelV2BurnBucketId.tenLapAverage,
+    fuelV2BurnBucketId.historicalNormal,
+    fuelV2BurnBucketId.maximum
+  ];
   const buckets = displayedBucketIds.map((bucketId) => windows.buckets[bucketId]);
   const segments = buckets.map((bucket) => metricSegment(
     bucket.label,
@@ -9108,6 +10131,7 @@ function metricModelRow(row) {
       value: row?.value || '--',
       tone: row?.tone || 'normal',
       ...(Array.isArray(row?.segments) && row.segments.length > 0 ? { segments: row.segments } : {}),
+      ...(Number.isInteger(row?.segmentColumnCount) ? { segmentColumnCount: row.segmentColumnCount } : {}),
       ...(row?.rowColorHex ? { rowColorHex: row.rowColorHex } : {})
     };
   }
@@ -9124,6 +10148,29 @@ function gridRow(label, values, tone = 'normal') {
       ? { value: value.value, tone: value.tone || tone }
       : { value, tone })
   };
+}
+
+function gridSummaryRow(summary, tone = 'normal') {
+  return { summary, tone };
+}
+
+function fuelV2StintTargetHeaders(hasTireServiceEvidence) {
+  return [
+    'Stint',
+    'Plan',
+    'Fuel target',
+    ...(hasTireServiceEvidence ? ['Tires'] : []),
+    'Live state'
+  ];
+}
+
+function fuelV2StintTargetCells(hasTireServiceEvidence, plan, fuelTarget, tires, liveState) {
+  return [
+    plan,
+    fuelTarget,
+    ...(hasTireServiceEvidence ? [tires ?? gridCell('—', 'normal')] : []),
+    liveState
+  ];
 }
 
 function gridCell(value, tone) {

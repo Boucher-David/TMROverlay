@@ -1,0 +1,193 @@
+{
+  "summaryVersion": 5,
+  "importModelVersion": 5,
+  "sourceId": "capture-example-fuel-v2-s001-race",
+  "summaryId": "sha256-v130-example",
+  "startedAtUtc": "2026-07-13T12:00:00+00:00",
+  "finishedAtUtc": "2026-07-13T12:30:00+00:00",
+  "importedAtUtc": "2026-07-13T12:31:00+00:00",
+  "sourceArtifact": {
+    "path": "capture-example/fuel-v2-capture/capture-example-fuel-v2-s001-race-fuel-v2-diagnostics.json",
+    "sha256": "v130-example",
+    "byteLength": 2048,
+    "lastWriteTimeUtc": "2026-07-13T12:30:01+00:00"
+  },
+  "sourceVersions": {
+    "captureFormatVersion": 5,
+    "historicalSummaryVersion": 1,
+    "historicalCollectionModelVersion": 1,
+    "historicalAggregateVersion": 3,
+    "liveModelContractVersion": 1
+  },
+  "scope": {
+    "combo": {
+      "carKey": "car-id-1",
+      "trackKey": "track-2-example",
+      "trackLayoutKey": "track-id-2-config-46756C6C",
+      "trackLayoutIdentitySource": "track-id-and-config",
+      "sessionKey": "race"
+    },
+    "car": {
+      "carId": 1,
+      "carPath": "example-car"
+    },
+    "track": {
+      "trackId": 2,
+      "trackConfigName": "Full"
+    },
+    "session": {
+      "currentSessionNum": 2,
+      "sessionNum": 2,
+      "sessionType": "Race",
+      "sessionName": "Race",
+      "eventType": "Race",
+      "dcRuleSet": "IMSA",
+      "sessionLapsText": "50 laps",
+      "sessionId": 20,
+      "subSessionId": 21
+    },
+    "trackSectors": []
+  },
+  "sessionIntegrity": {
+    "captureScope": "session-segment",
+    "connectionSourceId": "capture-example",
+    "segmentOrdinal": 1,
+    "boundaryKind": "first-observed->collector-stop",
+    "sessionFamily": "race",
+    "sessionOccurrenceKey": "current-session:2|session:2|session-id:20|sub-session-id:21",
+    "sessionOccurrenceVerified": true,
+    "sessionOccurrenceSupportsReconnectDeduplication": true,
+    "exactTrackLayoutVerified": true,
+    "exactCarVerified": true
+  },
+  "quality": {
+    "confidence": "medium",
+    "contributesToLearning": true,
+    "syntheticReplaySuitable": true,
+    "reasons": []
+  },
+  "evidence": {
+    "frameCount": 100,
+    "sampledFrameCount": 10,
+    "acceptedLapBurnWindowCount": 1,
+    "rejectedLapBurnWindowCount": 0,
+    "acceptedSectorWindowCount": 0,
+    "rejectedSectorWindowCount": 0,
+    "pitWindowCount": 0,
+    "pitWindowsWithFuelIncrease": 0,
+    "stationaryServiceObservationCount": 1,
+    "retainedStationaryServiceObservationCount": 1,
+    "droppedStationaryServiceObservationCount": 0,
+    "teamStintCount": 0,
+    "driverChangeEventCount": 0,
+    "framesWithLocalFuel": 100,
+    "framesWithTeamProgress": 100,
+    "framesWithTeamProgressWithoutLocalFuel": 0,
+    "contextFlagCounts": {},
+    "fuelEvidenceCounts": {},
+    "raceControlCounts": {},
+    "weatherCounts": {}
+  },
+  "fuelCapacity": {
+    "physicalTankCapacityLiters": 70,
+    "effectiveSessionCapacityLiters": 56,
+    "effectiveSessionCapacitySource": "matching_driver_and_class_caps"
+  },
+  "lapBudget": {
+    "framesWithLapBudget": 1,
+    "framesWithRaceProjection": 1,
+    "sourceCounts": {},
+    "missingSignalCounts": {},
+    "estimatedFinishLap": {
+      "sampleCount": 1,
+      "mean": 50,
+      "minimum": 50,
+      "maximum": 50
+    },
+    "estimatedTeamLapsRemaining": {},
+    "raceLapsRemaining": {}
+  },
+  "raceLength": {
+    "declaredSessionLapsText": "50 laps",
+    "declaredLapCount": 50,
+    "observedRaceLaps": 50
+  },
+  "acceptedLapBurnWindows": [
+    {
+      "startedAtUtc": "2026-07-13T12:01:00+00:00",
+      "completedAtUtc": "2026-07-13T12:03:00+00:00",
+      "progressDeltaLaps": 1,
+      "fuelUsedLiters": 3.1,
+      "fuelPerLapLiters": 3.1,
+      "acceptedForBaseline": true,
+      "contextFlags": []
+    }
+  ],
+  "rejectedLapBurnWindowReasonCounts": {},
+  "rejectedLapBurnWindowExamples": [],
+  "sectorBurnWindows": [],
+  "pitWindows": [],
+  "stationaryServiceObservations": [
+    {
+      "startedAtUtc": "2026-07-13T12:12:00+00:00",
+      "endedAtUtc": "2026-07-13T12:12:08+00:00",
+      "durationSeconds": 8,
+      "entryFuelLiters": 20,
+      "exitFuelLiters": 20,
+      "netFuelDeltaLiters": 0,
+      "entryRequest": {
+        "leftFrontTire": true,
+        "rightFrontTire": true,
+        "leftRearTire": false,
+        "rightRearTire": false,
+        "fuel": false,
+        "tearoff": false,
+        "fastRepair": false,
+        "requestedTireCount": 2
+      },
+      "lastRequest": {
+        "leftFrontTire": true,
+        "rightFrontTire": true,
+        "leftRearTire": false,
+        "rightRearTire": false,
+        "fuel": false,
+        "tearoff": false,
+        "fastRepair": false,
+        "requestedTireCount": 2
+      },
+      "requestChangedDuringService": false,
+      "sampleCount": 5,
+      "entryTireSetsUsed": 5,
+      "exitTireSetsUsed": 6,
+      "tireSetsUsedDelta": 1,
+      "entryTireCounters": {
+        "tireSetsUsed": 5,
+        "leftFrontTiresUsed": 12,
+        "rightFrontTiresUsed": 8,
+        "leftRearTiresUsed": 9,
+        "rightRearTiresUsed": 13
+      },
+      "exitTireCounters": {
+        "tireSetsUsed": 6,
+        "leftFrontTiresUsed": 13,
+        "rightFrontTiresUsed": 9,
+        "leftRearTiresUsed": 9,
+        "rightRearTiresUsed": 13
+      },
+      "tireCounterDelta": {
+        "tireSetsUsed": 1,
+        "leftFrontTiresUsed": 1,
+        "rightFrontTiresUsed": 1,
+        "leftRearTiresUsed": 0,
+        "rightRearTiresUsed": 0
+      },
+      "sawPitStall": true,
+      "sawServiceActive": true,
+      "sawRepair": false,
+      "qualificationFlags": [
+        "no-observed-fuel-flow"
+      ]
+    }
+  ],
+  "teamStints": []
+}

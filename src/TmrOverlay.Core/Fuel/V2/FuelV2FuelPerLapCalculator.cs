@@ -22,6 +22,10 @@ internal static class FuelV2FuelPerLapCalculator
             safeOptions.QualifyingSeed,
             FuelV2BurnBucketId.Qualifying,
             FuelV2BurnSource.QualifyingSeed);
+        var historicalNormalSeed = SeedEvidence(
+            safeOptions.HistoricalNormalSeed,
+            FuelV2BurnBucketId.HistoricalNormal,
+            FuelV2BurnSource.HistoricalNormal);
 
         return new FuelV2FuelPerLapWindows(
             Last: samples.Length >= 1
@@ -56,7 +60,14 @@ internal static class FuelV2FuelPerLapCalculator
                 FuelV2BurnBucketId.Qualifying,
                 "qualifying seed",
                 FuelV2BurnSource.QualifyingSeed),
-            AcceptedLapCount: samples.Length);
+            AcceptedLapCount: samples.Length)
+        {
+            HistoricalNormal = SeedWindow(
+                historicalNormalSeed,
+                FuelV2BurnBucketId.HistoricalNormal,
+                "classified history normal",
+                FuelV2BurnSource.HistoricalNormal)
+        };
     }
 
     private static FuelV2Scalar? AverageWindow(
@@ -247,7 +258,8 @@ internal sealed record FuelV2FuelPerLapWindowOptions(
     int PartialTenLapMinimumSampleCount = 6,
     FuelV2Scalar? MaxSeed = null,
     FuelV2Scalar? MinSeed = null,
-    FuelV2Scalar? QualifyingSeed = null)
+    FuelV2Scalar? QualifyingSeed = null,
+    FuelV2Scalar? HistoricalNormalSeed = null)
 {
     public static FuelV2FuelPerLapWindowOptions Default { get; } = new();
 }

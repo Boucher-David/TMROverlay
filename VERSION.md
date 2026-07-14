@@ -13,24 +13,21 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.2.3 - Fuel V2 Capture And History Diagnostics
+### v1.3.0 - Fuel Calculator V2
 
-Status: active implementation on branch `release/v1.2.3`.
+Status: active implementation on branch `v1.3`.
 
 Suggested squash title:
 
 ```text
-[v1.2.3] Add Fuel V2 capture and history diagnostics
+[v1.3.0] Build Fuel Calculator V2
 ```
 
 Suggested squash body:
 
 ```text
-- Add Fuel V2 capture recorder/options plumbing so enhanced telemetry capture can persist versioned fuel-history artifacts alongside diagnostics and forensics packages.
-- Add Fuel V2 history store/importer models and retention integration so captured fuel-history snapshots can be read, packaged, and maintained through app-managed storage.
-- Document the new artifacts and schema flow across the README, capture/data-contract/history docs, diagnostics notes, and telemetry references.
-- Add focused app tests for Fuel V2 capture options/recording, history import/storage behavior, retention handling, diagnostics bundle packaging, and schema compatibility ordering.
-- User-data compatibility: the Fuel V2 history schema is additive and versioned with compatibility coverage; existing released raw-capture and history flows are intended to remain readable.
+- Complete the Fuel Calculator V2 workbench and live-model contract, including classified Fuel V2 history intake, later strategy selection, and a V2 overlay cutover that preserves V1 until explicitly promoted.
+- User-data compatibility: Fuel V2 history format 3 adds bounded stationary-service source evidence while retaining compatible format-2 classified readers; mixed format-1 connection evidence remains retained but cannot drive a future V2 strategy decision.
 ```
 
 ## Merged Mainline Milestones

@@ -152,7 +152,10 @@ internal static class LiveLocalStrategyContext
 
     private static int? ValidCarIdx(int? carIdx)
     {
-        return carIdx is >= 0 and < 64 ? carIdx : null;
+        // Player/focus IDs arrive through the normalized live model, whose
+        // collector validates against the current session schema. Keeping a
+        // legacy 64-slot cap here would reject legitimate expanded CarIdx IDs.
+        return carIdx is >= 0 ? carIdx : null;
     }
 
     private static string ReasonCode(OverlayAvailabilityReason reason)

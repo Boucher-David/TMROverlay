@@ -10,11 +10,14 @@ harden is race lap budget quality, because every fuel-to-finish, stint rhythm,
 stop count, and refuel recommendation depends on how many laps the race will
 actually run.
 
-## V1.2.3 Diagnostics And Learned History
+## V1.3 Diagnostics And Learned History
 
-The V1.2.3 diagnostics branch ships default-on Fuel V2 evidence collection
-without connecting Fuel V2 strategy advice or workbench rendering to production
-overlays. `FuelV2CaptureRecorder` writes compact per-session evidence under
+The V1.3 branch retains the default-on Fuel V2 evidence collection introduced
+by the diagnostics work, while hardening its history contract before strategy
+selection or overlay cutover. It does not connect Fuel V2 strategy advice or
+the browser-only workbench to the default production overlay. The factual V2
+top half is now available through an explicit developer gate and production
+replay, while V1 remains the default. `FuelV2CaptureRecorder` writes compact per-session evidence under
 `fuel-v2-capture/`, either inside raw captures or under the logs root when raw
 capture is off. After finalization, `FuelV2HistoryImporter` promotes selected
 derived facts into `history/user/fuel-v2/` while
@@ -771,6 +774,66 @@ question:
   exact edge, reserve-flipped Dallara start, one-lap-too-many, absurd `N+1`,
   caution-only burn, and no-live-burn case so the table proves it degrades
   impossible or source-weak targets instead of presenting them as recommendations.
+
+### Real-History Bottom-Half Reference Set - 2026-07-13
+
+`fixtures/telemetry-analysis/fuel-v2-bottom-half-real-history/manifest.json`
+contains compact sanitized facts from three local real V1 historical-session
+summaries: the four-lap Dallara stretch decision, a timed 45-minute Dallara
+fuel-only service, and an incomplete Charlotte oval tire-service case. They
+are deterministic bottom-half workbench reference scenarios, not retroactive
+Fuel V2 format-2 artifacts. The V1 summaries did not contain the immutable
+segment lineage and raw evidence needed to honestly classify them under the
+new history intake contract.
+
+Use their observed fuel, stint, pit, and service facts to check row semantics
+and degraded behavior. Do not import them into `history/user/fuel-v2/`, use
+them as a runtime strategy source, or claim that they validate format-2
+history ingestion. Real format-2 sidecars will later validate that separate
+intake path; these references let bottom-half work proceed without inventing
+telemetry facts.
+
+#### Bottom-Half State Gate and Stint Rows - Current Workbench Slice
+
+The lower-half implementation is still deliberately a gate, not a full stint
+simulator. It preserves the approved V2 top-half composition and now renders a
+real four-column table only when an actionable stint plan is present:
+
+```text
+Stint | Plan | Fuel-only target | Live state
+```
+
+For the fixed four-lap Dallara opening, the staged rows are:
+
+```text
+Stint 1 | 3 laps, then pit | Skip Stint 2: 4 to finish <=12.42 L/lap | Possible — History 13.50 L/lap; save 1.08 L/lap
+Stint 2 | Final 1 lap after pit | Fuel to finish: 13.50 L | Predicted +4.32 L to finish (at-box 9.18 L)
+```
+
+The second refuel is an explicitly labeled prediction from the selected burn,
+the planned safe first-stint boundary, and an expected at-box fuel checkpoint.
+It is not a future observed delta or an instruction to fill the tank. A later
+schedule model owns reserve/pit-lane policy once, derives that checkpoint from
+shared Core inputs, and must never duplicate the reserve in its refuel amount.
+
+The state gate remains:
+
+- no bottom-half evidence: omit the entire lower half;
+- enough fuel for the known target: show `No fuel stop required`;
+- usable fuel/service history but no live timed-race finish budget: omit the
+  table and hold the plan until the live input is present;
+- a known target exceeding conservative range: expose the normal stop path and
+  the stretch requirement side-by-side, without calling either advice.
+
+The initial browser fixtures are `fuel-v2-bottom-half-no-data`,
+`fuel-v2-bottom-half-dallara-three-lap-control`,
+`fuel-v2-bottom-half-dallara-four-lap`,
+`fuel-v2-bottom-half-dallara-timed`, and
+`fuel-v2-bottom-half-charlotte-degraded`. The four-lap Dallara fixture is the
+active workbench default. It uses the explicit classified `HistoricalNormal`
+seed from the deterministic format-2 bridge fixture for the provisional burn,
+and sanitized V1 facts only as observed comparison context. No fixture is
+runtime strategy logic.
 
 Staging implementation boundary: `FuelV2StintTargetsCalculator` derives the
 current tank range and dynamic required-burn targets from current fuel, reference
@@ -2687,11 +2750,15 @@ Gate 2 completion - 2026-07-13:
   driver's `CarClassMaxFuelPct` in non-durable session context. Class-cap
   evidence requires an exact `DriverCarIdx` match and never comes from the
   parser's fallback first-driver identity. The Fuel V2
-  capture recorder uses those values with `DriverCarFuelMaxLtr`; it populates
-  the capacity fields already present in format-version-1 Fuel V2 sidecars and
-  learned summaries. No durable V1 history shape or Fuel V2 artifact field was
-  added, so this evidence-population change does not require a schema-version
-  bump and older placeholder/null artifacts remain readable.
+  capture recorder uses those values with `DriverCarFuelMaxLtr`; it populated
+  the capacity fields already present in the released format-version-1 Fuel V2
+  sidecars and learned summaries. The v1.3 format-2 successor preserves those
+  capacity facts while adding classified-session lineage, format 3 extends
+  that classified contract with bounded stationary-service source evidence, and
+  format 4 adds exact tire-counter snapshots/deltas where the SDK exposes them,
+  and format 5 preserves raw `WeekendInfo.DCRuleSet` service-rule provenance;
+  older placeholder/null artifacts remain readable as legacy-unclassified
+  evidence.
 - `FuelV2FuelCheckpointCalculator` retains effective capacity, first-green,
   current, expected-at-box, service-complete, and expected-pit-exit fuel as
   distinct facts with typed source, confidence, and state. Measured facts win
@@ -2714,7 +2781,8 @@ Gate 2 completion - 2026-07-13:
   rather than being relabeled Authoritative. Capture and import tests protect
   the live-session-info-to-learned-history path, warmup-to-race scope changes,
   and older format-version-1 null/placeholder artifacts through the existing
-  capacity fields.
+  capacity fields. The v1.3 compatible reader retains them as
+  legacy-unclassified evidence rather than using them for learned strategy.
 
 This is still a factual foundation, not strategy selection. Configured margin,
 reserve policy, service feasibility/clamping, preferred bucket choice, and
@@ -2989,6 +3057,239 @@ starting `Stint N` or deciding whether the `V2` label remains necessary, perform
 the required preservation audit below against the pre-gate workbench commits
 and accepted cell tests.
 
+#### Live V2 Composition Ingress Hardening - 2026-07-14
+
+The first live ingress is intentionally a thin adapter, not an implicit
+strategy selector: `FuelV2LiveSnapshotComposer` consumes the normalized
+`LiveTelemetrySnapshot` and its qualified completed-lap span, then produces the
+immutable top-half composition. It does not reconstruct burn from V1 aggregate
+fields, choose a history/practice/live profile, invent target laps or reserves,
+or create a `Plan`/`PitRequest`.
+
+The live facts have the following ownership boundary:
+
+| Concern | Owner |
+| --- | --- |
+| Current session/car/layout/rules facts, source/session freshness, qualified clean completed-lap observations, raw race-control and local-state facts | `Core.Telemetry.Live` |
+| Actual stationary-service outcomes, request shape, tire/repair/fuel-counter deltas, and observed service duration | `Core.PitService` |
+| Later condition/repair/penalty/tow interruption classification and driving/fuel/tire-run continuity | small shared `Core.Strategy` contract |
+| Evidence selection/hysteresis, box-to-service-to-exit route consumption, stint schedule, fuel/service/tire optimizer, and Fuel advice eligibility | `Core.Fuel.V2` |
+| User-facing labels, optional columns, layout, and Windows/browser/localhost mapping | shared app presenter/renderer contract |
+
+V2 composition is unavailable until both conditions are true: a telemetry frame
+has arrived for the current context and current session information has arrived
+for the active collection source. This prevents an old fuel level or derived
+race model being combined with newly published car, exact-layout, fuel-cap, or
+session facts. A changed source resets freshness until it publishes fresh session
+YAML; a changed known `TrackConfigName`, `SessionID`, or `SubSessionID` resets
+the accepted-lap span. Unknown identity fields do not by themselves fabricate a
+boundary.
+
+This is an additive Core safety bridge only. It leaves V1 strategy unchanged and
+is not approval to use Fuel V2 learned history for strategy. The next promotion
+slice can present factual V2 top-half values behind a development gate, with the
+lower half absent until the separate selector, route, lifecycle, and scheduler
+owners exist.
+
+#### Factual V2 Overlay Development Gate - 2026-07-14
+
+`FuelV2Overlay:Enabled` defaults to `false` in application configuration (or
+`TMR_FuelV2Overlay__Enabled=true` through this app's normal environment-variable
+provider).
+It is an app/developer gate, not a persisted user preference: its purpose is to
+review the emerging Fuel V2 overlay through the real localhost/OBS browser-model
+and Windows-native paths without silently cutting over the V1 strategy
+calculator.
+
+When enabled, the presentation consumes the fresh, local-context-qualified
+`FuelV2LiveSnapshotComposer` output and shows only factual top-half material:
+
+- race only: Lap context and current/effective fuel capacity;
+- every supported active session: the aligned
+  `Last / 5L / 10L / History / Max / Min / Quali` fuel-per-lap and range
+  comparison. `History` is populated only from an exact classified
+  race/practice reader and remains visibly modeled; and
+- practice/qualifying deliberately omit race-plan, fuel-state, and stint
+  language, preserving the existing usage/range-only contract.
+
+It must render nothing for stale, disconnected, non-local, garage, or
+pre-session-context telemetry. The native gate deliberately uses the sectioned
+DesignV2 renderer even when the legacy-renderer environment switch is off; the
+legacy table cannot preserve metric sections/segments or Fuel's hidden no-data
+policy. Localhost uses the same view model through the browser model factory.
+The tracked Mac/browser-review server remains a fixture renderer for ordinary
+review URLs, while its `production-model-replay` route forwards this C# presenter
+byte-for-byte. The static V2 workbench remains a design/diagnostic surface only.
+Before this gate can be a visual release/parity claim, add a deterministic C#
+model-replay fixture, then capture matching browser, localhost/OBS, and
+Windows-native manifests.
+
+The production replay tool is prepared for that first fixture: run
+`tools/TmrOverlay.OverlayModelReplay` with
+`--overlays fuel-calculator --fuel-v2-overlay true` against a compact raw-capture
+sample plan and a `--settings` file that enables Fuel for the replayed session.
+To seed the factual `History` column or inspect selected tire-shape evidence,
+pass prior immutable sidecars with
+`--fuel-v2-history-artifacts <sidecar-a.json,sidecar-b.json>` (and optionally
+`--fuel-v2-history-as-of <utc>`). Replay stages copies below its own output
+directory and rejects any sidecar finished after the earliest selected replay
+frame, preventing an end-of-race artifact from leaking into a race-start view.
+Then pass its emitted `BrowserOverlayDisplayModel` rows to
+`tools/browser-review/render-model-replay-screenshots.mjs`. The replay records
+the enabled gate and sanitized staged-history provenance in both the run summary
+and each model row. No generated enabled-gate fixture is committed yet, so this
+capability is evidence plumbing, not completed browser-review parity.
+
+For interactive inspection of such an output, start the review server with
+`TMR_BROWSER_REVIEW_MODEL_REPLAY_ROOT=<forensics-output>` and open
+`/review/overlays/fuel-calculator?fixture=production-model-replay&frame=<frame-index>`.
+That route forwards the serialized C# `response` directly; it does not run the
+Node workbench builder, add review chrome/evidence, or recalculate Fuel values.
+
+The constructed 24-hour control lives at
+`fixtures/telemetry-analysis/fuel-v2-white-room-24h/manifest.json`. Run it with
+`--white-room-fixture <path> --overlays fuel-calculator --output <directory>`.
+Unlike raw replay it creates typed normalized checkpoints and an output-owned
+synthetic exact-history summary, then runs the real history reader, V2 composer,
+presenter, and browser model factory. The fixture intentionally covers
+history-only race start, ten-lap live agreement, higher live disagreement, and
+a mid-first-stint pit interruption. Every emitted row is marked
+`constructed-white-room`, has no capture identifier, reports no raw telemetry,
+and keeps `FuelV2History:UseForStrategy=false`; it is a deterministic arithmetic
+and provenance control, never a claim about an iRacing capture. The factual
+gate must still omit `Stint N`/lower-half rows for every checkpoint.
+
+This is not the Fuel V2 strategy cutover. Exact `HistoricalNormal` can appear
+only as a labeled factual display seed; this presenter does **not** select it
+for advice, choose a target-usage bucket, calculate fuel to add, create a pit
+request, show a Plan, or show a `Stint N`/lower-half row. Those remain blocked
+on the separate selector, pit-route, interruption lifecycle, and
+service/scheduler contracts. V1 remains the default while this gate is false.
+
+#### Race Burn Selection And Pit-Route Foundation - 2026-07-14
+
+The next Core-only slice makes two previously implicit strategy inputs explicit
+without yet feeding either into the factual V2 overlay, a pit request, or V1.
+
+`FuelV2RaceBurnEvidenceSelector` owns normal **race** burn selection above the
+factual `Last / 5L / 10L / History / Max / Min / Quali` buckets. Its initial
+policy is deliberately asymmetric:
+
+- exact classified `HistoricalNormal` is the normal-race start baseline when
+  explicitly strategy-eligible;
+- one accepted live lap is real, but cannot replace an available exact-history
+  baseline; it is a provisional seed only when no history exists;
+- the more conservative of the clean live `5L` and `10L` windows takes
+  precedence immediately when it raises required fuel, so an older lower `10L`
+  average cannot hide a recent higher `5L` burn;
+- a lower live result stays on the current conservative baseline until a full
+  ten clean live laps support it. That prevents a short early run from reducing
+  fuel or deleting a stop; and
+- `Max`, `Min`, and qualifying remain factual range/limit comparison buckets,
+  never silent normal-stint selections.
+
+The selector returns the held/observed candidate alongside the selected burn,
+provenance state, seed/advice eligibility, and reason. A small stateful tracker
+exists for the later Fuel V2 lifecycle service, not the live telemetry store.
+That lifecycle owner must reset it on car/layout/session or condition-regime
+boundaries; a missing current history read also cannot keep an old historical
+selection alive. Practice history is still admitted through the exact-history
+reader's existing race-then-practice fallback; qualifying only reinforces the
+conservative limit until a separate policy deliberately changes that rule.
+
+`FuelV2PitRouteFuelProjection` now owns the fuel-path input shape needed for a
+next stop:
+
+```text
+current -> pit entry -> assigned box -> service complete -> pit exit
+```
+
+It retains three independently sourced fuel segments—current-to-pit-entry,
+pit-entry-to-box, and box-to-pit-exit—so the later strategy layer can account
+for a driver's actual box rather than treating every stop as a generic pit-lane
+number. A complete route scope carries car, exact layout, track version,
+pit-speed rule, ruleset, and assigned-box identity; every segment must match
+it. All three matching segments must be finite, non-negative, and corroborated
+or proven before it exposes either checkpoint input. A missing, observed-only,
+mismatched, or invalid segment leaves the route partial/invalid and supplies **no** partial
+`ExpectedAtBox`/`ExpectedPitExit` arithmetic; missing never means zero. Once a
+later route collector provides that complete projection, it maps exactly once
+to the existing factual checkpoint calculator as:
+
+```text
+ExpectedFuelToBox = current-to-entry + entry-to-box
+ExpectedBoxToPitExit = box-to-exit
+```
+
+This slice is a policy and data-shape foundation only. It does not yet collect
+box position, infer remaining distance while already in pit lane, create route
+history, select a service amount, or change any user-facing V2 table row. Those
+need the interruption lifecycle plus compact archive slices below.
+
+#### Strategy Stress-Fixture Catalogue - 2026-07-14
+
+`fixtures/telemetry-analysis/fuel-v2-strategy-stress/manifest.json` is now the
+single named catalogue for V2 strategy pressure cases. It makes the same case
+usable in three deliberate stages: a deterministic Core characterization test
+where the owner exists today, a provenance-labelled workbench visual review,
+and eventual browser-review, localhost/OBS, and Windows-native final-overlay
+evidence once the relevant row becomes real. The catalogue test guards its
+schema, provenance labelling, redaction boundary, unique IDs, and current test
+references without requiring locally retained raw archives.
+
+The initial catalogue spans exact/no/mismatched history, practice context,
+early lower/higher live burn, fixed-lap authority, timed-race green/service,
+endurance handoff and repair, long-race rejoin contamination/recovery, route
+boundaries/incomplete stops, and fuel-only, repair, and tire-plus-fuel service
+references. Real archive observations remain explicitly distinct from
+constructed selector, complete-route, and known-no-stop pressure cases.
+
+Two gaps are intentional and visible rather than papered over: the retained
+45-minute Dallara race yields no strict continuous live `5L`/`10L` window under
+the present yellow-anchor rule, and no retained raw archive proves a complete
+box-scoped current-to-entry-to-box-to-exit route. The constructed cases protect
+the resulting Core safety contracts until compact replay exports replace them;
+they must never be presented as captured driving proof.
+
+#### Workbench Composition Direction - 2026-07-14
+
+The current V1 `Plan` row is the approved reference for a compact race
+overview: it communicates race/remain/stints/stops succinctly without making
+the driver parse the underlying calculation. V2 retains that **role**, but does
+not retain duplicate Full Race and From Here plan rows in the eventual driving
+overlay. The current lap-budget result should fold into that one overview or
+the header; final-stint detail belongs in the lower-half Final Stint row.
+
+Fuel/Lap, Laps in Tank, and Fuel to Add form one explicitly aligned comparison
+matrix in the V2 workbench. Their stable left-to-right order is
+`Last | 5L | 10L | History | Max | Min | Quali`; a bucket with no factual
+calculation remains a visible unavailable cell instead of collapsing the row.
+The shared seven-column geometry is contract-owned, so the same bucket always
+occupies the same visual column across those rows.
+
+The V2 workbench uses the shared Weather/Pit Service visual system rather than
+inventing a Fuel-specific dashboard treatment: dark navy metric rows, muted
+uppercase labels, compact two-line value cells, and a stable scan anchor on the
+left. Fuel has one explicit geometry exception for its seven-column matrix
+(`1120px` width, `158px` label gutter, `38px` segmented row, and `26px`
+minimum segment); those values live in `overlay-geometry.json`. Browser review
+and the native Design V2 renderer both consume the same maximum segment-column
+contract, so the final `Quali` column cannot silently disappear on Windows.
+
+Colour is local semantic evidence, not a row category: neutral is the normal
+plan/comparison surface; cyan denotes measured/info, green safe/live, amber
+partial or near-boundary, and red infeasible. In particular, ordinary Plan
+summary tiles and Stint labels remain neutral while the decisive Fuel Target or
+Live State cell carries the warning. The workbench source label still exposes a
+seeded/degraded provenance state; colour must not make every ordinary number
+look like a warning.
+
+Target Usage Green/Current and the separate full-race/current-plan arithmetic
+remain retained Core/workbench diagnostics while the lower half is built. Once
+Current Stint, Next Stint, Final Stint, and Strategy provide the approved
+Fuel Target and live-state decisions, those intermediate rows are candidates
+to move behind a diagnostic surface rather than remain normal driving content.
+
 #### Post-Gate Top-Half Preservation Audit - 2026-07-13
 
 The required audit found no accidental deletion, reversion, or semantic loss in
@@ -3227,6 +3528,31 @@ Pit-service evidence and diagnostics:
 - Implement shared `nextPitRequest` consumption across Fuel V2 and Pit Service
   as required V2 infrastructure so fuel, tires, tearoff/wiper, fast repair,
   repairs, and penalty state update both surfaces together.
+- The first implementation seam is intentionally narrow: Fuel V2 adapts one
+  explicitly selected typed boundary bucket into the shared `nextPitRequest`,
+  and Pit Service contributes the normalized live selection. It validates
+  selection alignment only; it is not yet an overlay input, command path, or
+  learned-service-time model. In particular, the adapter selects from the
+  complete typed boundary rather than the legacy named pit-request comparison,
+  so an explicit `HistoricalNormal` choice does not require adding a seventh
+  positional column to that top-half comparison contract.
+- The same shared Core seam now has a stationary-service observation tracker.
+  It starts only from reliable local pit-stall or active-service evidence;
+  pit-lane travel remains in the existing diagnostic pit window. It records
+  request shape, raw service status/flags, observed fuel-flow intervals,
+  cadence gaps, qualification failures, and raw entry/exit/delta tire counters.
+  The exact four-corner counters preserve individual, front/rear, left/right,
+  four-tire, and unusual selections without assuming the request executed.
+  Format-4 sidecars retain bounded observations and the importer copies them
+  into the immutable summary only after validating the retained/dropped
+  counters. A shared classifier marks each result confirmed, request-only,
+  mismatched, or ambiguous; repair/interrupted windows cannot train tire timing.
+  Format-5 adds raw `WeekendInfo.DCRuleSet` to the session scope as provenance
+  only. It does not prove a sequential/parallel execution mode, so every
+  current value remains `Unknown` for timing. A first read-time exact-shape profile may show `Front tires —
+  observed` or `Front tires — collect sample`; it never exposes seconds,
+  overlap, or a "tires are free" recommendation. These facts do not enter the
+  fuel-burn aggregate or produce a duration/rate recommendation.
 - Prove service overlap/order by car/service rules so "four tires: +8s" means
   incremental stop loss versus the selected fuel plan, not raw tire duration.
   Strategy-facing service rows must show incremental loss relative to the
@@ -3240,6 +3566,10 @@ Pit-service evidence and diagnostics:
   bad sample when the observed add matches the session-effective cap. For
   example, requesting `50 L` when the tank can only accept `30 L` should
   classify as a valid cap-limited fill, not as failed refuel evidence.
+- Do not infer service concurrency from arbitrary session-info or duration
+  data. `WeekendInfo.DCRuleSet` is preserved as raw provenance only. Its label,
+  including fair-share or familiar series identifiers, remains `Unknown` for
+  service timing until a separately sourced executable rule contract exists.
 - Fast repair and discrete service proof: collect or import clean samples so
   fast repair, tearoff/wiper, setup adjustments, and other exposed services can
   graduate like tires/fuel. Once isolated, these services should use the same
@@ -3808,25 +4138,20 @@ Timing model:
   evidence proves how long a tire swap, windshield tearoff, or other static
   pit-service task takes for car `N` under a rule set, that value should not need
   a multi-capture synthesis model every race.
-- Treat stationary service time as the maximum of active service buckets until
-  replay evidence proves a service is serialized:
-
-  ```text
-  stationaryServiceSeconds =
-      max(fuelServiceSeconds, tireServiceSeconds, repairServiceSeconds, otherServiceSeconds)
-  ```
+- Treat service execution mode as a source-backed, per-rule decision:
+  `Parallel`, `Sequential`, or `Unknown`. A verified parallel mode may use the
+  limiting active bucket; a verified sequential mode must compose the proven
+  service order; `Unknown` produces no strategy-facing duration or tire delta.
+  Current iRacing series can use different fuel/tire modes, so neither `max`
+  nor additive timing is a safe default.
 
 - Keep pit-lane travel separate from stationary service. A late pit box matters
   for fuel-to-box risk and total pit-lane loss, but not for the fill-rate
   itself.
 - Tire timing should compare equivalent stops, not just add tire time on top of
-  fuel time. The dormant V1 helper already has the right rough shape:
-
-  ```text
-  noTireStopSeconds = max(fuelServiceSeconds, noTireServiceSeconds)
-  tireStopSeconds = max(fuelServiceSeconds, tireServiceSeconds)
-  tireTimeLossSeconds = max(0, tireStopSeconds - noTireStopSeconds)
-  ```
+  fuel time. The comparison must use the current verified execution mode and
+  matching service shape; the dormant V1 `max(...)` helper is not a V2 shortcut
+  because it assumes parallel operation.
 
 - Fast repair should be modeled like other discrete pit services such as tires,
   refuel, windshield tearoff, or wiper service where exposed. Once isolated, it
@@ -4372,7 +4697,7 @@ Fuel V2 diagnostic capture boundary:
   promotion step explicitly imports it.
 - Preferred artifact shape:
   - while raw capture is active, write
-    `capture-*/fuel-v2-capture/fuel-v2-diagnostics.json`;
+    `capture-*/fuel-v2-capture/{connection}-fuel-v2-sNNN-{family}-fuel-v2-diagnostics.json`;
   - when raw capture is not active, write recent rolling files under
     `logs/fuel-v2-capture/*-fuel-v2-diagnostics.json`;
   - support/diagnostics bundles should include these files under a clearly named
@@ -4385,26 +4710,64 @@ Fuel V2 diagnostic capture boundary:
   effective-cap limitation, sampled fuel/progress/pit/weather/lap-budget inputs,
   accepted/rejected lap-burn windows, sector burn samples, pit windows, team
   stint windows, driver-change events, source/missing-signal counts, and
-  synthetic-replay suitability. It does not mutate durable history and does not
-  copy raw telemetry.
+  synthetic-replay suitability. Format-5 also retains bounded stationary-service
+  observations separately from pit-lane windows; those carry the local request
+  shape, service status/flags, fuel-flow cadence, qualification failures, and
+  entry/exit plus delta snapshots for total, side, axle, and exact four-corner
+  tire counters where the SDK exposes them. It does not mutate durable history
+  and does not copy raw telemetry.
 - Current implementation also promotes selected sidecar evidence into a separate
   Fuel V2 learned-history store after session finalization when
   `FuelV2History:Enabled=true`. The store lives under
   `%LOCALAPPDATA%\TmrOverlay\history\user\fuel-v2\`, writes
-  `manifest.json`, per-session `summaries/{sourceId}.json`, and rebuilt
-  `aggregate.json` files, and keeps `FuelV2History:UseForStrategy=false` so V1
-  strategy and overlays do not read it. The importer stores source artifact
+  `manifest.json`, content-hash `summaries/{summaryId}.json`, and rebuilt
+  `aggregate.json` files. Format 2 split immutable telemetry-session segments;
+  format 3 added stationary-service source evidence; format 4 adds exact
+  tire-counter snapshots/deltas; format 5 adds raw `DCRuleSet` provenance to
+  the session scope. Reusable evidence is grouped by exact car
+  + exact track layout (with session family separate), while race length/fuel-cap
+  facts remain context rather than history keys. Version-1 connection records
+  remain retained but `legacy-unclassified`; a format-2, format-3, format-4, or format-5 segment
+  whose raw scope cannot validate its lineage is retained as unclassified v2.
+  Neither can contribute to learned metrics. It keeps
+  `FuelV2History:UseForStrategy=false` so V1 strategy and overlays do not read
+  it. The importer stores source artifact
   path/hash, app/schema versions, session scope, fuel-cap facts, accepted and
   rejected evidence, lap-budget outcome metrics, pit/service windows, and team
   stint shape; it does not persist raw frame streams or raw SDK value snapshots.
-- Branching intent: the V1.2.x diagnostics branch should ship this default-on
-  capture/history path without connecting any Fuel V2 overlay advice or
-  workbench rendering. The parked V1.3 Fuel V2 calculator/workbench branch can
-  then compare its top-half models against real teammate `fuel-v2-capture`
+- Branching intent: V1.3 can compare its top-half models against real teammate
+  `fuel-v2-capture`
   sidecars and `history/user/fuel-v2/` learned summaries before any strategy
   promotion. Until a later promotion decision flips
   `FuelV2History:UseForStrategy`, these records are training/calibration
   evidence only and must not alter V1 overlay behavior.
+- **V1.3 classified-history bridge:** the staged V2 reader now looks up only
+  the current exact car plus exact `TrackId`/layout-config family. For a race
+  it tries classified, learning-eligible `race` history first and then the
+  same exact `practice` family; it never promotes qualifying to normal burn,
+  merges families, or falls back to a loose track name. A current-version
+  aggregate must also prove its raw scope, classified/learning counts, and a
+  positive finite accepted-lap mean before it can return a typed
+  `HistoricalNormal` scalar. The scalar is a seeded, non-clean workbench input
+  with selected-family/sample/provenance metadata. `UseForStrategy=false`
+  still prevents a strategy-purpose lookup, V1 has no consumer, and a later
+  live-vs-history selection policy must be explicit rather than hidden in the
+  burn-window calculator.
+- The deterministic 13.50 L/lap format-2 importer/query fixture proves the
+  whole staged route: accepted sidecar window → classified aggregate → exact
+  Race selection → `HistoricalNormal` → explicit Target Usage/Plan inputs.
+  It does not reinterpret the V1 Dallara reference manifest as Fuel V2
+  history. The browser workbench mirrors the persisted aggregate/selector
+  contract, while the C# importer test remains the raw-sidecar authority.
+- The bridge still adds no field to the fuel-burn aggregate: format-5
+  summaries/imports retain stationary source evidence plus raw service-rule
+  provenance, manifest is version 3, and aggregate remains version 2. A
+  read-time exact tire-history profile queries immutable summaries by exact
+  car/layout, Race→Practice family fallback, exact requested corner shape, and
+  the same rule identity; it is presentation evidence only, never a timing or
+  strategy result. Race length, weather, BoP, and effective fuel-cap
+  facts remain context for a later selector: live effective capacity always
+  drives the current plan and is not a history key.
 - This stream should collect the facts needed to tune the V2 workbench and train
   later models: local fuel-known samples, clean/rejected lap burn windows,
   partial sector burn and cumulative live-lap projections, fuel-flow integral
@@ -4721,11 +5084,13 @@ Pit Service overlay relationship:
   same normalized next-stop request that Fuel V2 uses. It already belongs with
   local pit-service telemetry and should help prove whether Fuel V2 is reading
   current pit selections correctly.
-- Fuel V2 should own strategy math: fuel-to-finish, target fuel, planned add
-  amount, service-time estimates, and whether the current request is strategy
-  safe. Pit Service should show the selected/requested service state and can
-  surface Fuel V2's selected recommendation through the shared request model. It
-  should not independently recalculate laps-to-go or refuel advice.
+- Fuel V2 should own fuel strategy math: fuel-to-finish, target fuel, planned
+  add amount, and whether the current request is fuel-strategy safe. The shared
+  Core Pit Service strategy domain should own rule-qualified learned service
+  facts and their time composition. Pit Service should show the
+  selected/requested service state and can surface Fuel V2's selected
+  recommendation through the shared request model. It should not independently
+  recalculate laps-to-go or refuel advice.
 - `nextPitRequest` is required shared infrastructure for V2. It should be built
   from `LiveFuelPitModel`, `LivePitServiceModel`, race-control state, repair
   state, and learned service facts. Fuel and Pit Service should both consume that

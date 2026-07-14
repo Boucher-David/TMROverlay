@@ -36,8 +36,9 @@ When raw capture is not active, it is written under the logs root:
 The deprecated mac harness has a secondary diagnostics mirror under `~/Library/Application Support/TmrOverlayMac/logs/overlay-diagnostics/` and can also write into mock capture directories, but Windows diagnostics remain the product path.
 
 Fuel Calculator V2 calibration capture is intentionally separate from
-`live-overlay-diagnostics.json`. Its sidecar lives under `fuel-v2-capture/` in a
-raw capture or under `logs/fuel-v2-capture/` without raw capture, and support
+`live-overlay-diagnostics.json`. Its source-qualified session sidecars live
+under `fuel-v2-capture/` in a raw capture or under `logs/fuel-v2-capture/`
+without raw capture, and support
 bundles include it separately so model-tuning evidence does not change the
 overlay diagnostics contract. A separate Fuel V2 importer can promote selected
 derived sidecar facts into `history/user/fuel-v2/`; V1 strategy remains

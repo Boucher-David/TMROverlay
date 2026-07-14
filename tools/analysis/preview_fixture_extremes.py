@@ -571,7 +571,7 @@ def analyze_schema(capture_dirs: list[Path]) -> dict[str, Any]:
         "relevantOverlayFields": relevant_fields,
         "sdkReferenceNotes": SDK_REFERENCE_NOTES,
         "localSdkConstraintInterpretation": [
-            "Observed CarIdx arrays in these captures use count=64; no checked-in SDK constant for max cars was found in this repo.",
+            "Observed CarIdx arrays in these captures use count=64; this is an archival schema observation, not an SDK maximum.",
             "SDK var header names and units are constrained by IRSDK_MAX_STRING=32, descriptions by IRSDK_MAX_DESC=64; session YAML string values are not constrained by those var-header buffers.",
             "The selected captures all report sdkVersion=2, tickRate=60, variableCount=334, and bufferLength=7823.",
         ],
@@ -989,7 +989,7 @@ def render_markdown(document: dict[str, Any]) -> str:
     schema = document["schemaAnalysis"]
     observed = schema["observedHeaderStringMaxima"]
     lines.append(
-        "- Observed schemas expose 334 variables, 7,823-byte buffers, 60 Hz capture rate, and max array count 64 in the selected large captures."
+        "- Observed schemas expose 334 variables, 7,823-byte buffers, 60 Hz capture rate, and max array count 64 in the selected large captures; newer SDK schemas can use larger dynamic CarIdx arrays."
     )
     lines.append(
         f"- Longest schema name/description/unit lengths observed: "

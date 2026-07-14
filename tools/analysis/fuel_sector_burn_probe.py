@@ -15,6 +15,7 @@ from fuel_laps_workbench_probe import (
     CAPTURE_HEADER_BYTES,
     FRAME_HEADER_BYTES,
     array_value,
+    car_idx_slot_count,
     finite,
     has_caution,
     has_track_surface,
@@ -517,7 +518,7 @@ def near_traffic(
 
     best_gap: float | None = None
     best_car_idx: int | None = None
-    for car_idx in range(64):
+    for car_idx in range(car_idx_slot_count(arrays)):
         if car_idx == reference_idx:
             continue
         if array_value(arrays, "CarIdxOnPitRoad", car_idx):
@@ -555,11 +556,11 @@ def near_traffic(
 
 def reference_car_idx(scalars: dict[str, Any], context: dict[str, Any]) -> int | None:
     player_car_idx = scalars.get("PlayerCarIdx")
-    if isinstance(player_car_idx, int) and 0 <= player_car_idx < 64:
+    if isinstance(player_car_idx, int) and 0 <= player_car_idx < car_idx_slot_count(arrays):
         return player_car_idx
 
     driver_car_idx = context.get("driverCarIdx")
-    if isinstance(driver_car_idx, int) and 0 <= driver_car_idx < 64:
+    if isinstance(driver_car_idx, int) and 0 <= driver_car_idx < car_idx_slot_count(arrays):
         return driver_car_idx
 
     return None

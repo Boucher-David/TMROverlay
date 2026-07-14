@@ -59,6 +59,7 @@ internal static class SessionInfoSummaryParser
                 SessionLaps = ReadString(session, "SessionLaps"),
                 EventType = ReadString(parsed.WeekendInfo, "EventType"),
                 Category = ReadString(parsed.WeekendInfo, "Category"),
+                DCRuleSet = ReadString(parsed.WeekendInfo, "DCRuleSet"),
                 Official = ReadBool(parsed.WeekendInfo, "Official"),
                 TeamRacing = ReadBool(parsed.WeekendInfo, "TeamRacing"),
                 SeriesId = ReadInt(parsed.WeekendInfo, "SeriesID"),

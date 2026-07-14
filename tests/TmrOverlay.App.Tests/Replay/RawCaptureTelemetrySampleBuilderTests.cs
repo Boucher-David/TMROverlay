@@ -97,6 +97,61 @@ public sealed class RawCaptureTelemetrySampleBuilderTests
         Assert.Equal(0.70d, spatialOpponent.LapDistPct);
     }
 
+    [Fact]
+    public void Build_UsesCapturedCarIdxSchemaLengthInsteadOfLegacySixtyFourSlotLimit()
+    {
+        const int expandedCarIdx = 64;
+        var frame = RawFrameBuilder.Create()
+            .AddInt("PlayerCarIdx")
+            .AddInt("CamCarIdx")
+            .AddIntArray("CarIdxClass", 65)
+            .AddIntArray("CarIdxLapCompleted", 65)
+            .AddDoubleArray("CarIdxLapDistPct", 65)
+            .AddIntArray("CarIdxTrackSurface", 65)
+            .AddIntArray("CarIdxPosition", 65)
+            .AddIntArray("CarIdxClassPosition", 65)
+            .AddDoubleArray("CarIdxF2Time", 65)
+            .AddDoubleArray("CarIdxEstTime", 65)
+            .AddDoubleArray("CarIdxLastLapTime", 65)
+            .AddDoubleArray("CarIdxBestLapTime", 65)
+            .Build();
+
+        for (var carIdx = 0; carIdx <= expandedCarIdx; carIdx++)
+        {
+            frame.WriteIntArray("CarIdxClass", carIdx, -1);
+            frame.WriteIntArray("CarIdxLapCompleted", carIdx, -1);
+            frame.WriteDoubleArray("CarIdxLapDistPct", carIdx, -1d);
+            frame.WriteIntArray("CarIdxTrackSurface", carIdx, 0);
+            frame.WriteIntArray("CarIdxPosition", carIdx, -1);
+            frame.WriteIntArray("CarIdxClassPosition", carIdx, -1);
+            frame.WriteDoubleArray("CarIdxF2Time", carIdx, -1d);
+            frame.WriteDoubleArray("CarIdxEstTime", carIdx, -1d);
+            frame.WriteDoubleArray("CarIdxLastLapTime", carIdx, -1d);
+            frame.WriteDoubleArray("CarIdxBestLapTime", carIdx, -1d);
+        }
+
+        frame.WriteInt("PlayerCarIdx", expandedCarIdx);
+        frame.WriteInt("CamCarIdx", expandedCarIdx);
+        frame.WriteIntArray("CarIdxClass", expandedCarIdx, 4098);
+        frame.WriteIntArray("CarIdxLapCompleted", expandedCarIdx, 7);
+        frame.WriteDoubleArray("CarIdxLapDistPct", expandedCarIdx, 0.25d);
+        frame.WriteIntArray("CarIdxTrackSurface", expandedCarIdx, 3);
+        frame.WriteIntArray("CarIdxPosition", expandedCarIdx, 1);
+        frame.WriteIntArray("CarIdxClassPosition", expandedCarIdx, 1);
+
+        var sample = new RawCaptureTelemetrySampleBuilder(frame.Schema).Build(new TelemetryFrameEnvelope(
+            CapturedAtUtc: DateTimeOffset.UtcNow,
+            FrameIndex: 1,
+            SessionTick: 1,
+            SessionInfoUpdate: 1,
+            SessionTime: 10d,
+            Payload: frame.Payload));
+
+        Assert.Equal(expandedCarIdx, sample.FocusCarIdx);
+        Assert.Equal(expandedCarIdx, sample.LeaderCarIdx);
+        Assert.Contains(sample.AllCars ?? [], car => car.CarIdx == expandedCarIdx);
+    }
+
     private static void WriteSpatialCar(RawFrame frame, int carIdx, int carClass, double lapDistPct)
     {
         frame.WriteIntArray("CarIdxClass", carIdx, carClass);

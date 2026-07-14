@@ -374,6 +374,13 @@ def progress(lap_completed: Any, lap_dist_pct: Any) -> float | None:
     return float(lap) + pct if lap is not None and lap >= 0 and pct is not None else None
 
 
+def car_idx_slot_count(arrays: dict[str, list[Any]]) -> int:
+    return max(
+        (len(values) for name, values in arrays.items() if name.startswith("CarIdx") and isinstance(values, list)),
+        default=0,
+    )
+
+
 def contains_race(value: Any) -> bool:
     return value is not None and "race" in str(value).lower()
 
@@ -422,7 +429,7 @@ def read_car_progress(scalars: dict[str, Any], arrays: dict[str, list[Any]], car
 
 def select_leader(arrays: dict[str, list[Any]]) -> dict[str, Any] | None:
     best: dict[str, Any] | None = None
-    for car_idx in range(64):
+    for car_idx in range(car_idx_slot_count(arrays)):
         progress_row = read_car_progress({}, arrays, car_idx)
         if progress_row is None:
             continue
@@ -445,7 +452,7 @@ def select_class_leader(arrays: dict[str, list[Any]], player_car_idx: int | None
     if player_class is None:
         return None
     best: dict[str, Any] | None = None
-    for car_idx in range(64):
+    for car_idx in range(car_idx_slot_count(arrays)):
         if car_idx >= len(classes) or parse_int(classes[car_idx]) != player_class:
             continue
         progress_row = read_car_progress({}, arrays, car_idx)

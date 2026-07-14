@@ -56,6 +56,9 @@ internal sealed class OverlayManager : IDisposable
     private readonly StreamChatOverlaySource _streamChatSource;
     private readonly ILiveTelemetrySource _liveTelemetrySource;
     private readonly SessionHistoryQueryService _historyQueryService;
+    private readonly FuelV2OverlayOptions _fuelV2OverlayOptions;
+    private readonly FuelV2PitServiceTireHistoryQueryService? _fuelV2TireHistoryQueryService;
+    private readonly FuelV2HistoryNormalBurnQueryService? _fuelV2NormalHistoryQueryService;
     private readonly AppEventRecorder _events;
     private readonly ILogger<CarRadarForm> _carRadarLogger;
     private readonly ILogger<GapToLeaderForm> _gapToLeaderLogger;
@@ -110,7 +113,10 @@ internal sealed class OverlayManager : IDisposable
         ILogger<StandingsForm> standingsLogger,
         ILogger<TrackMapForm> trackMapLogger,
         ILogger<StreamChatForm> streamChatLogger,
-        ILogger<SimpleTelemetryOverlayForm> simpleTelemetryLogger)
+        ILogger<SimpleTelemetryOverlayForm> simpleTelemetryLogger,
+        FuelV2OverlayOptions? fuelV2OverlayOptions = null,
+        FuelV2PitServiceTireHistoryQueryService? fuelV2TireHistoryQueryService = null,
+        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null)
     {
         _settingsStore = settingsStore;
         _storageOptions = storageOptions;
@@ -130,6 +136,9 @@ internal sealed class OverlayManager : IDisposable
         _streamChatSource = streamChatSource;
         _liveTelemetrySource = liveTelemetrySource;
         _historyQueryService = historyQueryService;
+        _fuelV2OverlayOptions = fuelV2OverlayOptions ?? FuelV2OverlayOptions.Disabled;
+        _fuelV2TireHistoryQueryService = fuelV2TireHistoryQueryService;
+        _fuelV2NormalHistoryQueryService = fuelV2NormalHistoryQueryService;
         _events = events;
         _carRadarLogger = carRadarLogger;
         _gapToLeaderLogger = gapToLeaderLogger;
@@ -537,7 +546,10 @@ internal sealed class OverlayManager : IDisposable
         ILogger logger,
         Func<Form> createLegacyForm)
     {
-        if (!UseDesignV2LiveOverlays)
+        if (!ShouldUseDesignV2Renderer(
+                UseDesignV2LiveOverlays,
+                kind,
+                _fuelV2OverlayOptions.Enabled))
         {
             return createLegacyForm();
         }
@@ -554,7 +566,10 @@ internal sealed class OverlayManager : IDisposable
             settings,
             SelectedFontFamily,
             SelectedUnitSystem,
-            SaveSettings);
+            SaveSettings,
+            _fuelV2OverlayOptions,
+            _fuelV2TireHistoryQueryService,
+            _fuelV2NormalHistoryQueryService);
     }
 
     private static bool UseDesignV2LiveOverlays
@@ -1004,6 +1019,27 @@ internal sealed class OverlayManager : IDisposable
         var now = DateTimeOffset.UtcNow;
         if (string.Equals(definition.Id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.Ordinal))
         {
+            if (_fuelV2OverlayOptions.Enabled)
+            {
+                var tireHistory = _fuelV2TireHistoryQueryService?.Lookup(
+                    snapshot.Context,
+                    snapshot.Models.PitService.Request);
+                var normalHistory = _fuelV2NormalHistoryQueryService?.Lookup(snapshot.Context);
+                var v2ViewModel = FuelV2OverlayViewModel.From(
+                    snapshot,
+                    SelectedUnitSystem,
+                    now,
+                    settings,
+                    tireHistory,
+                    normalHistory);
+                return OverlayContentSizing.FuelCalculatorSizeForMetricSections(
+                    definition,
+                    settings,
+                    sessionKind,
+                    v2ViewModel.Overlay.MetricSections,
+                    contentWidth: OverlayGeometryContracts.MetricRows.FuelV2WorkbenchWidth);
+            }
+
             var strategyModel = LiveFuelStrategyModel.From(snapshot, now, LookupFuelSizingHistory);
             if (!strategyModel.IsAvailable && !FuelLapsWorkbenchViewModel.Enabled)
             {
@@ -1736,6 +1772,20 @@ internal sealed class OverlayManager : IDisposable
             FlagDisplayCategory.Finish => settings.GetBooleanOption(OverlayOptionKeys.FlagsShowFinish, defaultValue: true),
             _ => true
         };
+    }
+
+    // Fuel V2 is a sectioned/segmented metric contract. Its developer gate
+    // therefore uses the same DesignV2 native body as browser/localhost even
+    // when a developer has otherwise selected legacy renderers. The old
+    // simple table flattens those sections and cannot honor Fuel's no-data
+    // hidden policy.
+    internal static bool ShouldUseDesignV2Renderer(
+        bool useDesignV2LiveOverlays,
+        DesignV2LiveOverlayKind kind,
+        bool fuelV2OverlayEnabled)
+    {
+        return useDesignV2LiveOverlays
+            || (kind == DesignV2LiveOverlayKind.FuelCalculator && fuelV2OverlayEnabled);
     }
 
     private void ReconcileSettingsOverlayActiveWithVisibility()

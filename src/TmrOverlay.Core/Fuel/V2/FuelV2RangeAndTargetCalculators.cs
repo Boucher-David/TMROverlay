@@ -23,7 +23,12 @@ internal static class FuelV2RangeCalculator
             Last: Range(boundary, FuelV2BurnBucketId.Last),
             FiveLapAverage: Range(boundary, FuelV2BurnBucketId.FiveLapAverage),
             TenLapAverage: Range(boundary, FuelV2BurnBucketId.TenLapAverage),
-            Max: Range(boundary, FuelV2BurnBucketId.Maximum));
+            Max: Range(boundary, FuelV2BurnBucketId.Maximum))
+        {
+            HistoricalNormal = Range(boundary, FuelV2BurnBucketId.HistoricalNormal),
+            Min = Range(boundary, FuelV2BurnBucketId.Minimum),
+            Qualifying = Range(boundary, FuelV2BurnBucketId.Qualifying)
+        };
     }
 
     private static FuelV2Scalar? Range(

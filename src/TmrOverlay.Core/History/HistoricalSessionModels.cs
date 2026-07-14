@@ -179,6 +179,11 @@ internal sealed class HistoricalSessionIdentity
 
     public string? Category { get; init; }
 
+    // Public iRacing WeekendInfo value. It identifies the active
+    // series-specific regulations (for example None, IMSA, NEC, or DTM), not
+    // a mutable user preference or an inferred pit-stop duration.
+    public string? DCRuleSet { get; init; }
+
     public bool? Official { get; init; }
 
     public bool? TeamRacing { get; init; }

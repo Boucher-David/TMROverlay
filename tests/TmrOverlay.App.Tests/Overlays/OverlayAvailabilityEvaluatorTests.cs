@@ -138,6 +138,19 @@ public sealed class OverlayAvailabilityEvaluatorTests
     }
 
     [Fact]
+    public void LiveLocalStrategyContext_AcceptsSchemaExpandedCarIdx()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = LocalStrategySnapshot(now, playerCarIdx: 64, focusCarIdx: 64);
+
+        var fuel = LiveLocalStrategyContext.ForFuelCalculator(snapshot, now);
+        var pitService = LiveLocalStrategyContext.ForPitService(snapshot, now);
+
+        Assert.True(fuel.IsAvailable);
+        Assert.True(pitService.IsAvailable);
+    }
+
+    [Fact]
     public void LiveLocalStrategyContext_AllowsLocalPitRoadContext()
     {
         var now = DateTimeOffset.UtcNow;

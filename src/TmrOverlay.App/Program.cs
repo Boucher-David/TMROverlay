@@ -13,6 +13,7 @@ using TmrOverlay.App.Localhost;
 using TmrOverlay.App.Logging;
 using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.BrowserSources;
+using TmrOverlay.App.Overlays.FuelCalculator;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Overlays.Styling;
 using TmrOverlay.App.Performance;
@@ -146,6 +147,7 @@ internal static class Program
                 services.AddSingleton(LiveModelParityOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(LiveOverlayDiagnosticsOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(FuelV2CaptureOptions.FromConfiguration(context.Configuration));
+                services.AddSingleton(FuelV2OverlayOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(LiveOverlayWindowCaptureOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(IbtAnalysisOptions.FromConfiguration(context.Configuration));
                 services.AddSingleton(PostRaceAnalysisOptions.FromConfiguration(context.Configuration));
@@ -161,6 +163,8 @@ internal static class Program
                 services.AddSingleton<SessionHistoryStore>();
                 services.AddSingleton<FuelV2HistoryStore>();
                 services.AddSingleton<FuelV2HistoryImporter>();
+                services.AddSingleton<FuelV2HistoryNormalBurnQueryService>();
+                services.AddSingleton<FuelV2PitServiceTireHistoryQueryService>();
                 services.AddSingleton<SessionHistoryQueryService>();
                 services.AddSingleton<StreamChatOverlaySource>();
                 services.AddSingleton<BrowserOverlayModelFactory>();

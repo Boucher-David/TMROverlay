@@ -19,6 +19,7 @@ public sealed class FuelV2CaptureOptionsTests
         Assert.Equal(120, options.MaxRejectedLapWindows);
         Assert.Equal(240, options.MaxSectorBurnSamples);
         Assert.Equal(80, options.MaxPitWindows);
+        Assert.Equal(80, options.MaxStationaryServiceObservations);
         Assert.Equal(80, options.MaxTeamStints);
         Assert.Equal("fuel-v2-diagnostics.json", options.OutputFileName);
         Assert.Equal("fuel-v2-capture", options.LogDirectoryName);
@@ -38,6 +39,7 @@ public sealed class FuelV2CaptureOptionsTests
             ["FuelV2Capture:MaxRejectedLapWindows"] = "31",
             ["FuelV2Capture:MaxSectorBurnSamples"] = "32",
             ["FuelV2Capture:MaxPitWindows"] = "6",
+            ["FuelV2Capture:MaxStationaryServiceObservations"] = "8",
             ["FuelV2Capture:MaxTeamStints"] = "7",
             ["FuelV2Capture:OutputFileName"] = "custom-fuel-v2.json",
             ["FuelV2Capture:LogDirectoryName"] = "custom-fuel-v2-logs",
@@ -52,6 +54,7 @@ public sealed class FuelV2CaptureOptionsTests
         Assert.Equal(31, options.MaxRejectedLapWindows);
         Assert.Equal(32, options.MaxSectorBurnSamples);
         Assert.Equal(6, options.MaxPitWindows);
+        Assert.Equal(8, options.MaxStationaryServiceObservations);
         Assert.Equal(7, options.MaxTeamStints);
         Assert.Equal("custom-fuel-v2.json", options.OutputFileName);
         Assert.Equal("custom-fuel-v2-logs", options.LogDirectoryName);
@@ -70,6 +73,7 @@ public sealed class FuelV2CaptureOptionsTests
             ["FuelV2Capture:MaxRejectedLapWindows"] = "1",
             ["FuelV2Capture:MaxSectorBurnSamples"] = "1",
             ["FuelV2Capture:MaxPitWindows"] = "1",
+            ["FuelV2Capture:MaxStationaryServiceObservations"] = "1",
             ["FuelV2Capture:MaxTeamStints"] = "1",
             ["FuelV2Capture:OutputFileName"] = "bad:name.json",
             ["FuelV2Capture:LogDirectoryName"] = "../outside",
@@ -83,6 +87,7 @@ public sealed class FuelV2CaptureOptionsTests
         Assert.Equal(10, options.MaxRejectedLapWindows);
         Assert.Equal(10, options.MaxSectorBurnSamples);
         Assert.Equal(5, options.MaxPitWindows);
+        Assert.Equal(5, options.MaxStationaryServiceObservations);
         Assert.Equal(5, options.MaxTeamStints);
         Assert.Equal("fuel-v2-diagnostics.json", options.OutputFileName);
         Assert.Equal("fuel-v2-capture", options.LogDirectoryName);

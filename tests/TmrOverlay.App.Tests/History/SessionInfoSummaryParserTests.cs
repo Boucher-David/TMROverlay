@@ -6,6 +6,17 @@ namespace TmrOverlay.App.Tests.History;
 public sealed class SessionInfoSummaryParserTests
 {
     [Fact]
+    public void Parse_ReadsPublicDriverControlRuleSetFromWeekendInfo()
+    {
+        var context = SessionInfoSummaryParser.Parse("""
+WeekendInfo:
+ DCRuleSet: IMSA
+""");
+
+        Assert.Equal("IMSA", context.Session.DCRuleSet);
+    }
+
+    [Fact]
     public void Parse_ReadsDriverAndSelectedClassFuelCapacityRules()
     {
         var context = SessionInfoSummaryParser.Parse("""

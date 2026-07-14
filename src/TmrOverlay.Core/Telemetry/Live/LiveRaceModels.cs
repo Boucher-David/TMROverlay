@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using TmrOverlay.Core.History;
+using TmrOverlay.Core.PitService;
 
 namespace TmrOverlay.Core.Telemetry.Live;
 
@@ -1001,14 +1002,6 @@ internal sealed record LivePitServiceRequest(
     string? RequestedTireCompoundLabel,
     string? RequestedTireCompoundShortLabel)
 {
-    private const int LeftFrontTireFlag = 0x01;
-    private const int RightFrontTireFlag = 0x02;
-    private const int LeftRearTireFlag = 0x04;
-    private const int RightRearTireFlag = 0x08;
-    private const int FuelServiceFlag = 0x10;
-    private const int TearoffServiceFlag = 0x20;
-    private const int FastRepairServiceFlag = 0x40;
-
     public int RequestedTireCount =>
         (LeftFrontTire ? 1 : 0)
         + (RightFrontTire ? 1 : 0)
@@ -1042,15 +1035,15 @@ internal sealed record LivePitServiceRequest(
         string? requestedTireCompoundLabel,
         string? requestedTireCompoundShortLabel)
     {
-        var value = flags.GetValueOrDefault();
+        var selection = PitServiceRequestFlags.Decode(flags);
         return new LivePitServiceRequest(
-            LeftFrontTire: (value & LeftFrontTireFlag) != 0,
-            RightFrontTire: (value & RightFrontTireFlag) != 0,
-            LeftRearTire: (value & LeftRearTireFlag) != 0,
-            RightRearTire: (value & RightRearTireFlag) != 0,
-            Fuel: (value & FuelServiceFlag) != 0,
-            Tearoff: (value & TearoffServiceFlag) != 0,
-            FastRepair: (value & FastRepairServiceFlag) != 0,
+            LeftFrontTire: selection.LeftFrontTire,
+            RightFrontTire: selection.RightFrontTire,
+            LeftRearTire: selection.LeftRearTire,
+            RightRearTire: selection.RightRearTire,
+            Fuel: selection.Fuel,
+            Tearoff: selection.Tearoff,
+            FastRepair: selection.FastRepair,
             FuelLiters: fuelLiters is >= 0d ? fuelLiters : null,
             RequestedTireCompoundIndex: requestedTireCompoundIndex is >= 0 ? requestedTireCompoundIndex : null,
             RequestedTireCompoundLabel: requestedTireCompoundLabel,

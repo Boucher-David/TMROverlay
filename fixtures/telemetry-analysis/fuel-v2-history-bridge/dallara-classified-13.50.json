@@ -1,0 +1,54 @@
+{
+  "fixtureVersion": 1,
+  "purpose": "Deterministic Fuel V2 workbench contract for the classified-history read bridge. The C# importer test is the authority for raw format-2 sidecar import; this fixture is the browser mirror of its persisted aggregate and exact selector result.",
+  "rawCaptureExpectation": {
+    "formatVersion": 2,
+    "acceptedLapBurnWindows": [
+      {
+        "fuelPerLapLiters": 13.5,
+        "acceptedForBaseline": true,
+        "contextFlags": ["clean-race"]
+      }
+    ]
+  },
+  "queryContext": {
+    "carId": 1,
+    "carPath": "test-car",
+    "trackId": 2,
+    "trackName": "test-track",
+    "trackDisplayName": "Test Track",
+    "trackConfigName": "Full",
+    "sessionFamily": "race"
+  },
+  "persistedAggregate": {
+    "aggregateVersion": 2,
+    "scope": {
+      "combo": {
+        "carKey": "car-id-1",
+        "trackKey": "track-2-test-track",
+        "trackLayoutKey": "track-id-2-config-46756C6C",
+        "trackLayoutIdentitySource": "track-id-and-config",
+        "sessionKey": "race"
+      }
+    },
+    "updatedAtUtc": "2026-07-14T12:00:00Z",
+    "classifiedSessionCount": 1,
+    "learningEligibleSessionCount": 1,
+    "acceptedLapFuelPerLapLiters": {
+      "sampleCount": 1,
+      "mean": 13.5,
+      "minimum": 13.5,
+      "maximum": 13.5
+    }
+  },
+  "expectedSelection": {
+    "status": "Selected",
+    "selectedSessionFamily": "race",
+    "burnBucketId": "HistoricalNormal",
+    "burnSource": "HistoricalNormal",
+    "confidence": "Seeded",
+    "strategyEligible": false,
+    "canSeedPlan": true,
+    "canDriveAdvice": false
+  }
+}

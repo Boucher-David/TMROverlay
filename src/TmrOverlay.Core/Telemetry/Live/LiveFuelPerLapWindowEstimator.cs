@@ -157,6 +157,11 @@ internal sealed class LiveFuelPerLapWindowEstimator
             return LiveFuelBurnBucket.PitOrEdge;
         }
 
+        if (LiveRaceControlFlags.HasYellowFamily(sample.SessionFlags))
+        {
+            return LiveFuelBurnBucket.Degraded;
+        }
+
         if (!sample.IsOnTrack)
         {
             return LiveFuelBurnBucket.PitOrEdge;
@@ -276,7 +281,21 @@ internal sealed record LiveFuelPerLapWindow(
     int AcceptedSampleCount,
     IReadOnlyList<LiveFuelPerLapAcceptedSample> CleanSamples,
     double? FormationFuelUsedLiters,
-    double? PitOrEdgeFuelUsedLiters);
+    double? PitOrEdgeFuelUsedLiters)
+{
+    // Keep the absence of accepted laps explicit. V2 consumers must not
+    // reconstruct a clean-lap window from V1's aggregate burn fields: those
+    // lose the accepted span and the pit/edge context that qualify it.
+    public static LiveFuelPerLapWindow Empty { get; } = new(
+        Last: null,
+        FiveLapAverage: null,
+        TenLapAverage: null,
+        Max: null,
+        AcceptedSampleCount: 0,
+        CleanSamples: [],
+        FormationFuelUsedLiters: null,
+        PitOrEdgeFuelUsedLiters: null);
+}
 
 internal sealed record LiveFuelPerLapWindowValue(
     double FuelPerLapLiters,

@@ -11,7 +11,10 @@ internal static class FuelLapsWorkbenchViewModel
     private const int UnlimitedLapsSentinel = 32000;
     private const int MaxPlausibleLiveLapCount = 1000;
 
-    public static bool Enabled => true;
+    // The static cell workbench belongs to browser-review fixtures. It must
+    // never replace production Fuel V1 content merely because this branch is
+    // being used for V2 development.
+    public static bool Enabled => false;
 
     public static FuelCalculatorViewModel Create()
     {

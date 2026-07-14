@@ -48,7 +48,10 @@ public sealed class FuelV2WhiteRoom24HourScenarioTests
             var workbenchHistory = normalHistory.Lookup(fixture.ToSnapshot(fixture.Checkpoints[0], 1).Context);
             Assert.True(workbenchHistory.IsAvailable);
             Assert.Equal("race", workbenchHistory.SelectedSessionFamily);
-            Assert.Equal(fixture.History.FuelPerLapLiters, workbenchHistory.Burn?.Value, precision: 6);
+            Assert.Equal(
+                fixture.History.FuelPerLapLiters,
+                Assert.IsType<double>(workbenchHistory.Burn?.Value),
+                precision: 6);
             Assert.True(workbenchHistory.CanSeedPlan);
             Assert.False(workbenchHistory.CanDriveAdvice);
 

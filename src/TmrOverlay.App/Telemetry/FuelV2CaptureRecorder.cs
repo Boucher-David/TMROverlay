@@ -546,7 +546,6 @@ internal sealed class FuelV2CaptureRecorder
                 return null;
             }
         }
-    }
 
     private void RecordFuelEvidence(
         LiveTelemetrySnapshot snapshot,

@@ -75,9 +75,9 @@ internal static class FuelV2EffectiveCapacityResolver
                 flags.Add(FuelV2CapacityStateFlag.DriverClassCapConflict);
             }
         }
-        else if (driverPercent is { } driver)
+        else if (driverPercent is { } driverOnly)
         {
-            appliedPercent = driver;
+            appliedPercent = driverOnly;
             source = FuelV2CapacitySource.DriverCarCap;
         }
         else
@@ -350,12 +350,14 @@ internal static class FuelV2FuelCheckpointCalculator
         double? expectedConsumptionLiters,
         FuelV2FuelCheckpointSource source)
     {
-        if (!CanProjectFrom(baseline) || NonNegativeOrNull(expectedConsumptionLiters) is not { } consumption)
+        if (baseline is not { Liters: { } baselineLiters }
+            || !CanProjectFrom(baseline)
+            || NonNegativeOrNull(expectedConsumptionLiters) is not { } consumption)
         {
             return null;
         }
 
-        var rawValue = baseline.Liters!.Value - consumption;
+        var rawValue = baselineLiters - consumption;
         var rawValueIsNegative = rawValue < 0d;
         return Checkpoint(
             kind,
@@ -377,14 +379,16 @@ internal static class FuelV2FuelCheckpointCalculator
         double? plannedAddLiters,
         FuelV2FuelCheckpointSource source)
     {
-        if (!CanProjectFrom(baseline) || NonNegativeOrNull(plannedAddLiters) is not { } plannedAdd)
+        if (baseline is not { Liters: { } baselineLiters }
+            || !CanProjectFrom(baseline)
+            || NonNegativeOrNull(plannedAddLiters) is not { } plannedAdd)
         {
             return null;
         }
 
         return Checkpoint(
             kind,
-            baseline.Liters!.Value + plannedAdd,
+            baselineLiters + plannedAdd,
             source,
             baseline.Confidence == FuelV2FuelCheckpointConfidence.Conflicted
                 ? FuelV2FuelCheckpointConfidence.Conflicted

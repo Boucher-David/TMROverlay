@@ -116,12 +116,12 @@ internal static class FuelV2FuelPerLapCalculator
                 cleanBaselineEligible: true)
             : null;
 
-        if (!IsPositiveScalar(seed))
+        if (seed is not { Value: { } seedValue } || !IsPositiveFinite(seedValue))
         {
             return liveMax;
         }
 
-        if (liveMax?.HasValue == true && liveMax.Value >= seed.Value)
+        if (liveMax is { Value: { } liveMaxValue } && liveMaxValue >= seedValue)
         {
             return liveMax;
         }
@@ -136,17 +136,17 @@ internal static class FuelV2FuelPerLapCalculator
 
     private static FuelV2Scalar? HigherSeed(FuelV2Scalar? first, FuelV2Scalar? second)
     {
-        if (!IsPositiveScalar(first))
+        if (first is not { Value: { } firstValue } || !IsPositiveFinite(firstValue))
         {
             return second;
         }
 
-        if (!IsPositiveScalar(second))
+        if (second is not { Value: { } secondValue } || !IsPositiveFinite(secondValue))
         {
             return first;
         }
 
-        return second.Value > first.Value ? second : first;
+        return secondValue > firstValue ? second : first;
     }
 
     private static FuelV2Scalar? MinWindow(IReadOnlyList<double> samples, FuelV2Scalar? seed)
@@ -161,12 +161,12 @@ internal static class FuelV2FuelPerLapCalculator
                 cleanBaselineEligible: true)
             : null;
 
-        if (!IsPositiveScalar(seed))
+        if (seed is not { Value: { } seedValue } || !IsPositiveFinite(seedValue))
         {
             return liveMin;
         }
 
-        if (liveMin?.HasValue == true && liveMin.Value <= seed.Value)
+        if (liveMin is { Value: { } liveMinValue } && liveMinValue <= seedValue)
         {
             return liveMin;
         }
@@ -184,7 +184,7 @@ internal static class FuelV2FuelPerLapCalculator
         string fallbackSource,
         FuelV2BurnSource fallbackBurnSource)
     {
-        if (!IsPositiveScalar(seed))
+        if (seed is not { Value: { } seedValue } || !IsPositiveFinite(seedValue))
         {
             return null;
         }
@@ -205,8 +205,9 @@ internal static class FuelV2FuelPerLapCalculator
         FuelV2BurnBucketId acceptedBucketId,
         FuelV2BurnSource fallbackBurnSource)
     {
-        if (!IsPositiveScalar(seed)
-            || (seed!.BurnBucketId is { } actualBucketId && actualBucketId != acceptedBucketId))
+        if (seed is not { Value: { } seedValue }
+            || !IsPositiveFinite(seedValue)
+            || (seed.BurnBucketId is { } actualBucketId && actualBucketId != acceptedBucketId))
         {
             return null;
         }
@@ -246,10 +247,6 @@ internal static class FuelV2FuelPerLapCalculator
         return value > 0d && !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
-    private static bool IsPositiveScalar(FuelV2Scalar? scalar)
-    {
-        return scalar?.Value is { } value && IsPositiveFinite(value);
-    }
 }
 
 internal sealed record FuelV2FuelPerLapWindowOptions(

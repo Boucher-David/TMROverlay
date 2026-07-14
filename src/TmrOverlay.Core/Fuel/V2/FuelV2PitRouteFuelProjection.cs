@@ -30,7 +30,7 @@ internal static class FuelV2PitRouteFuelProjectionCalculator
                 or FuelV2PitRouteFuelProjectionFlag.BoxToPitExitInvalid);
         var rawFuelToBox = Sum(entry, box);
         double? rawBoxToExit = exit.CanDriveFuelStrategy ? exit.Liters : null;
-        var hasInvalidAggregate = rawFuelToBox is { } fuelToBox && !double.IsFinite(fuelToBox);
+        var hasInvalidAggregate = rawFuelToBox is { } rawFuelToBoxLiters && !double.IsFinite(rawFuelToBoxLiters);
         if (hasInvalidAggregate)
         {
             flags.Add(FuelV2PitRouteFuelProjectionFlag.CurrentToBoxTotalInvalid);

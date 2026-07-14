@@ -49,7 +49,7 @@ internal static class FuelV2RaceBurnEvidenceSelector
             return FuelV2RaceBurnEvidenceSelection.Unavailable("no normal race burn evidence");
         }
 
-        var prior = PriorUsable(previous);
+        var prior = PriorUsable(previous, safeOptions.IncludeDisplayOnlyEvidenceForShadowCapture);
         // A missing current history read is not a license to carry an old
         // history value forward. The lifecycle owner still resets on a scope
         // change; this additional guard also prevents a transient/missing
@@ -171,10 +171,12 @@ internal static class FuelV2RaceBurnEvidenceSelector
         return first.Burn.Value >= second.Burn.Value ? first : second;
     }
 
-    private static FuelV2RaceBurnCandidate? PriorUsable(FuelV2RaceBurnEvidenceSelection? selection)
+    private static FuelV2RaceBurnCandidate? PriorUsable(
+        FuelV2RaceBurnEvidenceSelection? selection,
+        bool includeDisplayOnlyEvidence)
     {
         return selection is { IsAvailable: true, Burn: { } burn, BurnBucketId: { } bucketId }
-            ? Candidate(burn, bucketId)
+            ? Candidate(burn, bucketId, includeDisplayOnlyEvidence)
             : null;
     }
 

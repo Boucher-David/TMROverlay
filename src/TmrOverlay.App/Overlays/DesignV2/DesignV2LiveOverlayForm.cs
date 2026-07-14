@@ -157,6 +157,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private readonly FuelV2OverlayOptions _fuelV2OverlayOptions;
     private readonly FuelV2PitServiceTireHistoryQueryService? _fuelV2TireHistoryQueryService;
     private readonly FuelV2HistoryNormalBurnQueryService? _fuelV2NormalHistoryQueryService;
+    private readonly FuelV2ModelReadinessQueryService? _fuelV2ModelReadinessQueryService;
     private readonly StreamChatOverlaySource _streamChatSource;
     private readonly AppPerformanceState _performanceState;
     private readonly ILogger _logger;
@@ -221,7 +222,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         Action saveSettings,
         FuelV2OverlayOptions? fuelV2OverlayOptions = null,
         FuelV2PitServiceTireHistoryQueryService? fuelV2TireHistoryQueryService = null,
-        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null)
+        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null,
+        FuelV2ModelReadinessQueryService? fuelV2ModelReadinessQueryService = null)
         : base(settings, saveSettings, definition.DefaultWidth, definition.DefaultHeight)
     {
         _kind = kind;
@@ -232,6 +234,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         _fuelV2OverlayOptions = fuelV2OverlayOptions ?? FuelV2OverlayOptions.Disabled;
         _fuelV2TireHistoryQueryService = fuelV2TireHistoryQueryService;
         _fuelV2NormalHistoryQueryService = fuelV2NormalHistoryQueryService;
+        _fuelV2ModelReadinessQueryService = fuelV2ModelReadinessQueryService;
         _streamChatSource = streamChatSource;
         _performanceState = performanceState;
         _logger = logger;
@@ -954,13 +957,15 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 snapshot.Context,
                 snapshot.Models.PitService.Request);
             var normalHistory = _fuelV2NormalHistoryQueryService?.Lookup(snapshot.Context);
+            var modelReadiness = _fuelV2ModelReadinessQueryService?.Lookup(snapshot.Context);
             var v2ViewModel = FuelV2OverlayViewModel.From(
                 snapshot,
                 _unitSystem,
                 now,
                 _settings,
                 tireHistory,
-                normalHistory);
+                normalHistory,
+                modelReadiness);
             return FromSimple(v2ViewModel.Overlay) with
             {
                 FuelV2TireHistory = v2ViewModel.TireHistory

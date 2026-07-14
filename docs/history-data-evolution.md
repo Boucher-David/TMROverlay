@@ -215,14 +215,20 @@ The current implementation is intentionally narrow:
   seconds or “free tires” claim. Summary/import versions are `5`; manifest is
   still `3` and the fuel-burn aggregate is still `2`; older formats remain
   readable under their original evidence limits.
-- Fuel V2 history format 6 promotes clean `Offline Testing` sidecars into a
-  distinct `test` family using the existing Practice-equivalent accepted-lap
-  quality gates. Normal history selection remains exact car + layout and keeps
+- Fuel V2 history format 6 is this branch's single summary/import schema step.
+  It promotes clean `Offline Testing` sidecars into a distinct `test` family
+  using the existing Practice-equivalent accepted-lap quality gates and retains
+  new format-6 direct local pit-route observations beside immutable exact
+  summaries. Each route carries two-sample-confirmed pit-entry/stall/exit
+  checkpoints plus `DriverPitTrkPct`, pit-speed, pit-stall-count, and raw rules
+  provenance; continuous no-stall routes are retained as optional pit-lane-pass
+  calibration. Route evidence remains out of the fuel aggregate and strategy until a later
+  route learner explicitly promotes it. Normal history selection remains exact car + layout and keeps
   provenance explicit: Race reads `race`, then `practice`, then `test`;
   Practice reads `practice`, then `test`; Test reads `test`, then `practice`.
   Test evidence is never silently relabeled as Race or Practice. Summary/import
   versions are `6`, manifest is `4`, and rebuilt aggregates are `3`; compatible
-  format-5 summaries remain readable and their aggregates rebuild without
+  format-5 summaries remain readable (with an empty route list) and their aggregates rebuild without
   rewriting the immutable summaries.
 - `HistorySchemaCompatibilityTests` snapshots durable summary, aggregate, and analysis model shapes so schema changes force a compatibility review during test validation
 

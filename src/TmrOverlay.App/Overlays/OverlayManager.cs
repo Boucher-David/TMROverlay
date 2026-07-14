@@ -59,6 +59,7 @@ internal sealed class OverlayManager : IDisposable
     private readonly FuelV2OverlayOptions _fuelV2OverlayOptions;
     private readonly FuelV2PitServiceTireHistoryQueryService? _fuelV2TireHistoryQueryService;
     private readonly FuelV2HistoryNormalBurnQueryService? _fuelV2NormalHistoryQueryService;
+    private readonly FuelV2ModelReadinessQueryService? _fuelV2ModelReadinessQueryService;
     private readonly AppEventRecorder _events;
     private readonly ILogger<CarRadarForm> _carRadarLogger;
     private readonly ILogger<GapToLeaderForm> _gapToLeaderLogger;
@@ -116,7 +117,8 @@ internal sealed class OverlayManager : IDisposable
         ILogger<SimpleTelemetryOverlayForm> simpleTelemetryLogger,
         FuelV2OverlayOptions? fuelV2OverlayOptions = null,
         FuelV2PitServiceTireHistoryQueryService? fuelV2TireHistoryQueryService = null,
-        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null)
+        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null,
+        FuelV2ModelReadinessQueryService? fuelV2ModelReadinessQueryService = null)
     {
         _settingsStore = settingsStore;
         _storageOptions = storageOptions;
@@ -139,6 +141,7 @@ internal sealed class OverlayManager : IDisposable
         _fuelV2OverlayOptions = fuelV2OverlayOptions ?? FuelV2OverlayOptions.Disabled;
         _fuelV2TireHistoryQueryService = fuelV2TireHistoryQueryService;
         _fuelV2NormalHistoryQueryService = fuelV2NormalHistoryQueryService;
+        _fuelV2ModelReadinessQueryService = fuelV2ModelReadinessQueryService;
         _events = events;
         _carRadarLogger = carRadarLogger;
         _gapToLeaderLogger = gapToLeaderLogger;
@@ -569,7 +572,8 @@ internal sealed class OverlayManager : IDisposable
             SaveSettings,
             _fuelV2OverlayOptions,
             _fuelV2TireHistoryQueryService,
-            _fuelV2NormalHistoryQueryService);
+            _fuelV2NormalHistoryQueryService,
+            _fuelV2ModelReadinessQueryService);
     }
 
     private static bool UseDesignV2LiveOverlays
@@ -1029,13 +1033,15 @@ internal sealed class OverlayManager : IDisposable
                     snapshot.Context,
                     snapshot.Models.PitService.Request);
                 var normalHistory = _fuelV2NormalHistoryQueryService?.Lookup(snapshot.Context);
+                var modelReadiness = _fuelV2ModelReadinessQueryService?.Lookup(snapshot.Context);
                 var v2ViewModel = FuelV2OverlayViewModel.From(
                     snapshot,
                     SelectedUnitSystem,
                     now,
                     settings,
                     tireHistory,
-                    normalHistory);
+                    normalHistory,
+                    modelReadiness);
                 return OverlayContentSizing.FuelCalculatorSizeForMetricSections(
                     definition,
                     settings,

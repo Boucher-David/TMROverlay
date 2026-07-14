@@ -33,6 +33,7 @@ FuelV2HistorySummary
   ImportModelVersion: int
   ImportedAtUtc: DateTimeOffset
   LapBudget: FuelV2HistoryLapBudgetFacts
+  PitRouteObservations: IReadOnlyList<PitServiceRouteObservation>
   PitWindows: IReadOnlyList<FuelV2HistoryPitWindow>
   Quality: FuelV2HistoryQuality
   RaceLength: FuelV2HistoryRaceLengthFacts
@@ -136,17 +137,20 @@ FuelV2HistoryEvidenceTotals
   AcceptedSectorWindowCount: int
   ContextFlagCounts: IReadOnlyDictionary<string, int>
   DriverChangeEventCount: int
+  DroppedPitRouteObservationCount: int
   DroppedStationaryServiceObservationCount: int
   FrameCount: int
   FramesWithLocalFuel: int
   FramesWithTeamProgress: int
   FramesWithTeamProgressWithoutLocalFuel: int
   FuelEvidenceCounts: IReadOnlyDictionary<string, int>
+  PitRouteObservationCount: int
   PitWindowCount: int
   PitWindowsWithFuelIncrease: int
   RaceControlCounts: IReadOnlyDictionary<string, int>
   RejectedLapBurnWindowCount: int
   RejectedSectorWindowCount: int
+  RetainedPitRouteObservationCount: int
   RetainedStationaryServiceObservationCount: int
   SampledFrameCount: int
   StationaryServiceObservationCount: int
@@ -251,6 +255,42 @@ PitServiceStationaryServiceObservation
   TeamOrLocalFastRepairsUsedDelta: int?
   TireCounterDelta: PitServiceTireCounterDelta
   TireSetsUsedDelta: int?
+PitServiceRouteObservation
+  Assignment: PitServiceRouteAssignment
+  BoxEntry: PitServiceRouteCheckpoint
+  BoxExit: PitServiceRouteCheckpoint
+  BoxToExitFuelUsedLiters: double?
+  BoxToExitSeconds: double?
+  EntryToBoxFuelUsedLiters: double?
+  EntryToBoxSeconds: double?
+  HasCompletePitLanePass: bool
+  HasCompleteRoute: bool
+  HasObservedBoxEntry: bool
+  HasObservedBoxExit: bool
+  MaxFrameGapSeconds: double?
+  PitEntry: PitServiceRouteCheckpoint
+  PitExit: PitServiceRouteCheckpoint
+  QualificationFlags: IReadOnlyList<string>
+  SampleCount: int
+PitServiceRouteAssignment
+  DCRuleSet: string
+  DriverPitTrackPct: double?
+  IsComplete: bool
+  PitBoxIdentity: string
+  PitSpeedRuleIdentity: string
+  TrackNumPitStalls: int?
+  TrackPitSpeedLimitKph: double?
+PitServiceRouteCheckpoint
+  CapturedAtUtc: DateTimeOffset
+  ConfirmedAtUtc: DateTimeOffset
+  FuelLiters: double?
+  LapDistPct: double?
+  LocalIdentityProvenance: string
+  OnPitRoad: bool
+  PlayerCarInPitStall: bool
+  Sequence: Int64
+  SessionTick: int
+  SessionTimeSeconds: double?
 PitServiceTireCounterSnapshot
   FrontTireSetsAvailable: int?
   FrontTireSetsUsed: int?
@@ -384,6 +424,9 @@ FuelV2HistoryMetric
             typeof(FuelV2HistoryPitWindow),
             typeof(PitServiceRequestShape),
             typeof(PitServiceStationaryServiceObservation),
+            typeof(PitServiceRouteObservation),
+            typeof(PitServiceRouteAssignment),
+            typeof(PitServiceRouteCheckpoint),
             typeof(PitServiceTireCounterSnapshot),
             typeof(PitServiceTireCounterDelta),
             typeof(FuelV2HistoryTeamStint),

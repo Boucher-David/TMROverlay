@@ -117,6 +117,7 @@ internal static class OverlayContentColumnSettings
     public const string FuelCalculatorStintTargetsBlockId = "fuel-calculator.race.stint-targets";
     public const string FuelCalculatorRangeBlockId = "fuel-calculator.range.fuel";
     public const string FuelCalculatorUsageBlockId = "fuel-calculator.usage";
+    public const string FuelCalculatorModelReadinessBlockId = "fuel-calculator.model-readiness";
     public const string InputThrottleTraceBlockId = "input-state.trace-throttle";
     public const string InputBrakeTraceBlockId = "input-state.trace-brake";
     public const string InputClutchTraceBlockId = "input-state.trace-clutch";
@@ -250,7 +251,8 @@ internal static class OverlayContentColumnSettings
         CellBlock(FuelCalculatorRaceFuelBlockId, "Fuel", "Show current fuel, burn, tank range, and fuel need fields."),
         CellBlock(FuelCalculatorStintTargetsBlockId, "Stint targets", "Show generated stint target rows when the strategy is trusted."),
         CellBlock(FuelCalculatorRangeBlockId, "Fuel range", "Show fuel range fields in practice and qualifying."),
-        CellBlock(FuelCalculatorUsageBlockId, "Fuel usage", "Show measured usage rows in practice and qualifying.")
+        CellBlock(FuelCalculatorUsageBlockId, "Fuel usage", "Show measured usage rows in practice and qualifying."),
+        CellBlock(FuelCalculatorModelReadinessBlockId, "Model readiness", "In Test and Practice, show the exact evidence still needed for Fuel V2 pit, refuel, and tire learning.")
     ]);
 
     public static OverlayContentDefinition InputState { get; } = new(

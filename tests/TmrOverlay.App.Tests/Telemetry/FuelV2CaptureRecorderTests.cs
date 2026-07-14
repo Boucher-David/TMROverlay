@@ -52,17 +52,21 @@ public sealed class FuelV2CaptureRecorderTests
             Assert.Equal(Path.Combine(storage.LogsRoot, "custom-fuel-v2-logs"), recorder.DiagnosticsLogRoot);
 
             using var document = JsonDocument.Parse(File.ReadAllText(expectedPath));
-            Assert.Equal(5, document.RootElement.GetProperty("formatVersion").GetInt32());
+            Assert.Equal(6, document.RootElement.GetProperty("formatVersion").GetInt32());
             Assert.Equal("capture-fuel-v2-fuel-v2-s001-race", document.RootElement.GetProperty("sourceId").GetString());
             Assert.Equal("raw-capture-sidecar", document.RootElement.GetProperty("output").GetProperty("mode").GetString());
             Assert.True(document.RootElement.GetProperty("output").GetProperty("rawTelemetryExcluded").GetBoolean());
             Assert.False(document.RootElement.GetProperty("output").GetProperty("durableHistoryMutated").GetBoolean());
             Assert.Equal(1, document.RootElement.GetProperty("totals").GetProperty("frameCount").GetInt32());
             Assert.Equal(0, document.RootElement.GetProperty("stationaryServiceObservations").GetArrayLength());
+            Assert.Equal(0, document.RootElement.GetProperty("pitRouteObservations").GetArrayLength());
             var pitService = document.RootElement.GetProperty("pitService");
             Assert.Equal(0, pitService.GetProperty("stationaryServiceObservationCount").GetInt32());
             Assert.Equal(0, pitService.GetProperty("retainedStationaryServiceObservationCount").GetInt32());
             Assert.Equal(0, pitService.GetProperty("droppedStationaryServiceObservationCount").GetInt32());
+            Assert.Equal(0, pitService.GetProperty("pitRouteObservationCount").GetInt32());
+            Assert.Equal(0, pitService.GetProperty("retainedPitRouteObservationCount").GetInt32());
+            Assert.Equal(0, pitService.GetProperty("droppedPitRouteObservationCount").GetInt32());
             Assert.Equal("race", document.RootElement.GetProperty("sessionLineage").GetProperty("sessionFamily").GetString());
             Assert.Equal(1, document.RootElement.GetProperty("sessionLineage").GetProperty("segmentOrdinal").GetInt32());
             Assert.Equal("IMSA", document.RootElement.GetProperty("sessionScope").GetProperty("session").GetProperty("dcRuleSet").GetString());
@@ -254,6 +258,73 @@ public sealed class FuelV2CaptureRecorderTests
             Assert.Equal(1, pitService.GetProperty("stationaryServiceObservationCount").GetInt32());
             Assert.Equal(1, pitService.GetProperty("retainedStationaryServiceObservationCount").GetInt32());
             Assert.Equal(0, pitService.GetProperty("droppedStationaryServiceObservationCount").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CompleteCollection_RecordsAConfirmedLocalPitRouteFromNormalizedLiveFrames()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-fuel-v2-capture-recorder-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var recorder = new FuelV2CaptureRecorder(
+                new FuelV2CaptureOptions { Enabled = true },
+                storage,
+                new AppEventRecorder(storage),
+                NullLogger<FuelV2CaptureRecorder>.Instance);
+            var startedAtUtc = DateTimeOffset.Parse("2026-07-14T12:00:00Z");
+            var context = CapacityContext(sessionNum: 0, sessionType: "Practice", capPercent: 1d);
+            recorder.StartCollection("confirmed-local-pit-route", startedAtUtc);
+
+            var frames = new[]
+            {
+                (onPitRoad: false, inStall: false, fuel: 40d),
+                (onPitRoad: true, inStall: false, fuel: 39.9d),
+                (onPitRoad: true, inStall: false, fuel: 39.8d),
+                (onPitRoad: true, inStall: true, fuel: 39.6d),
+                (onPitRoad: true, inStall: true, fuel: 39.5d),
+                (onPitRoad: true, inStall: false, fuel: 44d),
+                (onPitRoad: true, inStall: false, fuel: 43.9d),
+                (onPitRoad: false, inStall: false, fuel: 43.7d),
+                (onPitRoad: false, inStall: false, fuel: 43.6d)
+            };
+            for (var index = 0; index < frames.Length; index++)
+            {
+                var frame = frames[index];
+                recorder.RecordFrame(PitRouteSnapshot(
+                    context,
+                    frame.fuel,
+                    startedAtUtc.AddSeconds(index + 1),
+                    sequence: index + 1,
+                    onPitRoad: frame.onPitRoad,
+                    inStall: frame.inStall));
+            }
+
+            var path = recorder.CompleteCollection(startedAtUtc.AddSeconds(11), captureDirectory: null);
+
+            Assert.NotNull(path);
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var route = Assert.Single(document.RootElement.GetProperty("pitRouteObservations").EnumerateArray());
+            Assert.Equal(2d, route.GetProperty("entryToBoxSeconds").GetDouble());
+            Assert.Equal(2d, route.GetProperty("boxToExitSeconds").GetDouble());
+            Assert.Equal(0.3d, route.GetProperty("entryToBoxFuelUsedLiters").GetDouble(), precision: 6);
+            Assert.Equal(0.3d, route.GetProperty("boxToExitFuelUsedLiters").GetDouble(), precision: 6);
+            Assert.True(route.GetProperty("hasCompleteRoute").GetBoolean());
+            Assert.Equal(
+                "driver-pit-track-percent:0.068197",
+                route.GetProperty("assignment").GetProperty("pitBoxIdentity").GetString());
+            Assert.Equal(1, document.RootElement
+                .GetProperty("pitService")
+                .GetProperty("pitRouteObservationCount")
+                .GetInt32());
         }
         finally
         {
@@ -520,6 +591,17 @@ public sealed class FuelV2CaptureRecorderTests
                 SubSessionId = 4
             },
             Conditions = new HistoricalSessionInfoConditions(),
+            PitRouteAssignment = new HistoricalPitRouteAssignment
+            {
+                DriverPitTrackPct = 0.068197d,
+                TrackPitSpeedLimitKph = 80d,
+                TrackNumPitStalls = 39
+            },
+            DriverCarIdx = 10,
+            Drivers =
+            [
+                new HistoricalSessionDriver { CarIdx = 10, IsSpectator = false }
+            ],
             FuelCapacityRules = new HistoricalFuelCapacityRules
             {
                 DriverCarMaxFuelPercent = capPercent,
@@ -622,6 +704,90 @@ public sealed class FuelV2CaptureRecorderTests
         return CapacitySnapshot(context, fuelLevelLiters, capturedAtUtc, sequence) with
         {
             Models = LiveRaceModels.Empty with { PitService = pitService }
+        };
+    }
+
+    private static LiveTelemetrySnapshot PitRouteSnapshot(
+        HistoricalSessionContext context,
+        double fuelLevelLiters,
+        DateTimeOffset capturedAtUtc,
+        long sequence,
+        bool onPitRoad,
+        bool inStall)
+    {
+        var sample = new HistoricalTelemetrySample(
+            CapturedAtUtc: capturedAtUtc,
+            SessionTime: (capturedAtUtc - DateTimeOffset.Parse("2026-07-14T12:00:00Z")).TotalSeconds,
+            SessionTick: checked((int)sequence * 60),
+            SessionInfoUpdate: 1,
+            IsOnTrack: !onPitRoad,
+            IsInGarage: false,
+            OnPitRoad: onPitRoad,
+            PitstopActive: inStall,
+            PlayerCarInPitStall: inStall,
+            FuelLevelLiters: fuelLevelLiters,
+            FuelLevelPercent: fuelLevelLiters / 75d,
+            FuelUsePerHourKg: 0d,
+            SpeedMetersPerSecond: onPitRoad ? 20d : 45d,
+            Lap: 4,
+            LapCompleted: 3,
+            LapDistPct: 0.8d,
+            LapLastLapTimeSeconds: null,
+            LapBestLapTimeSeconds: null,
+            AirTempC: 20d,
+            TrackTempCrewC: 24d,
+            TrackWetness: 0,
+            WeatherDeclaredWet: false,
+            PlayerTireCompound: 0,
+            PlayerCarIdx: 10,
+            RawCamCarIdx: 10,
+            FocusCarIdx: 10,
+            PlayerTrackSurface: onPitRoad ? 1 : 3);
+        var fuelPit = LiveFuelPitModel.Empty with
+        {
+            HasData = true,
+            Quality = LiveModelQuality.Reliable,
+            Fuel = LiveFuel(fuelLevelLiters),
+            OnPitRoad = onPitRoad,
+            PitstopActive = inStall,
+            PlayerCarInPitStall = inStall
+        };
+        return CapacitySnapshot(context, fuelLevelLiters, capturedAtUtc, sequence) with
+        {
+            LatestSample = sample,
+            HasFrameForCurrentContext = true,
+            HasSessionInfoForCurrentCollection = true,
+            Models = LiveRaceModels.Empty with
+            {
+                IsLiveSampleModel = true,
+                DriverDirectory = LiveDriverDirectoryModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    PlayerCarIdx = 10,
+                    FocusCarIdx = 10
+                },
+                Reference = LiveReferenceModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    PlayerCarIdx = 10,
+                    FocusCarIdx = 10,
+                    FocusIsPlayer = true,
+                    IsOnTrack = !onPitRoad,
+                    OnPitRoad = onPitRoad,
+                    PlayerOnPitRoad = onPitRoad,
+                    PlayerCarInPitStall = inStall
+                },
+                RaceEvents = LiveRaceEventModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    IsOnTrack = !onPitRoad,
+                    OnPitRoad = onPitRoad
+                },
+                FuelPit = fuelPit
+            }
         };
     }
 

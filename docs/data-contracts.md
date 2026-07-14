@@ -172,8 +172,16 @@ under its explicit output directory for the same display/replay path; this is
 ephemeral replay evidence, never a write to `history/user/fuel-v2/`, and it
 rejects sidecars that finish after the earliest replayed frame.
 
-Fuel V2 format-5 capture writes independent session segments and bounded
-stationary-service observations. The importer
+Fuel V2 format-6 capture writes independent session segments, bounded
+stationary-service observations, and direct local pit-route checkpoints. A
+route is retained only after two fresh local samples confirm each observed
+transition; complete stopped-route evidence requires pit entry, box entry, box
+exit, and pit exit with valid checkpoint fuel. A continuous entry-to-exit route
+with no observed stall is separately recognized as optional pit-lane-pass
+calibration rather than a failed stopped route. Each route preserves the
+session-declared `DriverPitTrkPct` coordinate, pit-speed limit, pit-stall count,
+and raw `DCRuleSet`. Those are per-session provenance, not history keys: the
+reader never invents a stall ordinal or uses team-wide pit state. The importer
 classifies one for learned history only when it has an injective exact-car
 identity, exact `TrackId + TrackConfigName` layout identity,
 race/practice/qualifying/test family, and verified occurrence that cross-check
@@ -183,14 +191,16 @@ storage partitions. Format-4 observations add raw entry/exit and delta snapshots
 for total, side, axle, and exact four-corner tire counters when available, which
 lets a later Core reader distinguish requested `LF`, `Front`, `Left`, or `4 tires`
 from an executed result. It also preserves raw `WeekendInfo.DCRuleSet` in the
-session identity. Capture versions remain `5`; history summary/import versions
-are now `6`, manifest is `4`, and rebuilt fuel-burn aggregates are `3` so clean
-Offline Testing can be retained as its separate `test` family. `DCRuleSet` is retained as raw
+session identity. Capture version is now `6`; this branch keeps its one Fuel V2
+summary/import version at `6`, manifest at `4`, and rebuilt fuel-burn aggregates
+at `3` so clean Offline Testing can be retained as its separate `test` family
+while route evidence stays raw summary-level provenance. `DCRuleSet` is retained as raw
 provenance only; it cannot classify sequential/parallel service execution or
 unlock service timing. Counter evidence remains source evidence only: it
 cannot infer service overlap/order or timing advice.
 
-Format-4 Fuel V2 sidecars and summaries remain compatible classified history
+Format-5 Fuel V2 sidecars and summaries remain compatible classified history
+with stationary-service evidence but no direct pit-route checkpoints. Format-4 Fuel V2 sidecars and summaries remain compatible classified history
 with exact tire-counter snapshots but no persisted service-rule identity.
 Format-3 Fuel V2 sidecars and summaries remain compatible classified history with
 stationary-service observations but no exact tire-counter snapshots. Format-2
@@ -201,7 +211,7 @@ as `legacy-unclassified`; they are not inferred into Race/Practice/Qualifying
 and cannot contribute to the classified aggregate or a future strategy reader.
 They remain at their existing legacy paths so the release does not delete or
 rewrite mixed connection evidence. The manifest reports classified, legacy-v1,
-retained-but-unclassified-v2, unreadable, and misfiled summary counts. Current v5 writes use content-hash
+retained-but-unclassified-v2, unreadable, and misfiled summary counts. Current v6 writes use content-hash
 summary IDs, which makes duplicate import idempotent without treating readable
 source labels as unique keys.
 

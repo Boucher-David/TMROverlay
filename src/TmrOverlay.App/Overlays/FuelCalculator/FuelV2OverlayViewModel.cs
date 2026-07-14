@@ -22,7 +22,8 @@ internal sealed record FuelV2OverlayViewModel(
         DateTimeOffset now,
         OverlaySettings? contentSettings = null,
         FuelV2TireServiceHistorySelection? tireHistory = null,
-        FuelV2HistoryNormalBurnSelection? normalHistory = null)
+        FuelV2HistoryNormalBurnSelection? normalHistory = null,
+        FuelV2ModelReadiness? modelReadiness = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
@@ -133,6 +134,14 @@ internal sealed record FuelV2OverlayViewModel(
                 }]));
         }
 
+        if (!isFactualFallback
+            && content.ShowModelReadiness
+            && IsTestOrPractice(snapshot)
+            && modelReadiness?.IsVisible == true)
+        {
+            sections.Add(ModelReadinessSection(modelReadiness));
+        }
+
         var rows = sections.SelectMany(section => section.Rows).ToArray();
         if (rows.Length == 0)
         {
@@ -166,6 +175,43 @@ internal sealed record FuelV2OverlayViewModel(
         return budget.PrimaryLapsRemaining is not null
             || budget.PossibleLapsRemaining is not null
             || budget.EstimatedFinishLap is not null;
+    }
+
+    private static bool IsTestOrPractice(LiveTelemetrySnapshot snapshot)
+    {
+        return OverlayAvailabilityEvaluator.NormalizeSessionKind(
+            OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot)) == OverlaySessionKind.Practice;
+    }
+
+    private static SimpleTelemetryMetricSectionViewModel ModelReadinessSection(FuelV2ModelReadiness readiness)
+    {
+        return new SimpleTelemetryMetricSectionViewModel(
+            "Model Readiness",
+            readiness.Rows.Select(row => new SimpleTelemetryRowViewModel(
+                row.Label,
+                row.Detail,
+                ReadinessTone(row))
+            {
+                Segments = row.Cells
+                    .Select(cell => Segment(cell.Label, cell.Value, ReadinessTone(cell)))
+                    .ToArray()
+            }).ToArray());
+    }
+
+    private static SimpleTelemetryTone ReadinessTone(FuelV2ModelReadinessRow row)
+    {
+        return row.Cells.Where(cell => cell.IsRequired).All(cell => cell.State == FuelV2ModelReadinessState.Confirmed)
+            ? SimpleTelemetryTone.Info
+            : SimpleTelemetryTone.Waiting;
+    }
+
+    private static SimpleTelemetryTone ReadinessTone(FuelV2ModelReadinessCell cell)
+    {
+        return cell.State switch
+        {
+            FuelV2ModelReadinessState.Confirmed => SimpleTelemetryTone.Info,
+            _ => SimpleTelemetryTone.Waiting
+        };
     }
 
     private static bool HasRange(FuelV2ComposedSnapshot composed)

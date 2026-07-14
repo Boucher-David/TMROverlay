@@ -827,7 +827,8 @@ internal sealed record FuelContentPolicy(
     bool ShowRaceFuel,
     bool ShowStintTargets,
     bool ShowFuelRange,
-    bool ShowFuelUsage)
+    bool ShowFuelUsage,
+    bool ShowModelReadiness)
 {
     // Fuel State is a factual capacity/current-fuel readout. It deliberately
     // reuses the existing persisted Fuel block in Race and Fuel Range block in
@@ -844,7 +845,7 @@ internal sealed record FuelContentPolicy(
         bool factualStateOnly)
     {
         return ShowFuelState(sessionKind)
-            || (!factualStateOnly && (ShowFuelUsage || ShowFuelRange));
+            || (!factualStateOnly && (ShowFuelUsage || ShowFuelRange || (IsTestOrPractice(sessionKind) && ShowModelReadiness)));
     }
 
     public static FuelContentPolicy From(OverlaySettings? settings, OverlaySessionKind? sessionKind)
@@ -869,7 +870,8 @@ internal sealed record FuelContentPolicy(
             ShowRaceFuel: Enabled(OverlayContentColumnSettings.FuelCalculatorRaceFuelBlockId),
             ShowStintTargets: Enabled(OverlayContentColumnSettings.FuelCalculatorStintTargetsBlockId),
             ShowFuelRange: Enabled(OverlayContentColumnSettings.FuelCalculatorRangeBlockId),
-            ShowFuelUsage: Enabled(OverlayContentColumnSettings.FuelCalculatorUsageBlockId));
+            ShowFuelUsage: Enabled(OverlayContentColumnSettings.FuelCalculatorUsageBlockId),
+            ShowModelReadiness: Enabled(OverlayContentColumnSettings.FuelCalculatorModelReadinessBlockId));
     }
 
     private static FuelContentPolicy AllEnabled { get; } = new(
@@ -877,7 +879,13 @@ internal sealed record FuelContentPolicy(
         ShowRaceFuel: true,
         ShowStintTargets: true,
         ShowFuelRange: true,
-        ShowFuelUsage: true);
+        ShowFuelUsage: true,
+        ShowModelReadiness: true);
+
+    private static bool IsTestOrPractice(OverlaySessionKind? sessionKind)
+    {
+        return OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) == OverlaySessionKind.Practice;
+    }
 }
 
 internal sealed record FuelDisplayRow(string Label, string Value, string Advice);

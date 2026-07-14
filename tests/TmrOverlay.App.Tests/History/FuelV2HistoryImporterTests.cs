@@ -1209,13 +1209,156 @@ public sealed class FuelV2HistoryImporterTests
     }
 
     [Fact]
+    public async Task ImportAsync_FormatSixRetainsQualifiedLocalPitRouteWithoutAddingAnAggregateMetric()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact(formatVersion: 6);
+            var route = CreatePitRouteObservation(artifact.StartedAtUtc.AddMinutes(10));
+            artifact = artifact with
+            {
+                PitService = artifact.PitService with
+                {
+                    PitRouteObservationCount = 1,
+                    RetainedPitRouteObservationCount = 1
+                },
+                PitRouteObservations = [route]
+            };
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+
+            Assert.True(result.Imported);
+            var summary = Assert.IsType<FuelV2HistorySummary>(JsonSerializer.Deserialize<FuelV2HistorySummary>(
+                File.ReadAllText(Assert.Single(Directory.EnumerateFiles(
+                    Path.Combine(SessionDirectory(storage), "summaries"),
+                    "*.json"))),
+                JsonOptions));
+            var retained = Assert.Single(summary.PitRouteObservations);
+            Assert.True(retained.HasCompleteRoute);
+            Assert.Equal("driver-pit-track-percent:0.068197", retained.Assignment.PitBoxIdentity);
+            Assert.Equal(1, summary.Evidence.PitRouteObservationCount);
+
+            var aggregate = Assert.IsType<FuelV2HistoryAggregate>(JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(SessionDirectory(storage), "aggregate.json")),
+                JsonOptions));
+            Assert.Equal(3, aggregate.AggregateVersion);
+            Assert.DoesNotContain("PitRoute", JsonSerializer.Serialize(aggregate, JsonOptions), StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ModelReadinessQuery_HidesOnlyAfterExactTestCollectionGoalsAreComplete()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var scope = CreateSessionScope() with
+            {
+                Combo = CreateSessionScope().Combo with { SessionKey = "test" },
+                Session = CreateSessionScope().Session with
+                {
+                    SessionType = "Offline Testing",
+                    SessionName = "Offline Testing",
+                    EventType = "Test",
+                    DCRuleSet = "IMSA"
+                }
+            };
+            var started = DateTimeOffset.Parse("2026-07-14T12:00:00Z");
+            var tireShapes = new[]
+            {
+                (true, false, false, false),
+                (false, true, false, false),
+                (false, false, true, false),
+                (false, false, false, true),
+                (true, true, false, false),
+                (false, false, true, true),
+                (true, false, true, false),
+                (false, true, false, true),
+                (true, true, true, true)
+            };
+            var stationary = tireShapes
+                .Select((shape, index) => CreateReadinessStationaryObservation(
+                    started.AddMinutes(index),
+                    shape.Item1,
+                    shape.Item2,
+                    shape.Item3,
+                    shape.Item4,
+                    fuelAddedLiters: index == tireShapes.Length - 1 ? 40d : 5d))
+                .Append(CreateReadinessStationaryObservation(
+                    started.AddMinutes(tireShapes.Length),
+                    leftFront: false,
+                    rightFront: false,
+                    leftRear: false,
+                    rightRear: false,
+                    fuelAddedLiters: 5d))
+                .ToArray();
+            var artifact = CreateArtifact(formatVersion: 6) with
+            {
+                SessionScope = scope,
+                SessionLineage = ClassifiedLineage() with { SessionFamily = "test" },
+                PitService = new FuelV2PitServiceEvidenceSummary(
+                    PitWindowCount: 1,
+                    PitWindowsWithFuelIncrease: 1,
+                    RequestCounts: new Dictionary<string, int> { ["fuel"] = stationary.Length },
+                    StationaryServiceObservationCount: stationary.Length,
+                    RetainedStationaryServiceObservationCount: stationary.Length,
+                    PitRouteObservationCount: 1,
+                    RetainedPitRouteObservationCount: 1),
+                StationaryServiceObservations = stationary,
+                PitRouteObservations = [CreatePitRouteObservation(started.AddMinutes(12))]
+            };
+            var options = CreateOptions(storage);
+            var importer = new FuelV2HistoryImporter(
+                options,
+                new FuelV2HistoryStore(options),
+                NullLogger<FuelV2HistoryImporter>.Instance);
+
+            Assert.True((await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None)).Imported);
+
+            var readiness = new FuelV2ModelReadinessQueryService(options, new FuelV2HistoryStore(options))
+                .Lookup(CreateHistoricalTestContext());
+
+            Assert.True(readiness.IsCollectionComplete);
+            Assert.False(readiness.IsVisible);
+            Assert.Equal(new[] { "test" }, readiness.SourceFamilies);
+            Assert.Equal(
+                new[] { "To box", "From box", "Full stop", "Pit box", "Pit lane pass" },
+                readiness.Rows.Single(row => row.Label == "Pit route").Cells.Select(cell => cell.Label));
+            Assert.Equal(
+                new[] { "Small fill", "Large fill", "Fuel flow", "Fuel only", "Fuel + tires" },
+                readiness.Rows.Single(row => row.Label == "Refuel").Cells.Select(cell => cell.Label));
+            Assert.Equal(
+                new[] { "1 tire", "Fronts", "Rears", "Left", "Right", "4 tires" },
+                readiness.Rows.Single(row => row.Label == "Tires").Cells.Select(cell => cell.Label));
+            Assert.All(readiness.Rows.SelectMany(row => row.Cells.Where(cell => cell.IsRequired)), cell =>
+                Assert.Equal(FuelV2ModelReadinessState.Confirmed, cell.State));
+            var pitLanePass = readiness.Rows.Single(row => row.Label == "Pit route")
+                .Cells.Single(cell => cell.Label == "Pit lane pass");
+            Assert.False(pitLanePass.IsRequired);
+            Assert.Equal(FuelV2ModelReadinessState.Missing, pitLanePass.State);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
     public async Task ImportAsync_WhenCaptureFormatIsFutureSkipsWithoutWritingHistory()
     {
         var root = TempRoot();
         try
         {
             var storage = CreateStorage(root);
-            var artifactPath = WriteArtifact(root, CreateArtifact(formatVersion: 6));
+            var artifactPath = WriteArtifact(root, CreateArtifact(formatVersion: 7));
             var importer = CreateImporter(storage);
 
             var result = await importer.ImportAsync(artifactPath, CancellationToken.None);
@@ -1411,6 +1554,29 @@ public sealed class FuelV2HistoryImporterTests
                 SessionName = "Race",
                 EventType = "Race",
                 DCRuleSet = dcRuleSet
+            },
+            Conditions = new HistoricalSessionInfoConditions()
+        };
+    }
+
+    private static HistoricalSessionContext CreateHistoricalTestContext()
+    {
+        return new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity { CarId = 1, CarPath = "test-car" },
+            Track = new HistoricalTrackIdentity
+            {
+                TrackId = 2,
+                TrackName = "test-track",
+                TrackDisplayName = "Test Track",
+                TrackConfigName = "Full"
+            },
+            Session = new HistoricalSessionIdentity
+            {
+                SessionType = "Offline Testing",
+                SessionName = "Offline Testing",
+                EventType = "Test",
+                DCRuleSet = "IMSA"
             },
             Conditions = new HistoricalSessionInfoConditions()
         };
@@ -1686,7 +1852,8 @@ public sealed class FuelV2HistoryImporterTests
                     Detail: "DCDriversSoFar changed from 1 to 2")
             ],
             SessionLineage: formatVersion >= 2 ? ClassifiedLineage() : null,
-            StationaryServiceObservations: []);
+            StationaryServiceObservations: [],
+            PitRouteObservations: formatVersion >= 6 ? [] : null);
     }
 
     private static PitServiceStationaryServiceObservation CreateStationaryServiceObservation(
@@ -1762,6 +1929,80 @@ public sealed class FuelV2HistoryImporterTests
             SawServiceActive: true,
             SawRepair: false,
             QualificationFlags: ["request-changed-during-service"]);
+    }
+
+    private static PitServiceRouteObservation CreatePitRouteObservation(DateTimeOffset startedAtUtc)
+    {
+        var assignment = new PitServiceRouteAssignment(
+            DriverPitTrackPct: 0.068197d,
+            TrackPitSpeedLimitKph: 80d,
+            TrackNumPitStalls: 39,
+            DCRuleSet: "IMSA");
+        PitServiceRouteCheckpoint Checkpoint(int second, double fuel, bool onPitRoad, bool inStall) => new(
+            CapturedAtUtc: startedAtUtc.AddSeconds(second),
+            ConfirmedAtUtc: startedAtUtc.AddSeconds(second + 1),
+            SessionTimeSeconds: second,
+            SessionTick: second * 60,
+            Sequence: second + 1,
+            FuelLiters: fuel,
+            LapDistPct: 0.8d,
+            OnPitRoad: onPitRoad,
+            PlayerCarInPitStall: inStall,
+            LocalIdentityProvenance: "strict-local");
+
+        return new PitServiceRouteObservation(
+            PitEntry: Checkpoint(0, 40d, onPitRoad: true, inStall: false),
+            BoxEntry: Checkpoint(4, 39.5d, onPitRoad: true, inStall: true),
+            BoxExit: Checkpoint(20, 50d, onPitRoad: true, inStall: false),
+            PitExit: Checkpoint(24, 49.5d, onPitRoad: false, inStall: false),
+            Assignment: assignment,
+            EntryToBoxSeconds: 4d,
+            BoxToExitSeconds: 4d,
+            EntryToBoxFuelUsedLiters: 0.5d,
+            BoxToExitFuelUsedLiters: 0.5d,
+            SampleCount: 10,
+            MaxFrameGapSeconds: 1d,
+            QualificationFlags: []);
+    }
+
+    private static PitServiceStationaryServiceObservation CreateReadinessStationaryObservation(
+        DateTimeOffset startedAtUtc,
+        bool leftFront,
+        bool rightFront,
+        bool leftRear,
+        bool rightRear,
+        double fuelAddedLiters)
+    {
+        var request = new PitServiceRequestShape(
+            LeftFrontTire: leftFront,
+            RightFrontTire: rightFront,
+            LeftRearTire: leftRear,
+            RightRearTire: rightRear,
+            Fuel: true,
+            Tearoff: false,
+            FastRepair: false,
+            FuelLiters: fuelAddedLiters,
+            RequestedTireCompoundIndex: 1);
+        var entry = TireCounters(10, 20, 30, 40);
+        var exit = TireCounters(
+            leftFront ? 11 : 10,
+            rightFront ? 21 : 20,
+            leftRear ? 31 : 30,
+            rightRear ? 41 : 40);
+        return CreateStationaryServiceObservation(startedAtUtc) with
+        {
+            EntryFuelLiters = 10d,
+            ExitFuelLiters = 10d + fuelAddedLiters,
+            NetFuelDeltaLiters = fuelAddedLiters,
+            PositiveFuelAddedLiters = fuelAddedLiters,
+            EntryRequest = request,
+            LastRequest = request,
+            RequestChangedDuringService = false,
+            EntryTireCounters = entry,
+            ExitTireCounters = exit,
+            TireCounterDelta = PitServiceTireCounterDelta.From(entry, exit),
+            QualificationFlags = []
+        };
     }
 
     private static PitServiceTireCounterSnapshot TireCounters(

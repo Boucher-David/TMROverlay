@@ -7,9 +7,10 @@ namespace TmrOverlay.Core.Fuel.V2;
 
 internal static class FuelV2HistoryDataVersions
 {
-    // Version 6 promotes clean Offline Testing evidence into a distinct
-    // practice-like family. It remains separate from race/practice provenance,
-    // but can be selected only through the explicit family fallback order.
+    // Version 6 is this branch's single learned-history schema step: it keeps
+    // Offline Testing as distinct practice-like evidence and adds direct,
+    // two-sample-confirmed local pit-route checkpoints. Earlier v6 summaries
+    // remain readable with their route list defaulting to empty.
     public const int ManifestVersion = 4;
     public const int SummaryVersion = 6;
     public const int AggregateVersion = 3;
@@ -114,6 +115,11 @@ internal sealed class FuelV2HistorySummary
     // observations, including exact tire-counter snapshots where the SDK
     // exposes them, not cross-session timing aggregates or strategy advice.
     public IReadOnlyList<PitServiceStationaryServiceObservation> StationaryServiceObservations { get; init; } = [];
+
+    // Format-6 source evidence. A complete route has a locally confirmed
+    // pit-entry, box-entry, box-exit, and pit-exit checkpoint. It remains raw
+    // per-stop provenance; aggregates and strategy advice do not consume it.
+    public IReadOnlyList<PitServiceRouteObservation> PitRouteObservations { get; init; } = [];
 
     public IReadOnlyList<FuelV2HistoryTeamStint> TeamStints { get; init; } = [];
 }
@@ -459,6 +465,12 @@ internal sealed class FuelV2HistoryEvidenceTotals
     public int RetainedStationaryServiceObservationCount { get; init; }
 
     public int DroppedStationaryServiceObservationCount { get; init; }
+
+    public int PitRouteObservationCount { get; init; }
+
+    public int RetainedPitRouteObservationCount { get; init; }
+
+    public int DroppedPitRouteObservationCount { get; init; }
 
     public int TeamStintCount { get; init; }
 

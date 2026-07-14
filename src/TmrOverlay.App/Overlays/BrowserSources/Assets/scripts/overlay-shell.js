@@ -845,6 +845,7 @@
         || status === 'fuel/plan workbench'
         || status === 'fuel/stint targets workbench'
         || status === 'fuel/stint sequence workbench'
+        || status === 'fuel/model readiness workbench'
         || status === 'fuel/pit request workbench'
         || status === 'fuel/sector burn workbench';
     }
@@ -856,7 +857,8 @@
         Array.isArray(section?.rows)
         && section.rows.some((row) => Array.isArray(row?.segments) && row.segments.length >= 7));
       return hasV2ComparisonColumns
-        || String(model?.status || '').trim().toLowerCase() === 'fuel/stint sequence workbench';
+        || ['fuel/stint sequence workbench', 'fuel/model readiness workbench']
+          .includes(String(model?.status || '').trim().toLowerCase());
     }
 
     function gapPanelSizeForModel(model) {

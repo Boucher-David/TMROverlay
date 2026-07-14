@@ -42,7 +42,7 @@ internal static class OverlayBehaviorDescriptorCatalog
             ScalePolicy: OverlayScalePolicy.VisualScale,
             SessionPolicy: OverlaySessionPolicy.LocalContextRequired,
             ObsReadinessPolicy: OverlayObsReadinessPolicy.RouteAndModelExpected,
-            EvidenceFields: ["metricSections", "strategySource", "localContext"]),
+            EvidenceFields: ["metricSections", "strategySource", "localContext", "modelReadiness"]),
         new(
             Id: "session-weather",
             BodyKind: "metrics",

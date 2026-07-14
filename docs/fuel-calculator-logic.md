@@ -48,6 +48,18 @@ lower-half Stint rows. See
 `docs/fuel-calculator-v2.md` for the stricter replay-history cutoff and V2
 promotion rules.
 
+In verified local Test/Practice only, the same V2 presenter can append the
+settings-controlled **Model Readiness** section. It reads immutable exact
+car/layout `test` then `practice` summaries and reports factual local pit-route,
+small/large stationary-refuel, and counter-confirmed tire-service collection.
+It includes an optional no-stall pit-lane pass as travel calibration, but that
+sample does not block collection completion. It does not duplicate the top
+Fuel/Lap usage row, use team pit state, infer a pit-stall number, render raw
+requests or `DCRuleSet` as readiness, treat that raw provenance as a
+service-order rule, or permit strategy. The section disappears for that combo
+after its explicit collection goals are complete; it never appears in race,
+qualifying, or the V2 camera fallback.
+
 V1 continues to require the normal local player/focus context. V2 alone may
 display the factual `Fuel State` in Test, Practice, Qualifying, or Race when
 fresh telemetry proves the non-spectator session `DriverCarIdx` is exactly the

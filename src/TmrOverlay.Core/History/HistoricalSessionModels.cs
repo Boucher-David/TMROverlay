@@ -1,3 +1,4 @@
+using System.Globalization;
 using TmrOverlay.Core.AppInfo;
 
 namespace TmrOverlay.Core.History;
@@ -9,7 +10,8 @@ internal sealed class HistoricalSessionContext
         Car = new HistoricalCarIdentity(),
         Track = new HistoricalTrackIdentity(),
         Session = new HistoricalSessionIdentity(),
-        Conditions = new HistoricalSessionInfoConditions()
+        Conditions = new HistoricalSessionInfoConditions(),
+        PitRouteAssignment = new HistoricalPitRouteAssignment()
     };
 
     public required HistoricalCarIdentity Car { get; init; }
@@ -21,6 +23,11 @@ internal sealed class HistoricalSessionContext
     public required HistoricalSessionInfoConditions Conditions { get; init; }
 
     public HistoricalFuelCapacityRules FuelCapacityRules { get; init; } = new();
+
+    // Session-scoped static pit assignment from session YAML. It describes
+    // this driver's currently assigned stall location and pit-lane rules; it
+    // is deliberately not a car/layout history key.
+    public HistoricalPitRouteAssignment PitRouteAssignment { get; init; } = new();
 
     // DriverInfo.DriverCarIdx is the session-declared local entry. It is kept
     // apart from transient PlayerCarIdx/CamCarIdx telemetry so a narrow
@@ -43,6 +50,24 @@ internal sealed class HistoricalFuelCapacityRules
     public double? DriverCarMaxFuelPercent { get; init; }
 
     public double? CarClassMaxFuelPercent { get; init; }
+}
+
+internal sealed class HistoricalPitRouteAssignment
+{
+    // iRacing DriverInfo.DriverPitTrkPct. This is the driver's declared pit
+    // track coordinate, not an inferred ordinal stall number.
+    public double? DriverPitTrackPct { get; init; }
+
+    public double? TrackPitSpeedLimitKph { get; init; }
+
+    public int? TrackNumPitStalls { get; init; }
+
+    public string? PitBoxIdentity => DriverPitTrackPct is { } pct
+        && double.IsFinite(pct)
+        && pct >= 0d
+        && pct < 1d
+            ? $"driver-pit-track-percent:{pct.ToString("0.000000", CultureInfo.InvariantCulture)}"
+            : null;
 }
 
 internal sealed class HistoricalSessionSummary

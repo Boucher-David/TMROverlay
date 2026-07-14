@@ -165,6 +165,7 @@ internal static class Program
                 services.AddSingleton<FuelV2HistoryImporter>();
                 services.AddSingleton<FuelV2HistoryNormalBurnQueryService>();
                 services.AddSingleton<FuelV2PitServiceTireHistoryQueryService>();
+                services.AddSingleton<FuelV2ModelReadinessQueryService>();
                 services.AddSingleton<SessionHistoryQueryService>();
                 services.AddSingleton<StreamChatOverlaySource>();
                 services.AddSingleton<BrowserOverlayModelFactory>();

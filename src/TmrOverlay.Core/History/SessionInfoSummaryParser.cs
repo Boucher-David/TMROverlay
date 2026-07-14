@@ -82,6 +82,12 @@ internal static class SessionInfoSummaryParser
                     ? null
                     : ReadDouble(exactDriver, "CarClassMaxFuelPct")
             },
+            PitRouteAssignment = new HistoricalPitRouteAssignment
+            {
+                DriverPitTrackPct = ReadDouble(parsed.DriverInfo, "DriverPitTrkPct"),
+                TrackPitSpeedLimitKph = ReadDouble(parsed.WeekendInfo, "TrackPitSpeedLimit"),
+                TrackNumPitStalls = ReadInt(parsed.WeekendInfo, "TrackNumPitStalls")
+            },
             DriverCarIdx = ReadInt(parsed.DriverInfo, "DriverCarIdx"),
             Drivers = parsed.Drivers
                 .Select(ToDriver)

@@ -686,6 +686,11 @@ internal sealed class FuelV2HistoryStore
                 || observation.EntryRequest is null
                 || observation.LastRequest is null
                 || observation.QualificationFlags is null)
+            || summary.PitRouteObservations is null
+            || summary.PitRouteObservations.Any(observation => observation is null
+                || observation.PitEntry is null
+                || observation.Assignment is null
+                || observation.QualificationFlags is null)
             || summary.TeamStints is null)
         {
             return false;

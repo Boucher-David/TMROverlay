@@ -126,6 +126,79 @@ public sealed class FuelV2OverlayViewModelTests
     }
 
     [Fact]
+    public void From_PracticeModelReadinessShowsOnlyMissingCollectionFacts()
+    {
+        var current = CurrentFuelSnapshot();
+        var snapshot = current with
+        {
+            Models = current.Models with
+            {
+                Session = current.Models.Session with { SessionType = "Practice" }
+            }
+        };
+        var readiness = new FuelV2ModelReadiness(
+            IsVisible: true,
+            IsCollectionComplete: false,
+            SourceFamilies: ["practice"],
+            Detail: "exact practice history",
+            Rows:
+            [
+                new FuelV2ModelReadinessRow(
+                    "Pit route",
+                    "Local route checkpoints",
+                    [
+                        new FuelV2ModelReadinessCell("To box", "observed", FuelV2ModelReadinessState.Confirmed, true),
+                        new FuelV2ModelReadinessCell("From box", "need exit", FuelV2ModelReadinessState.Missing, true),
+                        new FuelV2ModelReadinessCell("Pit lane pass", "optional", FuelV2ModelReadinessState.Missing, false)
+                    ])
+            ]);
+
+        var viewModel = FuelV2OverlayViewModel.From(
+            snapshot,
+            "Metric",
+            snapshot.LastUpdatedAtUtc!.Value,
+            modelReadiness: readiness);
+
+        var section = viewModel.Overlay.MetricSections.Single(section => section.Title == "Model Readiness");
+        var row = Assert.Single(section.Rows);
+        Assert.Equal("Pit route", row.Label);
+        Assert.Contains(row.Segments, segment => segment.Label == "To box"
+            && segment.Value == "observed"
+            && segment.Tone == SimpleTelemetryTone.Info);
+        Assert.Contains(row.Segments, segment => segment.Label == "From box"
+            && segment.Value == "need exit"
+            && segment.Tone == SimpleTelemetryTone.Waiting);
+        Assert.DoesNotContain(viewModel.Overlay.Rows, row => row.Label.Contains("Plan", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void From_CompletedPracticeModelReadinessDoesNotRender()
+    {
+        var current = CurrentFuelSnapshot();
+        var snapshot = current with
+        {
+            Models = current.Models with
+            {
+                Session = current.Models.Session with { SessionType = "Practice" }
+            }
+        };
+        var readiness = new FuelV2ModelReadiness(
+            IsVisible: false,
+            IsCollectionComplete: true,
+            SourceFamilies: ["practice"],
+            Detail: "collection complete",
+            Rows: []);
+
+        var viewModel = FuelV2OverlayViewModel.From(
+            snapshot,
+            "Metric",
+            snapshot.LastUpdatedAtUtc!.Value,
+            modelReadiness: readiness);
+
+        Assert.DoesNotContain(viewModel.Overlay.MetricSections, section => section.Title == "Model Readiness");
+    }
+
+    [Fact]
     public void From_VerifiedSessionDriverCameraFallback_RendersFactualFuelButNotStrategy()
     {
         var current = CurrentFuelSnapshot();

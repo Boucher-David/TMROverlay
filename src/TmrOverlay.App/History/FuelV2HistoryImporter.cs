@@ -14,7 +14,8 @@ internal sealed class FuelV2HistoryImporter
     private const int LegacyCaptureFormatVersion = 1;
     private const int FirstClassifiedCaptureFormatVersion = 2;
     private const int StationaryServiceCaptureFormatVersion = 3;
-    private const int CurrentCaptureFormatVersion = 5;
+    private const int PitRouteCaptureFormatVersion = 6;
+    private const int CurrentCaptureFormatVersion = 6;
     private const int MaxRejectedLapBurnWindowExamples = 20;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -81,6 +82,7 @@ internal sealed class FuelV2HistoryImporter
                 or FirstClassifiedCaptureFormatVersion
                 or StationaryServiceCaptureFormatVersion
                 or 4
+                or 5
                 or CurrentCaptureFormatVersion))
         {
             return FuelV2HistoryImportResult.Skipped("unsupported_capture_format");
@@ -184,7 +186,8 @@ internal sealed class FuelV2HistoryImporter
             && !artifact.PitWindows.Any(window => window is null)
             && !artifact.TeamStints.Any(stint => stint is null)
             && !artifact.EventSamples.Any(sample => sample is null)
-            && HasUsableStationaryServiceEvidence(artifact);
+            && HasUsableStationaryServiceEvidence(artifact)
+            && HasUsablePitRouteEvidence(artifact);
     }
 
     private static bool HasUsableStationaryServiceEvidence(FuelV2CaptureArtifact artifact)
@@ -220,6 +223,33 @@ internal sealed class FuelV2HistoryImporter
         return observation.EntryRequest is not null
             && observation.LastRequest is not null
             && observation.QualificationFlags is not null;
+    }
+
+    private static bool HasUsablePitRouteEvidence(FuelV2CaptureArtifact artifact)
+    {
+        if (artifact.FormatVersion < PitRouteCaptureFormatVersion)
+        {
+            return true;
+        }
+
+        var observations = artifact.PitRouteObservations;
+        var pitService = artifact.PitService;
+        if (observations is null
+            || observations.Any(observation => observation is null
+                || observation.PitEntry is null
+                || observation.Assignment is null
+                || observation.QualificationFlags is null)
+            || pitService.PitRouteObservationCount < 0
+            || pitService.RetainedPitRouteObservationCount < 0
+            || pitService.DroppedPitRouteObservationCount < 0)
+        {
+            return false;
+        }
+
+        return observations.Count == pitService.RetainedPitRouteObservationCount
+            && pitService.PitRouteObservationCount
+                == pitService.RetainedPitRouteObservationCount
+                    + pitService.DroppedPitRouteObservationCount;
     }
 
     private static async Task<FuelV2HistorySummary> BuildSummaryAsync(
@@ -277,6 +307,9 @@ internal sealed class FuelV2HistoryImporter
                 StationaryServiceObservationCount = artifact.PitService.StationaryServiceObservationCount,
                 RetainedStationaryServiceObservationCount = artifact.PitService.RetainedStationaryServiceObservationCount,
                 DroppedStationaryServiceObservationCount = artifact.PitService.DroppedStationaryServiceObservationCount,
+                PitRouteObservationCount = artifact.PitService.PitRouteObservationCount,
+                RetainedPitRouteObservationCount = artifact.PitService.RetainedPitRouteObservationCount,
+                DroppedPitRouteObservationCount = artifact.PitService.DroppedPitRouteObservationCount,
                 TeamStintCount = artifact.Team.TeamStintCount,
                 DriverChangeEventCount = artifact.Team.DriverChangeEventCount,
                 FramesWithLocalFuel = artifact.Fuel.FramesWithLocalFuel,
@@ -311,6 +344,7 @@ internal sealed class FuelV2HistoryImporter
             SectorBurnWindows = artifact.SectorBurnSamples.Select(MapSectorBurnWindow).ToArray(),
             PitWindows = artifact.PitWindows.Select(MapPitWindow).ToArray(),
             StationaryServiceObservations = artifact.StationaryServiceObservations?.ToArray() ?? [],
+            PitRouteObservations = artifact.PitRouteObservations?.ToArray() ?? [],
             TeamStints = artifact.TeamStints.Select(MapTeamStint).ToArray()
         };
     }

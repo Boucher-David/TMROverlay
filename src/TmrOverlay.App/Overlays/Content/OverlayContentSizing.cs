@@ -785,7 +785,8 @@ internal static class OverlayContentSizing
             ? new[]
             {
                 OverlayContentColumnSettings.FuelCalculatorRangeBlockId,
-                OverlayContentColumnSettings.FuelCalculatorUsageBlockId
+                OverlayContentColumnSettings.FuelCalculatorUsageBlockId,
+                OverlayContentColumnSettings.FuelCalculatorModelReadinessBlockId
             }
             : new[]
             {

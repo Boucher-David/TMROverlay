@@ -8,6 +8,7 @@ using TmrOverlay.App.Storage;
 using TmrOverlay.Core.AppInfo;
 using TmrOverlay.Core.Fuel.V2;
 using TmrOverlay.Core.History;
+using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.PitService;
 using TmrOverlay.Core.Telemetry.EdgeCases;
 using TmrOverlay.Core.Telemetry.Live;
@@ -99,6 +100,7 @@ internal sealed class FuelV2CaptureRecorder
     private readonly List<FuelV2SectorBurnSample> _sectorBurnSamples = [];
     private readonly List<FuelV2PitWindowSample> _pitWindows = [];
     private readonly List<PitServiceStationaryServiceObservation> _stationaryServiceObservations = [];
+    private readonly List<PitServiceRouteObservation> _pitRouteObservations = [];
     private readonly List<FuelV2TeamStintSample> _teamStints = [];
     private readonly List<FuelV2RaceBurnSelectorShadowTransition> _raceBurnSelectorTransitions = [];
     private string? _connectionSourceId;
@@ -129,6 +131,8 @@ internal sealed class FuelV2CaptureRecorder
     private int _pitWindowsWithFuelIncrease;
     private int _stationaryServiceObservationCount;
     private int _droppedStationaryServiceObservationCount;
+    private int _pitRouteObservationCount;
+    private int _droppedPitRouteObservationCount;
     private int _teamStintCount;
     private int _driverChangeEventCount;
     private double? _minFuelLiters;
@@ -145,6 +149,7 @@ internal sealed class FuelV2CaptureRecorder
     private SectorAnchor? _sectorAnchor;
     private PitWindowBuilder? _activePitWindow;
     private PitServiceStationaryServiceTracker _stationaryServiceTracker = new();
+    private PitServiceRouteTracker _pitServiceRouteTracker = new();
     private TeamStintBuilder? _activeTeamStint;
     private FuelV2RaceBurnEvidenceSelectionTracker _raceBurnSelector = new();
     private FuelV2RaceBurnSelectorShadowTransition? _latestRaceBurnSelectorTransition;
@@ -219,6 +224,8 @@ internal sealed class FuelV2CaptureRecorder
         _pitWindowsWithFuelIncrease = 0;
         _stationaryServiceObservationCount = 0;
         _droppedStationaryServiceObservationCount = 0;
+        _pitRouteObservationCount = 0;
+        _droppedPitRouteObservationCount = 0;
         _teamStintCount = 0;
         _driverChangeEventCount = 0;
         _minFuelLiters = null;
@@ -235,6 +242,7 @@ internal sealed class FuelV2CaptureRecorder
         _sectorAnchor = null;
         _activePitWindow = null;
         _stationaryServiceTracker = new PitServiceStationaryServiceTracker();
+        _pitServiceRouteTracker = new PitServiceRouteTracker(_options.MaximumPitRouteFrameGapSeconds);
         _activeTeamStint = null;
         _sessionFrameCounts.Clear();
         _contextFlagCounts.Clear();
@@ -258,6 +266,7 @@ internal sealed class FuelV2CaptureRecorder
         _sectorBurnSamples.Clear();
         _pitWindows.Clear();
         _stationaryServiceObservations.Clear();
+        _pitRouteObservations.Clear();
         _teamStints.Clear();
         _raceBurnSelectorTransitions.Clear();
         _raceBurnSelector = new FuelV2RaceBurnEvidenceSelectionTracker();
@@ -357,6 +366,7 @@ internal sealed class FuelV2CaptureRecorder
             TrackLapBurnWindow(sample, progress, currentFuel, contextFlags, capturedAtUtc);
             TrackSectorBurn(sample, models, progress, currentFuel, contextFlags, capturedAtUtc);
             TrackStationaryServiceObservation(sample, models, currentFuel, capturedAtUtc);
+            TrackPitRoute(snapshot, sample, models, currentFuel, capturedAtUtc);
             TrackPitWindow(sample, models, currentFuel, capturedAtUtc);
             TrackTeamStint(sample, progress, currentFuel, contextFlags, capturedAtUtc);
             TrackDriverChange(sample, snapshot, capturedAtUtc);
@@ -430,11 +440,12 @@ internal sealed class FuelV2CaptureRecorder
         {
             AddBoundaryEvent(boundaryKind, finishedAtUtc);
             FinalizeActiveStationaryServiceObservation();
+            FinalizeActivePitRouteObservation();
             FinalizeActivePitWindow(finishedAtUtc);
             FinalizeActiveTeamStint(finishedAtUtc);
 
             var artifact = new FuelV2CaptureArtifact(
-                    FormatVersion: 5,
+                    FormatVersion: 6,
                     SourceId: _sourceId,
                     StartedAtUtc: _startedAtUtc.Value,
                     FinishedAtUtc: finishedAtUtc,
@@ -461,7 +472,9 @@ internal sealed class FuelV2CaptureRecorder
                         MaxSectorBurnSamples: _options.MaxSectorBurnSamples,
                         MaxPitWindows: _options.MaxPitWindows,
                         MaxTeamStints: _options.MaxTeamStints,
-                        MaxStationaryServiceObservations: _options.MaxStationaryServiceObservations),
+                        MaxStationaryServiceObservations: _options.MaxStationaryServiceObservations,
+                        MaxPitRouteObservations: _options.MaxPitRouteObservations,
+                        MaximumPitRouteFrameGapSeconds: _options.MaximumPitRouteFrameGapSeconds),
                     Totals: new FuelV2CaptureTotals(
                         FrameCount: _frameCount,
                         SampledFrameCount: _sampledFrameCount,
@@ -496,7 +509,10 @@ internal sealed class FuelV2CaptureRecorder
                         RequestCounts: Sorted(_pitServiceRequestCounts),
                         StationaryServiceObservationCount: _stationaryServiceObservationCount,
                         RetainedStationaryServiceObservationCount: _stationaryServiceObservations.Count,
-                        DroppedStationaryServiceObservationCount: _droppedStationaryServiceObservationCount),
+                        DroppedStationaryServiceObservationCount: _droppedStationaryServiceObservationCount,
+                        PitRouteObservationCount: _pitRouteObservationCount,
+                        RetainedPitRouteObservationCount: _pitRouteObservations.Count,
+                        DroppedPitRouteObservationCount: _droppedPitRouteObservationCount),
                     Team: new FuelV2TeamEvidenceSummary(
                         TeamStintCount: _teamStintCount,
                         DriverChangeEventCount: _driverChangeEventCount),
@@ -518,7 +534,8 @@ internal sealed class FuelV2CaptureRecorder
                         _nextSessionOrdinal,
                         _sessionBoundaryKind,
                         boundaryKind),
-                    StationaryServiceObservations: _stationaryServiceObservations.ToArray());
+                    StationaryServiceObservations: _stationaryServiceObservations.ToArray(),
+                    PitRouteObservations: _pitRouteObservations.ToArray());
 
                 var path = ResolveArtifactPath(captureDirectory, _sourceId);
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -992,6 +1009,37 @@ internal sealed class FuelV2CaptureRecorder
         }
     }
 
+    private void TrackPitRoute(
+        LiveTelemetrySnapshot snapshot,
+        HistoricalTelemetrySample? sample,
+        LiveRaceModels models,
+        double? currentFuel,
+        DateTimeOffset capturedAtUtc)
+    {
+        // TeamOnPitRoad is intentionally absent here: pit-route history is a
+        // local-car physical measurement, never a team-wide state guess.
+        var local = LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, capturedAtUtc);
+        var completed = _pitServiceRouteTracker.Track(new PitServiceRouteObservationFrame(
+            CapturedAtUtc: capturedAtUtc,
+            SessionTimeSeconds: sample?.SessionTime,
+            SessionTick: sample?.SessionTick ?? 0,
+            Sequence: snapshot.Sequence,
+            IsReliable: local.IsAvailable && sample is not null && !sample.IsInGarage,
+            OnPitRoad: models.FuelPit.OnPitRoad,
+            PlayerCarInPitStall: models.FuelPit.PlayerCarInPitStall,
+            IsInGarage: sample?.IsInGarage == true,
+            FuelLiters: currentFuel,
+            LapDistPct: sample?.LapDistPct,
+            LocalIdentityProvenance: local.Reason == "session_driver_camera_identity_fallback"
+                ? "session-driver-camera-fallback"
+                : "strict-local",
+            Assignment: PitServiceRouteAssignment.From(snapshot.Context)));
+        if (completed is not null)
+        {
+            RecordPitRouteObservation(completed);
+        }
+    }
+
     private void TrackTeamStint(
         HistoricalTelemetrySample? sample,
         LapProgress? progress,
@@ -1200,6 +1248,15 @@ internal sealed class FuelV2CaptureRecorder
         }
     }
 
+    private void FinalizeActivePitRouteObservation()
+    {
+        var completed = _pitServiceRouteTracker.Finish();
+        if (completed is not null)
+        {
+            RecordPitRouteObservation(completed);
+        }
+    }
+
     private void RecordStationaryServiceObservation(PitServiceStationaryServiceObservation observation)
     {
         _stationaryServiceObservationCount++;
@@ -1210,6 +1267,19 @@ internal sealed class FuelV2CaptureRecorder
         else
         {
             _droppedStationaryServiceObservationCount++;
+        }
+    }
+
+    private void RecordPitRouteObservation(PitServiceRouteObservation observation)
+    {
+        _pitRouteObservationCount++;
+        if (_pitRouteObservations.Count < _options.MaxPitRouteObservations)
+        {
+            _pitRouteObservations.Add(observation);
+        }
+        else
+        {
+            _droppedPitRouteObservationCount++;
         }
     }
 
@@ -2001,7 +2071,8 @@ internal sealed record FuelV2CaptureArtifact(
     IReadOnlyList<FuelV2EventSample> EventSamples,
     FuelV2CaptureSessionLineage? SessionLineage = null,
     IReadOnlyList<PitServiceStationaryServiceObservation>? StationaryServiceObservations = null,
-    FuelV2RaceBurnSelectorShadowEvidence? RaceBurnSelectorShadow = null);
+    FuelV2RaceBurnSelectorShadowEvidence? RaceBurnSelectorShadow = null,
+    IReadOnlyList<PitServiceRouteObservation>? PitRouteObservations = null);
 
 // A bounded shadow record for the unpromoted race-burn selector. `ShadowOnly`
 // is intentionally redundant on both the summary and every transition so a
@@ -2273,7 +2344,9 @@ internal sealed record FuelV2CaptureArtifactOptions(
     int MaxSectorBurnSamples,
     int MaxPitWindows,
     int MaxTeamStints,
-    int MaxStationaryServiceObservations = 80);
+    int MaxStationaryServiceObservations = 80,
+    int MaxPitRouteObservations = 80,
+    double MaximumPitRouteFrameGapSeconds = 2d);
 
 internal sealed record FuelV2CaptureTotals(
     int FrameCount,
@@ -2313,7 +2386,10 @@ internal sealed record FuelV2PitServiceEvidenceSummary(
     IReadOnlyDictionary<string, int> RequestCounts,
     int StationaryServiceObservationCount = 0,
     int RetainedStationaryServiceObservationCount = 0,
-    int DroppedStationaryServiceObservationCount = 0);
+    int DroppedStationaryServiceObservationCount = 0,
+    int PitRouteObservationCount = 0,
+    int RetainedPitRouteObservationCount = 0,
+    int DroppedPitRouteObservationCount = 0);
 
 internal sealed record FuelV2TeamEvidenceSummary(
     int TeamStintCount,

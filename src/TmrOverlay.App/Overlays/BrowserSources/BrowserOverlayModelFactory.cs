@@ -63,6 +63,7 @@ internal sealed class BrowserOverlayModelFactory
     private readonly FuelV2OverlayOptions _fuelV2OverlayOptions;
     private readonly FuelV2PitServiceTireHistoryQueryService? _fuelV2TireHistoryQueryService;
     private readonly FuelV2HistoryNormalBurnQueryService? _fuelV2NormalHistoryQueryService;
+    private readonly FuelV2ModelReadinessQueryService? _fuelV2ModelReadinessQueryService;
     private readonly TrackMapStore? _trackMapStore;
     private readonly StreamChatOverlaySource? _streamChatSource;
     private readonly SessionWeatherOverlayViewModel.StatefulBuilder _sessionWeatherBuilder;
@@ -104,7 +105,8 @@ internal sealed class BrowserOverlayModelFactory
         StreamChatOverlaySource? streamChatSource = null,
         FuelV2OverlayOptions? fuelV2OverlayOptions = null,
         FuelV2PitServiceTireHistoryQueryService? fuelV2TireHistoryQueryService = null,
-        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null)
+        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null,
+        FuelV2ModelReadinessQueryService? fuelV2ModelReadinessQueryService = null)
     {
         _historyQueryService = historyQueryService;
         _trackMapStore = trackMapStore;
@@ -112,6 +114,7 @@ internal sealed class BrowserOverlayModelFactory
         _fuelV2OverlayOptions = fuelV2OverlayOptions ?? FuelV2OverlayOptions.Disabled;
         _fuelV2TireHistoryQueryService = fuelV2TireHistoryQueryService;
         _fuelV2NormalHistoryQueryService = fuelV2NormalHistoryQueryService;
+        _fuelV2ModelReadinessQueryService = fuelV2ModelReadinessQueryService;
         _sessionWeatherBuilder = SessionWeatherOverlayViewModel.CreateStatefulBuilder();
         _pitServiceBuilder = PitServiceOverlayViewModel.CreateStatefulBuilder();
     }
@@ -449,13 +452,15 @@ internal sealed class BrowserOverlayModelFactory
                 snapshot.Context,
                 snapshot.Models.PitService.Request);
             var normalHistory = _fuelV2NormalHistoryQueryService?.Lookup(snapshot.Context);
+            var modelReadiness = _fuelV2ModelReadinessQueryService?.Lookup(snapshot.Context);
             var v2ViewModel = FuelV2OverlayViewModel.From(
                 snapshot,
                 unitSystem,
                 now,
                 effectiveOverlay,
                 tireHistory,
-                normalHistory);
+                normalHistory,
+                modelReadiness);
             var v2HeaderItems = HeaderItems(overlay, snapshot, v2ViewModel.Overlay.Status, SimpleChromeTone(v2ViewModel.Overlay.Tone));
             return FromSimple(
                 FuelCalculatorOverlayDefinition.Definition.Id,
@@ -468,7 +473,8 @@ internal sealed class BrowserOverlayModelFactory
                     AdditionalFuelNeedState: "unavailable",
                     SuccessCopyRequiresMeasuredNeed: true,
                     TireService: TireServiceEvidence(v2ViewModel.TireHistory),
-                    HistoricalFuel: HistoricalFuelEvidence(normalHistory))
+                    HistoricalFuel: HistoricalFuelEvidence(normalHistory),
+                    ModelReadiness: ModelReadinessEvidence(modelReadiness))
             };
         }
 
@@ -3285,6 +3291,21 @@ internal sealed class BrowserOverlayModelFactory
             CanDriveAdvice: false);
     }
 
+    private static BrowserOverlayModelReadinessEvidence ModelReadinessEvidence(
+        FuelV2ModelReadiness? readiness)
+    {
+        return new BrowserOverlayModelReadinessEvidence(
+            State: readiness?.IsCollectionComplete == true
+                ? "collection-complete"
+                : readiness?.IsVisible == true
+                    ? "collecting"
+                    : "unavailable-or-not-applicable",
+            IsVisible: readiness?.IsVisible == true,
+            IsCollectionComplete: readiness?.IsCollectionComplete == true,
+            SourceFamilies: readiness?.SourceFamilies ?? [],
+            RowLabels: readiness?.Rows.Select(row => row.Label).ToArray() ?? []);
+    }
+
     private static BrowserOverlayFuelStrategyEvidence FuelStrategyEvidence(FuelStrategySnapshot? strategy)
     {
         if (strategy is null || !HasTrustedFuelStrategy(strategy) || strategy.AdditionalFuelNeededLiters is null)
@@ -4285,7 +4306,8 @@ internal sealed record BrowserOverlayFuelStrategyEvidence(
     string AdditionalFuelNeedState,
     bool SuccessCopyRequiresMeasuredNeed,
     BrowserOverlayTireServiceEvidence? TireService = null,
-    BrowserOverlayHistoricalFuelEvidence? HistoricalFuel = null);
+    BrowserOverlayHistoricalFuelEvidence? HistoricalFuel = null,
+    BrowserOverlayModelReadinessEvidence? ModelReadiness = null);
 
 internal sealed record BrowserOverlayTireServiceEvidence(
     string State,
@@ -4301,6 +4323,13 @@ internal sealed record BrowserOverlayHistoricalFuelEvidence(
     int? AcceptedLapBurnSampleCount,
     bool CanSeedPlan,
     bool CanDriveAdvice);
+
+internal sealed record BrowserOverlayModelReadinessEvidence(
+    string State,
+    bool IsVisible,
+    bool IsCollectionComplete,
+    IReadOnlyList<string> SourceFamilies,
+    IReadOnlyList<string> RowLabels);
 
 internal sealed record BrowserOverlayLayoutEvidence(
     int ContentRowCount,

@@ -4,6 +4,7 @@ using TmrOverlay.App.Overlays.FuelCalculator;
 using TmrOverlay.App.Overlays.SimpleTelemetry;
 using TmrOverlay.Core.Fuel.V2;
 using TmrOverlay.Core.History;
+using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.PitService;
 using TmrOverlay.Core.Settings;
 using TmrOverlay.Core.Telemetry.Live;

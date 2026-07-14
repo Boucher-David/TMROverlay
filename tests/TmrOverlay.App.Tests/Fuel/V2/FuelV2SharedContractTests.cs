@@ -55,16 +55,16 @@ public sealed class FuelV2SharedContractTests
     }
 
     [Theory]
-    [InlineData(30d, 3, 10d, true, FuelV2RangeBoundaryState.Available)]
-    [InlineData(29.99999d, 2, 0.00001d, false, FuelV2RangeBoundaryState.Available)]
-    [InlineData(30.00001d, 3, 9.99999d, false, FuelV2RangeBoundaryState.Available)]
-    [InlineData(0d, 0, 10d, true, FuelV2RangeBoundaryState.KnownZero)]
+    [InlineData(30d, 3, 10d, true, (int)FuelV2RangeBoundaryState.Available)]
+    [InlineData(29.99999d, 2, 0.00001d, false, (int)FuelV2RangeBoundaryState.Available)]
+    [InlineData(30.00001d, 3, 9.99999d, false, (int)FuelV2RangeBoundaryState.Available)]
+    [InlineData(0d, 0, 10d, true, (int)FuelV2RangeBoundaryState.KnownZero)]
     public void ComposedSnapshot_PreservesExactNearAndKnownZeroBoundaries(
         double currentFuelLiters,
         int expectedSafeLaps,
         double expectedNextLapFuel,
         bool expectedExactBoundary,
-        FuelV2RangeBoundaryState expectedRangeState)
+        int expectedRangeState)
     {
         var checkpoints = FuelV2FuelCheckpointCalculator.From(
             ResolvedCapacity(60d),
@@ -88,7 +88,7 @@ public sealed class FuelV2SharedContractTests
         var cell = composed.BoundaryFeasibility.Bucket(FuelV2BurnBucketId.Last);
 
         AssertJsonEqual(direct, composed.BoundaryFeasibility);
-        Assert.Equal(expectedRangeState, cell.RangeState);
+        Assert.Equal((FuelV2RangeBoundaryState)expectedRangeState, cell.RangeState);
         Assert.Equal(expectedSafeLaps, cell.SafeWholeLaps);
         Assert.Equal(expectedNextLapFuel, Value(cell.FuelToNextCompleteLapLiters), precision: 8);
         Assert.Equal(expectedExactBoundary,
@@ -268,13 +268,14 @@ public sealed class FuelV2SharedContractTests
     }
 
     [Theory]
-    [InlineData(FuelV2LapBudgetValueKind.PrimaryLapsRemaining, 12d)]
-    [InlineData(FuelV2LapBudgetValueKind.PossibleLapsRemaining, 11.5d)]
-    [InlineData(FuelV2LapBudgetValueKind.EstimatedFinishLap, 42.5d)]
+    [InlineData((int)FuelV2LapBudgetValueKind.PrimaryLapsRemaining, 12d)]
+    [InlineData((int)FuelV2LapBudgetValueKind.PossibleLapsRemaining, 11.5d)]
+    [InlineData((int)FuelV2LapBudgetValueKind.EstimatedFinishLap, 42.5d)]
     public void ComposedPlan_MatchesDirectPlanForEveryNamedLapBudgetValue(
-        FuelV2LapBudgetValueKind valueKind,
+        int valueKind,
         double expectedValue)
     {
+        var expectedValueKind = (FuelV2LapBudgetValueKind)valueKind;
         var capacity = ResolvedCapacity(60d);
         var checkpoints = FuelV2FuelCheckpointCalculator.From(
             capacity,
@@ -289,8 +290,8 @@ public sealed class FuelV2SharedContractTests
                 FuelV2BurnBucketId.Last,
                 [6]),
             plan: new FuelV2FullRacePlanComposition(
-                valueKind,
-                valueKind,
+                expectedValueKind,
+                expectedValueKind,
                 FuelV2FuelCheckpointKind.FirstGreen,
                 FuelV2BurnBucketId.Last,
                 Options: null));

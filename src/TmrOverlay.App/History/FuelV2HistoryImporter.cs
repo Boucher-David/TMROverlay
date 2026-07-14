@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TmrOverlay.App.Telemetry;
 using TmrOverlay.Core.Fuel.V2;
 using TmrOverlay.Core.History;
+using TmrOverlay.Core.PitService;
 
 namespace TmrOverlay.App.History;
 

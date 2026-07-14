@@ -193,7 +193,7 @@ public sealed class FuelV2SnapshotComposerTests
         var snapshot = FuelV2SnapshotComposer.From(new FuelV2SnapshotCompositionInputs(
             LapBudget: LapBudget() with
             {
-                PrimaryLapsRemaining = 4d,
+                PrimaryLapsRemaining = 4,
                 PossibleLapsRemaining = 4d,
                 EstimatedFinishLap = 4d
             },

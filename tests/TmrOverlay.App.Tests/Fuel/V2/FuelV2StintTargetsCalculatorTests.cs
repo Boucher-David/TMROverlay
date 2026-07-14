@@ -54,10 +54,10 @@ public sealed class FuelV2StintTargetsCalculatorTests
     }
 
     [Theory]
-    [InlineData(9.20d, FuelV2WorkbenchTone.Warning)]
-    [InlineData(9.19d, FuelV2WorkbenchTone.Warning)]
-    [InlineData(8.4d, FuelV2WorkbenchTone.Error)]
-    public void SavingSeverityIsMonotonic(double usableFuelLiters, FuelV2WorkbenchTone expectedTone)
+    [InlineData(9.20d, (int)FuelV2WorkbenchTone.Warning)]
+    [InlineData(9.19d, (int)FuelV2WorkbenchTone.Warning)]
+    [InlineData(8.4d, (int)FuelV2WorkbenchTone.Error)]
+    public void SavingSeverityIsMonotonic(double usableFuelLiters, int expectedTone)
     {
         var snapshot = FuelV2StintTargetsCalculator.From(
             currentFuelLiters: usableFuelLiters,
@@ -66,8 +66,8 @@ public sealed class FuelV2StintTargetsCalculatorTests
             remainingLaps: 3d);
 
         var plan = Assert.Single(snapshot.Targets, cell => cell.Role == FuelV2StintTargetRole.Plan);
-        Assert.Equal(expectedTone, plan.Tone);
-        Assert.Equal(expectedTone, snapshot.Tone);
+        Assert.Equal((FuelV2WorkbenchTone)expectedTone, plan.Tone);
+        Assert.Equal((FuelV2WorkbenchTone)expectedTone, snapshot.Tone);
     }
 
     [Fact]

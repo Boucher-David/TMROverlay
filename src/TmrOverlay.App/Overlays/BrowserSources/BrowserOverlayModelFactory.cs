@@ -17,6 +17,7 @@ using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Overlays.TrackMap;
 using TmrOverlay.App.TrackMaps;
 using TmrOverlay.Core.Fuel;
+using TmrOverlay.Core.Fuel.V2;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;

@@ -75,7 +75,7 @@ public sealed class FuelV2WhiteRoom24HourScenarioTests
         var fixture = FuelV2WhiteRoomFixture.Load(FixturePath());
 
         Assert.Equal(
-            ["pre-race-history-only", "first-stint-live-agrees", "first-stint-live-higher", "mid-first-stint-pit-interruption"],
+            new[] { "pre-race-history-only", "first-stint-live-agrees", "first-stint-live-higher", "mid-first-stint-pit-interruption" },
             fixture.Checkpoints.Select(checkpoint => checkpoint.Id).ToArray());
         Assert.Empty(fixture.Checkpoints[0].AcceptedFuelPerLapLiters);
         Assert.Equal(10, fixture.Checkpoints[1].AcceptedFuelPerLapLiters.Count);

@@ -1,6 +1,8 @@
 using TmrOverlay.App.History;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.FuelCalculator;
+using TmrOverlay.App.Overlays.SimpleTelemetry;
+using TmrOverlay.Core.Fuel.V2;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.PitService;
 using TmrOverlay.Core.Settings;
@@ -19,7 +21,7 @@ public sealed class FuelV2OverlayViewModelTests
 
         Assert.Equal("fuel range", viewModel.Overlay.Status);
         Assert.Equal(
-            ["Fuel State", "Fuel Usage", "Fuel Range"],
+            new[] { "Fuel State", "Fuel Usage", "Fuel Range" },
             viewModel.Overlay.MetricSections.Select(section => section.Title).ToArray());
         Assert.Collection(
             viewModel.Overlay.MetricSections,
@@ -30,10 +32,10 @@ public sealed class FuelV2OverlayViewModelTests
         Assert.Contains(viewModel.Overlay.MetricSections[1].Rows[0].Segments, segment => segment.Label == "Last" && segment.Value == "13.6 L/lap");
         Assert.Contains(viewModel.Overlay.MetricSections[2].Rows[0].Segments, segment => segment.Label == "Last" && segment.Value == "2.94 laps");
         Assert.Equal(
-            ["Last", "5L", "10L", "History", "Max", "Min", "Quali"],
+            new[] { "Last", "5L", "10L", "History", "Max", "Min", "Quali" },
             viewModel.Overlay.MetricSections[1].Rows[0].Segments.Select(segment => segment.Label).ToArray());
         Assert.Equal(
-            ["Last", "5L", "10L", "History", "Max", "Min", "Quali"],
+            new[] { "Last", "5L", "10L", "History", "Max", "Min", "Quali" },
             viewModel.Overlay.MetricSections[2].Rows[0].Segments.Select(segment => segment.Label).ToArray());
         Assert.DoesNotContain(viewModel.Overlay.MetricSections, section => section.Title == "Stint Targets");
         Assert.DoesNotContain(viewModel.Overlay.Rows, row => row.Label.Contains("Target", StringComparison.OrdinalIgnoreCase));
@@ -92,7 +94,7 @@ public sealed class FuelV2OverlayViewModelTests
         var viewModel = FuelV2OverlayViewModel.From(snapshot, "Metric", snapshot.LastUpdatedAtUtc!.Value);
 
         Assert.Equal(
-            ["Fuel Usage", "Fuel Range"],
+            new[] { "Fuel Usage", "Fuel Range" },
             viewModel.Overlay.MetricSections.Select(section => section.Title).ToArray());
         Assert.DoesNotContain(viewModel.Overlay.MetricSections, section => section.Title == "Race Information");
         Assert.DoesNotContain(viewModel.Overlay.MetricSections, section => section.Title == "Fuel State");
@@ -126,7 +128,7 @@ public sealed class FuelV2OverlayViewModelTests
         Assert.Equal("metrics", v2Response.Model.BodyKind);
         Assert.NotNull(v2Response.Model.MetricSections);
         Assert.Equal(
-            ["Fuel State", "Fuel Usage", "Fuel Range"],
+            new[] { "Fuel State", "Fuel Usage", "Fuel Range" },
             v2Response.Model.MetricSections!.Select(section => section.Title).ToArray());
         Assert.NotNull(v2Response.Model.GridSections);
         Assert.Empty(v2Response.Model.GridSections!);
@@ -274,12 +276,12 @@ public sealed class FuelV2OverlayViewModelTests
         {
             Car = new HistoricalCarIdentity
             {
-                CarKey = "gt3-test",
+                CarPath = "gt3-test",
                 DriverCarFuelMaxLiters = 100d
             },
             Track = new HistoricalTrackIdentity
             {
-                TrackKey = "road-atlanta",
+                TrackName = "road-atlanta",
                 TrackConfigName = "full"
             },
             Session = new HistoricalSessionIdentity

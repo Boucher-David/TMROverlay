@@ -46,7 +46,7 @@ public sealed class FuelV2RaceBurnEvidenceSelectorTests
 
         Assert.Equal(FuelV2RaceBurnEvidenceSelectionState.LiveConfirmed, confirmed.State);
         Assert.Equal(FuelV2BurnBucketId.TenLapAverage, confirmed.BurnBucketId);
-        Assert.Equal(13.04d, confirmed.Burn?.Value, precision: 6);
+        Assert.Equal(13.04d, Assert.IsType<double>(confirmed.Burn?.Value), precision: 6);
         Assert.True(confirmed.CanDriveAdvice);
     }
 
@@ -58,7 +58,7 @@ public sealed class FuelV2RaceBurnEvidenceSelectorTests
 
         Assert.Equal(FuelV2RaceBurnEvidenceSelectionState.LiveConfirmed, selection.State);
         Assert.Equal(FuelV2BurnBucketId.FiveLapAverage, selection.BurnBucketId);
-        Assert.Equal(13.84d, selection.Burn?.Value, precision: 6);
+        Assert.Equal(13.84d, Assert.IsType<double>(selection.Burn?.Value), precision: 6);
         Assert.True(selection.CanDriveAdvice);
     }
 
@@ -72,7 +72,7 @@ public sealed class FuelV2RaceBurnEvidenceSelectorTests
 
         Assert.Equal(FuelV2RaceBurnEvidenceSelectionState.LiveConfirmed, selection.State);
         Assert.Equal(FuelV2BurnBucketId.FiveLapAverage, selection.BurnBucketId);
-        Assert.Equal(13.90d, selection.Burn?.Value, precision: 6);
+        Assert.Equal(13.90d, Assert.IsType<double>(selection.Burn?.Value), precision: 6);
         Assert.True(selection.CanDriveAdvice);
     }
 

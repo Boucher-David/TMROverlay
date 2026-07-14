@@ -148,7 +148,7 @@ public sealed class FuelV2FuelPerLapCalculatorTests
                 QualifyingSeed: qualifyingSeed));
 
         AssertScalarValue(windows.Max, 6d);
-        AssertCleanLiveWindow(windows.Max);
+        AssertCleanLiveWindow(windows.Max, FuelV2BurnBucketId.Maximum, FuelV2BurnSource.LiveMaximum, 3);
     }
 
     [Fact]

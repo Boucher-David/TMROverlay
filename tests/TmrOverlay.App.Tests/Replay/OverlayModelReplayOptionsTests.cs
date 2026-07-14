@@ -1,4 +1,5 @@
 using TmrOverlay.OverlayModelReplay;
+using ReplayProgram = TmrOverlay.OverlayModelReplay.Program;
 using Xunit;
 
 namespace TmrOverlay.App.Tests.Replay;
@@ -11,7 +12,7 @@ public sealed class OverlayModelReplayOptionsTests
         // A sample plan's capturedUnixMs is useful provenance but is editable.
         // This test fixes the causal guard to the raw frame timestamp that the
         // replay will actually emit.
-        var cutoff = Program.EarliestEmittedFrameAtUtc(
+        var cutoff = ReplayProgram.EarliestEmittedFrameAtUtc(
             new HashSet<int> { 41, 43 },
             [
                 new ReplaySelectedFrameTime(41, DateTimeOffset.Parse("2026-07-14T10:00:00Z")),
@@ -25,7 +26,7 @@ public sealed class OverlayModelReplayOptionsTests
     public void EarliestEmittedFrameAtUtc_RejectsSamplePlanFramesExcludedByReplayFilter()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            Program.EarliestEmittedFrameAtUtc(
+            ReplayProgram.EarliestEmittedFrameAtUtc(
                 new HashSet<int> { 41, 43 },
                 [new ReplaySelectedFrameTime(41, DateTimeOffset.Parse("2026-07-14T10:00:00Z"))]));
 

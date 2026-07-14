@@ -113,11 +113,11 @@ public sealed class FuelV2BoundaryFeasibilityCalculatorTests
     }
 
     [Theory]
-    [InlineData(0d, FuelV2TargetFeasibilityState.Feasible, 5, 0d)]
-    [InlineData(0.0001d, FuelV2TargetFeasibilityState.Unachievable, 4, 0.0001d)]
+    [InlineData(0d, (int)FuelV2TargetFeasibilityState.Feasible, 5, 0d)]
+    [InlineData(0.0001d, (int)FuelV2TargetFeasibilityState.Unachievable, 4, 0.0001d)]
     public void MarginCrossingCapacityBoundary_UsesMathematicalValuesRatherThanDisplayRounding(
         double reserveLiters,
-        FuelV2TargetFeasibilityState expectedState,
+        int expectedState,
         int expectedMaximumLaps,
         double expectedShortfall)
     {
@@ -130,7 +130,7 @@ public sealed class FuelV2BoundaryFeasibilityCalculatorTests
             reserveLiters: reserveLiters);
 
         var cell = snapshot.Bucket(FuelV2BurnBucketId.Last);
-        Assert.Equal(expectedState, cell.FeasibilityState);
+        Assert.Equal((FuelV2TargetFeasibilityState)expectedState, cell.FeasibilityState);
         Assert.Equal(expectedMaximumLaps, cell.MaximumFeasibleLaps);
         Assert.Equal(expectedShortfall, Value(cell.ShortfallLiters), precision: 8);
     }

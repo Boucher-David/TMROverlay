@@ -1,6 +1,6 @@
 # Capture Format
 
-Raw capture is normally an opt-in diagnostic/development mode. The current `v1.3` branch intentionally overrides that default with `TelemetryCapture:RawCaptureEnabled=true` for Windows Fuel V2 evidence collection; restore it to `false` before merging any PR. When it is `true`, each live capture produces a directory with four core artifacts:
+Raw capture is normally an opt-in diagnostic/development mode. The current `v1.3` branch intentionally overrides that default with `TelemetryCapture:RawCaptureEnabled=true` and enables the factual `FuelV2Overlay` for Windows evidence collection; restore both settings to `false` before merging any PR. When raw capture is `true`, each live capture produces a directory with four core artifacts:
 
 - `capture-manifest.json`
 - `telemetry-schema.json`

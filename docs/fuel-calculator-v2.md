@@ -3093,9 +3093,10 @@ owners exist.
 
 #### Factual V2 Overlay Development Gate - 2026-07-14
 
-`FuelV2Overlay:Enabled` defaults to `false` in application configuration (or
-`TMR_FuelV2Overlay__Enabled=true` through this app's normal environment-variable
-provider).
+`FuelV2Overlay:Enabled` is deliberately `true` in this branch's application
+configuration for the Windows evidence pass (and can be overridden through
+`TMR_FuelV2Overlay__Enabled`). It must be restored to `false` before merging;
+the released default remains V1 Fuel until V2 strategy ownership is complete.
 It is an app/developer gate, not a persisted user preference: its purpose is to
 review the emerging Fuel V2 overlay through the real localhost/OBS browser-model
 and Windows-native paths without silently cutting over the V1 strategy

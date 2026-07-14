@@ -25,8 +25,10 @@ public sealed class PitServiceRouteTrackerTests
         Assert.NotNull(observation);
         Assert.Equal(2d, observation.EntryToBoxSeconds);
         Assert.Equal(2d, observation.BoxToExitSeconds);
-        Assert.Equal(0.3d, observation.EntryToBoxFuelUsedLiters, precision: 6);
-        Assert.Equal(0.3d, observation.BoxToExitFuelUsedLiters, precision: 6);
+        Assert.NotNull(observation.EntryToBoxFuelUsedLiters);
+        Assert.NotNull(observation.BoxToExitFuelUsedLiters);
+        Assert.Equal(0.3d, observation.EntryToBoxFuelUsedLiters.Value, precision: 6);
+        Assert.Equal(0.3d, observation.BoxToExitFuelUsedLiters.Value, precision: 6);
         Assert.Equal("driver-pit-track-percent:0.068197", observation.Assignment.PitBoxIdentity);
         Assert.Equal("pit-speed-kph:80", observation.Assignment.PitSpeedRuleIdentity);
         Assert.True(observation.HasObservedBoxEntry);

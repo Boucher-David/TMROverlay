@@ -45,7 +45,7 @@ internal sealed record OverlaySemanticProjection(
                 MetricSections: body.MetricSections.Select(From).ToArray(),
                 GridSections: body.Sections.Select(From).ToArray())
             : throw new InvalidOperationException(
-                $"The metric-body semantic projection does not support native body family '{BodyFamily(model.Body)}'.");
+                $"The metric-body semantic projection does not support native body family '{DescribeBodyFamily(model.Body)}'.");
     }
 
     private static OverlaySemanticProjection Hidden() => new(
@@ -60,7 +60,7 @@ internal sealed record OverlaySemanticProjection(
             ? "metric-rows"
             : bodyKind;
 
-    private static string BodyFamily(DesignV2Body body) => body switch
+    private static string DescribeBodyFamily(DesignV2Body body) => body switch
     {
         DesignV2TableBody => "table",
         DesignV2GraphBody => "graph",

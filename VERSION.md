@@ -30,6 +30,17 @@ Suggested squash body:
 - User-data compatibility: Fuel V2 history format 3 adds bounded stationary-service source evidence while retaining compatible format-2 classified readers; mixed format-1 connection evidence remains retained but cannot drive a future V2 strategy decision.
 ```
 
+## Next Planned Milestone
+
+### v1.4.0 - Shared Overlay Chrome And Race Context
+
+The next planned branch promotes a small Core-owned header/footer slot
+contract across native, localhost/OBS, and browser review. It will prioritize
+session clock, normalized race phase, safe race-lap budget, and
+analysis-only/degraded evidence instead of a generic telemetry picker. The
+former v1.4 Track Map Expansion and QA scope now follows as v1.5.0; see
+`docs/model-v2-future-branches.md` for the detailed roadmap and non-goals.
+
 ## Merged Mainline Milestones
 
 ### v1.2.0 - Overlay Evidence Contracts And Real-Data Validation

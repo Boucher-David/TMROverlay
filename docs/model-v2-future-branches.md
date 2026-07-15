@@ -456,7 +456,68 @@ Likely scope:
 - Keep source/evidence UI available because these products derive meaning from telemetry rather than simply displaying direct values.
 - Use replay and live diagnostics to validate edge cases before making advice prominent.
 
-### v1.4 - Track Map Expansion And QA
+### v1.4 - Shared Overlay Chrome And Race Context
+
+Goal: replace the current single time-remaining header and intentionally empty
+footer with a small, typed, cross-surface chrome contract. It should make an
+overlay easier to read in context, not turn every overlay into a configurable
+dashboard.
+
+Current state and product decision:
+
+- `HeaderItems` already carries the browser/localhost shape, but native reduces
+  chrome to one text string. `ShowHeaderStatus` and `ShowFooterSource` are
+  deliberately dormant, so the old status/source controls must not be revived
+  as generic telemetry pickers.
+- iOverlay demonstrates that header/footer slots are valuable, while RaceLab
+  demonstrates compact decision-specific blocks and team-fuel context. TMR
+  should take the slot idea, not copy either product's broad arbitrary-field
+  configuration.
+- Normal telemetry overlays stay quiet: source, confidence, and freshness stay
+  diagnostic/manifest evidence unless the value is unavailable or derived.
+  Fuel, Gap, and future strategy analysis may use a compact exceptional footer
+  when it changes the meaning or safety of advice.
+
+Likely scope:
+
+- Add a Core-owned `OverlayChromeContext`/composer that maps one completed
+  `LiveTelemetrySnapshot` plus resolved settings into typed, ordered chrome
+  items for native, localhost/OBS, and browser review. Renderers must not
+  independently choose their own facts or fit rules.
+- Start with a constrained catalogue: session clock, normalized race phase,
+  and a safe race-lap-budget item. The budget must promote the existing
+  `LiveRaceLapBudget` source/confidence contract rather than display a bare
+  estimated number. Do not expose raw `SessionState` values as product copy.
+- Permit only descriptor-approved slots, normally at most two compact header
+  items. Use analysis-only footer items for an actionable basis/degraded state,
+  such as live versus qualified historical fuel evidence; do not show a
+  permanent generic "source" footer on ordinary telemetry overlays.
+- Replace dormant header-status/footer-source setting rows with additive,
+  session-scoped keyed options for the approved slots. Preserve existing user
+  settings and remove obsolete keys through the migrator; this is a settings
+  contract change only if the persisted shape itself changes.
+- Make rendered chrome presence, not merely an enabled option, drive native,
+  localhost, and OBS recommended height. Put slot counts, lanes, fitting, and
+  footer reserve geometry in the shared geometry contract.
+- Add deterministic fixtures for pre-green/countdown, active timed race,
+  fixed-lap race, checkered/degraded clock, and analysis-source fallback. Each
+  must prove visible text and absent stale/misleading chrome across the three
+  product surfaces.
+- Keep `SessionTimeRemain`, finite `SessionLapsRemainEx`/`SessionLapsTotal`,
+  race progress/projection, local fuel/pit state, timing, and weather as the
+  initial data sources: they are already captured and represented in Core.
+  Capture multi-pace-start and post-checkered windows before promoting any new
+  phase mapping. No new iRacing SDK field is required for this first pass.
+
+Explicit non-goals:
+
+- No generic 32-field picker, expression language, user-authored layout
+  builder, Overlay Bridge, or automatic session-layout switching.
+- No permanent confidence/source chrome on straightforward telemetry windows.
+- No service-overlap or pit-duration claim from `DCRuleSet` alone; it remains
+  provenance until observed timing evidence proves the model.
+
+### v1.5 - Track Map Expansion And QA
 
 Goal: improve the v0.11 Track Map implementation with better assets, status reporting, and map-quality workflows after the basic local generation path has real usage.
 
@@ -468,7 +529,7 @@ Likely scope:
 - Improve pit-lane-aware marker placement when live telemetry exposes a reliable pit-lane progress signal.
 - Use iRacing/Data API or other official/reference map sources only as QA references unless licensing and product rules justify bundled assets.
 
-### v1.5 - Overlay Bridge And External Clients
+### v1.6 - Overlay Bridge And External Clients
 
 Goal: turn future teammate-to-teammate data sharing into a documented developer/platform boundary after the core contracts have proven themselves. Local OBS/localhost overlays are a separate feature.
 
@@ -480,7 +541,7 @@ Likely scope:
 - Add deterministic bridge fixture tests and sample payloads so external clients can be developed without iRacing running.
 - Explore peer/missed-history context exchange as derived session context only: provenance, session identity, observation window, roster/timing coverage, schema version, and trust labels.
 
-### v1.6 - Streaming And Broadcast Overlays
+### v1.7 - Streaming And Broadcast Overlays
 
 Goal: let the app support broadcast-style surfaces without coupling chat or web/widget rendering to the Windows collector.
 
@@ -491,7 +552,7 @@ Likely scope:
 - Keep localhost stream overlays on the local `LocalhostOverlays` path unless they intentionally need peer data.
 - Add deterministic offline preview states for chat-only and mixed telemetry/chat overlays.
 
-### v1.7 - Overlay Builder And Designer Tooling
+### v1.8 - Overlay Builder And Designer Tooling
 
 Goal: move toward configurable layouts only after the primitives and bridge contracts are stable.
 

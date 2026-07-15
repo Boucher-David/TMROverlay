@@ -1,6 +1,6 @@
 # iRacing 2026 Release-Note Audit
 
-Reviewed 2026-07-14 against the [iRacing 2026 release-note index](https://support.iracing.com/support/solutions/31000076778), the current `irsdkSharp` ingestion path, raw-capture schema, replay reader, and Fuel V2 contracts.
+Reviewed 2026-07-15 against the [iRacing 2026 release-note index](https://support.iracing.com/support/solutions/31000076778), the current `irsdkSharp` ingestion path, raw-capture schema, replay reader, and Fuel V2 contracts.
 
 ## Required changes found
 
@@ -40,6 +40,7 @@ continue to require normal local focus/progress.
 | Season 3 initial | Series-specific service arrangements and pit-rule changes | Preserve `DCRuleSet` only as raw provenance; no inferred timing model. |
 | Season 3 Patch 1 | Dynamic all-car `CarIdx` arrays | Implemented above. |
 | Season 3 Patch 2 and Patch 3 | Pit-speed/rules behaviour, multi-pace starts, driver-swap/lap-count and pace-car camera fixes, corrected GT3 telemetry values | Existing raw/session capture preserves the evidence. Patch 3 now has a narrow verified session-driver/raw-camera Fuel State fallback; camera identity alone remains untrusted. Future race-control/pit-route work should use new real captures; no named SDK field change was published. |
+| Season 3 Patch 3 Hotfix 1 | Acura NSX GT3 EVO 22 loading repair | No SDK, session-data, raw-capture, or overlay-contract impact. |
 
 ## Follow-up evidence to collect
 

@@ -92,23 +92,23 @@ public sealed class OverlayAvailabilityEvaluatorTests
                      descriptor => descriptor.WindowsNative == OverlaySurfaceSupport.Supported))
         {
             Assert.True(OverlayManager.ShouldShowManagedOverlay(
-                enabled: true,
-                sessionAllowed: true,
-                contextAllowed: true,
-                contentAllowed: true,
-                settingsPreview: false), descriptor.Id);
+                isUserEnabled: true,
+                isSessionAllowed: true,
+                hasRequiredContext: true,
+                hasEnabledContent: true,
+                isSettingsPreview: false), descriptor.Id);
             Assert.False(OverlayManager.ShouldShowManagedOverlay(
-                enabled: false,
-                sessionAllowed: true,
-                contextAllowed: true,
-                contentAllowed: true,
-                settingsPreview: false), descriptor.Id);
+                isUserEnabled: false,
+                isSessionAllowed: true,
+                hasRequiredContext: true,
+                hasEnabledContent: true,
+                isSettingsPreview: false), descriptor.Id);
             Assert.True(OverlayManager.ShouldShowManagedOverlay(
-                enabled: true,
-                sessionAllowed: true,
-                contextAllowed: true,
-                contentAllowed: true,
-                settingsPreview: false), descriptor.Id);
+                isUserEnabled: true,
+                isSessionAllowed: true,
+                hasRequiredContext: true,
+                hasEnabledContent: true,
+                isSettingsPreview: false), descriptor.Id);
         }
     }
 
@@ -652,14 +652,16 @@ public sealed class OverlayAvailabilityEvaluatorTests
     {
         // CompleteModels intentionally derives normalized FuelPit.Fuel from
         // the current raw scalar when the legacy Fuel snapshot is unavailable.
-        // A genuine no-fuel case must remove both representations.
+        // HistoricalTelemetrySample uses non-nullable scalar fields, so NaN is
+        // its established unavailable sentinel and must be applied to the raw
+        // representation as well as the normalized one.
         return snapshot with
         {
             Fuel = LiveFuelSnapshot.Unavailable,
             LatestSample = sample with
             {
-                FuelLevelLiters = null,
-                FuelLevelPercent = null
+                FuelLevelLiters = double.NaN,
+                FuelLevelPercent = double.NaN
             }
         };
     }

@@ -69,6 +69,38 @@ public sealed class BrowserOverlayModelFactoryTests
     }
 
     [Fact]
+    public void EveryBrowserAndLocalhostOverlay_HidesBeforeModelConstructionWhenItsMainToggleIsDisabled()
+    {
+        var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions
+        {
+            Enabled = false,
+            ResolvedUserHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-history"),
+            ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
+        }));
+        var settings = new ApplicationSettings();
+        var now = DateTimeOffset.Parse("2026-07-14T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        foreach (var descriptor in OverlayBehaviorDescriptorCatalog.All.Where(
+                     descriptor => descriptor.BrowserReview == OverlaySurfaceSupport.Supported
+                         && descriptor.LocalhostObs == OverlaySurfaceSupport.Supported))
+        {
+            settings.GetOrAddOverlay(descriptor.Id, 640, 360).Enabled = false;
+
+            Assert.True(factory.TryBuild(descriptor.Id, LiveTelemetrySnapshot.Empty, settings, now, out var response));
+            Assert.False(response.Model.ShouldRender);
+            Assert.Equal("disabled | product hidden", response.Model.Status);
+            Assert.Empty(response.Model.Rows);
+            Assert.Empty(response.Model.Metrics);
+            Assert.Empty(response.Model.HeaderItems);
+            Assert.NotNull(response.Model.EffectiveSettings);
+            Assert.False(response.Model.EffectiveSettings!.Rendered.ShouldRender);
+            Assert.Contains(
+                response.Model.EffectiveSettings.Settings,
+                setting => setting.Key == "overlayEnabled" && Equals(setting.Value, false));
+        }
+    }
+
+    [Fact]
     public void GarageCoverModel_MapsCoverDecisionToTopLevelRenderability()
     {
         var factory = new BrowserOverlayModelFactory(new SessionHistoryQueryService(new SessionHistoryOptions

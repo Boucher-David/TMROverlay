@@ -3100,7 +3100,8 @@ the released default remains V1 Fuel until V2 strategy ownership is complete.
 It is an app/developer gate, not a persisted user preference: its purpose is to
 review the emerging Fuel V2 overlay through the real localhost/OBS browser-model
 and Windows-native paths without silently cutting over the V1 strategy
-calculator.
+calculator. It does not bypass the persisted Fuel Calculator **Visible** setting;
+that toggle remains the outermost authority on every product surface.
 
 When enabled, the presentation consumes the fresh, local-context-qualified
 `FuelV2LiveSnapshotComposer` output and shows only factual top-half material:
@@ -3113,15 +3114,21 @@ When enabled, the presentation consumes the fresh, local-context-qualified
   is populated only from an exact classified race/practice/test reader and
   remains visibly modeled; and
 - a fresh grid/pit transition with no progress focus may render exactly Fuel
-  State only after the non-spectator session `DriverCarIdx` exactly matches the
-  raw camera. It cannot expose usage, range, history, lap context, plan,
-  target, add, stint, or tire content.
+  State only after a current collection frame, current session info, and usable
+  current fuel prove the non-spectator session `DriverCarIdx` exactly matches
+  the raw camera. The known absence must be the progress-only
+  `cam_car_progress_unavailable` state, not an invalid or missing camera. It
+  cannot expose usage, range, history, lap context, plan, target, add, stint,
+  or tire content.
 
 It must render nothing for stale, disconnected, garage, spectator, conflicting
 camera/session identity, or pre-session-context telemetry. The native gate deliberately uses the sectioned
 DesignV2 renderer even when the legacy-renderer environment switch is off; the
 legacy table cannot preserve metric sections/segments or Fuel's hidden no-data
 policy. Localhost uses the same view model through the browser model factory.
+Fuel V2 capture/replay keeps its separate verified-local-identity context for
+collection, so a display-only missing-frame or missing-fuel wait does not throw
+away otherwise valid route/service evidence.
 The tracked Mac/browser-review server remains a fixture renderer for ordinary
 review URLs, while its `production-model-replay` route forwards this C# presenter
 byte-for-byte. The static V2 workbench remains a design/diagnostic surface only.

@@ -63,10 +63,16 @@ qualifying, or the V2 camera fallback.
 V1 continues to require the normal local player/focus context. V2 alone may
 display the factual `Fuel State` in Test, Practice, Qualifying, or Race when
 fresh telemetry proves the non-spectator session `DriverCarIdx` is exactly the
-raw camera car, but no progress-based focus exists yet. That fallback is
-display-only: it never shows burn, range, history, lap, plan, target, add, or
-stint information, and it rejects stale, garage, conflicting identity, or
-spectator data.
+raw camera car and the only missing focus condition is that camera's
+progress/timing row. The V2 eligibility gate also requires a current frame,
+current session info, and usable current fuel before any surface may show the
+overlay; this prevents the native manager from showing a transient shell that
+the 250ms presenter would immediately hide. The fallback is display-only: it
+never shows burn, range, history, lap, plan, target, add, or stint information,
+and it rejects stale, garage, invalid-camera, conflicting identity, or
+spectator data. The persisted Fuel Calculator **Visible** setting remains the
+outermost gate: the developer V2 flag and factual fallback can never render an
+overlay the user disabled.
 
 ## Refresh Loop
 

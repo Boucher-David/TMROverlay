@@ -2768,7 +2768,12 @@ internal sealed class BrowserOverlayModelFactory
         DateTimeOffset now)
     {
         var isFuelV2 = IsFuelV2(definition);
-        if (!overlay.Enabled)
+        if (!OverlayVisibilityPolicy.ShouldShowManagedOverlay(
+                overlay.Enabled,
+                isSessionAllowed: true,
+                hasRequiredContext: true,
+                hasEnabledContent: true,
+                isSettingsPreview: false))
         {
             return "disabled | product hidden";
         }

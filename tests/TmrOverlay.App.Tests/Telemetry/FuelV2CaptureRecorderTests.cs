@@ -336,6 +336,99 @@ public sealed class FuelV2CaptureRecorderTests
     }
 
     [Fact]
+    public void CompleteCollection_PreservesProgressOnlyCameraFallbackPitRouteCollectionWhenFuelV2DisplayWaitsForCurrentData()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-fuel-v2-capture-recorder-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var recorder = new FuelV2CaptureRecorder(
+                new FuelV2CaptureOptions { Enabled = true },
+                storage,
+                new AppEventRecorder(storage),
+                NullLogger<FuelV2CaptureRecorder>.Instance);
+            var startedAtUtc = DateTimeOffset.Parse("2026-07-14T12:00:00Z");
+            var context = CapacityContext(sessionNum: 0, sessionType: "Practice", capPercent: 1d);
+            recorder.StartCollection("display-wait-local-route", startedAtUtc);
+
+            var frames = new[]
+            {
+                (onPitRoad: false, inStall: false, fuel: 40d),
+                (onPitRoad: true, inStall: false, fuel: 39.9d),
+                (onPitRoad: true, inStall: false, fuel: 39.8d),
+                (onPitRoad: true, inStall: true, fuel: 39.6d),
+                (onPitRoad: true, inStall: true, fuel: 39.5d),
+                (onPitRoad: true, inStall: false, fuel: 44d),
+                (onPitRoad: true, inStall: false, fuel: 43.9d),
+                (onPitRoad: false, inStall: false, fuel: 43.7d),
+                (onPitRoad: false, inStall: false, fuel: 43.6d)
+            };
+            for (var index = 0; index < frames.Length; index++)
+            {
+                var frame = frames[index];
+                var snapshot = PitRouteSnapshot(
+                    context,
+                    frame.fuel,
+                    startedAtUtc.AddSeconds(index + 1),
+                    sequence: index + 1,
+                    onPitRoad: frame.onPitRoad,
+                    inStall: frame.inStall) with
+                {
+                    // The presenter is intentionally ineligible, but the
+                    // normalized FuelPit model still has valid local route
+                    // evidence that the capture collector must retain. This
+                    // models the exact narrow fallback observed in capture:
+                    // session driver and raw camera agree, but focus has no
+                    // usable timing/spatial progress yet.
+                    Fuel = LiveFuelSnapshot.Unavailable,
+                    HasFrameForCurrentContext = false,
+                    HasSessionInfoForCurrentCollection = false,
+                    LatestSample = snapshot.LatestSample! with
+                    {
+                        FocusCarIdx = null,
+                        FocusUnavailableReason = "cam_car_progress_unavailable"
+                    },
+                    Models = snapshot.Models with
+                    {
+                        DriverDirectory = snapshot.Models.DriverDirectory with
+                        {
+                            FocusCarIdx = null
+                        },
+                        Reference = snapshot.Models.Reference with
+                        {
+                            FocusCarIdx = null,
+                            FocusIsPlayer = false,
+                            FocusUnavailableReason = "cam_car_progress_unavailable"
+                        }
+                    }
+                };
+                recorder.RecordFrame(snapshot);
+            }
+
+            var path = recorder.CompleteCollection(startedAtUtc.AddSeconds(11), captureDirectory: null);
+
+            Assert.NotNull(path);
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var route = Assert.Single(document.RootElement.GetProperty("pitRouteObservations").EnumerateArray());
+            Assert.True(route.GetProperty("hasCompleteRoute").GetBoolean());
+            Assert.Equal(
+                "session-driver-camera-fallback",
+                route.GetProperty("pitEntry").GetProperty("localIdentityProvenance").GetString());
+            Assert.Equal(1, document.RootElement
+                .GetProperty("pitService")
+                .GetProperty("pitRouteObservationCount")
+                .GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void CompleteCollection_WhenDisabledReturnsNullAndDoesNotWriteArtifact()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-fuel-v2-capture-recorder-test", Guid.NewGuid().ToString("N"));

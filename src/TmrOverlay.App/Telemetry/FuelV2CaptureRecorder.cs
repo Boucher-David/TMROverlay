@@ -1018,7 +1018,7 @@ internal sealed class FuelV2CaptureRecorder
     {
         // TeamOnPitRoad is intentionally absent here: pit-route history is a
         // local-car physical measurement, never a team-wide state guess.
-        var local = LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, capturedAtUtc);
+        var local = LiveLocalStrategyContext.ForFuelV2FactualLocalContext(snapshot, capturedAtUtc);
         var completed = _pitServiceRouteTracker.Track(new PitServiceRouteObservationFrame(
             CapturedAtUtc: capturedAtUtc,
             SessionTimeSeconds: sample?.SessionTime,

@@ -60,6 +60,65 @@ public sealed class FuelV2OverlayViewModelTests
     }
 
     [Fact]
+    public void From_WithoutCurrentSessionInfo_HidesInsteadOfBrieflyRenderingThenClearing()
+    {
+        var snapshot = CurrentFuelSnapshot() with
+        {
+            HasSessionInfoForCurrentCollection = false
+        };
+
+        var viewModel = FuelV2OverlayViewModel.From(snapshot, "Metric", snapshot.LastUpdatedAtUtc!.Value);
+
+        Assert.Empty(viewModel.Overlay.Rows);
+        Assert.Empty(viewModel.Overlay.MetricSections);
+        Assert.Equal("waiting for current fuel telemetry", viewModel.Overlay.Status);
+    }
+
+    [Fact]
+    public void From_WithoutUsableCurrentFuel_HidesInsteadOfBrieflyRenderingThenClearing()
+    {
+        var snapshot = CurrentFuelSnapshot() with
+        {
+            Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = false, FuelLevelLiters = null }
+        };
+
+        var viewModel = FuelV2OverlayViewModel.From(snapshot, "Metric", snapshot.LastUpdatedAtUtc!.Value);
+
+        Assert.Empty(viewModel.Overlay.Rows);
+        Assert.Empty(viewModel.Overlay.MetricSections);
+        Assert.Equal("waiting for fuel level", viewModel.Overlay.Status);
+    }
+
+    [Fact]
+    public void From_UsesTheSameNormalizedFuelFallbackAsTheV2Composer()
+    {
+        var current = CurrentFuelSnapshot();
+        var snapshot = current with
+        {
+            Fuel = LiveFuelSnapshot.Unavailable,
+            Models = current.Models with
+            {
+                FuelPit = LiveFuelPitModel.Empty with
+                {
+                    HasData = true,
+                    Quality = LiveModelQuality.Reliable,
+                    Fuel = LiveFuelSnapshot.Unavailable with
+                    {
+                        HasValidFuel = true,
+                        Source = "normalized fuel-pit fallback",
+                        FuelLevelLiters = 39d
+                    }
+                }
+            }
+        };
+
+        var viewModel = FuelV2OverlayViewModel.From(snapshot, "Metric", snapshot.LastUpdatedAtUtc!.Value);
+
+        var fuelState = viewModel.Overlay.MetricSections.Single(section => section.Title == "Fuel State");
+        Assert.Contains(fuelState.Rows.Single().Segments, segment => segment.Label == "Current" && segment.Value == "39.0 L");
+    }
+
+    [Fact]
     public void From_StaleLocalTelemetry_HidesFactualRows()
     {
         var snapshot = CurrentFuelSnapshot();
@@ -314,6 +373,24 @@ public sealed class FuelV2OverlayViewModelTests
         Assert.Contains(
             response.Model.EffectiveSettings.Settings,
             setting => setting.Key == "fuelV2.sessionNeutral" && Equals(setting.Value, true));
+
+        // The V2 factual gate is never an override for the persisted main
+        // overlay toggle. Browser review and localhost both consume this exact
+        // product model before their renderer sees any Fuel V2 content.
+        overlay.Enabled = false;
+        Assert.True(factory.TryBuild("fuel-calculator", snapshot, settings, snapshot.LastUpdatedAtUtc!.Value, out var disabled));
+        Assert.False(disabled.Model.ShouldRender);
+        Assert.Equal("disabled | product hidden", disabled.Model.Status);
+        Assert.Empty(disabled.Model.Rows);
+        Assert.Empty(disabled.Model.Metrics);
+        Assert.Empty(disabled.Model.HeaderItems);
+        Assert.NotNull(disabled.Model.MetricSections);
+        Assert.Empty(disabled.Model.MetricSections!);
+        Assert.NotNull(disabled.Model.EffectiveSettings);
+        Assert.False(disabled.Model.EffectiveSettings!.Rendered.ShouldRender);
+        Assert.Contains(
+            disabled.Model.EffectiveSettings.Settings,
+            setting => setting.Key == "overlayEnabled" && Equals(setting.Value, false));
     }
 
     [Fact]
@@ -566,6 +643,7 @@ public sealed class FuelV2OverlayViewModelTests
             PlayerCarIdx: -1,
             RawCamCarIdx: 10,
             FocusCarIdx: null,
+            FocusUnavailableReason: "cam_car_progress_unavailable",
             PlayerTrackSurface: -1);
     }
 }

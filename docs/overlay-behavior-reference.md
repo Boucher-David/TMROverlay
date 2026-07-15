@@ -100,7 +100,7 @@ Inputs:
 
 Behavior:
 
-- V1 requires a local active driver/team context. In native overlay mode, focus on another car, unavailable focus, missing player car, garage/setup context, and no active local/pit context keep the enabled window hidden; localhost/model callers show `waiting for local fuel context`. The gated factual V2 path has one display-only exception: verified non-spectator session-driver/raw-camera identity may show only `Fuel State` while progress focus is unavailable.
+- V1 requires a local active driver/team context. In native overlay mode, focus on another car, unavailable focus, missing player car, garage/setup context, and no active local/pit context keep the enabled window hidden; localhost/model callers show `waiting for local fuel context`. The gated factual V2 path has one display-only exception: a current frame/session plus usable fuel and verified non-spectator session-driver/raw-camera identity may show only `Fuel State` for the observed progress-only focus gap. The persisted Visible toggle always wins; this exception can never show a disabled Fuel overlay.
 - Shows planned race laps, stint count, and final stint target when those are known.
 - Otherwise shows current fuel, race laps remaining, and additional fuel needed.
 - Uses measured completed green-lap fuel deltas first, exact history second, and keeps instantaneous `FuelUsePerHour` diagnostic-only.

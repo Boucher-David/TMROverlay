@@ -767,7 +767,12 @@ internal sealed class OverlayManager : IDisposable
                     settings,
                     currentSession,
                     contextAvailability);
-                var shouldShow = settingsPreview || (settings.Enabled && sessionAllowed && contextAllowed && contentAllowed);
+                var shouldShow = ShouldShowManagedOverlay(
+                    settings.Enabled,
+                    sessionAllowed,
+                    contextAllowed,
+                    contentAllowed,
+                    settingsPreview);
 
                 if (string.Equals(registration.Definition.Id, FlagsOverlayDefinition.Definition.Id, StringComparison.Ordinal))
                 {
@@ -950,6 +955,24 @@ internal sealed class OverlayManager : IDisposable
         return settingsWindowActiveAndVisible
             && radarOverlayEnabled
             && string.Equals(selectedSettingsOverlayTabId, CarRadarOverlayDefinition.Definition.Id, StringComparison.Ordinal);
+    }
+
+    // Kept as the explicit native-manager seam so the shared visibility
+    // invariant is regression-tested with the same decision that reaches the
+    // special Flags registration and every ordinary managed form.
+    internal static bool ShouldShowManagedOverlay(
+        bool isUserEnabled,
+        bool isSessionAllowed,
+        bool hasRequiredContext,
+        bool hasEnabledContent,
+        bool isSettingsPreview)
+    {
+        return OverlayVisibilityPolicy.ShouldShowManagedOverlay(
+            isUserEnabled,
+            isSessionAllowed,
+            hasRequiredContext,
+            hasEnabledContent,
+            isSettingsPreview);
     }
 
     private static void ApplyRadarSettingsPreview(Form form, bool previewVisible)

@@ -727,11 +727,11 @@ test.describe('browser overlay Playwright integration', () => {
   });
 
   test('clears stale input graph and rail when all input content becomes disabled', async ({ page }) => {
+    let contentDisabled = false;
     await installBrowserOverlayRoutes(page, 'input-state', {
       live: inputStateLiveSnapshot(0, 0.72),
-      settings: [
-        {},
-        {
+      settings: () => (contentDisabled
+        ? {
           showThrottleTrace: false,
           showBrakeTrace: false,
           showClutchTrace: false,
@@ -742,7 +742,7 @@ test.describe('browser overlay Playwright integration', () => {
           showGear: false,
           showSpeed: false
         }
-      ]
+        : {})
     });
 
     await page.setViewportSize({ width: 520, height: 260 });
@@ -751,6 +751,11 @@ test.describe('browser overlay Playwright integration', () => {
     await expect(page.locator('.input-graph')).toBeVisible();
     await expect(page.locator('.input-rail')).toBeVisible();
 
+    // Keep the populated frame alive until the assertion above has observed
+    // it. The browser refresh interval is intentionally short, so a
+    // two-element response array can otherwise advance before Playwright sees
+    // the state whose cleanup this test is meant to prove.
+    contentDisabled = true;
     await expect.poll(async () => page.locator('.overlay').evaluate((element) =>
       element.classList.contains('input-empty')
     ), { timeout: 3500 }).toBe(true);

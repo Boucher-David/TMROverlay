@@ -369,7 +369,7 @@ public sealed class FuelV2OverlayViewModelTests
         Assert.NotNull(response.Model.EffectiveSettings);
         Assert.Contains(
             response.Model.EffectiveSettings!.Settings,
-            setting => setting.Key == "session.practice.enabled" && Equals(setting.Value, true));
+            setting => setting.Key == "session.practice.allowed" && Equals(setting.Value, true));
         Assert.Contains(
             response.Model.EffectiveSettings.Settings,
             setting => setting.Key == "fuelV2.sessionNeutral" && Equals(setting.Value, true));

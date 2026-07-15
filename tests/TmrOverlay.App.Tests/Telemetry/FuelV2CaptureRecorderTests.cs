@@ -366,13 +366,14 @@ public sealed class FuelV2CaptureRecorderTests
             for (var index = 0; index < frames.Length; index++)
             {
                 var frame = frames[index];
-                var snapshot = PitRouteSnapshot(
+                var baseSnapshot = PitRouteSnapshot(
                     context,
                     frame.fuel,
                     startedAtUtc.AddSeconds(index + 1),
                     sequence: index + 1,
                     onPitRoad: frame.onPitRoad,
-                    inStall: frame.inStall) with
+                    inStall: frame.inStall);
+                var snapshot = baseSnapshot with
                 {
                     // The presenter is intentionally ineligible, but the
                     // normalized FuelPit model still has valid local route
@@ -383,18 +384,18 @@ public sealed class FuelV2CaptureRecorderTests
                     Fuel = LiveFuelSnapshot.Unavailable,
                     HasFrameForCurrentContext = false,
                     HasSessionInfoForCurrentCollection = false,
-                    LatestSample = snapshot.LatestSample! with
+                    LatestSample = baseSnapshot.LatestSample! with
                     {
                         FocusCarIdx = null,
                         FocusUnavailableReason = "cam_car_progress_unavailable"
                     },
-                    Models = snapshot.Models with
+                    Models = baseSnapshot.Models with
                     {
-                        DriverDirectory = snapshot.Models.DriverDirectory with
+                        DriverDirectory = baseSnapshot.Models.DriverDirectory with
                         {
                             FocusCarIdx = null
                         },
-                        Reference = snapshot.Models.Reference with
+                        Reference = baseSnapshot.Models.Reference with
                         {
                             FocusCarIdx = null,
                             FocusIsPlayer = false,

@@ -45,7 +45,10 @@ export async function renderBrowserOverlay(name, { live, settings = {}, model = 
         }
 
         const currentModel = typeof model === 'function' ? model() : model;
-        if (failModelFetch && path === page.modelRoute) {
+        const shouldFailModelFetch = typeof failModelFetch === 'function'
+          ? failModelFetch()
+          : failModelFetch;
+        if (shouldFailModelFetch && path === page.modelRoute) {
           return { ok: false, status: 503, json: async () => ({}) };
         }
 

@@ -104,7 +104,7 @@ For every managed driving overlay, `OverlayManager` ensures:
 - Width and height are valid.
 - Invalid sizes are reset from the overlay default size and scale.
 
-The gap-to-leader overlay is normalized to race-only visibility whenever managed overlay settings are ensured.
+Gap-to-leader's race-only visibility is enforced by the shared overlay session-policy contract. Legacy persisted `ShowIn*` values remain readable for backwards compatibility, but they are not a generic product visibility control.
 
 The flags overlay is normalized back to the compact procedural-flag default when old saved settings still contain the previous primary-screen border dimensions. Older compact custom sizes are converted into an approximate scale, then width/height return to definition-derived values.
 

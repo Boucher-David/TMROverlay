@@ -8,7 +8,16 @@ TmrBrowserOverlay.register({
     renderTrackMap(trackMapDisplayModel);
   },
   renderOffline() {
-    renderTrackMap(trackMapDisplayModel);
+    // A failed refresh must never leave the last successful map visible.
+    // Reuse the normal hidden state so content, chrome, and opacity clear
+    // together for browser and OBS consumers.
+    trackMapDisplayModel = null;
+    renderTrackMap({
+      overlayId: 'track-map',
+      status: 'waiting for track map',
+      shouldRender: false,
+      rootOpacity: 1
+    });
   }
 });
 

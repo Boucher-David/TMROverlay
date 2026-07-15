@@ -113,12 +113,6 @@ function overlayReviewState(overlay) {
     enabled: overlay.enabled === true,
     scalePercent: Math.round(Number(overlay.scale || 1) * 100),
     opacityPercent: Math.round(Number(overlay.opacity || 1) * 100),
-    sessions: {
-      test: overlay.showInTest !== false,
-      practice: overlay.showInPractice !== false,
-      qualifying: overlay.showInQualifying !== false,
-      race: overlay.showInRace !== false
-    },
     content: contentState(options),
     chrome: chromeState(options),
     provider: options['stream-chat.provider'] || 'twitch',

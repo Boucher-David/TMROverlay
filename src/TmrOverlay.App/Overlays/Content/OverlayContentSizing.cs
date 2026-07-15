@@ -181,7 +181,8 @@ internal static class OverlayContentSizing
         OverlayDefinition definition,
         OverlaySettings settings,
         OverlaySessionKind? sessionKind,
-        IReadOnlyList<SimpleTelemetryMetricSectionViewModel> metricSections)
+        IReadOnlyList<SimpleTelemetryMetricSectionViewModel> metricSections,
+        bool? hasRenderedHeader = null)
     {
         var visibleSections = metricSections
             .Where(section => section.Rows.Count > 0)
@@ -195,7 +196,7 @@ internal static class OverlayContentSizing
         var baseSize = new Size(
             definition.DefaultWidth,
             FuelCalculatorHeightForContent(rowCount, visibleSections.Length));
-        return ApplyChromeHeight(definition, settings, sessionKind, baseSize);
+        return ApplyChromeHeight(definition, settings, sessionKind, baseSize, hasRenderedHeader);
     }
 
     public static Size SimpleTelemetrySizeForRenderedSections(
@@ -805,7 +806,8 @@ internal static class OverlayContentSizing
         OverlayDefinition definition,
         OverlaySettings settings,
         OverlaySessionKind? sessionKind,
-        Size baseSize)
+        Size baseSize,
+        bool? hasRenderedHeader = null)
     {
         if (!UsesChromeReservedHeight(definition.Id))
         {
@@ -813,7 +815,7 @@ internal static class OverlayContentSizing
         }
 
         var height = baseSize.Height;
-        if (!HasSelectedHeaderChrome(definition.Id, settings, sessionKind))
+        if (!(hasRenderedHeader ?? HasSelectedHeaderChrome(definition.Id, settings, sessionKind)))
         {
             height -= HeaderChromeCollapseHeight(definition.Id);
         }

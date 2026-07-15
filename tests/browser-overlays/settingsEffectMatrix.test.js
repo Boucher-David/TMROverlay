@@ -409,12 +409,10 @@ function happyPathCases() {
       settingKey: 'overlayEnabled',
       expectedValue: false,
       patches: [
-        { kind: 'overlayEnabled', overlayId: 'standings', enabled: false },
-        { kind: 'session', overlayId: 'standings', session: 'Race', enabled: false }
+        { kind: 'overlayEnabled', overlayId: 'standings', enabled: false }
       ],
       assertSettings: (overlay) => {
         expect.soft(overlay.enabled).toBe(false);
-        expect.soft(overlay.sessions.race).toBe(false);
       },
       assertModel: (model) => {
         expect.soft(model.shouldRender).toBe(false);
@@ -434,10 +432,7 @@ async function withReviewServer(callback) {
 }
 
 function visibleOverlayPatches(overlayId) {
-  return [
-    { kind: 'overlayEnabled', overlayId, enabled: true },
-    { kind: 'session', overlayId, session: 'Race', enabled: true }
-  ];
+  return [{ kind: 'overlayEnabled', overlayId, enabled: true }];
 }
 
 function contentPatch(overlayId, key, label, enabled) {

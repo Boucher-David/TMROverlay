@@ -38,8 +38,10 @@ internal enum OverlayScalePolicy
 
 internal enum OverlaySessionPolicy
 {
-    SettingsSessionFilters,
     AllSessions,
+    RaceOnly,
+    KnownSessionRequired,
+    QualifyingUnsupported,
     LocalContextRequired,
     GarageSignalRequired
 }

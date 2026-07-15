@@ -49,6 +49,12 @@ public sealed class BrowserOverlayPageRendererTests
         Assert.Contains(
             $"--tmr-metric-row-segmented-height: {OverlayGeometryContracts.MetricRows.SegmentedRowHeight.ToString("0.###", CultureInfo.InvariantCulture)}px",
             html);
+        Assert.Contains(
+            $"--tmr-metric-row-border-width: {OverlayGeometryContracts.MetricRows.RowBorderWidth.ToString("0.###", CultureInfo.InvariantCulture)}px",
+            html);
+        Assert.Contains(
+            $"--tmr-metric-value-divider-width: {OverlayGeometryContracts.MetricRows.ValueDividerWidth.ToString("0.###", CultureInfo.InvariantCulture)}px",
+            html);
         Assert.Contains("--tmr-overlay-sizes-input-state-width: 520px", html);
         Assert.Contains("--tmr-input-state-rail-preferred-width-fraction: 0.4", html);
         Assert.Contains("--tmr-flags-refresh-interval-milliseconds: 250", html);
@@ -73,6 +79,7 @@ public sealed class BrowserOverlayPageRendererTests
             Assert.Contains("track-map-page", html);
             Assert.Contains("fetchOverlayModel('track-map')", html);
             Assert.Contains("renderOffline()", html);
+            Assert.Contains("status: 'waiting for track map'", html);
             Assert.Contains("trackMapSvg(renderModel)", html);
             Assert.Contains("renderModel.primitives", html);
             Assert.Contains("renderModel.markers", html);

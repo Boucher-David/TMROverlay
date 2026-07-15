@@ -584,7 +584,6 @@ internal sealed class OverlayManager : IDisposable
                 defaultEnabled: false,
                 defaultOpacity: DefaultOverlayOpacity(definition));
             overlay.Scale = Math.Clamp(overlay.Scale, 0.6d, 2d);
-            ApplyGapToLeaderRaceOnlyPolicy(definition, overlay);
             ApplyFlagsCompactPolicy(definition, overlay);
 
             if (UsesScaleDerivedSize(definition))
@@ -739,7 +738,7 @@ internal sealed class OverlayManager : IDisposable
                 var settingsPreview = settings.Enabled
                     && _radarSettingsPreviewVisible
                     && string.Equals(registration.Definition.Id, CarRadarOverlayDefinition.Definition.Id, StringComparison.Ordinal);
-                var sessionAllowed = IsAllowedForSession(registration.Definition, settings, currentSession);
+                var sessionAllowed = OverlaySessionPolicyEvaluator.IsAllowed(registration.Definition.Id, currentSession);
                 var overlayLiveTelemetryAvailable = liveTelemetryAvailable || settingsPreview;
                 var contextAvailability = EvaluateOverlayContext(registration.Definition, liveSnapshot);
                 var contextAllowed = settingsPreview || contextAvailability.IsAvailable;
@@ -1020,7 +1019,8 @@ internal sealed class OverlayManager : IDisposable
                 definition,
                 settings,
                 sessionKind,
-                viewModel.MetricSections);
+                viewModel.MetricSections,
+                hasRenderedHeader: HasRenderedHeaderTimeRemaining(settings, snapshot));
         }
 
         if (string.Equals(definition.Id, PitServiceOverlayDefinition.Definition.Id, StringComparison.Ordinal))
@@ -1036,6 +1036,14 @@ internal sealed class OverlayManager : IDisposable
         }
 
         return null;
+    }
+
+    private static bool HasRenderedHeaderTimeRemaining(
+        OverlaySettings settings,
+        LiveTelemetrySnapshot snapshot)
+    {
+        return OverlayChromeSettings.ShowHeaderTimeRemaining(settings, snapshot)
+            && !string.IsNullOrWhiteSpace(OverlayHeaderTimeFormatter.FormatTimeRemaining(snapshot));
     }
 
     private static Size? SimpleTelemetryModelDrivenBaseSize(
@@ -1243,22 +1251,6 @@ internal sealed class OverlayManager : IDisposable
     private OverlaySessionKind? CurrentSessionKind(LiveTelemetrySnapshot snapshot)
     {
         return OverlayAvailabilityEvaluator.CurrentSessionKind(snapshot);
-    }
-
-    private static bool IsAllowedForSession(OverlayDefinition definition, OverlaySettings settings, OverlaySessionKind? sessionKind)
-    {
-        if (string.Equals(definition.Id, FlagsOverlayDefinition.Definition.Id, StringComparison.Ordinal)
-            && sessionKind is null)
-        {
-            return false;
-        }
-
-        if (string.Equals(definition.Id, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.Ordinal))
-        {
-            return OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) == OverlaySessionKind.Race;
-        }
-
-        return true;
     }
 
     private static bool IsLiveTelemetryAvailable(LiveTelemetrySnapshot snapshot)
@@ -1515,25 +1507,6 @@ internal sealed class OverlayManager : IDisposable
             Math.Max(1, width),
             Math.Max(1, height));
         return Screen.AllScreens.Any(screen => screen.WorkingArea.IntersectsWith(bounds));
-    }
-
-    private static void ApplyGapToLeaderRaceOnlyPolicy(OverlayDefinition definition, OverlaySettings settings)
-    {
-        if (!string.Equals(definition.Id, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        if (settings.GetBooleanOption(OverlayOptionKeys.GapRaceOnlyDefaultApplied, defaultValue: false))
-        {
-            return;
-        }
-
-        settings.ShowInTest = false;
-        settings.ShowInPractice = false;
-        settings.ShowInQualifying = false;
-        settings.ShowInRace = true;
-        settings.SetBooleanOption(OverlayOptionKeys.GapRaceOnlyDefaultApplied, true);
     }
 
     private static void ApplyFlagsCompactPolicy(OverlayDefinition definition, OverlaySettings settings)

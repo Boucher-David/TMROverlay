@@ -99,6 +99,28 @@ public sealed class OverlayAvailabilityEvaluatorTests
         Assert.True(OverlayAvailabilityEvaluator.IsAllowedForSession(settings, OverlaySessionKind.Race));
     }
 
+    [Theory]
+    [InlineData("gap-to-leader", "Practice", false, "race only")]
+    [InlineData("gap-to-leader", "Race", true, null)]
+    [InlineData("flags", null, false, "waiting for session")]
+    [InlineData("flags", "Qualifying", true, null)]
+    [InlineData("relative", "Qualifying", false, "qualifying unsupported")]
+    [InlineData("relative", "Race", true, null)]
+    [InlineData("standings", "Practice", true, null)]
+    public void DescriptorOwnedSessionPolicy_DeclaresTheOnlyProductVisibilityExceptions(
+        string overlayId,
+        string? sessionKindName,
+        bool expectedAllowed,
+        string? expectedHiddenStatus)
+    {
+        OverlaySessionKind? sessionKind = string.IsNullOrWhiteSpace(sessionKindName)
+            ? null
+            : Enum.Parse<OverlaySessionKind>(sessionKindName, ignoreCase: true);
+
+        Assert.Equal(expectedAllowed, OverlaySessionPolicyEvaluator.IsAllowed(overlayId, sessionKind));
+        Assert.Equal(expectedHiddenStatus, OverlaySessionPolicyEvaluator.HiddenStatus(overlayId, sessionKind));
+    }
+
     [Fact]
     public void OverlayChromeSettings_OnlyHonorsSessionScopedTimeRemainingChrome()
     {

@@ -2778,19 +2778,9 @@ internal sealed class BrowserOverlayModelFactory
             return "disabled | product hidden";
         }
 
-        // Fuel V2 is intentionally session-neutral while the factual overlay
-        // gate is enabled. Its per-session content blocks still decide what
-        // can render; legacy Fuel and every other product surface retain the
-        // persisted overlay session switches.
-        if (!isFuelV2 && !OverlayEnabledForSession(overlay, sessionKind))
+        if (OverlaySessionPolicyEvaluator.HiddenStatus(definition.Id, sessionKind) is { } sessionStatus)
         {
-            return "hidden | session disabled";
-        }
-
-        if (string.Equals(definition.Id, RelativeOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            && OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) is OverlaySessionKind.Qualifying)
-        {
-            return "hidden | qualifying unsupported";
+            return $"hidden | {sessionStatus}";
         }
 
         if (!GapWindowEnabled(overlay))
@@ -2974,7 +2964,7 @@ internal sealed class BrowserOverlayModelFactory
         var effectiveSettings = new List<BrowserOverlayEffectiveSetting>
         {
             new("overlayEnabled", overlay.Enabled),
-            new($"session.{session}.enabled", fuelV2SessionNeutral || OverlayEnabledForSession(overlay, sessionKind)),
+            new($"session.{session}.allowed", OverlaySessionPolicyEvaluator.IsAllowed(overlayId, sessionKind)),
             new("general.unitSystem", UnitSystem(settings)),
             new("scalePercent", (int)Math.Round(clampedScale * 100d)),
             new("opacityPercent", (int)Math.Round(clampedOpacity * 100d))
@@ -3913,16 +3903,6 @@ internal sealed class BrowserOverlayModelFactory
                 sessionKind);
             settings.Add(new("input-state.trace.*", throttle || brake || clutch, session));
         }
-    }
-
-    private static bool OverlayEnabledForSession(OverlaySettings overlay, OverlaySessionKind? sessionKind)
-    {
-        return sessionKind switch
-        {
-            OverlaySessionKind.Qualifying => overlay.ShowInQualifying,
-            OverlaySessionKind.Race => overlay.ShowInRace,
-            _ => overlay.ShowInPractice
-        };
     }
 
     private static string EffectiveSettingsSessionKey(OverlaySessionKind? sessionKind)

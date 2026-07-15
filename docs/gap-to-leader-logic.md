@@ -13,7 +13,7 @@ Implementation files:
 
 The gap-to-leader overlay is a live in-class race trend graph. It shows how the currently focused car and nearby same-class cars relate to the nearest eligible same-lap reference over time. That reference is normally the class leader, but it can move down the order when the focused car is more than a lap behind the cars ahead.
 
-The overlay is race-only product UI. The settings tab omits ordinary display-in-session controls, and the overlay manager normalizes its visibility to race sessions only.
+The overlay is race-only product UI. The settings tab omits ordinary display-in-session controls, and the shared overlay session-policy contract permits it only in race sessions.
 
 It is separate from radar. Radar needs live proximity placement. The gap graph can use same-class timing rows even when lap-distance placement is unavailable.
 

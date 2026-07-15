@@ -67,6 +67,15 @@ public sealed class OverlayBehaviorDescriptorContractTests
     [Fact]
     public void DescriptorCatalog_DeclaresExpectedPolicyExceptions()
     {
+        Assert.True(OverlayBehaviorDescriptorCatalog.TryGet("gap-to-leader", out var gapToLeader));
+        Assert.Equal(OverlaySessionPolicy.RaceOnly, gapToLeader.SessionPolicy);
+
+        Assert.True(OverlayBehaviorDescriptorCatalog.TryGet("flags", out var flags));
+        Assert.Equal(OverlaySessionPolicy.KnownSessionRequired, flags.SessionPolicy);
+
+        Assert.True(OverlayBehaviorDescriptorCatalog.TryGet("relative", out var relative));
+        Assert.Equal(OverlaySessionPolicy.QualifyingUnsupported, relative.SessionPolicy);
+
         Assert.True(OverlayBehaviorDescriptorCatalog.TryGet("garage-cover", out var garageCover));
         Assert.Equal(OverlaySurfaceSupport.NotApplicable, garageCover.WindowsNative);
         Assert.Equal(OverlaySizingPolicy.FullCanvasCover, garageCover.SizingPolicy);

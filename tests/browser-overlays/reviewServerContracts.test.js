@@ -193,6 +193,39 @@ describe('browser review server validation contracts', () => {
     ]));
   });
 
+  it('gives a normalized session content override priority over the global setting', async () => {
+    const key = 'session-weather.surface.wetness.enabled';
+    await reviewServer.postReviewPatch({
+      kind: 'content',
+      overlayId: 'session-weather',
+      key,
+      label: 'Wetness',
+      enabled: true
+    });
+    await reviewServer.postReviewPatch({
+      kind: 'content',
+      overlayId: 'session-weather',
+      key,
+      label: 'Wetness',
+      session: 'Practice',
+      enabled: false
+    });
+
+    const practice = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=practice')).model;
+    const race = (await reviewServer.getJson('/api/overlay-model/session-weather?preview=race')).model;
+
+    expect.soft(practice.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key,
+      session: 'practice',
+      value: false
+    }));
+    expect.soft(race.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key,
+      session: 'race',
+      value: true
+    }));
+  });
+
   it('exposes fuel calculating and content-off review fixtures', async () => {
     const calculating = (await reviewServer.getJson('/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-calculating')).model;
     expect.soft(calculating.status).toBe('calculating strategy');
@@ -1406,13 +1439,6 @@ describe('browser review server validation contracts', () => {
       overlayId: 'standings',
       enabled: false
     });
-    await reviewServer.postReviewPatch({
-      kind: 'session',
-      overlayId: 'standings',
-      session: 'Race',
-      enabled: false
-    });
-
     const model = (await reviewServer.getJson('/api/overlay-model/standings?preview=race')).model;
 
     expect.soft(model.shouldRender).toBe(false);
@@ -1428,9 +1454,32 @@ describe('browser review server validation contracts', () => {
       },
       settings: expect.arrayContaining([
         expect.objectContaining({ key: 'overlayEnabled', value: false }),
-        expect.objectContaining({ key: 'session.race.enabled', value: false })
+        expect.objectContaining({ key: 'session.race.allowed', value: true })
       ])
     });
+  });
+
+  it('does not let a legacy session patch hide a product overlay', async () => {
+    await reviewServer.postReviewPatch({
+      kind: 'overlayEnabled',
+      overlayId: 'standings',
+      enabled: true
+    });
+    await reviewServer.postReviewPatch({
+      kind: 'session',
+      overlayId: 'standings',
+      session: 'Race',
+      enabled: false
+    });
+
+    const model = (await reviewServer.getJson('/api/overlay-model/standings?preview=race')).model;
+
+    expect.soft(model.shouldRender).toBe(true);
+    expect.soft(model.status).not.toMatch(/session disabled/i);
+    expect.soft(model.effectiveSettings.settings).toContainEqual(expect.objectContaining({
+      key: 'session.race.allowed',
+      value: true
+    }));
   });
 
   it('serves bounded gap-to-leader models under concurrent localhost polling', async () => {
@@ -1439,13 +1488,6 @@ describe('browser review server validation contracts', () => {
       overlayId: 'gap-to-leader',
       enabled: true
     });
-    await reviewServer.postReviewPatch({
-      kind: 'session',
-      overlayId: 'gap-to-leader',
-      session: 'Race',
-      enabled: true
-    });
-
     const startedAt = performance.now();
     const responses = await Promise.all(Array.from({ length: 32 }, () =>
       reviewServer.getJson('/api/overlay-model/gap-to-leader?preview=race')
@@ -1491,13 +1533,6 @@ describe('browser review server validation contracts', () => {
         overlayId,
         enabled: false
       });
-      await reviewServer.postReviewPatch({
-        kind: 'session',
-        overlayId,
-        session: 'Race',
-        enabled: false
-      });
-
       const model = (await reviewServer.getJson(`/api/overlay-model/${overlayId}?preview=race`)).model;
 
       expectHiddenOverlayModel(model, overlayId);
@@ -1511,7 +1546,7 @@ describe('browser review server validation contracts', () => {
         },
         settings: expect.arrayContaining([
           expect.objectContaining({ key: 'overlayEnabled', value: false }),
-          expect.objectContaining({ key: 'session.race.enabled', value: false })
+          expect.objectContaining({ key: 'session.race.allowed', value: true })
         ])
       });
     }
@@ -1530,13 +1565,6 @@ describe('browser review server validation contracts', () => {
         overlayId,
         enabled: true
       });
-      await reviewServer.postReviewPatch({
-        kind: 'session',
-        overlayId,
-        session: 'Race',
-        enabled: true
-      });
-
       for (const row of overlay?.contentRows || []) {
         await reviewServer.postReviewPatch({
           kind: 'content',

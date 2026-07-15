@@ -8112,7 +8112,7 @@ internal static class Program
         var values = new List<Dictionary<string, object?>>();
 
         AddEffectiveSetting(values, "overlayEnabled", false);
-        AddEffectiveSetting(values, $"session.{session}.enabled", NativeEffectiveSessionEnabled(overlayId, session));
+        AddEffectiveSetting(values, $"session.{session}.allowed", OverlaySessionPolicyEvaluator.IsAllowed(overlayId, sessionKind));
         AddEffectiveSetting(values, "general.unitSystem", metadata.UnitSystem ?? "Metric");
         AddEffectiveSetting(values, "scalePercent", NativeEffectiveScalePercent(settings));
         AddEffectiveSetting(
@@ -8357,13 +8357,6 @@ internal static class Program
             "race" => OverlaySessionKind.Race,
             _ => OverlaySessionKind.Test
         };
-    }
-
-    private static bool NativeEffectiveSessionEnabled(string overlayId, string session)
-    {
-        return string.Equals(overlayId, GapToLeaderOverlayDefinition.Definition.Id, StringComparison.OrdinalIgnoreCase)
-            ? string.Equals(session, "race", StringComparison.Ordinal)
-            : true;
     }
 
     private static int NativeEffectiveScalePercent(OverlaySettings settings)

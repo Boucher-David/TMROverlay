@@ -586,6 +586,20 @@ public sealed class OverlayContentColumnSettingsTests
                 OverlaySessionKind.Race,
                 metricSections));
 
+        var expectedWithoutRenderedHeader = new Size(
+            expectedBase.Width,
+            Math.Max(
+                geometry.MinimumChromeAdjustedHeight,
+                expectedBase.Height - geometry.HeaderChromeHeight));
+        Assert.Equal(
+            expectedWithoutRenderedHeader,
+            OverlayContentSizing.FuelCalculatorSizeForMetricSections(
+                FuelCalculatorOverlayDefinition.Definition,
+                fuel,
+                OverlaySessionKind.Race,
+                metricSections,
+                hasRenderedHeader: false));
+
         var size = OverlayManager.TargetOverlayClientSizeForApply(
             FuelCalculatorOverlayDefinition.Definition,
             fuel,

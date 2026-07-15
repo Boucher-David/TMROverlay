@@ -4,8 +4,10 @@ using System.Text.Json;
 using TmrOverlay.App.Cars;
 using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.CarRadar;
+using TmrOverlay.App.Overlays.Content;
 using TmrOverlay.App.Overlays.DesignV2;
 using TmrOverlay.App.Overlays.Relative;
+using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Telemetry;
 using TmrOverlay.Core.History;
@@ -100,6 +102,114 @@ public sealed class OverlayInputTransparencyTests
         Assert.Same(reference, rows[3]);
         Assert.Same(behind, rows[4]);
         Assert.Null(rows[5]);
+    }
+
+    [Fact]
+    public void DesignV2StandingsTableAdapter_PreservesBrowserVisibleRowSemantics()
+    {
+        var columns = new[]
+        {
+            Column("class-position", "Pos", OverlayContentColumnSettings.DataClassPosition, OverlayContentColumnAlignment.Right),
+            Column("car-number", "#", OverlayContentColumnSettings.DataCarNumber, OverlayContentColumnAlignment.Right),
+            Column("driver", "Driver", OverlayContentColumnSettings.DataDriver, OverlayContentColumnAlignment.Left),
+            Column("pit", "Pit", OverlayContentColumnSettings.DataPit, OverlayContentColumnAlignment.Center),
+            Column("fastest-lap", "Fast", OverlayContentColumnSettings.DataFastestLap, OverlayContentColumnAlignment.Right),
+            Column("last-lap", "Last", OverlayContentColumnSettings.DataLastLap, OverlayContentColumnAlignment.Right)
+        };
+        var viewModel = new StandingsOverlayViewModel("live", "source: test", new[]
+        {
+            new StandingsOverlayRowViewModel(
+                ClassPosition: "",
+                CarNumber: "",
+                Driver: "GT3",
+                Gap: "+2.1",
+                Interval: "+0.4",
+                Pit: "",
+                IsReference: false,
+                IsLeader: false,
+                IsClassHeader: true,
+                IsPartial: false,
+                CarClassColorHex: "#FFDA59"),
+            new StandingsOverlayRowViewModel(
+                ClassPosition: "2",
+                CarNumber: "#12",
+                Driver: "Driver 12",
+                Gap: "+2.1",
+                Interval: "+0.4",
+                Pit: "PIT",
+                IsReference: true,
+                IsLeader: false,
+                IsClassHeader: false,
+                IsPartial: false,
+                CarClassColorHex: "#FFDA59",
+                IsPendingGrid: true,
+                FastestLap: "1:21.100",
+                LastLap: "1:22.000",
+                IsClassFastestLap: true,
+                IsRecentCarBestLastLap: true)
+        });
+
+        var table = DesignV2LiveOverlayForm.StandingsTableBodyFrom(viewModel, columns);
+
+        Assert.Equal(new[] { "Pos", "#", "Driver", "Pit", "Fast", "Last" }, table.Columns.Select(column => column.Label));
+        var header = table.Rows[0];
+        Assert.True(header.IsClassHeader);
+        Assert.Equal(new[] { "", "", "GT3", "", "", "" }, header.Values);
+        Assert.Equal("GT3", header.ClassHeaderTitle);
+        Assert.Equal("+2.1 | +0.4", header.ClassHeaderDetail);
+
+        var row = table.Rows[1];
+        Assert.True(row.IsReference);
+        Assert.True(row.IsPit);
+        Assert.True(row.IsPendingGrid);
+        Assert.Equal(new[] { "2", "#12", "Driver 12", "PIT", "1:21.100", "1:22.000" }, row.Values);
+        Assert.Equal(new string?[] { null, null, null, null, "best-lap", "personal-best" }, row.CellTones);
+    }
+
+    [Fact]
+    public void DesignV2RelativeTableAdapter_PreservesPitRowsAndExplicitPlaceholders()
+    {
+        var columns = new[]
+        {
+            Column("position", "Pos", OverlayContentColumnSettings.DataRelativePosition, OverlayContentColumnAlignment.Right),
+            Column("driver", "Driver", OverlayContentColumnSettings.DataDriver, OverlayContentColumnAlignment.Left),
+            Column("pit", "Pit", OverlayContentColumnSettings.DataPit, OverlayContentColumnAlignment.Center)
+        };
+        var ahead = new RelativeOverlayRowViewModel("4", "#4 Ahead", "-0.400", "GT3", "#FFDA59", false, true, false, true, true, false, 1);
+        var reference = new RelativeOverlayRowViewModel("5", "#5 Focus", "0.000", "GT3", "#FFDA59", true, false, false, true, false, false);
+        var behind = new RelativeOverlayRowViewModel("6", "#6 Behind", "+0.500", "GT3", "#FFDA59", false, false, true, true, false, false, -1);
+        var viewModel = new RelativeOverlayViewModel("live relative", "source: test", new[] { ahead, reference, behind });
+
+        var table = DesignV2LiveOverlayForm.RelativeTableBodyFrom(viewModel, columns, carsAhead: 2, carsBehind: 1);
+
+        Assert.Equal(4, table.Rows.Count);
+        Assert.True(table.Rows[0].IsPlaceholder);
+        Assert.Equal(new[] { "", "", "" }, table.Rows[0].Values);
+        Assert.True(table.Rows[1].IsPit);
+        Assert.Equal(new[] { "4", "#4 Ahead", "PIT" }, table.Rows[1].Values);
+        Assert.Equal(1, table.Rows[1].RelativeLapDelta);
+        Assert.True(table.Rows[2].IsReference);
+        Assert.False(table.Rows[3].IsPlaceholder);
+        Assert.Equal(-1, table.Rows[3].RelativeLapDelta);
+    }
+
+    private static OverlayContentColumnState Column(
+        string id,
+        string label,
+        string dataKey,
+        OverlayContentColumnAlignment alignment)
+    {
+        return new OverlayContentColumnState(
+            id,
+            label,
+            label,
+            dataKey,
+            Enabled: true,
+            Order: 0,
+            Width: 50,
+            MinimumWidth: 20,
+            MaximumWidth: 100,
+            Alignment: alignment);
     }
 
     [Fact]

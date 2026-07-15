@@ -723,7 +723,7 @@
           "testFiles": ["tests/tools/test_model_timeline_validator.py", "tests/browser-overlays/reviewServerContracts.test.js"],
           "validatorRules": ["tools/analysis/validate_model_timeline.py:fuel-compact-height-unused", "tools/analysis/validate_model_timeline.py:fuel-compact-height-too-tall", "tools/validate_overlay_screenshots.py:validate_fuel_calculating_variant", "tools/validate_overlay_screenshots.py:require_fuel_rendered_content_height"],
           "captureTargets": ["v1.1.0 race with two visible rows and larger persisted/default surface"],
-          "assertions": ["rendered section/row count drives recommended height unless user or OBS size is locked", "unusedHeightRatio is reported", "size reason is rendered-content, settings-content, custom-size, or persisted-window"],
+          "assertions": ["rendered section/row count drives recommended height unless user or OBS size is locked", "a configured time-remaining header reserves chrome height only when it renders text", "unusedHeightRatio is reported", "size reason is rendered-content, settings-content, custom-size, or persisted-window"],
           "gaps": ["synthetic browser/localhost/Windows screenshot variants now prove compact rendered height for two-row and three-row Fuel layouts", "compact real-data browser/localhost/Windows screenshot manifests are still missing"]
         },
         {
@@ -1172,8 +1172,9 @@
           "status": "covered",
           "surfaces": ["browserReview", "localhostObs", "windowsNative"],
           "artifacts": ["browser-overlays/track-map/default.png", "browser-overlays/track-map/fallback.png", "browser-overlays/track-map/no-markers.png"],
+          "testFiles": ["tests/browser-overlays/browserOverlayShell.test.js"],
           "validatorRules": ["tools/validate_overlay_screenshots.py:validate_track_map_contract", "tools/validate_overlay_screenshots.py:validate_track_map_variant"],
-          "assertions": ["generated-map vs circle-fallback source is explicit", "marker and vector bounds are compared", "no-markers renders generated map primitives with zero markers"]
+          "assertions": ["generated-map vs circle-fallback source is explicit", "marker and vector bounds are compared", "no-markers renders generated map primitives with zero markers", "a later unavailable model clears prior track-map primitives before the next successful poll"]
         },
         {
           "id": "track-map-focus-real-data",

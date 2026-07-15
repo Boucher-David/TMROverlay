@@ -679,9 +679,9 @@ function applyReviewSettingsPatch(patch) {
       overlay.enabled = patch.enabled === true;
       break;
     case 'session':
-      for (const session of sessionKeys(patch.session)) {
-        overlay.sessions[session] = patch.enabled === true;
-      }
+      // Legacy ShowIn* switches remain readable from saved settings for
+      // compatibility, but descriptor-owned product visibility is shared
+      // across native, browser, and localhost paths.
       break;
     case 'content':
       {
@@ -805,11 +805,9 @@ function supportActionMessage(action) {
 
 function reviewOverlayState(overlayId) {
   reviewAppState.overlays[overlayId] ??= {
-    sessions: Object.create(null),
     content: Object.create(null),
     chrome: Object.create(null)
   };
-  reviewAppState.overlays[overlayId].sessions ??= Object.create(null);
   reviewAppState.overlays[overlayId].content ??= Object.create(null);
   reviewAppState.overlays[overlayId].chrome ??= Object.create(null);
   return reviewAppState.overlays[overlayId];
@@ -1655,24 +1653,27 @@ function contentEnabled(overlayState, label, defaultValue = true, aliases = [], 
 
 function contentLabelsEnabled(overlayState, labels, defaultValue = true, session = null) {
   const content = overlayState?.content || {};
-  let hasExplicitValue = false;
-  let hasEnabledValue = false;
-  for (const candidate of labels) {
-    if (session) {
-      const sessionCandidate = `${candidate}.${session}`;
-      if (Object.hasOwn(content, sessionCandidate)) {
-        hasExplicitValue = true;
-        hasEnabledValue ||= content[sessionCandidate] !== false;
-      }
-    }
+  const normalizedSession = sessionKey(session);
+  const sessionValue = normalizedSession
+    ? firstExplicitContentValue(content, labels, normalizedSession)
+    : undefined;
+  if (sessionValue !== undefined) {
+    return sessionValue;
+  }
 
-    if (Object.hasOwn(content, candidate)) {
-      hasExplicitValue = true;
-      hasEnabledValue ||= content[candidate] !== false;
+  const globalValue = firstExplicitContentValue(content, labels);
+  return globalValue === undefined ? defaultValue : globalValue;
+}
+
+function firstExplicitContentValue(content, labels, session = null) {
+  for (const candidate of labels) {
+    const key = session ? `${candidate}.${session}` : candidate;
+    if (Object.hasOwn(content, key)) {
+      return content[key] !== false;
     }
   }
 
-  return hasExplicitValue ? hasEnabledValue : defaultValue;
+  return undefined;
 }
 
 function streamChatContentOptionsFromReviewState(overlayState) {
@@ -1784,13 +1785,12 @@ function hiddenProductDisplayModel(overlayId, previewMode = 'off', searchParams 
   const normalizedPreviewMode = normalizePreviewMode(previewMode);
   const session = sessionKeyFromPreview(previewMode);
   const overlayDisabled = Object.hasOwn(overlayState, 'enabled') && overlayState.enabled === false;
-  const sessionDisabled = Object.hasOwn(overlayState?.sessions || {}, session) && overlayState.sessions[session] === false;
-  const relativeQualifying = overlayId === 'relative' && normalizedPreviewMode === 'qualifying';
+  const sessionStatus = reviewSessionHiddenStatus(overlayId, normalizedPreviewMode);
   const noRenderableContent = !reviewHasRenderableContent(overlayId, overlayState, session);
   const chromeOnlyRenderable = noRenderableContent
     && overlayId === 'standings'
     && chromeEnabled(overlayState, 'header', 'Time remaining', session, true);
-  if (!overlayDisabled && !sessionDisabled && !relativeQualifying && (!noRenderableContent || chromeOnlyRenderable)) {
+  if (!overlayDisabled && !sessionStatus && (!noRenderableContent || chromeOnlyRenderable)) {
     return null;
   }
 
@@ -1800,10 +1800,8 @@ function hiddenProductDisplayModel(overlayId, previewMode = 'off', searchParams 
     title: page.title,
     status: overlayDisabled
       ? 'disabled | product hidden'
-      : sessionDisabled
-        ? 'hidden | session disabled'
-        : relativeQualifying
-          ? 'hidden | qualifying unsupported'
+      : sessionStatus
+        ? `hidden | ${sessionStatus}`
           : 'hidden | no enabled content',
     source: '',
     bodyKind: hiddenBodyKind(overlayId),
@@ -1844,9 +1842,11 @@ function reviewRenderableContentRows(overlayId, session) {
     return rows;
   }
 
-  return session === 'test' || session === 'practice' || session === 'qualifying'
-    ? rows.filter((row) => ['Fuel range', 'Fuel usage'].includes(row.label))
-    : rows.filter((row) => ['Plan', 'Fuel', 'Stint targets'].includes(row.label));
+  if (session === 'test' || session === 'practice' || session === 'qualifying') {
+    return rows.filter((row) => ['Fuel range', 'Fuel usage'].includes(row.label));
+  }
+
+  return rows.filter((row) => ['Plan', 'Fuel', 'Stint targets'].includes(row.label));
 }
 
 function hiddenBodyKind(overlayId) {
@@ -2007,7 +2007,12 @@ function reviewEffectiveSettings(model, overlayId, previewMode = 'off', searchPa
   const overlayState = reviewAppState.overlays[overlayId] || {};
   const effectiveOverlayState = effectiveSettingsOverlayState(overlayId, overlayState, previewMode, searchParams);
   const fixture = fixtureVariant(searchParams) || null;
-  const settings = reviewEffectiveSettingList(overlayId, effectiveOverlayState, session, searchParams);
+  const settings = reviewEffectiveSettingList(
+    overlayId,
+    effectiveOverlayState,
+    session,
+    searchParams,
+    normalizedPreviewMode);
   const sharedSettingsHash = stableEvidenceHash(settings.filter((item) => sharedEffectiveSettingKeys.has(item.key)));
   const overlaySettingsHash = stableEvidenceHash(settings);
   const browserSource = reviewEffectiveBrowserSource(overlayId, effectiveOverlayState, normalizedPreviewMode, model);
@@ -2840,10 +2845,15 @@ function withDisabledContentLabels(overlayState, labels) {
   };
 }
 
-function reviewEffectiveSettingList(overlayId, overlayState, session, searchParams = new URLSearchParams()) {
+function reviewEffectiveSettingList(
+  overlayId,
+  overlayState,
+  session,
+  searchParams = new URLSearchParams(),
+  policySession = session) {
   const settings = [
     effectiveSetting('overlayEnabled', overlayState.enabled === true),
-    effectiveSetting(`session.${session}.enabled`, overlaySessionEnabled(overlayId, overlayState, session)),
+    effectiveSetting(`session.${policySession}.allowed`, reviewSessionHiddenStatus(overlayId, policySession) === null),
     effectiveSetting('general.unitSystem', reviewAppState.unitSystem),
     effectiveSetting('scalePercent', clampInteger(overlayState?.scalePercent, 100, 60, 200)),
     effectiveSetting(
@@ -2922,12 +2932,21 @@ function reviewEffectiveSettingList(overlayId, overlayState, session, searchPara
   return settings;
 }
 
-function overlaySessionEnabled(overlayId, overlayState, session) {
-  if (Object.hasOwn(overlayState?.sessions || {}, session)) {
-    return overlayState.sessions[session] === true;
+function reviewSessionHiddenStatus(overlayId, session) {
+  const normalizedSession = normalizePreviewMode(session);
+  if (overlayId === 'gap-to-leader' && normalizedSession !== 'race') {
+    return 'race only';
   }
 
-  return overlayId === 'gap-to-leader' ? session === 'race' : true;
+  if (overlayId === 'flags' && !['practice', 'qualifying', 'race'].includes(normalizedSession)) {
+    return 'waiting for session';
+  }
+
+  if (overlayId === 'relative' && normalizedSession === 'qualifying') {
+    return 'qualifying unsupported';
+  }
+
+  return null;
 }
 
 function effectiveSetting(key, value, session = null) {

@@ -430,11 +430,13 @@ function geometryCssVariables() {
     '--tmr-metric-section-title-inset-x': px(metricRows.sectionTitleInsetX),
     '--tmr-metric-section-gap': px(metricRows.sectionGap),
     '--tmr-metric-row-radius': px(metricRows.rowRadius),
+    '--tmr-metric-row-border-width': px(metricRows.rowBorderWidth),
     '--tmr-metric-label-column-width': px(metricRows.labelColumnWidth),
     '--tmr-metric-label-padding-left': px(metricRows.labelPaddingLeft),
     '--tmr-metric-label-padding-right': px(metricRows.labelPaddingRight),
     '--tmr-metric-value-padding-left': px(metricRows.valuePaddingLeft),
     '--tmr-metric-value-padding-right': px(metricRows.valuePaddingRight),
+    '--tmr-metric-value-divider-width': px(metricRows.valueDividerWidth),
     '--tmr-metric-cell-padding-y': px(metricRows.cellVerticalPadding),
     '--tmr-metric-value-segment-gap': px(metricRows.valueSegmentGap),
     '--tmr-metric-pit-service-section-gap': px(metricRows.pitServiceSectionGap),
@@ -651,9 +653,6 @@ function settingsOverlayDefinition(id, reviewState = null, previewMode = 'off') 
     showSessionFilters: !noSessionFilters && id !== 'garage-cover',
     supportsChrome,
     content: overlayState.content || {},
-    sessions: overlayState.sessions ?? (id === 'gap-to-leader'
-      ? { test: false, practice: false, qualifying: false, race: true }
-      : { test: true, practice: true, qualifying: true, race: true }),
     providerLabel: providerLabelFromState(overlayState.provider),
     provider: overlayState.provider || 'twitch',
     twitchChannel: overlayState.twitchChannel || 'techmatesracing',

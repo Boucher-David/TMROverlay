@@ -100,19 +100,23 @@ public sealed class OverlayAvailabilityEvaluatorTests
     }
 
     [Theory]
-    [InlineData("gap-to-leader", OverlaySessionKind.Practice, false, "race only")]
-    [InlineData("gap-to-leader", OverlaySessionKind.Race, true, null)]
+    [InlineData("gap-to-leader", "Practice", false, "race only")]
+    [InlineData("gap-to-leader", "Race", true, null)]
     [InlineData("flags", null, false, "waiting for session")]
-    [InlineData("flags", OverlaySessionKind.Qualifying, true, null)]
-    [InlineData("relative", OverlaySessionKind.Qualifying, false, "qualifying unsupported")]
-    [InlineData("relative", OverlaySessionKind.Race, true, null)]
-    [InlineData("standings", OverlaySessionKind.Practice, true, null)]
+    [InlineData("flags", "Qualifying", true, null)]
+    [InlineData("relative", "Qualifying", false, "qualifying unsupported")]
+    [InlineData("relative", "Race", true, null)]
+    [InlineData("standings", "Practice", true, null)]
     public void DescriptorOwnedSessionPolicy_DeclaresTheOnlyProductVisibilityExceptions(
         string overlayId,
-        OverlaySessionKind? sessionKind,
+        string? sessionKindName,
         bool expectedAllowed,
         string? expectedHiddenStatus)
     {
+        var sessionKind = string.IsNullOrWhiteSpace(sessionKindName)
+            ? null
+            : Enum.Parse<OverlaySessionKind>(sessionKindName, ignoreCase: true);
+
         Assert.Equal(expectedAllowed, OverlaySessionPolicyEvaluator.IsAllowed(overlayId, sessionKind));
         Assert.Equal(expectedHiddenStatus, OverlaySessionPolicyEvaluator.HiddenStatus(overlayId, sessionKind));
     }

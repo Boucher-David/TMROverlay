@@ -113,7 +113,7 @@ public sealed class OverlayAvailabilityEvaluatorTests
         bool expectedAllowed,
         string? expectedHiddenStatus)
     {
-        var sessionKind = string.IsNullOrWhiteSpace(sessionKindName)
+        OverlaySessionKind? sessionKind = string.IsNullOrWhiteSpace(sessionKindName)
             ? null
             : Enum.Parse<OverlaySessionKind>(sessionKindName, ignoreCase: true);
 

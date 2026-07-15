@@ -3331,7 +3331,7 @@ def validate_effective_settings_contract(path: str, values: dict[str, object], f
         if not any(isinstance(item, dict) and item.get("key") == key for item in settings):
             failures.append(f"{path}: effectiveSettings missing setting {key!r}")
     if preview_mode in {"practice", "qualifying", "race"}:
-        session_key = f"session.{preview_mode}.enabled"
+        session_key = f"session.{preview_mode}.allowed"
         if not any(isinstance(item, dict) and item.get("key") == session_key for item in settings):
             failures.append(f"{path}: effectiveSettings missing preview session setting {session_key!r}")
 
@@ -12904,7 +12904,7 @@ def mutation_effective_settings(
         },
         "settings": [
             {"key": "overlayEnabled", "value": True},
-            {"key": f"session.{preview_mode}.enabled", "value": True},
+            {"key": f"session.{preview_mode}.allowed", "value": True},
             {"key": "general.unitSystem", "value": "Metric"},
             *(extra_settings or []),
             {"key": "scalePercent", "value": 100},

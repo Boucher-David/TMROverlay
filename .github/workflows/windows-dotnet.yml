@@ -655,7 +655,8 @@ jobs:
           "manifest_path=$manifestPath" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "informational_version=$informationalVersion" >> $env:GITHUB_OUTPUT
-          "short_sha=${{ github.sha }}".Substring(0, 7) >> $env:GITHUB_OUTPUT
+          $shortSha = "${{ github.sha }}".Substring(0, 7)
+          "short_sha=$shortSha" >> $env:GITHUB_OUTPUT
 
       - name: Audit dry-run publish output
         shell: pwsh

@@ -990,7 +990,13 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             _unitSystem,
             maximumRows: FuelVisibleRowsForHeight(RenderLayoutRectangle().Height, ShowFooterForSettings(_kind, _settings, snapshot)),
             contentSettings: _settings);
-        var metricSections = viewModel.MetricSections.Select(section => new DesignV2MetricSection(
+        // Match BrowserOverlayModelFactory's contract: empty sections are
+        // absent rather than renderer-visible empty headings.  Keeping this
+        // projection pure lets the parity tests compare body semantics without
+        // constructing a WinForms form.
+        var metricSections = viewModel.MetricSections
+            .Where(section => section.Rows.Count > 0)
+            .Select(section => new DesignV2MetricSection(
             section.Title,
             section.Rows.Select(row => new DesignV2MetricRow(
                 row.Label,
@@ -3087,22 +3093,27 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 segment.RotationDegrees)).ToArray(),
             RowColorHex = row.RowColorHex
         }).ToArray();
-        var metricSections = viewModel.MetricSections.Select(section => new DesignV2MetricSection(
-            section.Title,
-            section.Rows.Select(row => new DesignV2MetricRow(
-                row.Label,
-                row.Value,
-                EvidenceFor(row.Tone))
-            {
-                Segments = row.Segments.Select(segment => new DesignV2MetricSegment(
-                    segment.Label,
-                    segment.Value,
-                    EvidenceFor(segment.Tone),
-                    segment.AccentHex,
-                    segment.RotationDegrees)).ToArray(),
-                RowColorHex = row.RowColorHex
-            }).ToArray())).ToArray();
-        var gridSections = viewModel.Sections.Select(section => new DesignV2MetricGridSection(
+        var metricSections = viewModel.MetricSections
+            .Where(section => section.Rows.Count > 0)
+            .Select(section => new DesignV2MetricSection(
+                section.Title,
+                section.Rows.Select(row => new DesignV2MetricRow(
+                    row.Label,
+                    row.Value,
+                    EvidenceFor(row.Tone))
+                {
+                    Segments = row.Segments.Select(segment => new DesignV2MetricSegment(
+                        segment.Label,
+                        segment.Value,
+                        EvidenceFor(segment.Tone),
+                        segment.AccentHex,
+                        segment.RotationDegrees)).ToArray(),
+                    RowColorHex = row.RowColorHex
+                }).ToArray()))
+            .ToArray();
+        var gridSections = viewModel.Sections
+            .Where(section => section.Rows.Count > 0)
+            .Select(section => new DesignV2MetricGridSection(
             section.Title,
             section.Headers,
             section.Rows.Select(row => new DesignV2MetricGridRow(
@@ -3110,7 +3121,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 row.Cells.Select(cell => new DesignV2MetricGridCell(
                     cell.Value,
                     EvidenceFor(cell.Tone))).ToArray(),
-                EvidenceFor(row.Tone))).ToArray())).ToArray();
+                EvidenceFor(row.Tone))).ToArray()))
+            .ToArray();
         return new DesignV2OverlayModel(
             viewModel.Title,
             viewModel.Status,

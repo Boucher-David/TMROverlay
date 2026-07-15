@@ -78,6 +78,23 @@ describe('settings effect matrix', () => {
       }
 
       for (const testCase of contentCases) {
+        const query = contentSemanticQuery(testCase);
+        for (const patch of visibleOverlayPatches(testCase.overlayId, query.preview)) {
+          await server.postReviewPatch(patch);
+        }
+
+        // Toggle from an explicitly enabled baseline. This catches controls
+        // whose packaged default is already false and ensures the test proves
+        // a renderer/model effect rather than only echoing settings evidence.
+        await server.postReviewPatch({
+          kind: 'content',
+          overlayId: testCase.overlayId,
+          key: testCase.row.key,
+          label: testCase.row.label,
+          enabled: true
+        });
+        const baseline = (await server.getJson(modelPath(testCase.overlayId, query))).model;
+
         await server.postReviewPatch({
           kind: 'content',
           overlayId: testCase.overlayId,
@@ -92,13 +109,18 @@ describe('settings effect matrix', () => {
           `${testCase.id}: settings app did not reflect disabled content toggle`
         ).toBe(false);
 
-        const model = (await server.getJson(modelPath(testCase.overlayId))).model;
+        const model = (await server.getJson(modelPath(testCase.overlayId, query))).model;
         expectEffectiveSettingsEvidence(model, {
           caseId: testCase.id,
           overlayId: testCase.overlayId,
+          preview: query.preview || previewMode,
           settingKey: testCase.row.key,
           expectedValue: false
         });
+        expect(
+          productSemanticShape(model),
+          `${testCase.id}: disabled content must change the rendered product model, not only effective-settings evidence`
+        ).not.toEqual(productSemanticShape(baseline));
 
         await server.postReviewPatch({
           kind: 'content',
@@ -111,6 +133,29 @@ describe('settings effect matrix', () => {
     });
   }, 30000);
 });
+
+function productSemanticShape(model) {
+  return {
+    shouldRender: model?.shouldRender,
+    bodyKind: model?.bodyKind,
+    status: model?.status,
+    source: model?.source,
+    columns: model?.columns,
+    rows: model?.rows,
+    metrics: model?.metrics,
+    points: model?.points,
+    headerItems: model?.headerItems,
+    graph: model?.graph,
+    carRadar: model?.carRadar,
+    trackMap: model?.trackMap,
+    garageCover: model?.garageCover,
+    streamChat: model?.streamChat,
+    inputs: model?.inputs,
+    flags: model?.flags,
+    gridSections: model?.gridSections,
+    metricSections: model?.metricSections
+  };
+}
 
 function happyPathCases() {
   return [
@@ -433,11 +478,34 @@ async function withReviewServer(callback) {
   }
 }
 
-function visibleOverlayPatches(overlayId) {
+function visibleOverlayPatches(overlayId, preview = previewMode) {
+  const session = {
+    practice: 'Practice',
+    qualifying: 'Qualifying',
+    race: 'Race'
+  }[preview] || 'Race';
   return [
     { kind: 'overlayEnabled', overlayId, enabled: true },
-    { kind: 'session', overlayId, session: 'Race', enabled: true }
+    { kind: 'session', overlayId, session, enabled: true }
   ];
+}
+
+function contentSemanticQuery(testCase) {
+  if (testCase.overlayId === 'fuel-calculator'
+    && ['fuel-calculator.range.fuel.enabled', 'fuel-calculator.usage.enabled'].includes(testCase.row.key)) {
+    return { preview: 'practice' };
+  }
+  if (testCase.overlayId === 'fuel-calculator'
+    && testCase.row.key === 'fuel-calculator.model-readiness.enabled') {
+    return {
+      preview: 'practice',
+      fixture: 'fuel-v2-model-readiness-test-fresh-combo'
+    };
+  }
+  if (testCase.overlayId === 'flags') {
+    return { fixture: 'flags-all-kinds' };
+  }
+  return {};
 }
 
 function contentPatch(overlayId, key, label, enabled) {

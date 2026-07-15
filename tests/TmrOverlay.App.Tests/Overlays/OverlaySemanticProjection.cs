@@ -44,12 +44,8 @@ internal sealed record OverlaySemanticProjection(
                 Metrics: body.Rows.Select(From).ToArray(),
                 MetricSections: body.MetricSections.Select(From).ToArray(),
                 GridSections: body.Sections.Select(From).ToArray())
-            : new OverlaySemanticProjection(
-                ShouldRender: true,
-                BodyFamily: BodyFamily(model.Body),
-                Metrics: [],
-                MetricSections: [],
-                GridSections: []);
+            : throw new InvalidOperationException(
+                $"The metric-body semantic projection does not support native body family '{BodyFamily(model.Body)}'.");
     }
 
     private static OverlaySemanticProjection Hidden() => new(
@@ -80,19 +76,25 @@ internal sealed record OverlaySemanticProjection(
         row.Label,
         row.Value,
         NormalizeBrowserTone(row.Tone),
+        row.RowColorHex,
         row.Segments.Select(segment => new OverlaySemanticMetricSegment(
             segment.Label,
             segment.Value,
-            NormalizeBrowserTone(segment.Tone))).ToArray());
+            NormalizeBrowserTone(segment.Tone),
+            segment.AccentHex,
+            segment.RotationDegrees)).ToArray());
 
     private static OverlaySemanticMetricRow From(DesignV2MetricRow row) => new(
         row.Label,
         row.Value,
         NormalizeNativeEvidence(row.Evidence),
+        row.RowColorHex,
         row.Segments.Select(segment => new OverlaySemanticMetricSegment(
             segment.Label,
             segment.Value,
-            NormalizeNativeEvidence(segment.Evidence))).ToArray());
+            NormalizeNativeEvidence(segment.Evidence),
+            segment.AccentHex,
+            segment.RotationDegrees)).ToArray());
 
     private static OverlaySemanticMetricSection From(BrowserOverlayMetricSection section) => new(
         section.Title,
@@ -141,12 +143,15 @@ internal sealed record OverlaySemanticMetricRow(
     string Label,
     string Value,
     string Tone,
+    string? RowColorHex,
     IReadOnlyList<OverlaySemanticMetricSegment> Segments);
 
 internal sealed record OverlaySemanticMetricSegment(
     string Label,
     string Value,
-    string Tone);
+    string Tone,
+    string? AccentHex,
+    double? RotationDegrees);
 
 internal sealed record OverlaySemanticMetricSection(
     string Title,

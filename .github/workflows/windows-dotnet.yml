@@ -618,6 +618,14 @@ jobs:
           python3 tools/validate_overlay_screenshots.py --profile screenshot-manifest-parity --root artifacts/screenshot-manifest-parity
           validation_status=$?
 
+          python3 tools/validation/compare_overlay_scenario_execution.py \
+            --browser-root artifacts/screenshot-manifest-parity/browser-review \
+            --localhost-root artifacts/screenshot-manifest-parity/localhost \
+            --windows-root artifacts/screenshot-manifest-parity/windows \
+            --suite minimum-scale-rendered-manifests \
+            --report artifacts/screenshot-manifest-parity/scenario-execution-report.md
+          scenario_execution_status=$?
+
           python3 tools/compare_screenshot_manifests.py \
             --browser-root artifacts/screenshot-manifest-parity/browser-review \
             --localhost-root artifacts/screenshot-manifest-parity/localhost \
@@ -626,7 +634,7 @@ jobs:
             --report artifacts/screenshot-manifest-parity/report.md
           detailed_status=$?
 
-          if [ "$validation_status" -ne 0 ] || [ "$detailed_status" -ne 0 ]; then
+          if [ "$validation_status" -ne 0 ] || [ "$scenario_execution_status" -ne 0 ] || [ "$detailed_status" -ne 0 ]; then
             exit 1
           fi
 
@@ -635,7 +643,9 @@ jobs:
         if: always()
         with:
           name: screenshot-manifest-parity-report
-          path: artifacts/screenshot-manifest-parity/report.md
+          path: |
+            artifacts/screenshot-manifest-parity/report.md
+            artifacts/screenshot-manifest-parity/scenario-execution-report.md
           if-no-files-found: ignore
           retention-days: 14
 

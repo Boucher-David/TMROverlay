@@ -13770,6 +13770,8 @@ def validate_replay_contract_provenance(label: str, provenance: object, failures
         source_hash = shared.get("sourceJsonSha256")
         if shared.get("loaded") is True and not is_sha256(source_hash):
             failures.append(f"{label}: loaded shared contract requires a 64-character sourceJsonSha256")
+        if not is_sha256(shared.get("resolvedContractSha256")):
+            failures.append(f"{label}: contractProvenance.shared.resolvedContractSha256 must be a 64-character SHA-256")
         if shared.get("loaded") is False and not isinstance(shared.get("loadError"), str):
             failures.append(f"{label}: unloaded shared contract requires a loadError")
 
@@ -13784,6 +13786,12 @@ def validate_replay_contract_provenance(label: str, provenance: object, failures
     source_hash = geometry.get("sourceJsonSha256")
     if geometry.get("sourceError") is None and not is_sha256(source_hash):
         failures.append(f"{label}: geometry source without sourceError requires a 64-character sourceJsonSha256")
+
+    browser_model = provenance.get("browserModel")
+    if not isinstance(browser_model, dict):
+        failures.append(f"{label}: contractProvenance.browserModel must be an object")
+    elif browser_model.get("version") != "browser-overlay-display-model/v1":
+        failures.append(f"{label}: contractProvenance.browserModel.version is not the supported browser model contract")
 
 
 def is_sha256(value: object) -> bool:

@@ -18,6 +18,11 @@ namespace TmrOverlay.OverlayModelReplay;
 
 internal static class Program
 {
+    // This version identifies the serialized C# browser model protocol apart
+    // from durable user-data schemas, so replay evidence can be traced across
+    // presentation-contract changes without implying a migration.
+    private const string BrowserOverlayDisplayModelContractVersion = "browser-overlay-display-model/v1";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -234,6 +239,7 @@ internal static class Program
                 Loaded: loaded,
                 SourceAsset: SharedOverlayContract.DefaultContractRelativePath,
                 SourceJsonSha256: sharedSourceHash,
+                ResolvedContractSha256: Sha256Text(JsonSerializer.Serialize(SharedOverlayContract.Current, JsonOptions)),
                 ContractVersion: SharedOverlayContract.Current.ContractVersion,
                 SettingsVersion: SharedOverlayContract.Current.SettingsVersion,
                 LoadError: loadError ?? sharedSourceError),
@@ -241,7 +247,9 @@ internal static class Program
                 SourceAsset: "src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json",
                 RuntimeContractSha256: Sha256Text(runtimeGeometryJson),
                 SourceJsonSha256: geometrySourceHash,
-                SourceError: geometrySourceError));
+                SourceError: geometrySourceError),
+            BrowserModel: new ReplayBrowserModelContractProvenance(
+                BrowserOverlayDisplayModelContractVersion));
     }
 
     private static async Task<FuelV2ReplayHistory> PrepareFuelV2ReplayHistoryAsync(
@@ -854,12 +862,14 @@ internal sealed record ReplaySelectedFrameTime(
 internal sealed record ReplayContractProvenance(
     int SchemaVersion,
     ReplaySharedContractProvenance Shared,
-    ReplayGeometryContractProvenance Geometry);
+    ReplayGeometryContractProvenance Geometry,
+    ReplayBrowserModelContractProvenance BrowserModel);
 
 internal sealed record ReplaySharedContractProvenance(
     bool Loaded,
     string SourceAsset,
     string? SourceJsonSha256,
+    string ResolvedContractSha256,
     int ContractVersion,
     int SettingsVersion,
     string? LoadError);
@@ -869,6 +879,9 @@ internal sealed record ReplayGeometryContractProvenance(
     string RuntimeContractSha256,
     string? SourceJsonSha256,
     string? SourceError);
+
+internal sealed record ReplayBrowserModelContractProvenance(
+    string Version);
 
 internal sealed record ReplayFilterSummary(
     int? StartFrameIndex,

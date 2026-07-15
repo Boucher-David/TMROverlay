@@ -1515,24 +1515,23 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
   }
 
   if (overlayId === 'flags') {
+    const contentSettings = () => ({
+      showGreen: contentEnabled(overlayState, 'Green / start / ready', true, ['Green']),
+      showBlue: contentEnabled(overlayState, 'Blue', true),
+      showYellow: contentEnabled(overlayState, 'Yellow / debris / caution', true, ['Yellow']),
+      showCritical: contentEnabled(overlayState, 'Red / black / repair', true, ['Red / black']),
+      showFinish: contentEnabled(overlayState, 'White / checkered / final laps', true, ['White / checkered'])
+    });
     if (fixtureMatches(searchParams, 'flags-all-kinds')) {
       return {
         flags: reviewAllFlags(),
-        showGreen: true,
-        showBlue: true,
-        showYellow: true,
-        showCritical: true,
-        showFinish: true
+        ...contentSettings()
       };
     }
     if (fixtureMatches(searchParams, 'flags-six-kinds')) {
       return {
         flags: reviewAllFlags().slice(0, 6),
-        showGreen: true,
-        showBlue: true,
-        showYellow: true,
-        showCritical: true,
-        showFinish: true
+        ...contentSettings()
       };
     }
     if (fixtureMatches(searchParams, 'flags-race-start-pseudo')) {
@@ -1541,21 +1540,13 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
           { kind: 'yellow', category: 'yellow', label: 'One to green', detail: null, tone: 'warning' },
           { kind: 'green', category: 'green', label: 'Start', detail: null, tone: 'success' }
         ],
-        showGreen: true,
-        showBlue: true,
-        showYellow: true,
-        showCritical: true,
-        showFinish: true
+        ...contentSettings()
       };
     }
     if (fixtureMatches(searchParams, 'flags-practice-pseudo-suppressed')) {
       return {
         flags: reviewFlagsForSession('practice'),
-        showGreen: true,
-        showBlue: true,
-        showYellow: true,
-        showCritical: true,
-        showFinish: true
+        ...contentSettings()
       };
     }
     if (fixtureMatches(searchParams, 'flags-practice-local-yellow')) {
@@ -1564,20 +1555,12 @@ function reviewSettings(overlayId, previewMode = 'off', searchParams = new URLSe
           { kind: 'yellow', category: 'yellow', label: 'Yellow', detail: 'local', tone: 'warning' },
           { kind: 'blue', category: 'blue', label: 'Blue', detail: null, tone: 'info' }
         ],
-        showGreen: true,
-        showBlue: true,
-        showYellow: true,
-        showCritical: true,
-        showFinish: true
+        ...contentSettings()
       };
     }
     return {
       flags: reviewFlagsForSession(session),
-      showGreen: contentEnabled(overlayState, 'Green / start / ready', true, ['Green']),
-      showBlue: contentEnabled(overlayState, 'Blue', true),
-      showYellow: contentEnabled(overlayState, 'Yellow / debris / caution', true, ['Yellow']),
-      showCritical: contentEnabled(overlayState, 'Red / black / repair', true, ['Red / black']),
-      showFinish: contentEnabled(overlayState, 'White / checkered / final laps', true, ['White / checkered'])
+      ...contentSettings()
     };
   }
 
@@ -2907,8 +2890,7 @@ function reviewEffectiveSettingList(overlayId, overlayState, session, searchPara
 
   if (overlayId === 'garage-cover') {
     settings.push(
-      effectiveSetting('garage-cover.previewVisible', reviewSettings(overlayId, 'race', searchParams).previewVisible === true),
-      effectiveContentSetting(overlayState, session, 'Content', 'Content', true)
+      effectiveSetting('garage-cover.previewVisible', reviewSettings(overlayId, 'race', searchParams).previewVisible === true)
     );
   }
 
@@ -3246,15 +3228,18 @@ function reviewDisplayModel(overlayId, previewMode = 'off', searchParams = new U
         }
 
         if (fixture === 'fuel-v2-model-readiness-test-fresh-combo') {
-          return withChrome(fuelV2ModelReadinessReviewModel('test-fresh-combo'));
+          return withChrome(filterFuelV2ModelReadinessReviewModel(
+            fuelV2ModelReadinessReviewModel('test-fresh-combo'), overlayState, session));
         }
 
         if (fixture === 'fuel-v2-model-readiness-test-fuel-baseline') {
-          return withChrome(fuelV2ModelReadinessReviewModel('test-fuel-baseline'));
+          return withChrome(filterFuelV2ModelReadinessReviewModel(
+            fuelV2ModelReadinessReviewModel('test-fuel-baseline'), overlayState, session));
         }
 
         if (fixture === 'fuel-v2-model-readiness-practice-pit-service') {
-          return withChrome(fuelV2ModelReadinessReviewModel('practice-pit-service'));
+          return withChrome(filterFuelV2ModelReadinessReviewModel(
+            fuelV2ModelReadinessReviewModel('practice-pit-service'), overlayState, session));
         }
 
         if (fixture === 'fuel-laps-workbench' || fixture === 'fuel-laps-workbench-stint') {
@@ -7009,6 +6994,21 @@ function fuelV2ModelReadinessReviewModel(stateId) {
       { key: 'track', value: 'Exact car + layout', tone: 'info' }
     ],
     true);
+}
+
+function filterFuelV2ModelReadinessReviewModel(model, overlayState, session) {
+  const enabled = contentLabelsEnabled(overlayState, [
+    'fuel-calculator.model-readiness.enabled',
+    'Model readiness'
+  ], true, session);
+  if (enabled) return model;
+
+  const readinessLabels = new Set(['Pit route', 'Refuel', 'Tires']);
+  return {
+    ...model,
+    metrics: (model.metrics || []).filter((row) => !readinessLabels.has(row?.label)),
+    metricSections: (model.metricSections || []).filter((section) => section?.title !== 'Model Readiness')
+  };
 }
 
 function fuelV2ModelReadinessFuelUsageRow(windows, label = 'Fuel/Lap') {

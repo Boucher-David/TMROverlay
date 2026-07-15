@@ -126,6 +126,21 @@ class OverlayScenarioRegistryTests(unittest.TestCase):
             {"min-scale"},
             {case.expected_fixture_variant for case in cases},
         )
+        self.assertEqual(
+            {
+                "table",
+                "metrics",
+                "inputs",
+                "car-radar",
+                "graph",
+                "track-map",
+                "flags",
+                "garage-cover",
+                "stream-chat",
+            },
+            {case.expected_body_kind for case in cases},
+        )
+        self.assertEqual({True}, {case.expected_should_render for case in cases})
         garage_cases = [case for case in cases if case.overlay_id == "garage-cover"]
         self.assertEqual({"browserReview", "localhostObs"}, {case.surface for case in garage_cases})
 

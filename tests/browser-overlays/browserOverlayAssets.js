@@ -1203,6 +1203,11 @@ function settingsContentRows(id, overlayState = {}) {
       ];
     case 'car-radar':
       return [];
+    case 'garage-cover':
+      // Garage Cover's image/preview controls are general browser-source
+      // controls, not a renderable content matrix. Do not surface a fake
+      // toggle that cannot alter the model.
+      return [];
     case 'flags':
       return [
         enabled('Green / start / ready'),

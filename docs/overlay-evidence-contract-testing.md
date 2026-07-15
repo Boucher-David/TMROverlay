@@ -41,7 +41,19 @@ top-level execution suites bind selected covered scenarios to generated
 manifests after screenshot validation. The first suite executes every
 minimum-scale case across browser review, localhost/OBS, and supported Windows
 native overlays, writing a per-artifact execution report that identifies the
-scenario, fixture variant, surface, and exact manifest/contract hashes.
+scenario, fixture variant, required `shouldRender` state, semantic body kind,
+surface, and exact manifest/contract hashes. The final cross-surface job
+validates those three reports against the checked-out contract as well as
+running the existing manifest comparator.
+
+The adjacent `all-overlay-visible-hidden-visible` runtime suite deliberately
+separates three concerns: a Windows C# localhost test drives all twelve real
+`BrowserOverlayModelFactory` routes through enabled → disabled → restored, a
+browser test verifies the shared renderer clears stale content/header and
+opacity before polling and rendering a restored response, and the native
+visibility test proves the same toggle transition reaches every Windows-native
+overlay decision. Its browser models are explicit renderer-protocol fixtures,
+never a substitute for C# model evidence.
 
 ## Validation Rules
 

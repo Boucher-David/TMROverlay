@@ -3847,7 +3847,6 @@ internal sealed class BrowserOverlayModelFactory
             settings.Add(new(
                 "garage-cover.previewVisible",
                 GarageCoverViewModel.BrowserSettingsFrom(appSettings, now).PreviewVisible));
-            settings.Add(new("Content", true));
         }
 
         if (SupportsSharedChrome(overlayId))

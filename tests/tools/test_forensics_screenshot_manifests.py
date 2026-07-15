@@ -201,6 +201,7 @@ def contract_provenance() -> dict[str, object]:
             "loaded": True,
             "sourceAsset": "shared/tmr-overlay-contract.json",
             "sourceJsonSha256": "a" * 64,
+            "resolvedContractSha256": "b" * 64,
             "contractVersion": 1,
             "settingsVersion": 11,
             "loadError": None,
@@ -210,6 +211,9 @@ def contract_provenance() -> dict[str, object]:
             "runtimeContractSha256": "b" * 64,
             "sourceJsonSha256": "c" * 64,
             "sourceError": None,
+        },
+        "browserModel": {
+            "version": "browser-overlay-display-model/v1",
         },
     }
 

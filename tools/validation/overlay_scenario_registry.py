@@ -65,6 +65,8 @@ class ScenarioExecutionCase:
     surface: str
     artifact_path: str
     expected_fixture_variant: str
+    expected_should_render: bool
+    expected_body_kind: str
 
 
 def load_contract(path: Path = DEFAULT_CONTRACT_PATH) -> dict:
@@ -125,16 +127,26 @@ def iter_execution_cases(
         runner = str(suite.get("runner") or "")
         if runner != "screenshot-manifest/v1":
             raise ValueError(f"{current_suite_id}: unsupported runner {runner!r}")
-        expected_fixture_variant = str(suite.get("expectedFixtureVariant") or "")
-        if not expected_fixture_variant:
-            raise ValueError(f"{current_suite_id}: expectedFixtureVariant is required")
-        scenario_ids = suite.get("scenarioIds")
-        if not isinstance(scenario_ids, list) or not scenario_ids:
-            raise ValueError(f"{current_suite_id}: scenarioIds must be a non-empty list")
+        cases = suite.get("cases")
+        if not isinstance(cases, list) or not cases:
+            raise ValueError(f"{current_suite_id}: cases must be a non-empty list")
+        scenario_ids = [case.get("scenarioId") for case in cases if isinstance(case, dict)]
+        if len(scenario_ids) != len(cases) or any(not isinstance(scenario_id, str) or not scenario_id for scenario_id in scenario_ids):
+            raise ValueError(f"{current_suite_id}: each case requires scenarioId")
         if len(set(scenario_ids)) != len(scenario_ids):
             raise ValueError(f"{current_suite_id}: scenarioIds must be unique")
 
-        for scenario_id in scenario_ids:
+        for declared_case in cases:
+            scenario_id = declared_case["scenarioId"]
+            expected_fixture_variant = str(declared_case.get("fixtureVariant") or "")
+            if not expected_fixture_variant:
+                raise ValueError(f"{current_suite_id}/{scenario_id}: fixtureVariant is required")
+            expected_should_render = declared_case.get("shouldRender")
+            if not isinstance(expected_should_render, bool):
+                raise ValueError(f"{current_suite_id}/{scenario_id}: shouldRender must be a boolean")
+            expected_body_kind = str(declared_case.get("bodyKind") or "")
+            if not expected_body_kind:
+                raise ValueError(f"{current_suite_id}/{scenario_id}: bodyKind is required")
             overlay_id, scenario = scenario_by_id(contract, scenario_id)
             resolution = resolve_scenario(contract, scenario_id, screenshots_module)
             if resolution.status != "covered":
@@ -150,6 +162,18 @@ def iter_execution_cases(
                     if artifact.startswith(prefix):
                         artifacts_by_surface.setdefault(surface, []).append(artifact)
                         break
+
+            declared_surfaces = {
+                surface
+                for surface in scenario.get("surfaces", [])
+                if surface in known_surfaces
+            }
+            missing_surfaces = declared_surfaces - set(artifacts_by_surface)
+            extra_surfaces = set(artifacts_by_surface) - declared_surfaces
+            if missing_surfaces or extra_surfaces:
+                raise ValueError(
+                    f"{current_suite_id}/{scenario_id}: execution artifacts must cover exactly the declared "
+                    f"browser/native surfaces; missing={sorted(missing_surfaces)!r}, extra={sorted(extra_surfaces)!r}")
 
             for surface, artifacts in sorted(artifacts_by_surface.items()):
                 if surface not in scenario.get("surfaces", []):
@@ -170,7 +194,9 @@ def iter_execution_cases(
                     scenario_id=scenario_id,
                     surface=surface,
                     artifact_path=expected[0],
-                    expected_fixture_variant=expected_fixture_variant)
+                    expected_fixture_variant=expected_fixture_variant,
+                    expected_should_render=expected_should_render,
+                    expected_body_kind=expected_body_kind)
 
 
 def resolve_scenario(

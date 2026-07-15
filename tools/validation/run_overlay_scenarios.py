@@ -51,17 +51,17 @@ def read_manifest(root: Path) -> tuple[Path, dict]:
     return path, manifest
 
 
-def manifest_screenshots(manifest: dict) -> dict[str, dict]:
+def manifest_screenshots(manifest: dict) -> dict[str, list[dict]]:
     raw = manifest.get("screenshots")
     if not isinstance(raw, list):
         raise ValueError("screenshot manifest screenshots must be a list")
-    result: dict[str, dict] = {}
+    result: dict[str, list[dict]] = {}
     for screenshot in raw:
         if not isinstance(screenshot, dict):
             continue
         path = screenshot.get("path")
         if isinstance(path, str) and path:
-            result[path] = screenshot
+            result.setdefault(path, []).append(screenshot)
     return result
 
 
@@ -85,11 +85,14 @@ def execute(
     results: list[dict] = []
     failures = 0
     for case in cases:
-        screenshot = indexed.get(case.artifact_path)
+        matches = indexed.get(case.artifact_path, [])
         failure_reason: str | None = None
-        if screenshot is None:
+        if not matches:
             failure_reason = "artifact_missing_from_manifest"
+        elif len(matches) != 1:
+            failure_reason = f"artifact_expected_once_got_{len(matches)}"
         else:
+            screenshot = matches[0]
             metadata = screenshot.get("metadata")
             actual_surface = screenshot.get("surface")
             if actual_surface is None and isinstance(metadata, dict):
@@ -105,8 +108,14 @@ def execute(
                 if fixture_variant != case.expected_fixture_variant:
                     failure_reason = (
                         f"fixture_variant_expected_{case.expected_fixture_variant}_got_{fixture_variant!r}")
-                elif screenshot.get("shouldRender") is not True:
-                    failure_reason = f"should_render_expected_true_got_{screenshot.get('shouldRender')!r}"
+                elif screenshot.get("shouldRender") is not case.expected_should_render:
+                    failure_reason = (
+                        f"should_render_expected_{case.expected_should_render!r}_got_"
+                        f"{screenshot.get('shouldRender')!r}")
+                elif screenshot.get("bodyKind") != case.expected_body_kind:
+                    failure_reason = (
+                        f"body_kind_expected_{case.expected_body_kind!r}_got_"
+                        f"{screenshot.get('bodyKind')!r}")
 
         outcome = "passed" if failure_reason is None else "failed"
         failures += outcome == "failed"
@@ -117,11 +126,25 @@ def execute(
                 "surface": surface,
                 "artifactPath": case.artifact_path,
                 "expectedFixtureVariant": case.expected_fixture_variant,
+                "expectedShouldRender": case.expected_should_render,
+                "expectedBodyKind": case.expected_body_kind,
                 "outcome": outcome,
                 "failureReason": failure_reason,
             }
         )
 
+    case_signature = [
+        {
+            "scenarioId": result["scenarioId"],
+            "overlayId": result["overlayId"],
+            "surface": result["surface"],
+            "artifactPath": result["artifactPath"],
+            "expectedFixtureVariant": result["expectedFixtureVariant"],
+            "expectedShouldRender": result["expectedShouldRender"],
+            "expectedBodyKind": result["expectedBodyKind"],
+        }
+        for result in results
+    ]
     return {
         "schemaVersion": 1,
         "tool": "tools/validation/run_overlay_scenarios.py",
@@ -132,6 +155,8 @@ def execute(
         "contractSha256": sha256_file(contract_path),
         "manifestPath": manifest_path.name,
         "manifestSha256": sha256_file(manifest_path),
+        "caseSetSha256": hashlib.sha256(
+            json.dumps(case_signature, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(),
         "resultCount": len(results),
         "failedCount": failures,
         "results": results,

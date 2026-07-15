@@ -86,6 +86,33 @@ public sealed class OverlayAvailabilityEvaluatorTests
     }
 
     [Fact]
+    public void NativeOverlayToggle_TransitionsVisibleHiddenVisibleForEverySupportedNativeOverlay()
+    {
+        foreach (var descriptor in OverlayBehaviorDescriptorCatalog.All.Where(
+                     descriptor => descriptor.WindowsNative == OverlaySurfaceSupport.Supported))
+        {
+            Assert.True(OverlayManager.ShouldShowManagedOverlay(
+                enabled: true,
+                sessionAllowed: true,
+                contextAllowed: true,
+                contentAllowed: true,
+                settingsPreview: false), descriptor.Id);
+            Assert.False(OverlayManager.ShouldShowManagedOverlay(
+                enabled: false,
+                sessionAllowed: true,
+                contextAllowed: true,
+                contentAllowed: true,
+                settingsPreview: false), descriptor.Id);
+            Assert.True(OverlayManager.ShouldShowManagedOverlay(
+                enabled: true,
+                sessionAllowed: true,
+                contextAllowed: true,
+                contentAllowed: true,
+                settingsPreview: false), descriptor.Id);
+        }
+    }
+
+    [Fact]
     public void FromSnapshot_ReturnsDisconnectedWhenIRacingIsUnavailable()
     {
         var now = DateTimeOffset.UtcNow;

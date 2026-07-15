@@ -16,6 +16,17 @@ internal sealed record ResolvedOverlayScenarioInputs(
         Action<OverlaySettings>? overlayPatch = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
+
+        // Scenario settings must start from the packaged contract just like a
+        // normal application load.  In particular, do this before creating
+        // ApplicationSettings so a prior test's process-local contract state
+        // cannot silently determine the defaults under test.
+        if (!SharedOverlayContract.TryLoadFromDefaultLocation(out var loadError))
+        {
+            throw new InvalidOperationException(
+                $"Unable to load the packaged shared overlay contract for scenario inputs: {loadError}");
+        }
+
         var settings = AppSettingsMigrator.Migrate(new ApplicationSettings());
         settingsPatch?.Invoke(settings);
         var overlay = settings.GetOrAddOverlay(

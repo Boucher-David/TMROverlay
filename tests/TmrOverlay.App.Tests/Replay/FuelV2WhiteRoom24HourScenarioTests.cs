@@ -135,6 +135,7 @@ public sealed class FuelV2WhiteRoom24HourScenarioTests
             Assert.Equal(1, shared.GetProperty("contractVersion").GetInt32());
             Assert.Equal(11, shared.GetProperty("settingsVersion").GetInt32());
             Assert.Equal(64, shared.GetProperty("sourceJsonSha256").GetString()!.Length);
+            Assert.Equal(64, shared.GetProperty("resolvedContractSha256").GetString()!.Length);
             Assert.False(shared.TryGetProperty("loadError", out _));
 
             var geometry = contractProvenance.GetProperty("geometry");
@@ -144,6 +145,9 @@ public sealed class FuelV2WhiteRoom24HourScenarioTests
             Assert.Equal(64, geometry.GetProperty("sourceJsonSha256").GetString()!.Length);
             Assert.Equal(64, geometry.GetProperty("runtimeContractSha256").GetString()!.Length);
             Assert.False(geometry.TryGetProperty("sourceError", out _));
+
+            var browserModel = contractProvenance.GetProperty("browserModel");
+            Assert.Equal("browser-overlay-display-model/v1", browserModel.GetProperty("version").GetString());
         }
         finally
         {

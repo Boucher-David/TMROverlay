@@ -31,6 +31,7 @@ class OverlayScenarioExecutionTests(unittest.TestCase):
                 "overlayId": case.overlay_id,
                 "fixtureVariant": "min-scale",
                 "shouldRender": True,
+                "bodyKind": case.expected_body_kind,
             }
             for case in cases
         ]
@@ -54,6 +55,8 @@ class OverlayScenarioExecutionTests(unittest.TestCase):
         )
         self.assertEqual(64, len(report["contractSha256"]))
         self.assertEqual(64, len(report["manifestSha256"]))
+        self.assertEqual("manifest.json", report["manifestPath"])
+        self.assertEqual(64, len(report["caseSetSha256"]))
 
     def test_execution_reports_missing_artifact_wrong_variant_and_wrong_surface(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -63,15 +66,34 @@ class OverlayScenarioExecutionTests(unittest.TestCase):
                 rows.pop()
                 rows[0]["fixtureVariant"] = "wrong"
                 rows[1]["surface"] = "localhost-overlay"
+                rows[2]["bodyKind"] = "wrong"
 
             self.write_manifest(root, mutate)
             report = runner.execute(root, "browserReview", self.suite_id)
 
-        self.assertEqual(3, report["failedCount"])
+        self.assertEqual(4, report["failedCount"])
         reasons = {result["failureReason"] for result in report["results"] if result["failureReason"]}
         self.assertIn("artifact_missing_from_manifest", reasons)
         self.assertTrue(any(reason.startswith("fixture_variant_expected_min-scale") for reason in reasons))
         self.assertTrue(any(reason.startswith("surface_expected_browser-review-overlay") for reason in reasons))
+        self.assertTrue(any(reason.startswith("body_kind_expected_") for reason in reasons))
+
+    def test_execution_rejects_duplicate_manifest_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_manifest(root)
+            manifest_path = root / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["screenshots"].append(manifest["screenshots"][0].copy())
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            report = runner.execute(root, "browserReview", self.suite_id)
+
+        self.assertEqual(1, report["failedCount"])
+        self.assertIn(
+            "artifact_expected_once_got_2",
+            {result["failureReason"] for result in report["results"] if result["failureReason"]},
+        )
 
 
 if __name__ == "__main__":

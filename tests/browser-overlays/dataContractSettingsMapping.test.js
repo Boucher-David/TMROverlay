@@ -89,6 +89,7 @@ describe('data contract settings mapping', () => {
     const garageCover = overlay(config, 'garage-cover');
     expect(garageCover.garageHasImage).toBe(true);
     expect(garageCover.garagePreviewVisible).toBe(true);
+    expect(garageCover.contentRows).toEqual([]);
 
     const flags = overlay(config, 'flags');
     expect(contentRow(flags, 'White / checkered / final laps').enabled).toBe(true);

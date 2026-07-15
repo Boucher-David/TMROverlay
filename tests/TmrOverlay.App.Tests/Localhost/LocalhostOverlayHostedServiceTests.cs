@@ -7,10 +7,13 @@ using TmrOverlay.App.Events;
 using TmrOverlay.App.History;
 using TmrOverlay.App.Localhost;
 using TmrOverlay.App.Overlays.BrowserSources;
+using TmrOverlay.App.Overlays.FuelCalculator;
 using TmrOverlay.App.Performance;
 using TmrOverlay.App.Settings;
 using TmrOverlay.App.Storage;
+using TmrOverlay.App.Telemetry;
 using TmrOverlay.App.TrackMaps;
+using TmrOverlay.Core.Settings;
 using TmrOverlay.Core.Telemetry.Live;
 using Xunit;
 
@@ -208,6 +211,167 @@ public sealed class LocalhostOverlayHostedServiceTests
         }
     }
 
+    [Fact]
+    public async Task EveryLocalhostOverlay_ClearsTheProductionModelWhenDisabledAndBuildsItAgainWhenRestored()
+    {
+        var storage = CreateStorageOptions();
+        var options = new LocalhostOverlayOptions
+        {
+            Enabled = true,
+            Host = IPAddress.Loopback.ToString(),
+            Port = ReserveLoopbackPort()
+        };
+        var state = new LocalhostOverlayState(options);
+        var now = DateTimeOffset.UtcNow;
+        var source = new MutableLiveTelemetrySource(OnTrackV2Preview(now, generation: 1));
+        var settingsStore = new AppSettingsStore(storage);
+        var factory = CreateFactory(storage, fuelV2Enabled: true);
+        var service = CreateService(options, state, storage, source, settingsStore, factory);
+
+        var settings = AppSettingsMigrator.Migrate(new ApplicationSettings());
+        foreach (var page in BrowserOverlayCatalog.Pages)
+        {
+            var overlay = settings.GetOrAddOverlay(page.Id, 640, 360);
+            overlay.Enabled = true;
+            overlay.ShowInRace = true;
+        }
+        settingsStore.Save(settings);
+
+        try
+        {
+            await service.StartAsync(CancellationToken.None);
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var generation = 2L;
+
+            foreach (var page in BrowserOverlayCatalog.Pages)
+            {
+                // Overlay availability deliberately rejects stale telemetry
+                // after 1.5 seconds. Refresh every request so this transition
+                // test proves an enabled product model, not a stale-model
+                // placeholder. Garage Cover is the one intentionally garage
+                // scoped surface; all local-in-car overlays use on-track data.
+                SetFreshSnapshot(source, page.Id, generation++);
+                if (string.Equals(page.Id, "gap-to-leader", StringComparison.Ordinal))
+                {
+                    Assert.True(factory.TryBuild(
+                        page.Id,
+                        source.Snapshot(),
+                        settings,
+                        DateTimeOffset.UtcNow,
+                        out _));
+                    SetFreshSnapshot(source, page.Id, generation++);
+                }
+                using var visible = await SendGetResponseAsync(
+                    client,
+                    $"{options.Prefix}api/overlay-model/{page.Id}?clientKind=obs",
+                    "Mozilla/5.0 OBS Studio/32.1.2");
+                Assert.Equal(HttpStatusCode.OK, visible.StatusCode);
+                using var visibleDocument = JsonDocument.Parse(await visible.Content.ReadAsStringAsync());
+                var visibleModel = visibleDocument.RootElement.GetProperty("model");
+                AssertVisibleModel(page.Id, visibleModel);
+
+                settings.GetOrAddOverlay(page.Id, 640, 360).Enabled = false;
+                settingsStore.Save(settings);
+                SetFreshSnapshot(source, page.Id, generation++);
+                using var hidden = await SendGetResponseAsync(
+                    client,
+                    $"{options.Prefix}api/overlay-model/{page.Id}?clientKind=obs",
+                    "Mozilla/5.0 OBS Studio/32.1.2");
+                Assert.Equal(HttpStatusCode.OK, hidden.StatusCode);
+                using var hiddenDocument = JsonDocument.Parse(await hidden.Content.ReadAsStringAsync());
+                AssertHiddenModel(page.Id, hiddenDocument.RootElement.GetProperty("model"));
+
+                settings.GetOrAddOverlay(page.Id, 640, 360).Enabled = true;
+                settingsStore.Save(settings);
+                SetFreshSnapshot(source, page.Id, generation++);
+                using var restored = await SendGetResponseAsync(
+                    client,
+                    $"{options.Prefix}api/overlay-model/{page.Id}?clientKind=obs",
+                    "Mozilla/5.0 OBS Studio/32.1.2");
+                Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
+                using var restoredDocument = JsonDocument.Parse(await restored.Content.ReadAsStringAsync());
+                AssertVisibleModel(page.Id, restoredDocument.RootElement.GetProperty("model"));
+            }
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+            if (Directory.Exists(storage.AppDataRoot))
+            {
+                Directory.Delete(storage.AppDataRoot, recursive: true);
+            }
+        }
+    }
+
+    private static void AssertVisibleModel(string overlayId, JsonElement model)
+    {
+        Assert.True(model.GetProperty("shouldRender").GetBoolean(), $"{overlayId}: {model.GetProperty("status").GetString()}");
+        Assert.Equal(ExpectedBodyKind(overlayId), model.GetProperty("bodyKind").GetString());
+        Assert.True(model.GetProperty("effectiveSettings").GetProperty("rendered").GetProperty("shouldRender").GetBoolean());
+
+        var hasPayload = overlayId switch
+        {
+            "input-state" => model.TryGetProperty("inputs", out var inputs)
+                && inputs.GetProperty("hasContent").GetBoolean()
+                && (inputs.GetProperty("hasGraph").GetBoolean() || inputs.GetProperty("hasRail").GetBoolean()),
+            "car-radar" => model.TryGetProperty("carRadar", out var carRadar)
+                && carRadar.GetProperty("renderModel").GetProperty("shouldRender").GetBoolean()
+                && carRadar.GetProperty("renderModel").GetProperty("cars").GetArrayLength() > 0,
+            "gap-to-leader" => model.TryGetProperty("graph", out var graph)
+                && graph.GetProperty("showGraph").GetBoolean()
+                && graph.GetProperty("series").GetArrayLength() > 0,
+            "track-map" => model.TryGetProperty("trackMap", out var trackMap)
+                && trackMap.GetProperty("renderModel").GetProperty("primitives").GetArrayLength() > 0,
+            "flags" => model.TryGetProperty("flags", out var flags)
+                && flags.GetProperty("flags").GetArrayLength() > 0,
+            "garage-cover" => model.TryGetProperty("garageCover", out var garage)
+                && garage.GetProperty("shouldCover").GetBoolean(),
+            "stream-chat" => model.TryGetProperty("streamChat", out var streamChat)
+                && streamChat.GetProperty("rows").GetArrayLength() > 0,
+            _ => model.GetProperty("rows").GetArrayLength() > 0
+                || model.GetProperty("metrics").GetArrayLength() > 0
+                || model.GetProperty("points").GetArrayLength() > 0
+        };
+        Assert.True(hasPayload, $"{overlayId}: expected a populated production body.");
+    }
+
+    private static void AssertHiddenModel(string overlayId, JsonElement model)
+    {
+        Assert.False(model.GetProperty("shouldRender").GetBoolean(), overlayId);
+        Assert.Equal("disabled | product hidden", model.GetProperty("status").GetString());
+        Assert.Equal(ExpectedBodyKind(overlayId), model.GetProperty("bodyKind").GetString());
+        Assert.Empty(model.GetProperty("columns").EnumerateArray());
+        Assert.Empty(model.GetProperty("rows").EnumerateArray());
+        Assert.Empty(model.GetProperty("metrics").EnumerateArray());
+        Assert.Empty(model.GetProperty("points").EnumerateArray());
+        Assert.Empty(model.GetProperty("headerItems").EnumerateArray());
+        Assert.Empty(model.GetProperty("gridSections").EnumerateArray());
+        Assert.Empty(model.GetProperty("metricSections").EnumerateArray());
+        Assert.Equal(string.Empty, model.GetProperty("source").GetString());
+        Assert.False(model.TryGetProperty("graph", out _));
+        Assert.False(model.TryGetProperty("carRadar", out _));
+        Assert.False(model.TryGetProperty("trackMap", out _));
+        Assert.False(model.TryGetProperty("garageCover", out _));
+        Assert.False(model.TryGetProperty("streamChat", out _));
+        Assert.False(model.TryGetProperty("inputs", out _));
+        Assert.False(model.TryGetProperty("flags", out _));
+        Assert.False(model.GetProperty("effectiveSettings").GetProperty("rendered").GetProperty("shouldRender").GetBoolean());
+    }
+
+    private static string ExpectedBodyKind(string overlayId) => overlayId switch
+    {
+        "standings" or "relative" => "table",
+        "fuel-calculator" or "session-weather" or "pit-service" => "metrics",
+        "input-state" => "inputs",
+        "car-radar" => "car-radar",
+        "gap-to-leader" => "graph",
+        "track-map" => "track-map",
+        "flags" => "flags",
+        "garage-cover" => "garage-cover",
+        "stream-chat" => "stream-chat",
+        _ => throw new ArgumentOutOfRangeException(nameof(overlayId), overlayId, "Unknown browser overlay")
+    };
+
     private static async Task SendGetAsync(HttpClient client, string url, string userAgent)
     {
         using var response = await SendGetResponseAsync(client, url, userAgent);
@@ -235,7 +399,24 @@ public sealed class LocalhostOverlayHostedServiceTests
     private static LocalhostOverlayHostedService CreateService(
         LocalhostOverlayOptions options,
         LocalhostOverlayState state,
-        AppStorageOptions storage)
+        AppStorageOptions storage,
+        ILiveTelemetrySource? liveTelemetrySource = null,
+        AppSettingsStore? settingsStore = null,
+        BrowserOverlayModelFactory? browserModelFactory = null)
+    {
+        return new LocalhostOverlayHostedService(
+            options,
+            liveTelemetrySource ?? new TestLiveTelemetrySource(),
+            new TrackMapStore(storage, Path.Combine(storage.AppDataRoot, "bundled-track-maps")),
+            settingsStore ?? new AppSettingsStore(storage),
+            browserModelFactory ?? CreateFactory(storage),
+            state,
+            new AppEventRecorder(storage),
+            new AppPerformanceState(),
+            NullLogger<LocalhostOverlayHostedService>.Instance);
+    }
+
+    private static BrowserOverlayModelFactory CreateFactory(AppStorageOptions storage, bool fuelV2Enabled = false)
     {
         var history = new SessionHistoryQueryService(new SessionHistoryOptions
         {
@@ -243,17 +424,51 @@ public sealed class LocalhostOverlayHostedServiceTests
             ResolvedUserHistoryRoot = storage.UserHistoryRoot,
             ResolvedBaselineHistoryRoot = storage.BaselineHistoryRoot
         });
-
-        return new LocalhostOverlayHostedService(
-            options,
-            new TestLiveTelemetrySource(),
+        return new BrowserOverlayModelFactory(
+            history,
             new TrackMapStore(storage, Path.Combine(storage.AppDataRoot, "bundled-track-maps")),
-            new AppSettingsStore(storage),
-            new BrowserOverlayModelFactory(history),
-            state,
-            new AppEventRecorder(storage),
-            new AppPerformanceState(),
-            NullLogger<LocalhostOverlayHostedService>.Instance);
+            fuelV2OverlayOptions: fuelV2Enabled ? new FuelV2OverlayOptions(true) : null);
+    }
+
+    private static void SetFreshSnapshot(MutableLiveTelemetrySource source, string overlayId, long generation)
+    {
+        var now = DateTimeOffset.UtcNow;
+        source.SetSnapshot(string.Equals(overlayId, "garage-cover", StringComparison.Ordinal)
+            ? GarageVisiblePreview(now, generation)
+            : OnTrackV2Preview(now, generation));
+    }
+
+    private static LiveTelemetrySnapshot OnTrackV2Preview(DateTimeOffset now, long generation)
+    {
+        return SessionPreviewTelemetryFixtures.Build(OverlaySessionKind.Race, now, generation) with
+        {
+            HasFrameForCurrentContext = true,
+            HasSessionInfoForCurrentCollection = true
+        };
+    }
+
+    private static LiveTelemetrySnapshot GarageVisiblePreview(DateTimeOffset now, long generation)
+    {
+        var snapshot = OnTrackV2Preview(now, generation);
+        var sample = Assert.IsType<TmrOverlay.Core.History.HistoricalTelemetrySample>(snapshot.LatestSample) with
+        {
+            IsGarageVisible = true,
+            IsInGarage = true,
+            IsOnTrack = false
+        };
+        return snapshot with
+        {
+            LatestSample = sample,
+            Models = snapshot.Models with
+            {
+                RaceEvents = snapshot.Models.RaceEvents with
+                {
+                    IsGarageVisible = true,
+                    IsInGarage = true,
+                    IsOnTrack = false
+                }
+            }
+        };
     }
 
     private static AppStorageOptions CreateStorageOptions()
@@ -315,6 +530,28 @@ public sealed class LocalhostOverlayHostedServiceTests
         public LiveTelemetrySnapshot Snapshot()
         {
             return LiveTelemetrySnapshot.Empty;
+        }
+    }
+
+    private sealed class MutableLiveTelemetrySource(LiveTelemetrySnapshot snapshot) : ILiveTelemetrySource
+    {
+        private readonly object _sync = new();
+        private LiveTelemetrySnapshot _snapshot = snapshot;
+
+        public LiveTelemetrySnapshot Snapshot()
+        {
+            lock (_sync)
+            {
+                return _snapshot;
+            }
+        }
+
+        public void SetSnapshot(LiveTelemetrySnapshot snapshot)
+        {
+            lock (_sync)
+            {
+                _snapshot = snapshot;
+            }
         }
     }
 }

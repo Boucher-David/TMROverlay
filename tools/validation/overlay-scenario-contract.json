@@ -111,23 +111,54 @@
     {
       "id": "minimum-scale-rendered-manifests",
       "runner": "screenshot-manifest/v1",
-      "scenarioIds": [
-        "standings-minimum-scale",
-        "relative-minimum-scale",
-        "fuel-minimum-scale",
-        "weather-minimum-scale",
-        "pit-minimum-scale",
-        "inputs-minimum-scale",
-        "radar-minimum-scale",
-        "gap-minimum-scale",
-        "track-map-minimum-scale",
-        "flags-minimum-scale",
-        "garage-cover-minimum-scale",
-        "stream-chat-minimum-scale"
+      "cases": [
+        { "scenarioId": "standings-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "table" },
+        { "scenarioId": "relative-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "table" },
+        { "scenarioId": "fuel-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "metrics" },
+        { "scenarioId": "weather-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "metrics" },
+        { "scenarioId": "pit-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "metrics" },
+        { "scenarioId": "inputs-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "inputs" },
+        { "scenarioId": "radar-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "car-radar" },
+        { "scenarioId": "gap-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "graph" },
+        { "scenarioId": "track-map-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "track-map" },
+        { "scenarioId": "flags-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "flags" },
+        { "scenarioId": "garage-cover-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "garage-cover" },
+        { "scenarioId": "stream-chat-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "stream-chat" }
       ],
-      "expectedFixtureVariant": "min-scale"
+      "description": "Each case binds a named product scenario to one populated minimum-scale artifact per declared product surface, including its required semantic body family."
     }
   ],
+  "runtimeTransitionSuite": {
+    "id": "all-overlay-visible-hidden-visible",
+    "contract": "overlay-runtime-transition/v1",
+    "purpose": "Production localhost semantics and shared browser-renderer stale-DOM behavior are deliberately proved as separate layers. Browser protocol fixtures are never application-model evidence.",
+    "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+    "testFiles": [
+      "tests/browser-overlays/browserOverlayProductionTransition.pw.spec.js",
+      "tests/TmrOverlay.App.Tests/Localhost/LocalhostOverlayHostedServiceTests.cs:EveryLocalhostOverlay_ClearsTheProductionModelWhenDisabledAndBuildsItAgainWhenRestored",
+      "tests/TmrOverlay.App.Tests/Overlays/OverlayAvailabilityEvaluatorTests.cs:NativeOverlayToggle_TransitionsVisibleHiddenVisibleForEverySupportedNativeOverlay"
+    ],
+    "cases": [
+      { "overlayId": "standings", "bodyKind": "table" },
+      { "overlayId": "relative", "bodyKind": "table" },
+      { "overlayId": "fuel-calculator", "bodyKind": "metrics" },
+      { "overlayId": "session-weather", "bodyKind": "metrics" },
+      { "overlayId": "pit-service", "bodyKind": "metrics" },
+      { "overlayId": "input-state", "bodyKind": "inputs" },
+      { "overlayId": "car-radar", "bodyKind": "car-radar" },
+      { "overlayId": "gap-to-leader", "bodyKind": "graph" },
+      { "overlayId": "track-map", "bodyKind": "track-map" },
+      { "overlayId": "flags", "bodyKind": "flags" },
+      { "overlayId": "garage-cover", "bodyKind": "garage-cover" },
+      { "overlayId": "stream-chat", "bodyKind": "stream-chat" }
+    ],
+    "assertions": [
+      "The real localhost route builds a populated product model, returns a fully cleared hidden model when the main overlay toggle is disabled, then builds a populated model after restoration.",
+      "The shared browser asset removes content, header, and opacity when a hidden response arrives and resumes polling to render the restored response.",
+      "The shared native visibility gate transitions every Windows-supported overlay through visible, hidden, and visible decisions; native rendering remains independently covered by the screenshot evidence suite.",
+      "Browser protocol fixtures exercise only renderer behavior; BrowserOverlayModelFactory output remains the application semantic authority."
+    ]
+  },
   "settingsScenarios": [
     {
       "id": "settings-support-diagnostics-actions",

@@ -655,6 +655,7 @@ jobs:
           "manifest_path=$manifestPath" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "informational_version=$informationalVersion" >> $env:GITHUB_OUTPUT
+          "short_sha=${{ github.sha }}".Substring(0, 7) >> $env:GITHUB_OUTPUT
 
       - name: Audit dry-run publish output
         shell: pwsh
@@ -722,7 +723,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
         with:
-          name: tmroverlay-pr-${{ github.event.pull_request.number }}-installer
+          name: tmroverlay-pr-${{ github.event.pull_request.number }}-v${{ steps.publish_dry_run.outputs.version }}-r${{ github.run_number }}-a${{ github.run_attempt }}-${{ steps.publish_dry_run.outputs.short_sha }}-installer
           path: artifacts/pr-velopack-check/*.msi
           if-no-files-found: error
           retention-days: 14

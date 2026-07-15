@@ -588,8 +588,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             DesignV2LiveOverlayKind.Standings => BuildStandingsModel(snapshot, now),
             DesignV2LiveOverlayKind.Relative => BuildRelativeModel(snapshot, now),
             DesignV2LiveOverlayKind.FuelCalculator => BuildFuelModel(snapshot, now),
-            DesignV2LiveOverlayKind.SessionWeather => FromSimple(_sessionWeatherBuilder.Build(snapshot, now, _unitSystem, _settings)),
-            DesignV2LiveOverlayKind.PitService => FromSimple(_pitServiceBuilder.Build(snapshot, now, _unitSystem, _settings)),
+            DesignV2LiveOverlayKind.SessionWeather => SimpleModelFrom(_sessionWeatherBuilder.Build(snapshot, now, _unitSystem, _settings)),
+            DesignV2LiveOverlayKind.PitService => SimpleModelFrom(_pitServiceBuilder.Build(snapshot, now, _unitSystem, _settings)),
             DesignV2LiveOverlayKind.InputState => BuildInputModel(snapshot, now),
             DesignV2LiveOverlayKind.Flags => BuildFlagsModel(snapshot, now),
             DesignV2LiveOverlayKind.CarRadar => BuildRadarModel(snapshot, now),
@@ -966,7 +966,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 tireHistory,
                 normalHistory,
                 modelReadiness);
-            return FromSimple(v2ViewModel.Overlay) with
+            return SimpleModelFrom(v2ViewModel.Overlay) with
             {
                 FuelV2TireHistory = v2ViewModel.TireHistory
             };
@@ -3067,7 +3067,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             ShouldRender: !viewModel.IsWaiting && flags.Length > 0);
     }
 
-    private DesignV2OverlayModel FromSimple(SimpleTelemetryOverlayViewModel viewModel)
+    // This is a pure native projection, intentionally exposed to the test
+    // assembly so semantic parity can be checked without constructing a
+    // WinForms window. It remains renderer-local rather than becoming a new
+    // cross-renderer runtime model.
+    internal static DesignV2OverlayModel SimpleModelFrom(SimpleTelemetryOverlayViewModel viewModel)
     {
         var shouldRender = HasSimpleTelemetryContent(viewModel);
         var rows = viewModel.Rows.Select(row => new DesignV2MetricRow(

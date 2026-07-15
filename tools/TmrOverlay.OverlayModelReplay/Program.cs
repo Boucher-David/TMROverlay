@@ -1,11 +1,14 @@
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging.Abstractions;
 using TmrOverlay.App.History;
+using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.FuelCalculator;
+using TmrOverlay.App.Overlays.Styling;
 using TmrOverlay.App.Replay;
 using TmrOverlay.App.Telemetry;
 using TmrOverlay.Core.Settings;
@@ -44,9 +47,10 @@ internal static class Program
 
     private static async Task RunAsync(OverlayModelReplayOptions options)
     {
+        var contractProvenance = InitializeRuntimeContracts();
         if (options.WhiteRoomFixturePath is not null)
         {
-            await WhiteRoomFuelV2ScenarioReplay.RunAsync(options).ConfigureAwait(false);
+            await WhiteRoomFuelV2ScenarioReplay.RunAsync(options, contractProvenance).ConfigureAwait(false);
             return;
         }
 
@@ -183,8 +187,61 @@ internal static class Program
             cadence = options.CadenceLabel,
             fuelV2OverlayEnabled = options.FuelV2OverlayEnabled,
             fuelV2HistoryReplay = fuelV2ReplayHistory.Provenance,
+            contractProvenance,
             generatedAtUtc = DateTimeOffset.UtcNow
         });
+    }
+
+    // The replay runs the same browser model factory as the Windows app, so it
+    // must resolve the static shared/theme contracts before settings defaults
+    // or models are constructed. User-storage theme overrides are intentionally
+    // excluded: replay evidence needs a deterministic, packaged baseline.
+    internal static ReplayContractProvenance InitializeRuntimeContracts()
+    {
+        var loaded = SharedOverlayContract.TryLoadFromDefaultLocation(out var loadError);
+        OverlayTheme.LoadSharedContract(SharedOverlayContract.Current, NullLogger.Instance);
+
+        var loadStatus = SharedOverlayContract.LoadStatus;
+        string? sharedSourceHash = null;
+        string? sharedSourceError = null;
+        if (loadStatus.Loaded && !string.IsNullOrWhiteSpace(loadStatus.Path))
+        {
+            try
+            {
+                sharedSourceHash = Sha256File(loadStatus.Path);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                sharedSourceError = exception.GetType().Name;
+            }
+        }
+
+        string? geometrySourceHash = null;
+        string? geometrySourceError = null;
+        try
+        {
+            geometrySourceHash = Sha256Text(OverlayGeometryContracts.BrowserJson());
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            geometrySourceError = exception.GetType().Name;
+        }
+
+        var runtimeGeometryJson = JsonSerializer.Serialize(OverlayGeometryContracts.Current, JsonOptions);
+        return new ReplayContractProvenance(
+            SchemaVersion: 1,
+            Shared: new ReplaySharedContractProvenance(
+                Loaded: loaded,
+                SourceAsset: SharedOverlayContract.DefaultContractRelativePath,
+                SourceJsonSha256: sharedSourceHash,
+                ContractVersion: SharedOverlayContract.Current.ContractVersion,
+                SettingsVersion: SharedOverlayContract.Current.SettingsVersion,
+                LoadError: loadError ?? sharedSourceError),
+            Geometry: new ReplayGeometryContractProvenance(
+                SourceAsset: "src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json",
+                RuntimeContractSha256: Sha256Text(runtimeGeometryJson),
+                SourceJsonSha256: geometrySourceHash,
+                SourceError: geometrySourceError));
     }
 
     private static async Task<FuelV2ReplayHistory> PrepareFuelV2ReplayHistoryAsync(
@@ -479,6 +536,11 @@ internal static class Program
     {
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
+    internal static string Sha256Text(string value)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
     }
 
     private static void WriteRunSummary(string outputDirectory, object summary)
@@ -788,6 +850,25 @@ internal sealed record ReplayFuelV2ArtifactInput(
 internal sealed record ReplaySelectedFrameTime(
     int FrameIndex,
     DateTimeOffset CapturedAtUtc);
+
+internal sealed record ReplayContractProvenance(
+    int SchemaVersion,
+    ReplaySharedContractProvenance Shared,
+    ReplayGeometryContractProvenance Geometry);
+
+internal sealed record ReplaySharedContractProvenance(
+    bool Loaded,
+    string SourceAsset,
+    string? SourceJsonSha256,
+    int ContractVersion,
+    int SettingsVersion,
+    string? LoadError);
+
+internal sealed record ReplayGeometryContractProvenance(
+    string SourceAsset,
+    string RuntimeContractSha256,
+    string? SourceJsonSha256,
+    string? SourceError);
 
 internal sealed record ReplayFilterSummary(
     int? StartFrameIndex,

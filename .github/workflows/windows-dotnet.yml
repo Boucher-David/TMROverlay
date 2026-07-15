@@ -160,6 +160,11 @@ jobs:
         continue-on-error: true
         run: python3 tools/validate_overlay_screenshots.py --profile browser-review-ci --root artifacts/browser-review-screenshots
 
+      - name: Execute browser review scenario suite
+        id: execute_browser_review_scenarios
+        continue-on-error: true
+        run: python3 tools/validation/run_overlay_scenarios.py --root artifacts/browser-review-screenshots --surface browserReview --suite minimum-scale-rendered-manifests --report artifacts/browser-review-screenshots/scenario-execution.json
+
       - name: Upload browser review screenshots
         uses: actions/upload-artifact@v7
         if: always()
@@ -171,6 +176,10 @@ jobs:
 
       - name: Fail on browser review screenshot validation
         if: ${{ steps.validate_browser_review.outcome == 'failure' }}
+        run: exit 1
+
+      - name: Fail on browser review scenario execution
+        if: ${{ steps.execute_browser_review_scenarios.outcome == 'failure' }}
         run: exit 1
 
   localhost_screenshots:
@@ -200,6 +209,11 @@ jobs:
         continue-on-error: true
         run: python3 tools/validate_overlay_screenshots.py --profile localhost-ci --root artifacts/localhost-screenshots
 
+      - name: Execute localhost scenario suite
+        id: execute_localhost_scenarios
+        continue-on-error: true
+        run: python3 tools/validation/run_overlay_scenarios.py --root artifacts/localhost-screenshots --surface localhostObs --suite minimum-scale-rendered-manifests --report artifacts/localhost-screenshots/scenario-execution.json
+
       - name: Upload localhost screenshots
         uses: actions/upload-artifact@v7
         if: always()
@@ -211,6 +225,10 @@ jobs:
 
       - name: Fail on localhost screenshot validation
         if: ${{ steps.validate_localhost.outcome == 'failure' }}
+        run: exit 1
+
+      - name: Fail on localhost scenario execution
+        if: ${{ steps.execute_localhost_scenarios.outcome == 'failure' }}
         run: exit 1
 
   windows_static_validation:
@@ -407,6 +425,11 @@ jobs:
         continue-on-error: true
         run: python tools/validate_overlay_screenshots.py --profile windows-ci --root artifacts/windows-overlay-screenshots
 
+      - name: Execute Windows native scenario suite
+        id: execute_windows_overlay_scenarios
+        continue-on-error: true
+        run: python tools/validation/run_overlay_scenarios.py --root artifacts/windows-overlay-screenshots --surface windowsNative --suite minimum-scale-rendered-manifests --report artifacts/windows-overlay-screenshots/scenario-execution.json
+
       - name: Upload Windows overlay screenshots
         uses: actions/upload-artifact@v7
         if: always()
@@ -418,6 +441,10 @@ jobs:
 
       - name: Fail on Windows overlay screenshot validation
         if: ${{ steps.validate_windows_overlay.outcome == 'failure' }}
+        run: exit 1
+
+      - name: Fail on Windows native scenario execution
+        if: ${{ steps.execute_windows_overlay_scenarios.outcome == 'failure' }}
         run: exit 1
 
   windows_installer_screenshots:

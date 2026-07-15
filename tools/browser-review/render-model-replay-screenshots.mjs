@@ -26,6 +26,7 @@ const overlays = csv(args.overlays).length
 const port = Number.parseInt(args.port || process.env.TMR_MODEL_REPLAY_SCREENSHOT_PORT || '5198', 10);
 const limitPerOverlay = Math.max(1, Number.parseInt(args.limit || '40', 10));
 const settleMs = Math.max(0, Number.parseInt(args.settleMs || args['settle-ms'] || '450', 10));
+const replaySummary = loadReplaySummary(forensicsOutput);
 const modelRows = loadModelRows(forensicsOutput, overlays);
 const baseUrl = `http://127.0.0.1:${port}`;
 const server = createReplayServer(modelRows);
@@ -39,6 +40,10 @@ const runManifest = {
   forensicsOutput,
   baseUrl,
   generatedAtUtc: new Date().toISOString(),
+  // Static contract provenance belongs to the replay run rather than every
+  // model row. Copy it into renderer evidence so browser artifacts remain
+  // tied to the exact shared defaults and geometry contract used by C#.
+  contractProvenance: replaySummary?.contractProvenance ?? null,
   overlays: {}
 };
 
@@ -119,6 +124,7 @@ async function captureOverlay(page, overlayId, rows) {
     schemaVersion: 1,
     overlayId,
     renderer,
+    contractProvenance: replaySummary?.contractProvenance ?? null,
     status: selectedRows.length ? 'produced' : 'skipped',
     reason: selectedRows.length ? null : 'no production model rows found',
     screenshotCount: 0,
@@ -262,6 +268,15 @@ function loadModelRows(root, overlayIds) {
   }
 
   return byOverlay;
+}
+
+function loadReplaySummary(root) {
+  const path = join(root, 'model-replay-result.json');
+  return existsSync(path) ? readJson(path) : null;
+}
+
+function readJson(path) {
+  return JSON.parse(readFileSync(path, 'utf8'));
 }
 
 function readJsonLines(path) {

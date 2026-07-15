@@ -13701,6 +13701,7 @@ def validate_forensics_screenshot_manifest(manifest_path: Path, min_unique_bytes
 
     if manifest.get("schemaVersion") != 1:
         failures.append(f"{label}: schemaVersion expected 1, got {manifest.get('schemaVersion')!r}")
+    validate_replay_contract_provenance(label, manifest.get("contractProvenance"), failures)
     status = str(manifest.get("status") or "")
     if status not in {"not-rendered", "skipped", "produced"}:
         failures.append(f"{label}: status expected not-rendered/skipped/produced, got {status!r}")
@@ -13745,6 +13746,48 @@ def validate_forensics_screenshot_manifest(manifest_path: Path, min_unique_bytes
             failures.append(f"{label}: produced manifest missing integer screenshotCount")
         elif screenshot_count != captured_count:
             failures.append(f"{label}: screenshotCount expected {captured_count}, got {screenshot_count}")
+
+
+def validate_replay_contract_provenance(label: str, provenance: object, failures: list[str]) -> None:
+    if not isinstance(provenance, dict):
+        failures.append(f"{label}: contractProvenance must be an object")
+        return
+    if provenance.get("schemaVersion") != 1:
+        failures.append(
+            f"{label}: contractProvenance.schemaVersion expected 1, got {provenance.get('schemaVersion')!r}")
+    shared = provenance.get("shared")
+    if not isinstance(shared, dict):
+        failures.append(f"{label}: contractProvenance.shared must be an object")
+    else:
+        if not isinstance(shared.get("loaded"), bool):
+            failures.append(f"{label}: contractProvenance.shared.loaded must be boolean")
+        if shared.get("sourceAsset") != "shared/tmr-overlay-contract.json":
+            failures.append(f"{label}: contractProvenance.shared.sourceAsset is not the stable shared-contract asset")
+        if not isinstance(shared.get("contractVersion"), int):
+            failures.append(f"{label}: contractProvenance.shared.contractVersion must be integer")
+        if not isinstance(shared.get("settingsVersion"), int):
+            failures.append(f"{label}: contractProvenance.shared.settingsVersion must be integer")
+        source_hash = shared.get("sourceJsonSha256")
+        if shared.get("loaded") is True and not is_sha256(source_hash):
+            failures.append(f"{label}: loaded shared contract requires a 64-character sourceJsonSha256")
+        if shared.get("loaded") is False and not isinstance(shared.get("loadError"), str):
+            failures.append(f"{label}: unloaded shared contract requires a loadError")
+
+    geometry = provenance.get("geometry")
+    if not isinstance(geometry, dict):
+        failures.append(f"{label}: contractProvenance.geometry must be an object")
+        return
+    if geometry.get("sourceAsset") != "src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json":
+        failures.append(f"{label}: contractProvenance.geometry.sourceAsset is not the stable geometry asset")
+    if not is_sha256(geometry.get("runtimeContractSha256")):
+        failures.append(f"{label}: contractProvenance.geometry.runtimeContractSha256 must be a 64-character SHA-256")
+    source_hash = geometry.get("sourceJsonSha256")
+    if geometry.get("sourceError") is None and not is_sha256(source_hash):
+        failures.append(f"{label}: geometry source without sourceError requires a 64-character sourceJsonSha256")
+
+
+def is_sha256(value: object) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 def validate_forensics_screenshot_row(

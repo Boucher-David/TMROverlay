@@ -25,6 +25,24 @@ Every overlay evidence contract uses:
 - `provenance`: `live-capture`, `synthetic-preview`, `stale-history`, or `unavailable`, plus capture specificity and source contract.
 - `semanticModel`: title/text/body kind, row identities, column keys, placeholder count, metric text, layout density, fallback state, graph/input/table evidence.
 
+`BrowserOverlayDisplayModel` is the production presentation contract for the
+browser-review and localhost/OBS renderers. Production model replay serializes
+that response from the C# `BrowserOverlayModelFactory`, and the review server
+returns it byte-for-byte for `fixture=production-model-replay`; synthetic Node
+fixtures remain renderer tests and must not be mistaken for production model
+evidence. Native WinForms keeps its own rendering/lifecycle model, so parity
+starts with test-only semantic projections of shared simple-overlay adapters
+(Session / Weather and Pit Service) rather than an artificial universal runtime
+presentation model. Geometry, chrome, and pixel parity remain their existing
+surface-specific contracts.
+
+The scenario JSON remains an evidence registry, not application input. Its
+top-level execution suites bind selected covered scenarios to generated
+manifests after screenshot validation. The first suite executes every
+minimum-scale case across browser review, localhost/OBS, and supported Windows
+native overlays, writing a per-artifact execution report that identifies the
+scenario, fixture variant, surface, and exact manifest/contract hashes.
+
 ## Validation Rules
 
 The integrated implementation lives in:

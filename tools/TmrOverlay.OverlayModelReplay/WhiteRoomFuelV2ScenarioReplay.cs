@@ -24,9 +24,12 @@ internal static class WhiteRoomFuelV2ScenarioReplay
         WriteIndented = false
     };
 
-    public static async Task RunAsync(OverlayModelReplayOptions options)
+    public static async Task RunAsync(
+        OverlayModelReplayOptions options,
+        ReplayContractProvenance? contractProvenance = null)
     {
         ArgumentNullException.ThrowIfNull(options);
+        contractProvenance ??= Program.InitializeRuntimeContracts();
         var fixturePath = options.WhiteRoomFixturePath
             ?? throw new ArgumentException("A white-room fixture path is required.");
         var fixture = FuelV2WhiteRoomFixture.Load(fixturePath);
@@ -156,6 +159,7 @@ internal static class WhiteRoomFuelV2ScenarioReplay
             emittedModelRows = emitted,
             fuelV2OverlayEnabled = true,
             fuelV2HistoryUseForStrategy = false,
+            contractProvenance,
             generatedAtUtc = DateTimeOffset.UtcNow
         };
         Directory.CreateDirectory(options.OutputDirectory);

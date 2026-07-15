@@ -3149,8 +3149,14 @@ frame, preventing an end-of-race artifact from leaking into a race-start view.
 Then pass its emitted `BrowserOverlayDisplayModel` rows to
 `tools/browser-review/render-model-replay-screenshots.mjs`. The replay records
 the enabled gate and sanitized staged-history provenance in both the run summary
-and each model row. No generated enabled-gate fixture is committed yet, so this
-capability is evidence plumbing, not completed browser-review parity.
+and each model row. It also initializes the same packaged shared contract as
+the app before settings/model construction, then records a run-level
+`contractProvenance` envelope: shared-contract/settings versions and source
+hash, plus geometry source/runtime hashes. The screenshot renderer copies that
+envelope into its renderer summary and each overlay screenshot manifest; it is
+validated as evidence, not repeated in every model row. No generated
+enabled-gate fixture is committed yet, so this capability is evidence plumbing,
+not completed browser-review parity.
 
 For interactive inspection of such an output, start the review server with
 `TMR_BROWSER_REVIEW_MODEL_REPLAY_ROOT=<forensics-output>` and open

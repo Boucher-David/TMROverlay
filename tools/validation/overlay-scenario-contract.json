@@ -1,7 +1,7 @@
 {
   "contract": "overlay-scenario-contract/v1",
   "tracker": "v1.2.md",
-  "updated": "2026-07-14",
+  "updated": "2026-07-15",
   "purpose": "Parseable matrix for overlay-specific screenshot, replay, and cross-surface parity scenarios. This is the planning contract for what each overlay must prove across browser review, localhost/OBS, Windows native, compact replay fixtures, and optional full-capture replay.",
   "productDescriptor": {
     "source": "src/TmrOverlay.Core/Overlays/OverlayBehaviorDescriptorCatalog.cs",
@@ -105,6 +105,27 @@
     {
       "id": "obs-readiness-classification",
       "description": "Telemetry-rich captures must classify each expected OBS overlay as not-requested, page-loaded-no-model, model-polled-hidden, model-rendered, or browser-source-error."
+    }
+  ],
+  "executionSuites": [
+    {
+      "id": "minimum-scale-rendered-manifests",
+      "runner": "screenshot-manifest/v1",
+      "scenarioIds": [
+        "standings-minimum-scale",
+        "relative-minimum-scale",
+        "fuel-minimum-scale",
+        "weather-minimum-scale",
+        "pit-minimum-scale",
+        "inputs-minimum-scale",
+        "radar-minimum-scale",
+        "gap-minimum-scale",
+        "track-map-minimum-scale",
+        "flags-minimum-scale",
+        "garage-cover-minimum-scale",
+        "stream-chat-minimum-scale"
+      ],
+      "expectedFixtureVariant": "min-scale"
     }
   ],
   "settingsScenarios": [

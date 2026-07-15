@@ -125,6 +125,25 @@ public sealed class FuelV2WhiteRoom24HourScenarioTests
                 Assert.False(provenance.GetProperty("rawTelemetry").GetBoolean());
                 Assert.False(provenance.GetProperty("fuelV2HistoryUseForStrategy").GetBoolean());
             }
+
+            using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "model-replay-result.json")));
+            var contractProvenance = summary.RootElement.GetProperty("contractProvenance");
+            Assert.Equal(1, contractProvenance.GetProperty("schemaVersion").GetInt32());
+            var shared = contractProvenance.GetProperty("shared");
+            Assert.True(shared.GetProperty("loaded").GetBoolean());
+            Assert.Equal("shared/tmr-overlay-contract.json", shared.GetProperty("sourceAsset").GetString());
+            Assert.Equal(1, shared.GetProperty("contractVersion").GetInt32());
+            Assert.Equal(11, shared.GetProperty("settingsVersion").GetInt32());
+            Assert.Equal(64, shared.GetProperty("sourceJsonSha256").GetString()!.Length);
+            Assert.False(shared.TryGetProperty("loadError", out _));
+
+            var geometry = contractProvenance.GetProperty("geometry");
+            Assert.Equal(
+                "src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json",
+                geometry.GetProperty("sourceAsset").GetString());
+            Assert.Equal(64, geometry.GetProperty("sourceJsonSha256").GetString()!.Length);
+            Assert.Equal(64, geometry.GetProperty("runtimeContractSha256").GetString()!.Length);
+            Assert.False(geometry.TryGetProperty("sourceError", out _));
         }
         finally
         {

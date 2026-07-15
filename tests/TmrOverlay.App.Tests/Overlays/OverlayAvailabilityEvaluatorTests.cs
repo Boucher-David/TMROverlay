@@ -507,7 +507,7 @@ public sealed class OverlayAvailabilityEvaluatorTests
         Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
             snapshot with { LatestSample = sample with { IsInGarage = true, IsOnTrack = false } }, now).IsAvailable);
         Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
-            snapshot with { Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = false, FuelLevelLiters = null } }, now).IsAvailable);
+            SnapshotWithoutAnyCurrentFuel(snapshot, sample), now).IsAvailable);
         Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
             snapshot with { LatestSample = sample with { FocusCarIdx = 1 } }, now).IsAvailable);
         Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
@@ -559,12 +559,12 @@ public sealed class OverlayAvailabilityEvaluatorTests
         Assert.False(missingSessionInfo.IsAvailable);
         Assert.Equal("current_fuel_telemetry_unavailable", missingSessionInfo.Reason);
 
-        var missingFuel = LiveLocalStrategyContext.ForFuelV2FactualDisplay(
-            snapshot with { Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = false, FuelLevelLiters = null } }, now);
+        var missingFuelSnapshot = SnapshotWithoutAnyCurrentFuel(snapshot, sample);
+        var missingFuel = LiveLocalStrategyContext.ForFuelV2FactualDisplay(missingFuelSnapshot, now);
         Assert.False(missingFuel.IsAvailable);
         Assert.Equal("fuel_level_unavailable", missingFuel.Reason);
         Assert.True(LiveLocalStrategyContext.ForFuelV2FactualLocalContext(
-            snapshot with { Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = false, FuelLevelLiters = null } }, now).IsAvailable);
+            missingFuelSnapshot, now).IsAvailable);
     }
 
     [Theory]
@@ -615,6 +615,24 @@ public sealed class OverlayAvailabilityEvaluatorTests
                     HasData = true,
                     SessionType = sessionType
                 }
+            }
+        };
+    }
+
+    private static LiveTelemetrySnapshot SnapshotWithoutAnyCurrentFuel(
+        LiveTelemetrySnapshot snapshot,
+        HistoricalTelemetrySample sample)
+    {
+        // CompleteModels intentionally derives normalized FuelPit.Fuel from
+        // the current raw scalar when the legacy Fuel snapshot is unavailable.
+        // A genuine no-fuel case must remove both representations.
+        return snapshot with
+        {
+            Fuel = LiveFuelSnapshot.Unavailable,
+            LatestSample = sample with
+            {
+                FuelLevelLiters = null,
+                FuelLevelPercent = null
             }
         };
     }

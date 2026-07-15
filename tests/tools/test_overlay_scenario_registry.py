@@ -108,6 +108,27 @@ class OverlayScenarioRegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(KeyError, "Unknown overlay scenario id"):
             registry.scenario_by_id(self.contract, "not-a-real-scenario")
 
+    def test_minimum_scale_execution_suite_resolves_all_supported_surface_artifacts(self):
+        cases = list(
+            registry.iter_execution_cases(
+                self.contract,
+                screenshots,
+                "minimum-scale-rendered-manifests",
+            )
+        )
+
+        self.assertEqual(35, len(cases))
+        self.assertEqual(
+            {"browserReview", "localhostObs", "windowsNative"},
+            {case.surface for case in cases},
+        )
+        self.assertEqual(
+            {"min-scale"},
+            {case.expected_fixture_variant for case in cases},
+        )
+        garage_cases = [case for case in cases if case.overlay_id == "garage-cover"]
+        self.assertEqual({"browserReview", "localhostObs"}, {case.surface for case in garage_cases})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -118,7 +118,12 @@ Replay consumers must keep these constraints:
   fixtures, diagnostics bundles, and ordinary screenshot artifacts
 - record replay provenance in derived artifacts: capture id, source files,
   sample plan, frame index, session time, session tick, session-info update,
-  session-info match source, model source, focused car, and renderer surface
+  session-info match source, model source, focused car, and renderer surface;
+  production model-replay run summaries and renderer manifests also record one
+  run-level static-contract envelope (shared-contract version/settings version
+  plus shared JSON hash, and geometry source/runtime hashes). Keep that
+  envelope out of individual model rows so it explains the run without
+  duplicating static metadata or local absolute paths.
 - treat `latest-session.yaml` fallback for missing historical snapshots as
   degraded provenance, because early frames may be interpreted with later
   session metadata

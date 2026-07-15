@@ -45,7 +45,8 @@ public sealed class BrowserOverlayModelFactoryTests
             ResolvedBaselineHistoryRoot = Path.Combine(Path.GetTempPath(), "tmr-overlay-test-baseline-history")
         }));
         var settings = new ApplicationSettings();
-        EnableOverlay(settings, "fuel-calculator");
+        var fuelSettings = EnableOverlay(settings, "fuel-calculator");
+        fuelSettings.ShowInPractice = false;
         var now = DateTimeOffset.Parse("2026-05-13T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
 
         var built = factory.TryBuild("fuel-calculator", LiveTelemetrySnapshot.Empty, settings, now, out var response);
@@ -60,6 +61,7 @@ public sealed class BrowserOverlayModelFactoryTests
         Assert.Equal("fuel-calculator", effectiveSettings!.OverlayId);
         Assert.Equal("off", effectiveSettings.PreviewMode);
         Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "overlayEnabled" && Equals(setting.Value, true));
+        Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "session.off.allowed" && Equals(setting.Value, true));
         Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "general.unitSystem" && Equals(setting.Value, "Metric"));
         Assert.Contains(effectiveSettings.Settings, setting => setting.Key == "scalePercent" && Equals(setting.Value, 100));
         Assert.Equal(FuelCalculatorOverlayDefinition.Definition.DefaultWidth, effectiveSettings.Rendered.BrowserSource.BaseWidth);

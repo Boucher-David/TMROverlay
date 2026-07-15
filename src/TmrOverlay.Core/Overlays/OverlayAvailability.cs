@@ -144,6 +144,9 @@ internal static class OverlayAvailabilityEvaluator
         OverlaySettings settings,
         OverlaySessionKind? sessionKind)
     {
+        // These persisted fields predate descriptor-owned session behavior.
+        // Retain them for compatible settings reads, but do not let them
+        // silently diverge the native, browser, and localhost render paths.
         return true;
     }
 
@@ -176,5 +179,43 @@ internal static class OverlayAvailabilityEvaluator
         return lastUpdatedAtUtc is null
             ? null
             : (now - lastUpdatedAtUtc.Value).TotalSeconds;
+    }
+}
+
+internal static class OverlaySessionPolicyEvaluator
+{
+    public static bool IsAllowed(string overlayId, OverlaySessionKind? sessionKind)
+    {
+        if (!OverlayBehaviorDescriptorCatalog.TryGet(overlayId, out var descriptor))
+        {
+            return true;
+        }
+
+        return descriptor.SessionPolicy switch
+        {
+            OverlaySessionPolicy.RaceOnly =>
+                OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) == OverlaySessionKind.Race,
+            OverlaySessionPolicy.KnownSessionRequired => sessionKind is not null,
+            OverlaySessionPolicy.QualifyingUnsupported =>
+                OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) != OverlaySessionKind.Qualifying,
+            _ => true
+        };
+    }
+
+    public static string? HiddenStatus(string overlayId, OverlaySessionKind? sessionKind)
+    {
+        if (IsAllowed(overlayId, sessionKind)
+            || !OverlayBehaviorDescriptorCatalog.TryGet(overlayId, out var descriptor))
+        {
+            return null;
+        }
+
+        return descriptor.SessionPolicy switch
+        {
+            OverlaySessionPolicy.RaceOnly => "race only",
+            OverlaySessionPolicy.KnownSessionRequired => "waiting for session",
+            OverlaySessionPolicy.QualifyingUnsupported => "qualifying unsupported",
+            _ => "session unavailable"
+        };
     }
 }

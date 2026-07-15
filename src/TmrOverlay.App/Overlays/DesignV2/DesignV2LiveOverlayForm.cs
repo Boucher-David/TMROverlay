@@ -708,6 +708,20 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             otherClassRowsPerClass: otherRows,
             showClassSeparators: showClassSeparators);
         var visibleColumns = OverlayContentColumnSettings.VisibleColumnsFor(_settings, OverlayContentColumnSettings.Standings, sessionKind);
+        var table = StandingsTableBodyFrom(viewModel, visibleColumns);
+        return new DesignV2OverlayModel(
+            "Standings",
+            viewModel.Status,
+            viewModel.Source,
+            table.Rows.Count == 0 ? DesignV2Evidence.Unavailable : DesignV2Evidence.Measured,
+            table,
+            ShouldRender: ShouldRenderStandingsTable(table.Columns.Count, table.Rows.Count, showHeader || showFooter));
+    }
+
+    internal static DesignV2TableBody StandingsTableBodyFrom(
+        StandingsOverlayViewModel viewModel,
+        IReadOnlyList<OverlayContentColumnState> visibleColumns)
+    {
         var rows = viewModel.Rows.Select(row => new DesignV2TableRow(
             ValuesForStandingsRow(row, visibleColumns),
             row.IsReference,
@@ -716,19 +730,16 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             row.CarClassColorHex,
             row.IsClassHeader ? row.Driver : string.Empty,
             row.IsClassHeader ? ClassHeaderDetail(row) : string.Empty,
-            CellForegrounds: CellForegroundsForStandingsRow(row, visibleColumns))).ToArray();
+            CellForegrounds: CellForegroundsForStandingsRow(row, visibleColumns),
+            IsPit: !string.IsNullOrWhiteSpace(row.Pit),
+            IsPendingGrid: row.IsPendingGrid,
+            CellTones: CellTonesForStandingsRow(row, visibleColumns))).ToArray();
         var columns = rows.Length > 0
             ? visibleColumns
                 .Select(column => new DesignV2Column(column.Label, column.Width, AlignmentFor(column.Alignment)))
                 .ToArray()
             : [];
-        return new DesignV2OverlayModel(
-            "Standings",
-            viewModel.Status,
-            viewModel.Source,
-            rows.Length == 0 ? DesignV2Evidence.Unavailable : DesignV2Evidence.Measured,
-            new DesignV2TableBody(columns, rows),
-            ShouldRender: ShouldRenderStandingsTable(columns.Length, rows.Length, showHeader || showFooter));
+        return new DesignV2TableBody(columns, rows);
     }
 
     internal static bool ShouldRenderStandingsTable(int columnCount, int rowCount, bool hasChrome)
@@ -783,8 +794,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     {
         var valuesByKey = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [OverlayContentColumnSettings.DataClassPosition] = row.ClassPosition,
-            [OverlayContentColumnSettings.DataCarNumber] = row.CarNumber,
+            [OverlayContentColumnSettings.DataClassPosition] = row.IsClassHeader ? string.Empty : row.ClassPosition,
+            [OverlayContentColumnSettings.DataCarNumber] = row.IsClassHeader ? string.Empty : row.CarNumber,
             [OverlayContentColumnSettings.DataDriver] = row.Driver,
             [OverlayContentColumnSettings.DataGap] = row.Gap,
             [OverlayContentColumnSettings.DataInterval] = row.Interval,
@@ -811,6 +822,25 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
                 return IsRecentCarBestLapCell(row, column.DataKey)
                     ? ColorRgbHex(Green)
+                    : null;
+            })
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string?> CellTonesForStandingsRow(
+        StandingsOverlayRowViewModel row,
+        IReadOnlyList<OverlayContentColumnState> visibleColumns)
+    {
+        return visibleColumns
+            .Select(column =>
+            {
+                if (IsClassFastestLapCell(row, column.DataKey))
+                {
+                    return "best-lap";
+                }
+
+                return IsRecentCarBestLapCell(row, column.DataKey)
+                    ? "personal-best"
                     : null;
             })
             .ToArray();
@@ -873,12 +903,28 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             carsEachSide,
             carsEachSide);
         var visibleColumns = OverlayContentColumnSettings.VisibleColumnsFor(_settings, OverlayContentColumnSettings.Relative, sessionKind);
+        var table = RelativeTableBodyFrom(viewModel, visibleColumns, carsEachSide, carsEachSide);
+        return new DesignV2OverlayModel(
+            "Relative",
+            viewModel.Status,
+            viewModel.Source,
+            table.Rows.Count == 0 ? DesignV2Evidence.Unavailable : DesignV2Evidence.Live,
+            table,
+            ShouldRender: table.Columns.Count > 0 && table.Rows.Count > 0);
+    }
+
+    internal static DesignV2TableBody RelativeTableBodyFrom(
+        RelativeOverlayViewModel viewModel,
+        IReadOnlyList<OverlayContentColumnState> visibleColumns,
+        int carsAhead,
+        int carsBehind)
+    {
         var columns = visibleColumns
             .Select(column => new DesignV2Column(column.Label, column.Width, AlignmentFor(column.Alignment)))
             .ToArray();
         var rows = (viewModel.Rows.Count == 0
                 ? []
-                : StableRelativeRows(viewModel, carsEachSide, carsEachSide))
+                : StableRelativeRows(viewModel, carsAhead, carsBehind))
             .Select(row => row is null
                 ? BlankTableRow(columns.Length)
                 : new DesignV2TableRow(
@@ -887,20 +933,15 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                     IsClassHeader: false,
                     row.IsPartial ? DesignV2Evidence.Partial : DesignV2Evidence.Measured,
                     row.ClassColorHex,
-                    RelativeLapDelta: row.LapDeltaToReference))
+                    RelativeLapDelta: row.LapDeltaToReference,
+                    IsPit: row.IsPit))
             .ToArray();
-        return new DesignV2OverlayModel(
-            "Relative",
-            viewModel.Status,
-            viewModel.Source,
-            rows.Length == 0 ? DesignV2Evidence.Unavailable : DesignV2Evidence.Live,
-            new DesignV2TableBody(
-                columns,
-                rows,
-                RowHeight: RelativeTableRowHeight,
-                PlaceholderRowHeight: RelativeTableRowHeight,
-                FadePlaceholderRows: true),
-            ShouldRender: columns.Length > 0 && rows.Length > 0);
+        return new DesignV2TableBody(
+            columns,
+            rows,
+            RowHeight: RelativeTableRowHeight,
+            PlaceholderRowHeight: RelativeTableRowHeight,
+            FadePlaceholderRows: true);
     }
 
     internal static IReadOnlyList<RelativeOverlayRowViewModel?> StableRelativeRows(
@@ -918,7 +959,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             IsReference: false,
             IsClassHeader: false,
             DesignV2Evidence.Unavailable,
-            ClassColorHex: null);
+            ClassColorHex: null,
+            IsPlaceholder: true);
     }
 
     private static IReadOnlyList<string> ValuesForRelativeRow(
@@ -1002,32 +1044,37 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             inputModel.Status,
             inputModel.Source,
             EvidenceFor(inputModel.Tone),
-            new DesignV2InputsBody(
-                inputModel.Throttle,
-                inputModel.Brake,
-                inputModel.Clutch,
-                inputModel.SteeringWheelAngle,
-                inputModel.SpeedMetersPerSecond,
-                inputModel.Gear,
-                inputModel.SpeedText,
-                inputModel.GearText,
-                inputModel.SteeringText,
-                inputModel.BrakeAbsActive,
-                inputModel.ShowThrottleTrace,
-                inputModel.ShowBrakeTrace,
-                inputModel.ShowClutchTrace,
-                inputModel.IsAvailable,
-                inputModel.ShowThrottle,
-                inputModel.ShowBrake,
-                inputModel.ShowClutch,
-                inputModel.ShowSteering,
-                inputModel.ShowGear,
-                inputModel.ShowSpeed,
-                inputModel.HasGraph,
-                inputModel.HasRail,
-                inputModel.HasContent,
-                inputModel.Trace),
+            InputsBodyFrom(inputModel),
             ShouldRender: inputModel.HasContent);
+    }
+
+    internal static DesignV2InputsBody InputsBodyFrom(InputStateRenderModel inputModel)
+    {
+        return new DesignV2InputsBody(
+            inputModel.Throttle,
+            inputModel.Brake,
+            inputModel.Clutch,
+            inputModel.SteeringWheelAngle,
+            inputModel.SpeedMetersPerSecond,
+            inputModel.Gear,
+            inputModel.SpeedText,
+            inputModel.GearText,
+            inputModel.SteeringText,
+            inputModel.BrakeAbsActive,
+            inputModel.ShowThrottleTrace,
+            inputModel.ShowBrakeTrace,
+            inputModel.ShowClutchTrace,
+            inputModel.IsAvailable,
+            inputModel.ShowThrottle,
+            inputModel.ShowBrake,
+            inputModel.ShowClutch,
+            inputModel.ShowSteering,
+            inputModel.ShowGear,
+            inputModel.ShowSpeed,
+            inputModel.HasGraph,
+            inputModel.HasRail,
+            inputModel.HasContent,
+            inputModel.Trace);
     }
 
     private DesignV2OverlayModel BuildRadarModel(LiveTelemetrySnapshot snapshot, DateTimeOffset now)
@@ -3764,7 +3811,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             rows.Add(new DesignV2LayoutRow(
                 drawnRows,
                 sourceIndex,
-                row.IsReference ? "reference" : "row",
+                TableRowKind(row),
                 LayoutRect(rowRect))
             {
                 Cells = cells,
@@ -3792,6 +3839,16 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private static Color TableRowFillColor(DesignV2TableBody table, DesignV2TableRow row)
     {
+        if (row.IsPendingGrid)
+        {
+            return Blend(SurfaceRaised, TextMuted, 20, 1);
+        }
+
+        if (row.IsPit && !row.IsReference)
+        {
+            return Blend(SurfaceRaised, Amber, 26, 1);
+        }
+
         if (row.Evidence == DesignV2Evidence.Unavailable)
         {
             return table.FadePlaceholderRows ? Color.FromArgb(22, TextMuted) : SurfaceInset;
@@ -5359,13 +5416,19 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private static bool IsPlaceholderTableRow(DesignV2TableRow row)
     {
-        return !row.IsClassHeader
-            && row.Evidence == DesignV2Evidence.Unavailable
-            && row.Values.All(string.IsNullOrWhiteSpace);
+        return row.IsPlaceholder
+            || (!row.IsClassHeader
+                && row.Evidence == DesignV2Evidence.Unavailable
+                && row.Values.All(string.IsNullOrWhiteSpace));
     }
 
     private static Color TableTextColor(DesignV2TableBody table, DesignV2TableRow row)
     {
+        if (row.IsPendingGrid || (row.IsPit && !row.IsReference))
+        {
+            return TextMuted;
+        }
+
         if (row.Evidence == DesignV2Evidence.Unavailable)
         {
             return table.FadePlaceholderRows ? Color.FromArgb(92, TextMuted) : TextMuted;
@@ -5388,6 +5451,21 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private static Color TableCellTextColor(DesignV2TableRow row, int columnIndex, Color rowTextColor)
     {
+        var tone = row.CellTones is not null
+            && columnIndex >= 0
+            && columnIndex < row.CellTones.Count
+            ? row.CellTones[columnIndex]
+            : null;
+        if (string.Equals(tone, "best-lap", StringComparison.OrdinalIgnoreCase))
+        {
+            return BestLapSectorColor;
+        }
+
+        if (string.Equals(tone, "personal-best", StringComparison.OrdinalIgnoreCase))
+        {
+            return Green;
+        }
+
         if (row.CellForegrounds is not null
             && columnIndex >= 0
             && columnIndex < row.CellForegrounds.Count
@@ -5397,6 +5475,26 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         }
 
         return row.IsReference ? TextPrimary : rowTextColor;
+    }
+
+    private static string TableRowKind(DesignV2TableRow row)
+    {
+        if (row.IsPendingGrid)
+        {
+            return "pending-grid";
+        }
+
+        if (row.IsPit && !row.IsReference)
+        {
+            return "pit";
+        }
+
+        if (row.IsPlaceholder)
+        {
+            return "placeholder";
+        }
+
+        return row.IsReference ? "reference" : "row";
     }
 
     private void DrawMetricRows(
@@ -10013,7 +10111,11 @@ internal sealed record DesignV2TableRow(
     string ClassHeaderTitle = "",
     string ClassHeaderDetail = "",
     int? RelativeLapDelta = null,
-    IReadOnlyList<string?>? CellForegrounds = null);
+    IReadOnlyList<string?>? CellForegrounds = null,
+    bool IsPit = false,
+    bool IsPendingGrid = false,
+    bool IsPlaceholder = false,
+    IReadOnlyList<string?>? CellTones = null);
 
 internal sealed record DesignV2MetricRow(
     string Label,

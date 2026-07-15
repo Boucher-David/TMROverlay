@@ -13,24 +13,24 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.2.3 - Fuel V2 Capture And History Diagnostics
+### v1.2.4 - Overlay Visibility And Renderer Parity Stability
 
-Status: active implementation on branch `release/v1.2.3`.
+Status: active implementation on branch `v1.2.4`.
 
 Suggested squash title:
 
 ```text
-[v1.2.3] Add Fuel V2 capture and history diagnostics
+[v1.2.4] Stabilize overlay visibility and renderer parity
 ```
 
 Suggested squash body:
 
 ```text
-- Add Fuel V2 capture recorder/options plumbing so enhanced telemetry capture can persist versioned fuel-history artifacts alongside diagnostics and forensics packages.
-- Add Fuel V2 history store/importer models and retention integration so captured fuel-history snapshots can be read, packaged, and maintained through app-managed storage.
-- Document the new artifacts and schema flow across the README, capture/data-contract/history docs, diagnostics notes, and telemetry references.
-- Add focused app tests for Fuel V2 capture options/recording, history import/storage behavior, retention handling, diagnostics bundle packaging, and schema compatibility ordering.
-- User-data compatibility: the Fuel V2 history schema is additive and versioned with compatibility coverage; existing released raw-capture and history flows are intended to remain readable.
+- Centralize the descriptor-owned session visibility rules used by Windows native, localhost/OBS, browser review, and diagnostics, while retaining legacy persisted `ShowIn*` settings as compatible no-op data.
+- Fix browser-review session-content precedence, stale Track Map clearing after an unavailable poll, missing shared geometry variables, and Fuel's blank-header height drift across native and browser surfaces.
+- Preserve browser-visible Standings and Relative row semantics in the native table adapter, including pit rows, pending-grid rows, placeholder slots, and fastest-lap tones.
+- Add focused session-policy, renderer-contract, and native adapter tests; update scenario evidence and settings/Gap logic documentation.
+- User-data compatibility: no durable user-data or raw-capture format changes. Existing settings remain readable without a migration.
 ```
 
 ## Merged Mainline Milestones

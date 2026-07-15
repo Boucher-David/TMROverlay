@@ -7,6 +7,10 @@ import { freshLiveSnapshot, renderBrowserOverlay, waitFor } from './browserOverl
 let currentOverlay;
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const sharedContract = JSON.parse(readFileSync(resolve(repoRoot, 'shared/tmr-overlay-contract.json'), 'utf8'));
+const overlayGeometry = JSON.parse(readFileSync(
+  resolve(repoRoot, 'src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json'),
+  'utf8'
+));
 
 afterEach(() => {
   currentOverlay?.close();
@@ -31,6 +35,8 @@ describe('browser overlay shell', () => {
     expect(styleText).toContain(`--tmr-magenta: ${cssColor(sharedContract.design.v2.colors.magenta)};`);
     expect(styleText).toContain(`--tmr-amber: ${cssColor(sharedContract.design.v2.colors.amber)};`);
     expect(styleText).toContain(`--tmr-surface: ${cssColor(sharedContract.design.v2.colors.surface)};`);
+    expect(styleText).toContain(`--tmr-metric-row-border-width: ${overlayGeometry.metricRows.rowBorderWidth}px;`);
+    expect(styleText).toContain(`--tmr-metric-value-divider-width: ${overlayGeometry.metricRows.valueDividerWidth}px;`);
   });
 
   it('uses model renderability for unavailable telemetry states', async () => {
@@ -438,6 +444,61 @@ describe('browser overlay shell', () => {
     expect(currentOverlay.browserSourceEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({ event: 'model-error', overlayId: 'garage-cover' }),
       expect.objectContaining({ event: 'model-hidden', overlayId: 'garage-cover', shouldRender: null })
+    ]));
+  });
+
+  it('clears a stale Track Map while a model refresh fails, then restores it', async () => {
+    let failModelFetch = false;
+    const trackMapModel = {
+      overlayId: 'track-map',
+      title: 'Track Map',
+      status: 'live track map',
+      source: '',
+      bodyKind: 'track-map',
+      columns: [],
+      rows: [],
+      metrics: [],
+      points: [],
+      headerItems: [],
+      shouldRender: true,
+      trackMap: {
+        renderModel: {
+          width: 360,
+          height: 360,
+          primitives: [
+            {
+              kind: 'line',
+              points: [{ x: 10, y: 10 }, { x: 350, y: 350 }],
+              stroke: '#ffffff',
+              strokeWidth: 2
+            }
+          ],
+          markers: []
+        }
+      }
+    };
+    currentOverlay = await renderBrowserOverlay('track-map', {
+      live: freshLiveSnapshot({}),
+      model: () => trackMapModel,
+      failModelFetch: () => failModelFetch,
+      waitForSelector: 'svg'
+    });
+
+    expect(currentOverlay.document.querySelector('.overlay').style.opacity).toBe('1');
+    expect(currentOverlay.document.querySelector('svg')).not.toBeNull();
+
+    failModelFetch = true;
+    await waitFor(() => currentOverlay.document.querySelector('.overlay').style.opacity === '0');
+    expect(currentOverlay.document.getElementById('content').textContent).toBe('');
+    expect(currentOverlay.document.querySelector('svg')).toBeNull();
+
+    failModelFetch = false;
+    await waitFor(() => currentOverlay.document.querySelector('.overlay').style.opacity === '1');
+    expect(currentOverlay.document.querySelector('svg')).not.toBeNull();
+    expect(currentOverlay.browserSourceEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: 'model-error', overlayId: 'track-map' }),
+      expect.objectContaining({ event: 'model-hidden', overlayId: 'track-map', shouldRender: false }),
+      expect.objectContaining({ event: 'model-render', overlayId: 'track-map', shouldRender: true })
     ]));
   });
 });

@@ -14,7 +14,7 @@ internal static class OverlayBehaviorDescriptorCatalog
             ChromePolicy: OverlayChromePolicy.HeaderFooterConfigurable,
             SizingPolicy: OverlaySizingPolicy.ContractGeometry,
             ScalePolicy: OverlayScalePolicy.VisualScale,
-            SessionPolicy: OverlaySessionPolicy.SettingsSessionFilters,
+            SessionPolicy: OverlaySessionPolicy.AllSessions,
             ObsReadinessPolicy: OverlayObsReadinessPolicy.RouteAndModelExpected,
             EvidenceFields: ["rowIdentities", "columnKeys", "classHeaders", "referenceRow"]),
         new(
@@ -27,7 +27,7 @@ internal static class OverlayBehaviorDescriptorCatalog
             ChromePolicy: OverlayChromePolicy.HeaderFooterConfigurable,
             SizingPolicy: OverlaySizingPolicy.ContractGeometry,
             ScalePolicy: OverlayScalePolicy.VisualScale,
-            SessionPolicy: OverlaySessionPolicy.SettingsSessionFilters,
+            SessionPolicy: OverlaySessionPolicy.QualifyingUnsupported,
             ObsReadinessPolicy: OverlayObsReadinessPolicy.RouteAndModelExpected,
             EvidenceFields: ["rowIdentities", "gapText", "lapRelationship", "referenceRow"]),
         new(
@@ -53,7 +53,7 @@ internal static class OverlayBehaviorDescriptorCatalog
             ChromePolicy: OverlayChromePolicy.HeaderFooterConfigurable,
             SizingPolicy: OverlaySizingPolicy.ContractGeometry,
             ScalePolicy: OverlayScalePolicy.VisualScale,
-            SessionPolicy: OverlaySessionPolicy.SettingsSessionFilters,
+            SessionPolicy: OverlaySessionPolicy.AllSessions,
             ObsReadinessPolicy: OverlayObsReadinessPolicy.RouteAndModelExpected,
             EvidenceFields: ["metricSections", "sessionState", "weatherSource"]),
         new(
@@ -105,7 +105,7 @@ internal static class OverlayBehaviorDescriptorCatalog
             ChromePolicy: OverlayChromePolicy.HeaderFooterConfigurable,
             SizingPolicy: OverlaySizingPolicy.ContractGeometry,
             ScalePolicy: OverlayScalePolicy.VisualScale,
-            SessionPolicy: OverlaySessionPolicy.AllSessions,
+            SessionPolicy: OverlaySessionPolicy.RaceOnly,
             ObsReadinessPolicy: OverlayObsReadinessPolicy.RouteAndModelExpected,
             EvidenceFields: ["rowIdentities", "seriesBounds", "sourceCadence", "focusedCar"]),
         new(
@@ -118,7 +118,7 @@ internal static class OverlayBehaviorDescriptorCatalog
             ChromePolicy: OverlayChromePolicy.ContentOnly,
             SizingPolicy: OverlaySizingPolicy.FixedCanvas,
             ScalePolicy: OverlayScalePolicy.VisualScale,
-            SessionPolicy: OverlaySessionPolicy.SettingsSessionFilters,
+            SessionPolicy: OverlaySessionPolicy.AllSessions,
             ObsReadinessPolicy: OverlayObsReadinessPolicy.RouteAndModelExpected,
             EvidenceFields: ["markerIds", "focusCar", "mapSource", "vectorBounds"]),
         new(
@@ -131,7 +131,7 @@ internal static class OverlayBehaviorDescriptorCatalog
             ChromePolicy: OverlayChromePolicy.ContentOnly,
             SizingPolicy: OverlaySizingPolicy.ContractGeometry,
             ScalePolicy: OverlayScalePolicy.VisualScale,
-            SessionPolicy: OverlaySessionPolicy.AllSessions,
+            SessionPolicy: OverlaySessionPolicy.KnownSessionRequired,
             ObsReadinessPolicy: OverlayObsReadinessPolicy.RouteAndModelExpected,
             EvidenceFields: ["flagCategories", "activeFlags", "localFlagEvidence"]),
         new(

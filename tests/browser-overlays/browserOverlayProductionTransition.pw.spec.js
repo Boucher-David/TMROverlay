@@ -19,12 +19,6 @@ test.describe('browser overlay visible-hidden-visible renderer protocol', () => 
       const models = transitionModels(pageDefinition);
       let modelRequestCount = 0;
       let phase = 'visible';
-      let beginHidden = false;
-      // Inputs refreshes every 50 ms, so retain the hidden state long enough
-      // to observe all cleared DOM/opacity assertions before restoration. The
-      // radar and map use similarly fast production refresh intervals.
-      const fastPollingOverlay = ['input-state', 'car-radar', 'track-map'].includes(overlayId);
-      let hiddenResponsesRemaining = fastPollingOverlay ? 20 : 5;
 
       await page.route('**/*', async (route) => {
         const url = new URL(route.request().url());
@@ -38,19 +32,12 @@ test.describe('browser overlay visible-hidden-visible renderer protocol', () => 
         }
 
         if (url.hostname === 'localhost' && url.pathname === pageDefinition.modelRoute) {
-          if (beginHidden && phase === 'visible') {
-            phase = 'hidden';
-          }
           const model = phase === 'visible'
             ? models[0]
             : phase === 'hidden'
               ? models[1]
               : models[2];
           modelRequestCount += 1;
-          if (phase === 'hidden') {
-            hiddenResponsesRemaining -= 1;
-            if (hiddenResponsesRemaining <= 0) phase = 'restored';
-          }
           await route.fulfill({
             status: 200,
             contentType: 'application/json; charset=utf-8',
@@ -93,20 +80,23 @@ test.describe('browser overlay visible-hidden-visible renderer protocol', () => 
         window.getComputedStyle(element).opacity
       ), { timeout: 3500 }).toBe('1');
 
-      beginHidden = true;
+      // Keep each phase explicit. Production refresh intervals range from
+      // 50–250 ms, so response-count transitions can restore before the test
+      // has observed the intended cleared-DOM state under CI load.
+      phase = 'hidden';
       await expect(page.locator('.header-items')).toBeEmpty({ timeout: 3500 });
       await expect(page.locator('#content')).toBeEmpty();
       await expect.poll(async () => page.locator('.overlay').evaluate((element) =>
         window.getComputedStyle(element).opacity
       ), { timeout: 3500 }).toBe('0');
 
+      phase = 'restored';
       await expect(page.locator('.header-items')).toContainText('transition-restored', { timeout: 3500 });
       await expectRenderedBody(page, overlayId, 'transition-restored');
       await expect.poll(async () => page.locator('.overlay').evaluate((element) =>
         window.getComputedStyle(element).opacity
       ), { timeout: 3500 }).toBe('1');
-      expect(modelRequestCount, `${overlayId} should keep polling after a hidden model`).toBeGreaterThanOrEqual(
-        fastPollingOverlay ? 22 : 7);
+      expect(modelRequestCount, `${overlayId} should keep polling after a hidden model`).toBeGreaterThanOrEqual(3);
     });
   }
 });

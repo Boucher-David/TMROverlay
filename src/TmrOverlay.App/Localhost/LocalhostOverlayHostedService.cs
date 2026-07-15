@@ -40,6 +40,8 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
     private readonly AppPerformanceState _performanceState;
     private readonly ILogger<LocalhostOverlayHostedService> _logger;
     private readonly LocalhostSnapshotResponseCache _snapshotResponseCache = new(JsonOptions);
+    private readonly object _requestTasksSync = new();
+    private readonly HashSet<Task> _requestTasks = [];
     private CancellationTokenSource? _cancellation;
     private HttpListener? _listener;
     private Task? _listenerTask;
@@ -133,6 +135,12 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
             }
         }
 
+        // A response can reach the client before its request task has run its
+        // final diagnostics/event bookkeeping. Wait for those tasks before
+        // reporting the service stopped so callers may safely dispose the
+        // storage root immediately after StopAsync returns.
+        await WaitForRequestTasksAsync(cancellationToken).ConfigureAwait(false);
+
         _state.RecordStopped();
         if (_options.Enabled)
         {
@@ -158,7 +166,54 @@ internal sealed class LocalhostOverlayHostedService : IHostedService
                 break;
             }
 
-            _ = Task.Run(() => RunRequestAsync(context, cancellationToken), CancellationToken.None);
+            TrackRequestTask(context, cancellationToken);
+        }
+    }
+
+    private void TrackRequestTask(HttpListenerContext context, CancellationToken cancellationToken)
+    {
+        Task requestTask;
+        lock (_requestTasksSync)
+        {
+            requestTask = Task.Run(() => RunRequestAsync(context, cancellationToken), CancellationToken.None);
+            _requestTasks.Add(requestTask);
+        }
+
+        _ = requestTask.ContinueWith(
+            completed =>
+            {
+                lock (_requestTasksSync)
+                {
+                    _requestTasks.Remove(completed);
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    private async Task WaitForRequestTasksAsync(CancellationToken cancellationToken)
+    {
+        Task[] requestTasks;
+        lock (_requestTasksSync)
+        {
+            requestTasks = [.. _requestTasks];
+        }
+
+        if (requestTasks.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await Task.WhenAll(requestTasks).WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Host shutdown may impose a cancellation deadline. Request tasks
+            // still receive the service cancellation above and will complete
+            // their own response/event cleanup as promptly as possible.
         }
     }
 

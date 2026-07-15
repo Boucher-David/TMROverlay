@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,19 @@ from typing import Iterator
 
 DEFAULT_CONTRACT_PATH = Path(__file__).with_name("overlay-scenario-contract.json")
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def canonical_text_sha256(path: Path) -> str:
+    """Hash tracked text independently of checkout newline conversion.
+
+    Scenario reports are produced on Windows and compared in a Linux job. Git
+    may materialize the same JSON contract with CRLF on Windows, so raw-byte
+    hashes describe the checkout rather than the contract. Binary screenshot
+    manifests intentionally retain byte-exact hashing in their own runners.
+    """
+    text = path.read_text(encoding="utf-8")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 SCENARIO_VALIDATOR_HOOKS: dict[str, tuple[str, ...]] = {
     "garage-cover-live-eligibility": (

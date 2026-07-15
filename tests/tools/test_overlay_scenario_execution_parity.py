@@ -20,7 +20,7 @@ class OverlayScenarioExecutionParityTests(unittest.TestCase):
 
     def write_reports(self, root: Path):
         contract_path = registry.DEFAULT_CONTRACT_PATH
-        contract_hash = hashlib.sha256(contract_path.read_bytes()).hexdigest()
+        contract_hash = registry.canonical_text_sha256(contract_path)
         cases = list(registry.iter_execution_cases(
             registry.load_contract(contract_path), screenshots, self.suite_id))
         roots = {
@@ -79,6 +79,29 @@ class OverlayScenarioExecutionParityTests(unittest.TestCase):
             roots = self.write_reports(Path(directory))
             errors = parity.compare(
                 roots["browserReview"], roots["localhostObs"], roots["windowsNative"], self.suite_id)
+
+        self.assertEqual([], errors)
+
+    def test_contract_provenance_is_invariant_to_windows_newlines(self):
+        with tempfile.TemporaryDirectory() as directory:
+            contract_path = Path(directory) / "overlay-scenario-contract.json"
+            source = registry.DEFAULT_CONTRACT_PATH.read_text(encoding="utf-8")
+            contract_path.write_bytes(source.replace("\n", "\r\n").encode("utf-8"))
+
+            self.assertNotEqual(
+                hashlib.sha256(registry.DEFAULT_CONTRACT_PATH.read_bytes()).hexdigest(),
+                hashlib.sha256(contract_path.read_bytes()).hexdigest())
+            self.assertEqual(
+                registry.canonical_text_sha256(registry.DEFAULT_CONTRACT_PATH),
+                registry.canonical_text_sha256(contract_path))
+
+            roots = self.write_reports(Path(directory) / "reports")
+            errors = parity.compare(
+                roots["browserReview"],
+                roots["localhostObs"],
+                roots["windowsNative"],
+                self.suite_id,
+                contract_path=contract_path)
 
         self.assertEqual([], errors)
 

@@ -152,7 +152,7 @@ def execute(
         "surface": surface,
         "suite": suite,
         "contractPath": contract_path.relative_to(REPO_ROOT).as_posix(),
-        "contractSha256": sha256_file(contract_path),
+        "contractSha256": registry.canonical_text_sha256(contract_path),
         "manifestPath": manifest_path.name,
         "manifestSha256": sha256_file(manifest_path),
         "caseSetSha256": hashlib.sha256(

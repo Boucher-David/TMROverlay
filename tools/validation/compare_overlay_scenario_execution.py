@@ -153,7 +153,7 @@ def compare(
 ) -> list[str]:
     contract = registry.load_contract(contract_path)
     expected = expected_results(contract, suite)
-    expected_contract_hash = sha256_file(contract_path)
+    expected_contract_hash = registry.canonical_text_sha256(contract_path)
     roots = {
         "browserReview": browser_root,
         "localhostObs": localhost_root,

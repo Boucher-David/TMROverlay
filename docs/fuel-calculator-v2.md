@@ -21,7 +21,7 @@ derived facts into `history/user/fuel-v2/` while
 `FuelV2History:UseForStrategy=false`.
 
 This makes teammate builds useful for model calibration before Fuel V2 is a
-user-facing strategy path. The V1.3 Fuel V2 calculator/workbench branch should
+user-facing strategy path. The V1.4 Fuel V2 calculator/workbench branch should
 compare its parked top-half models against these sidecars and learned summaries:
 scope/provenance, fuel-cap facts, accepted and rejected lap-burn windows,
 sector-burn samples, pit/service windows, team stint shape, lap-budget

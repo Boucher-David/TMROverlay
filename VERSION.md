@@ -13,24 +13,24 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.2.4 - Overlay Visibility And Renderer Parity Stability
+### v1.3 - Overlay Bridge Developer Foundation
 
-Status: active implementation on branch `v1.2.4`.
+Status: active implementation on branch `v1.3-overlay-bridge`.
 
 Suggested squash title:
 
 ```text
-[v1.2.4] Stabilize overlay visibility and renderer parity
+[v1.3] Build Overlay Bridge developer foundation
 ```
 
 Suggested squash body:
 
 ```text
-- Centralize the descriptor-owned session visibility rules used by Windows native, localhost/OBS, browser review, and diagnostics, while retaining legacy persisted `ShowIn*` settings as compatible no-op data.
-- Fix browser-review session-content precedence, stale Track Map clearing after an unavailable poll, missing shared geometry variables, and Fuel's blank-header height drift across native and browser surfaces.
-- Preserve browser-visible Standings and Relative row semantics in the native table adapter, including pit rows, pending-grid rows, placeholder slots, and fastest-lap tones.
-- Add focused session-policy, renderer-contract, and native adapter tests; update scenario evidence and settings/Gap logic documentation.
-- User-data compatibility: no durable user-data or raw-capture format changes. Existing settings remain readable without a migration.
+- Preserve the PR workflow's short-lived portable Windows test build and MSI download artifacts so live Windows testing remains practical throughout the branch.
+- Establish the Overlay Bridge as a separate, opt-in developer/client boundary rather than extending localhost/OBS routes or giving external clients direct iRacing access.
+- Start with versioned, read-only normalized model contracts, deterministic fixtures, safe connection diagnostics, and explicit compatibility rules; defer commands, raw telemetry sharing, and peer-history promotion.
+- Validate Windows publisher behavior independently from browser-review and localhost evidence; a Mac bridge monitor accelerates iteration but does not replace Windows-native validation.
+- User-data compatibility: preserve existing settings/history readers and do not change the raw-capture format without its matching migrations and documentation.
 ```
 
 ## Merged Mainline Milestones

@@ -51,6 +51,7 @@ Current evidence/tooling shape:
 - 2026-05-24: The `v1.2.1-replay-foundation-improvement` branch expands raw-capture replay from linear playback into controllable frame/session-time windows, session-type filtering, optional focus-car override, manifest/header/schema import inspection, production model replay provenance, and a standalone compact import/sample export tool. This is still raw-capture replay foundation work, not Fuel Calculator V2 product logic.
 - 2026-05-24: The teammate GR86 Road Atlanta support bundle timestamped 2026-05-24 19:29:23 UTC did not contain raw replay input, but diagnostics showed update apply/restart limbo rather than a telemetry freeze or TMR overlay input interception: Settings was visible, performance timers were still ticking, `release-updates.json` was `Applying`, and `runtime-state.json` had no clean stop. v1.2.1 moves update handoff to the post-UI shutdown path, adds update-apply shutdown breadcrumbs, and adds `metadata/evidence-quality.json` `updateFlow.applyShutdown` classification so future bundles can report `update_apply_shutdown_incomplete` directly.
 - 2026-05-25: The `v1.2.2-small-fixes` branch is a focused overlay-regression pass from Dallara/team feedback. It filters zero/default timing placeholders before Standings can render, makes Pit Service and Session / Weather size to rendered sections, keeps Relative fixed empty slots visibly dimmed, and refines Flags so practice/test one-to-green/start/global-yellow noise is suppressed while race-start and local actionable flag evidence still displays. It also reduces the default Flags footprint and makes native/browser/localhost flag sizing count-driven. No durable raw-capture or user-data schema change is intended.
+- 2026-07-18: The next V1.x milestone is reset to `v1.3-overlay-bridge`: an opt-in Overlay Bridge developer foundation for a Windows publisher and a separately running live monitor/client. It stays separate from localhost/OBS and begins read-only, versioned, and fixture-driven. Fuel Calculator V2 moves intact to the following `v1.4` milestone; no Fuel V2 work should be folded into the bridge branch merely because both consume live model data.
 
 ## Current V1.2 Branch Focus
 
@@ -245,7 +246,7 @@ Likely scope:
 
 V1.x is where heavy analysis overlays and broader platform features should mature, except for the engineer/operator mode, which is large enough to treat as V2.0. These branches can assume the V1.0 core app already has reliable release/support flow and stable core telemetry contracts. They should also assume the V1.1/V1.2 evidence baseline: explicit forensics packages, parseable overlay contracts, app-owned behavior descriptors, compact real-data fixtures, screenshot/manifest parity, and CI lanes that treat validation failures as product evidence until classified.
 
-The immediate patch-line follow-up after v1.2.0 should be v1.2.1 replay/tooling hardening. v1.3 should start only when the branch is ready to build Fuel Calculator V2 on top of that evidence foundation, with Gap, sector, and stint analysis treated as supporting model work for the fuel strategy product.
+The immediate patch-line follow-up after v1.2.0 is v1.2.1 replay/tooling hardening. The next feature milestone is v1.3 Overlay Bridge: a Windows-published, separately consumed live-monitor development boundary that builds on that evidence foundation. Fuel Calculator V2 follows as v1.4, with Gap, sector, and stint analysis treated as supporting model work for the fuel strategy product.
 
 ### V1.0.x Comfort Follow-Up - Windows Cursor Affordances
 
@@ -421,7 +422,23 @@ Success criteria:
 - Large raw captures are not committed to git; durable CI fixtures are redacted/minimized capture slices or explicit normalized replay windows.
 - Replay evidence does not replace real Windows/OBS validation, but it makes the next live validation targeted instead of exploratory.
 
-### v1.3 - Fuel Calculator V2
+### v1.3 - Overlay Bridge And External Clients
+
+Goal: establish an opt-in, read-only Windows publisher to developer/client
+boundary so live Windows data can drive a separately running monitor without
+exposing localhost/OBS routes or requiring the client to talk to iRacing.
+
+Likely scope:
+
+- Preserve short-lived portable and MSI PR build artifacts so Windows testers can validate the branch continuously.
+- Define versioned JSON contracts for redacted live telemetry models, app health, overlay metadata, selected display settings, peer/session context, and schema capabilities.
+- Keep the bridge disabled by default with explicit settings/support visibility for enabled state, allowed clients, connection count, last error, and schema version.
+- Use normalized `LiveTelemetrySnapshot.Models` instead of exporting overlay-local temporary calculations, `LatestSample`, raw captures, private settings, or local history.
+- Add deterministic bridge fixture tests and sample payloads so external clients can be developed without iRacing running.
+- Start with latest-state, read-only monitor updates and explicit freshness/session/provenance evidence; defer simulator commands, raw telemetry synchronization, and peer-history promotion.
+- Explore peer/missed-history context exchange only as derived context: provenance, session identity, observation window, roster/timing coverage, schema version, and trust labels.
+
+### v1.4 - Fuel Calculator V2
 
 Goal: rebuild fuel strategy around team-stint evidence instead of stitched scalar estimates.
 Detailed design notes now live in `docs/fuel-calculator-v2.md`, starting with
@@ -434,13 +451,13 @@ Likely scope:
 - Treat tire/repair/pit-service/setup-change evidence as input to strategy but avoid command-capable pit controls in this branch.
 - Treat incident-count increases as suspected-damage candidates only. Confirm later with repair timers, fast-repair counters, or pit-service evidence when available, and estimate pace loss from post-event clean laps while controlling for fuel, tire age/compound, wetness, traffic, pit-out laps, and driver. Gap To Leader can eventually show timeline markers and pace-loss context, while Fuel can consume the simplified repair/unscheduled-stop consequence.
 - Keep user-facing strategy recommendations conservative until enough teammate race data supports them.
-- Use Gap To Leader, sector comparison, and stint laptime analysis as supporting model inputs for Fuel Calculator V2 rather than standalone v1.3 product surfaces.
+- Use Gap To Leader, sector comparison, and stint laptime analysis as supporting model inputs for Fuel Calculator V2 rather than standalone v1.4 product surfaces.
 - Rework gap-to-leader and gap-to-class behavior around race/session semantics where that evidence explains pit windows, pace loss, stint rhythm, or fuel feasibility.
 - Add sector comparison and stint laptime analysis only after model-v2 timing contracts and replay evidence support them.
 - Keep source/evidence UI available because these products derive meaning from telemetry rather than simply displaying direct values.
 - Use replay and live diagnostics to validate edge cases before making advice prominent.
 
-### v1.4 - Track Map Expansion And QA
+### v1.5 - Track Map Expansion And QA
 
 Goal: improve the v0.11 Track Map implementation with better assets, status reporting, and map-quality workflows after the basic local generation path has real usage.
 
@@ -451,18 +468,6 @@ Likely scope:
 - Add deterministic screenshot states for placeholder, preview/low confidence, high confidence, stale markers, and pit-lane marker placement.
 - Improve pit-lane-aware marker placement when live telemetry exposes a reliable pit-lane progress signal.
 - Use iRacing/Data API or other official/reference map sources only as QA references unless licensing and product rules justify bundled assets.
-
-### v1.5 - Overlay Bridge And External Clients
-
-Goal: turn future teammate-to-teammate data sharing into a documented developer/platform boundary after the core contracts have proven themselves. Local OBS/localhost overlays are a separate feature.
-
-Likely scope:
-
-- Define versioned JSON contracts for live telemetry, app health, overlay metadata, selected display settings, peer/session context, and schema capabilities.
-- Keep the bridge disabled by default with explicit settings/support visibility for enabled state, allowed clients, connection count, last error, and schema version.
-- Use normalized `LiveTelemetrySnapshot.Models` instead of exporting overlay-local temporary calculations.
-- Add deterministic bridge fixture tests and sample payloads so external clients can be developed without iRacing running.
-- Explore peer/missed-history context exchange as derived session context only: provenance, session identity, observation window, roster/timing coverage, schema version, and trust labels.
 
 ### v1.6 - Streaming And Broadcast Overlays
 
@@ -620,7 +625,7 @@ Migrate style one overlay at a time with screenshot validation.
 
 ### Overlay Bridge / External Overlay Platform
 
-Overlay Bridge should become the boundary for trusted teammate-to-teammate context sharing after the normalized live snapshot schema is stable enough. Treat it as a platform branch, not as another in-process overlay and not as the local OBS/localhost server.
+The v1.3 Overlay Bridge is the boundary for a trusted Windows publisher and separately running developer/client monitor. Treat it as a platform branch, not as another in-process overlay and not as the local OBS/localhost server. Its initial read-only monitor path may later grow into trusted teammate-to-teammate context sharing only after the normalized live snapshot schema has proven stable.
 
 Bridge v2 should define:
 

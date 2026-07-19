@@ -901,11 +901,22 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         };
     }
 
-    private static CarProgress? ReadLeaderProgress(IRacingSDK sdk)
+    // Season 3 2026 made the CarIdx SDK arrays grow with the actual entry
+    // table. Derive the bound from this session's telemetry rather than
+    // assuming the former fixed 64-slot table.
+    private static int ReadCarIdxSlotCount(IRacingSDK sdk)
+    {
+        return CarIdxTelemetrySchema.TimingArrayNames
+            .Select(variableName => sdk.GetData(variableName) is Array values ? values.Length : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+    }
+
+    private static CarProgress? ReadLeaderProgress(IRacingSDK sdk, int carIdxSlotCount)
     {
         CarProgress? bestProgress = null;
 
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var progress = ReadCarProgress(sdk, carIdx, requireLapProgress: false);
             if (progress is null)
@@ -932,7 +943,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return bestProgress;
     }
 
-    private static CarProgress? ReadClassLeaderProgress(IRacingSDK sdk, int referenceCarIdx)
+    private static CarProgress? ReadClassLeaderProgress(IRacingSDK sdk, int referenceCarIdx, int carIdxSlotCount)
     {
         var referenceClass = ReadInt32ArrayElement(sdk, "CarIdxClass", referenceCarIdx);
         if (referenceClass is null)
@@ -941,7 +952,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         }
 
         CarProgress? bestClassProgress = null;
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var carClass = ReadInt32ArrayElement(sdk, "CarIdxClass", carIdx);
             if (carClass != referenceClass)
@@ -974,7 +985,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return bestClassProgress;
     }
 
-    private static FocusCarSelection ReadFocusCarSelection(IRacingSDK sdk)
+    private static FocusCarSelection ReadFocusCarSelection(IRacingSDK sdk, int carIdxSlotCount)
     {
         var camCarIdx = ReadNullableInt32(sdk, "CamCarIdx");
         if (camCarIdx is null)
@@ -982,7 +993,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             return new FocusCarSelection(null, null, "cam_car_idx_missing");
         }
 
-        if (camCarIdx is < 0 or >= 64)
+        if (camCarIdx is < 0 || camCarIdx >= carIdxSlotCount)
         {
             return new FocusCarSelection(camCarIdx, null, "cam_car_idx_invalid");
         }
@@ -1030,7 +1041,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx));
     }
 
-    private static IReadOnlyList<HistoricalCarProximity> ReadNearbyCars(IRacingSDK sdk, int referenceCarIdx)
+    private static IReadOnlyList<HistoricalCarProximity> ReadNearbyCars(IRacingSDK sdk, int referenceCarIdx, int carIdxSlotCount)
     {
         if (referenceCarIdx < 0)
         {
@@ -1038,7 +1049,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         }
 
         var cars = new List<HistoricalCarProximity>();
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             if (carIdx == referenceCarIdx)
             {
@@ -1071,7 +1082,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return cars;
     }
 
-    private static IReadOnlyList<HistoricalCarProximity> ReadClassCars(IRacingSDK sdk, int referenceCarIdx)
+    private static IReadOnlyList<HistoricalCarProximity> ReadClassCars(IRacingSDK sdk, int referenceCarIdx, int carIdxSlotCount)
     {
         if (referenceCarIdx < 0)
         {
@@ -1085,7 +1096,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         }
 
         var cars = new List<HistoricalCarProximity>();
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var carClass = ReadInt32ArrayElement(sdk, "CarIdxClass", carIdx);
             if (carClass != referenceClass)
@@ -1125,10 +1136,10 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return cars;
     }
 
-    private static IReadOnlyList<HistoricalCarProximity> ReadAllTimingCars(IRacingSDK sdk)
+    private static IReadOnlyList<HistoricalCarProximity> ReadAllTimingCars(IRacingSDK sdk, int carIdxSlotCount)
     {
         var cars = new List<HistoricalCarProximity>();
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var lapCompleted = ReadInt32ArrayElement(sdk, "CarIdxLapCompleted", carIdx);
             var lapDistPct = ReadDoubleArrayElement(sdk, "CarIdxLapDistPct", carIdx);
@@ -1483,7 +1494,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         try
         {
             var playerCarIdx = ReadInt32(sdk, "PlayerCarIdx");
-            var focusSelection = ReadFocusCarSelection(sdk);
+            var carIdxSlotCount = ReadCarIdxSlotCount(sdk);
+            var focusSelection = ReadFocusCarSelection(sdk, carIdxSlotCount);
             var focusCarIdx = focusSelection.FocusCarIdx;
             var focusProgress = focusCarIdx is { } focusProgressCarIdx
                 ? ReadCarProgress(sdk, focusProgressCarIdx, requireLapProgress: false)
@@ -1494,7 +1506,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             var leaderSucceeded = false;
             try
             {
-                leaderProgress = ReadLeaderProgress(sdk);
+                leaderProgress = ReadLeaderProgress(sdk, carIdxSlotCount);
                 leaderSucceeded = true;
             }
             finally
@@ -1510,7 +1522,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             var classLeaderSucceeded = false;
             try
             {
-                classLeaderProgress = ReadClassLeaderProgress(sdk, playerCarIdx);
+                classLeaderProgress = ReadClassLeaderProgress(sdk, playerCarIdx, carIdxSlotCount);
                 classLeaderSucceeded = true;
             }
             finally
@@ -1525,7 +1537,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 ? null
                 : focusCarIdx == playerCarIdx
                     ? classLeaderProgress
-                    : ReadClassLeaderProgress(sdk, focusCarIdx.Value);
+                    : ReadClassLeaderProgress(sdk, focusCarIdx.Value, carIdxSlotCount);
 
             IReadOnlyList<HistoricalCarProximity> nearbyCars;
             var nearbyStarted = Stopwatch.GetTimestamp();
@@ -1533,7 +1545,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             try
             {
                 nearbyCars = focusCarIdx is { } nearbyFocusCarIdx
-                    ? ReadNearbyCars(sdk, nearbyFocusCarIdx)
+                    ? ReadNearbyCars(sdk, nearbyFocusCarIdx, carIdxSlotCount)
                     : [];
                 nearbySucceeded = true;
             }
@@ -1550,7 +1562,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             var classCarsSucceeded = false;
             try
             {
-                classCars = ReadClassCars(sdk, playerCarIdx);
+                classCars = ReadClassCars(sdk, playerCarIdx, carIdxSlotCount);
                 classCarsSucceeded = true;
             }
             finally
@@ -1565,8 +1577,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 ? []
                 : focusCarIdx == playerCarIdx
                     ? classCars
-                    : ReadClassCars(sdk, focusCarIdx.Value);
-            var allCars = ReadAllTimingCars(sdk);
+                    : ReadClassCars(sdk, focusCarIdx.Value, carIdxSlotCount);
+            var allCars = ReadAllTimingCars(sdk, carIdxSlotCount);
 
             sample = new HistoricalTelemetrySample(
                 CapturedAtUtc: capturedAtUtc,

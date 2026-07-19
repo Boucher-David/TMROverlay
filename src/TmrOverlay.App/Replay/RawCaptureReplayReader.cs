@@ -638,28 +638,29 @@ internal sealed class RawCaptureTelemetrySampleBuilder
     {
         var reader = new RawCaptureTelemetryFrameReader(_schema, frame.Payload);
         var playerCarIdx = reader.ReadInt32("PlayerCarIdx");
-        var focusSelection = ReadFocusCarSelection(reader, focusCarIdxOverride);
+        var carIdxSlotCount = reader.CarIdxSlotCount;
+        var focusSelection = ReadFocusCarSelection(reader, focusCarIdxOverride, carIdxSlotCount);
         var focusCarIdx = focusSelection.FocusCarIdx;
         var focusProgress = focusCarIdx is { } focusProgressCarIdx
             ? ReadCarProgress(reader, focusProgressCarIdx, requireLapProgress: false)
             : null;
-        var leaderProgress = ReadLeaderProgress(reader);
-        var classLeaderProgress = ReadClassLeaderProgress(reader, playerCarIdx);
+        var leaderProgress = ReadLeaderProgress(reader, carIdxSlotCount);
+        var classLeaderProgress = ReadClassLeaderProgress(reader, playerCarIdx, carIdxSlotCount);
         var focusClassLeaderProgress = focusCarIdx is null
             ? null
             : focusCarIdx == playerCarIdx
                 ? classLeaderProgress
-                : ReadClassLeaderProgress(reader, focusCarIdx.Value);
+                : ReadClassLeaderProgress(reader, focusCarIdx.Value, carIdxSlotCount);
         var nearbyCars = focusCarIdx is { } nearbyFocusCarIdx
-            ? ReadNearbyCars(reader, nearbyFocusCarIdx)
+            ? ReadNearbyCars(reader, nearbyFocusCarIdx, carIdxSlotCount)
             : [];
-        var classCars = ReadClassCars(reader, playerCarIdx);
+        var classCars = ReadClassCars(reader, playerCarIdx, carIdxSlotCount);
         var focusClassCars = focusCarIdx is null
             ? []
             : focusCarIdx == playerCarIdx
                 ? classCars
-                : ReadClassCars(reader, focusCarIdx.Value);
-        var allCars = ReadAllTimingCars(reader);
+                : ReadClassCars(reader, focusCarIdx.Value, carIdxSlotCount);
+        var allCars = ReadAllTimingCars(reader, carIdxSlotCount);
 
         return new HistoricalTelemetrySample(
             CapturedAtUtc: frame.CapturedAtUtc,
@@ -872,10 +873,10 @@ internal sealed class RawCaptureTelemetrySampleBuilder
             RightRearChangeRequested: reader.ReadNullableBoolean("dpRRTireChange"));
     }
 
-    private static CarProgress? ReadLeaderProgress(RawCaptureTelemetryFrameReader reader)
+    private static CarProgress? ReadLeaderProgress(RawCaptureTelemetryFrameReader reader, int carIdxSlotCount)
     {
         CarProgress? bestProgress = null;
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var progress = ReadCarProgress(reader, carIdx, requireLapProgress: false);
             if (progress is null)
@@ -902,7 +903,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         return bestProgress;
     }
 
-    private static CarProgress? ReadClassLeaderProgress(RawCaptureTelemetryFrameReader reader, int referenceCarIdx)
+    private static CarProgress? ReadClassLeaderProgress(RawCaptureTelemetryFrameReader reader, int referenceCarIdx, int carIdxSlotCount)
     {
         var referenceClass = reader.ReadInt32ArrayElement("CarIdxClass", referenceCarIdx);
         if (referenceClass is null)
@@ -911,7 +912,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         }
 
         CarProgress? bestClassProgress = null;
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var carClass = reader.ReadInt32ArrayElement("CarIdxClass", carIdx);
             if (carClass != referenceClass)
@@ -944,12 +945,15 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         return bestClassProgress;
     }
 
-    private static FocusCarSelection ReadFocusCarSelection(RawCaptureTelemetryFrameReader reader, int? focusCarIdxOverride)
+    private static FocusCarSelection ReadFocusCarSelection(
+        RawCaptureTelemetryFrameReader reader,
+        int? focusCarIdxOverride,
+        int carIdxSlotCount)
     {
         var camCarIdx = reader.ReadNullableInt32("CamCarIdx");
         if (focusCarIdxOverride is { } overrideCarIdx)
         {
-            return ReadFocusCarSelection(reader, camCarIdx, overrideCarIdx, "replay_focus_override");
+            return ReadFocusCarSelection(reader, camCarIdx, overrideCarIdx, "replay_focus_override", carIdxSlotCount);
         }
 
         if (camCarIdx is null)
@@ -957,16 +961,17 @@ internal sealed class RawCaptureTelemetrySampleBuilder
             return new FocusCarSelection(null, null, "cam_car_idx_missing");
         }
 
-        return ReadFocusCarSelection(reader, camCarIdx, camCarIdx.Value, "cam_car");
+        return ReadFocusCarSelection(reader, camCarIdx, camCarIdx.Value, "cam_car", carIdxSlotCount);
     }
 
     private static FocusCarSelection ReadFocusCarSelection(
         RawCaptureTelemetryFrameReader reader,
         int? rawCamCarIdx,
         int rawCarIdx,
-        string source)
+        string source,
+        int carIdxSlotCount)
     {
-        if (rawCarIdx is < 0 or >= 64)
+        if (rawCarIdx < 0 || rawCarIdx >= carIdxSlotCount)
         {
             return new FocusCarSelection(rawCamCarIdx, null, $"{source}_idx_invalid");
         }
@@ -1014,7 +1019,10 @@ internal sealed class RawCaptureTelemetrySampleBuilder
             TireCompound: reader.ReadInt32ArrayElement("CarIdxTireCompound", carIdx));
     }
 
-    private static IReadOnlyList<HistoricalCarProximity> ReadNearbyCars(RawCaptureTelemetryFrameReader reader, int referenceCarIdx)
+    private static IReadOnlyList<HistoricalCarProximity> ReadNearbyCars(
+        RawCaptureTelemetryFrameReader reader,
+        int referenceCarIdx,
+        int carIdxSlotCount)
     {
         if (referenceCarIdx < 0)
         {
@@ -1022,7 +1030,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         }
 
         var cars = new List<HistoricalCarProximity>();
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             if (carIdx == referenceCarIdx)
             {
@@ -1055,7 +1063,10 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         return cars;
     }
 
-    private static IReadOnlyList<HistoricalCarProximity> ReadClassCars(RawCaptureTelemetryFrameReader reader, int referenceCarIdx)
+    private static IReadOnlyList<HistoricalCarProximity> ReadClassCars(
+        RawCaptureTelemetryFrameReader reader,
+        int referenceCarIdx,
+        int carIdxSlotCount)
     {
         if (referenceCarIdx < 0)
         {
@@ -1069,7 +1080,7 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         }
 
         var cars = new List<HistoricalCarProximity>();
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var carClass = reader.ReadInt32ArrayElement("CarIdxClass", carIdx);
             if (carClass != referenceClass)
@@ -1109,10 +1120,12 @@ internal sealed class RawCaptureTelemetrySampleBuilder
         return cars;
     }
 
-    private static IReadOnlyList<HistoricalCarProximity> ReadAllTimingCars(RawCaptureTelemetryFrameReader reader)
+    private static IReadOnlyList<HistoricalCarProximity> ReadAllTimingCars(
+        RawCaptureTelemetryFrameReader reader,
+        int carIdxSlotCount)
     {
         var cars = new List<HistoricalCarProximity>();
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var lapCompleted = reader.ReadInt32ArrayElement("CarIdxLapCompleted", carIdx);
             var lapDistPct = reader.ReadDoubleArrayElement("CarIdxLapDistPct", carIdx);
@@ -1214,6 +1227,7 @@ internal sealed class RawCaptureTelemetryFrameReader
 {
     private readonly IReadOnlyDictionary<string, TelemetryVariableSchema> _schema;
     private readonly ReadOnlyMemory<byte> _payload;
+    private readonly int _carIdxSlotCount;
 
     public RawCaptureTelemetryFrameReader(
         IReadOnlyDictionary<string, TelemetryVariableSchema> schema,
@@ -1221,7 +1235,15 @@ internal sealed class RawCaptureTelemetryFrameReader
     {
         _schema = schema;
         _payload = payload;
+        _carIdxSlotCount = CarIdxTelemetrySchema.TimingArrayNames
+            .Select(variableName => schema.TryGetValue(variableName, out var field) ? Math.Max(0, field.Count) : 0)
+            .DefaultIfEmpty(0)
+            .Max();
     }
+
+    // Matches the live SDK reader: raw replay must honor the captured schema
+    // rather than reintroducing the former fixed 64-entry CarIdx assumption.
+    public int CarIdxSlotCount => _carIdxSlotCount;
 
     public int ReadInt32(string variableName)
     {

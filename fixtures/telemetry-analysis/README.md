@@ -31,7 +31,8 @@ If local iRacing SDK output exposes fields or declared shapes that are not in th
 - `session-state-signal-availability.md`
   - Human-readable comparison of scoring/results, position, gap, interval, and timing signal availability by `SessionState` across the uploaded race-start capture and local endurance captures.
 - `sdk-field-availability-corpus.json`
-  - Compact redacted SDK availability corpus derived from local four-hour, 24-hour, NASCAR, and PCup raw captures.
+  - Compact redacted SDK availability corpus derived from local four-hour, 24-hour, NASCAR, PCup, and July 2026 Acura raw captures.
+  - The Acura source records the current 72-slot dynamic `CarIdx*` schema without committing raw frames; it is schema evidence, not evidence of 65+ populated driver rows.
   - Preserves SDK variable names, types, units, descriptions, declared array/storage maximums, primitive type bounds, sampled observed ranges, and identity shape counts without committing raw telemetry frames or full session-info payloads.
 - `sdk-field-availability-corpus.md`
   - Human-readable index for the SDK availability corpus.

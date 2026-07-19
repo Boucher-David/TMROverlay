@@ -90,6 +90,13 @@ internal sealed class OverlayBridgePairingControlPlane
                 throw new ArgumentOutOfRangeException(nameof(lifetime), "Viewer invites must have a short bounded lifetime.");
             }
 
+            PurgeExpiredInvites(now);
+            if (_invitesByTokenHash.Count >= OverlayBridgePairingLimits.MaximumOutstandingViewerInvites)
+            {
+                throw new InvalidOperationException(
+                    "The room already has the maximum number of outstanding Viewer invites.");
+            }
+
             var token = _inviteTokenGenerator.CreateToken();
             if (!OverlayBridgePairingLimits.IsValidInviteToken(token))
             {
@@ -142,7 +149,15 @@ internal sealed class OverlayBridgePairingControlPlane
 
             if (now >= pendingInvite.Invite.ExpiresAtUtc)
             {
-                _invitesByTokenHash.Remove(tokenHash);
+                if (pendingInvite.Pending is { } expiredPending)
+                {
+                    ConsumePending(expiredPending);
+                }
+                else
+                {
+                    _invitesByTokenHash.Remove(tokenHash);
+                }
+
                 return OverlayBridgePairingRedemptionResult.Rejected(OverlayBridgePairingRejectionReason.InviteExpired);
             }
 
@@ -327,6 +342,21 @@ internal sealed class OverlayBridgePairingControlPlane
         _invitesByTokenHash.Remove(pending.InviteTokenHash);
     }
 
+    private void PurgeExpiredInvites(DateTimeOffset now)
+    {
+        foreach (var expired in _invitesByTokenHash
+                     .Where(entry => now >= entry.Value.Invite.ExpiresAtUtc)
+                     .ToArray())
+        {
+            if (expired.Value.Pending is { } pending)
+            {
+                _pendingPairings.Remove(pending.Request.RequestId);
+            }
+
+            _invitesByTokenHash.Remove(expired.Key);
+        }
+    }
+
     private sealed class PendingInvite(OverlayBridgeViewerInvite invite)
     {
         public OverlayBridgeViewerInvite Invite { get; } = invite;
@@ -443,6 +473,13 @@ internal abstract class OverlayBridgeInviteTokenGenerator
 internal static class OverlayBridgePairingLimits
 {
     public static readonly TimeSpan MaximumInviteLifetime = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// A room is a small teammate party, not an unbounded registration endpoint. This bounds
+    /// locally retained invite capabilities even before the future remote control plane applies
+    /// its own identity-aware request-rate controls.
+    /// </summary>
+    public const int MaximumOutstandingViewerInvites = 16;
 
     public static bool IsValidPolicyLifetime(TimeSpan lifetime)
     {

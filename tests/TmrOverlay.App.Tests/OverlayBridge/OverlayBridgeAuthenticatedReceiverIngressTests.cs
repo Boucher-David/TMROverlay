@@ -136,6 +136,32 @@ public sealed class OverlayBridgeAuthenticatedReceiverIngressTests
     }
 
     [Fact]
+    public async Task ReadNext_StampsReceiptAfterTheDelayedProtectedFrameArrives()
+    {
+        using var fixture = ReceiverCircuitFixture.Create();
+        var ingress = fixture.CreateIngress();
+        using var pair = OverlayBridgeVirtualCircuitStream.CreatePair();
+        await OpenAsync(ingress, pair, fixture);
+
+        var pendingRead = ingress.ReadNextAsync(pair.Second);
+        Assert.False(pendingRead.IsCompleted);
+
+        // This consumes the first deterministic clock tick while the frame is still absent. A
+        // receipt timestamp taken before Stream.ReadAsync would incorrectly reuse this tick.
+        var whileWaiting = ingress.Observe();
+        Assert.Equal(0, whileWaiting.ReceiverElapsedMonotonicMilliseconds);
+
+        await OverlayBridgePublicationFrameProtocol.WriteAsync(pair.First, fixture.Publication);
+        var admitted = await pendingRead;
+
+        Assert.Equal(OverlayBridgeReceiverIngressFrameOutcome.AdmissionCompleted, admitted.Outcome);
+        Assert.Equal(1, admitted.ReceiverElapsedMonotonicMilliseconds);
+        Assert.Equal(
+            fixture.PolicyVerifiedAtUtc.AddMilliseconds(1),
+            admitted.Pipeline.ReceiverState.ActiveTeamCar.LastAcceptedReceiptAtUtc);
+    }
+
+    [Fact]
     public void Creation_RequiresSignedPolicyAndExactApprovedRolesCapabilitiesAndDeviceBindings()
     {
         using var fixture = ReceiverCircuitFixture.Create();
@@ -200,6 +226,21 @@ public sealed class OverlayBridgeAuthenticatedReceiverIngressTests
         await stream.WriteAsync(prefix);
         await stream.WriteAsync(payload);
         await stream.FlushAsync();
+    }
+
+    private static async Task OpenAsync(
+        OverlayBridgeAuthenticatedReceiverIngress ingress,
+        OverlayBridgeVirtualCircuitPair pair,
+        ReceiverCircuitFixture fixture)
+    {
+        var receiverHandshake = ingress.EstablishAsync(pair.Second);
+        var publisherHandshake = OverlayBridgeChannelHelloHandshake.ExchangeAsync(
+            pair.First,
+            fixture.CreatePublisherHelloBinding(),
+            new OverlayBridgeChannelNonceReplayCache(maximumEntries: 8));
+        await Task.WhenAll(receiverHandshake, publisherHandshake);
+        Assert.True((await receiverHandshake).IsAccepted);
+        Assert.True((await publisherHandshake).IsAccepted);
     }
 
     private sealed class ReceiverCircuitFixture : IDisposable

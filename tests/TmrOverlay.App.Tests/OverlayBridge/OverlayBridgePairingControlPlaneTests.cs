@@ -291,6 +291,47 @@ public sealed class OverlayBridgePairingControlPlaneTests
     }
 
     [Fact]
+    public void PolicyVerification_RejectsAPolicyBeforeItsIssuedAtTime()
+    {
+        using var owner = CreateParticipant("owner");
+        var policy = new OverlayBridgeRoomPolicy(
+            "room-future-policy",
+            "instance-future-policy",
+            policyEpoch: 1,
+            ownerBinding: OverlayBridgeDevicePolicyBinding.FromIdentity(owner.Identity),
+            issuedAtUtc: Now.AddMinutes(2),
+            expiresAtUtc: Now.AddHours(1),
+            approvedDevices: []);
+        var signed = new OverlayBridgeRoomPolicySigner(owner.Identity, owner.Key).Sign(policy);
+
+        Assert.False(OverlayBridgeRoomPolicySigner.TryVerify(signed, owner.Identity, Now, out var verificationError));
+        Assert.Equal(OverlayBridgeRoomPolicyVerificationError.PolicyNotYetValid, verificationError);
+    }
+
+    [Fact]
+    public void CreateViewerInvite_BoundsOutstandingCapabilitiesAndPurgesExpiredEntries()
+    {
+        using var owner = CreateParticipant("owner");
+        var plane = new OverlayBridgePairingControlPlane(
+            "room-invite-limit",
+            "instance-invite-limit",
+            new OverlayBridgeRoomPolicySigner(owner.Identity, owner.Key),
+            new SequentialTokenGenerator());
+
+        for (var index = 0; index < OverlayBridgePairingLimits.MaximumOutstandingViewerInvites; index++)
+        {
+            _ = plane.CreateViewerInvite(Now, InviteLifetime);
+        }
+
+        Assert.Throws<InvalidOperationException>(() => plane.CreateViewerInvite(Now, InviteLifetime));
+
+        // Issuing a later invite sweeps old capability and pending-request state rather than
+        // preserving expired links indefinitely.
+        var renewed = plane.CreateViewerInvite(Now.Add(InviteLifetime), InviteLifetime);
+        Assert.Equal("room-invite-limit", renewed.RoomId);
+    }
+
+    [Fact]
     public void Constructors_RejectNonP256IdentityAndNonFirstReleaseCapabilities()
     {
         using var rsa = RSA.Create(2048);
@@ -337,5 +378,12 @@ public sealed class OverlayBridgePairingControlPlaneTests
     private sealed class FixedTokenGenerator(string token) : OverlayBridgeInviteTokenGenerator
     {
         public override string CreateToken() => token;
+    }
+
+    private sealed class SequentialTokenGenerator : OverlayBridgeInviteTokenGenerator
+    {
+        private int next;
+
+        public override string CreateToken() => new string('a', 42) + (char)('A' + next++);
     }
 }

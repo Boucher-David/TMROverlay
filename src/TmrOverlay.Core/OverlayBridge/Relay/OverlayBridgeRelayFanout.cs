@@ -62,31 +62,32 @@ internal sealed class OverlayBridgeRelayFanout
         long receivedAtMonotonicMilliseconds)
     {
         ArgumentNullException.ThrowIfNull(circuitFrames);
-        var suppliedFrames = circuitFrames.ToArray();
-        if (suppliedFrames.Any(frame => frame is null || frame.CircuitBinding is null))
-        {
-            throw new ArgumentException("Circuit frames cannot contain null metadata.", nameof(circuitFrames));
-        }
-
-        var framesByCircuit = suppliedFrames
-            .GroupBy(frame => frame.CircuitBinding.CircuitId)
-            .ToDictionary(group => group.Key, group => group.ToArray());
-        if (framesByCircuit.Any(entry => entry.Value.Length != 1))
-        {
-            throw new ArgumentException("At most one protected frame may target each circuit per fan-out operation.", nameof(circuitFrames));
-        }
-
         var knownCircuitIds = _viewerCircuits
             .Select(circuit => circuit.Binding.CircuitId)
             .ToHashSet();
-        if (framesByCircuit.Keys.Any(circuitId => !knownCircuitIds.Contains(circuitId)))
+        var framesByCircuit = new Dictionary<Guid, OverlayBridgeRelayPublisherCircuitFrame>();
+        foreach (var frame in circuitFrames)
         {
-            throw new ArgumentException("A protected frame targeted an unknown relay circuit.", nameof(circuitFrames));
+            if (frame is null || frame.CircuitBinding is null)
+            {
+                throw new ArgumentException("Circuit frames cannot contain null metadata.", nameof(circuitFrames));
+            }
+
+            var circuitId = frame.CircuitBinding.CircuitId;
+            if (!knownCircuitIds.Contains(circuitId))
+            {
+                throw new ArgumentException("A protected frame targeted an unknown relay circuit.", nameof(circuitFrames));
+            }
+
+            if (!framesByCircuit.TryAdd(circuitId, frame))
+            {
+                throw new ArgumentException("At most one protected frame may target each circuit per fan-out operation.", nameof(circuitFrames));
+            }
         }
 
         return _viewerCircuits
             .Select(circuit => framesByCircuit.TryGetValue(circuit.Binding.CircuitId, out var frame)
-                ? circuit.ForwardFromPublisher(frame[0], receivedAtMonotonicMilliseconds)
+                ? circuit.ForwardFromPublisher(frame, receivedAtMonotonicMilliseconds)
                 : circuit.NoFrameForCurrentCircuit())
             .ToArray();
     }

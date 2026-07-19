@@ -79,7 +79,13 @@ internal sealed class OverlayBridgeRelayCircuit
                 return Forward(OverlayBridgeRelayForwardOutcome.ProtectedFrameTooLarge);
             }
 
-            if (frame.ProtectedBytes.Length > _limits.MaximumQueuedBytes - _queuedBytes)
+            if (frame.ProtectedBytes.IsEmpty)
+            {
+                return Forward(OverlayBridgeRelayForwardOutcome.ProtectedFrameEmpty);
+            }
+
+            if (_viewerQueue.Count >= _limits.MaximumQueuedFrames
+                || frame.ProtectedBytes.Length > _limits.MaximumQueuedBytes - _queuedBytes)
             {
                 Close(OverlayBridgeRelayCircuitCloseReason.ViewerBackpressure);
                 return Forward(OverlayBridgeRelayForwardOutcome.ViewerDisconnectedForBackpressure);

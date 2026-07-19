@@ -282,7 +282,8 @@ internal sealed record OverlayBridgeRelayQueueLimits
 {
     public OverlayBridgeRelayQueueLimits(
         int maximumProtectedFrameBytes,
-        int maximumQueuedBytes)
+        int maximumQueuedBytes,
+        int maximumQueuedFrames = 64)
     {
         if (maximumProtectedFrameBytes <= 0)
         {
@@ -298,13 +299,27 @@ internal sealed record OverlayBridgeRelayQueueLimits
                 "The per-viewer queue must hold one maximum protected frame.");
         }
 
+        if (maximumQueuedFrames <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maximumQueuedFrames),
+                "The per-viewer queue must allow at least one protected frame.");
+        }
+
         MaximumProtectedFrameBytes = maximumProtectedFrameBytes;
         MaximumQueuedBytes = maximumQueuedBytes;
+        MaximumQueuedFrames = maximumQueuedFrames;
     }
 
     public int MaximumProtectedFrameBytes { get; }
 
     public int MaximumQueuedBytes { get; }
+
+    /// <summary>
+    /// Independent object-count bound. Byte accounting alone is insufficient because an
+    /// authenticated endpoint could otherwise enqueue arbitrarily many empty frame objects.
+    /// </summary>
+    public int MaximumQueuedFrames { get; }
 }
 
 internal enum OverlayBridgeRelayCircuitCloseReason
@@ -322,9 +337,10 @@ internal enum OverlayBridgeRelayForwardOutcome
     CircuitExpired = 2,
     AuthenticatedCircuitBindingMismatch = 3,
     ProtectedFrameTooLarge = 4,
-    ViewerDisconnectedForBackpressure = 5,
-    MonotonicTimeRegression = 6,
-    NoFrameForCircuit = 7
+    ProtectedFrameEmpty = 5,
+    ViewerDisconnectedForBackpressure = 6,
+    MonotonicTimeRegression = 7,
+    NoFrameForCircuit = 8
 }
 
 internal enum OverlayBridgeRelayReceiveOutcome

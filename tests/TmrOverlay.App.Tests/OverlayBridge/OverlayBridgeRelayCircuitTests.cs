@@ -204,11 +204,45 @@ public sealed class OverlayBridgeRelayCircuitTests
         Assert.Null(rejected.State.LastAcceptedReceiptMonotonicMilliseconds);
     }
 
+    [Fact]
+    public void QueueBounds_RejectEmptyFramesAndDisconnectOnlyTheViewerThatExhaustsItsFrameCount()
+    {
+        var first = CreateCircuit(
+            "viewer-a",
+            expiresAtMonotonicMilliseconds: 100,
+            maximumProtectedFrameBytes: 8,
+            maximumQueuedBytes: 16,
+            maximumQueuedFrames: 1);
+        var second = CreateCircuit(
+            "viewer-b",
+            expiresAtMonotonicMilliseconds: 100,
+            maximumProtectedFrameBytes: 8,
+            maximumQueuedBytes: 16,
+            maximumQueuedFrames: 1);
+
+        var empty = first.ForwardFromPublisher(FrameFor(first, ReadOnlyMemory<byte>.Empty), 1);
+        Assert.Equal(OverlayBridgeRelayForwardOutcome.ProtectedFrameEmpty, empty.Outcome);
+        Assert.Equal(0, empty.State.QueuedFrameCount);
+        Assert.False(empty.State.IsClosed);
+
+        Assert.Equal(
+            OverlayBridgeRelayForwardOutcome.Enqueued,
+            first.ForwardFromPublisher(FrameFor(first, [0x01]), 2).Outcome);
+        var overflow = first.ForwardFromPublisher(FrameFor(first, [0x02]), 3);
+        Assert.Equal(OverlayBridgeRelayForwardOutcome.ViewerDisconnectedForBackpressure, overflow.Outcome);
+        Assert.Equal(OverlayBridgeRelayCircuitCloseReason.ViewerBackpressure, overflow.State.CloseReason);
+
+        Assert.Equal(
+            OverlayBridgeRelayForwardOutcome.Enqueued,
+            second.ForwardFromPublisher(FrameFor(second, [0x03]), 3).Outcome);
+    }
+
     private static OverlayBridgeRelayCircuit CreateCircuit(
         string viewerDeviceKeyId,
         long expiresAtMonotonicMilliseconds,
         int maximumProtectedFrameBytes = 8,
-        int maximumQueuedBytes = 32)
+        int maximumQueuedBytes = 32,
+        int maximumQueuedFrames = 64)
     {
         return new OverlayBridgeRelayCircuit(
             new OverlayBridgeRelayAuthenticatedCircuitBinding(
@@ -234,7 +268,8 @@ public sealed class OverlayBridgeRelayCircuitTests
                 expiresAtMonotonicMilliseconds: expiresAtMonotonicMilliseconds),
             new OverlayBridgeRelayQueueLimits(
                 maximumProtectedFrameBytes: maximumProtectedFrameBytes,
-                maximumQueuedBytes: maximumQueuedBytes));
+                maximumQueuedBytes: maximumQueuedBytes,
+                maximumQueuedFrames: maximumQueuedFrames));
     }
 
     private static OverlayBridgeRelayPublisherCircuitFrame FrameFor(

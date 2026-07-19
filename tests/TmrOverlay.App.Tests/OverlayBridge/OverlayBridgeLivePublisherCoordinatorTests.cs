@@ -143,6 +143,43 @@ public sealed class OverlayBridgeLivePublisherCoordinatorTests
     }
 
     [Fact]
+    public void Observe_GarageTransitionEmitsOneLifecycleInvalidationAndDoesNotLeaveRemoteFuelUsable()
+    {
+        var context = CreateOwnerPublisherContext();
+        var coordinator = new OverlayBridgeLivePublisherCoordinator(
+            snapshotIdFactory: SnapshotIds(
+                "70000000-0000-0000-0000-000000000025",
+                "70000000-0000-0000-0000-000000000026",
+                "70000000-0000-0000-0000-000000000027"));
+        var inCar = new OverlayBridgePublisherSourceEligibility(true, false);
+
+        var current = coordinator.Observe(context, Snapshot(18, 0.12d), inCar, StartedAtUtc);
+        var garage = coordinator.Observe(context, Snapshot(18, 0.40d, isInGarage: true), inCar, StartedAtUtc.AddSeconds(1));
+        var repeatedGarage = coordinator.Observe(context, Snapshot(18, 0.72d, isInGarage: true), inCar, StartedAtUtc.AddSeconds(2));
+
+        var currentPublication = Assert.IsType<OverlayBridgeSectorPublication>(current.Publication);
+        var garagePublication = Assert.IsType<OverlayBridgeSectorPublication>(garage.Publication);
+        Assert.Equal(OverlayBridgeLivePublisherOutcome.PublishedLifecycleInvalidation, garage.Outcome);
+        Assert.Equal(OverlayBridgeFactGroupUnavailableReason.GarageOrSpectator, garagePublication.ActiveTeamCar.UnavailableReason);
+        Assert.Equal(currentPublication.Header.Sequence + 1, garagePublication.Header.Sequence);
+        Assert.Equal(OverlayBridgeLivePublisherOutcome.ProjectionDeclined, repeatedGarage.Outcome);
+        Assert.Null(repeatedGarage.Publication);
+
+        var receiver = new OverlayBridgeReceiverAdmissionStore();
+        var admissionContext = new OverlayBridgeReceiverAdmissionContext(
+            currentPublication.Header.RoomId,
+            currentPublication.Header.StreamId,
+            currentPublication.Header.Session,
+            HasFreshDirectInCarTelemetry: false);
+        _ = receiver.Admit(currentPublication, admissionContext, StartedAtUtc.AddSeconds(3));
+        var result = receiver.Admit(garagePublication, admissionContext, StartedAtUtc.AddSeconds(4));
+
+        Assert.Equal(OverlayBridgeReceiverAdmissionOutcome.Accepted, result.Outcome);
+        Assert.Equal(OverlayBridgeReceiverTerminalReason.GarageOrSpectator, result.State.ActiveTeamCar.TerminalReason);
+        Assert.False(result.State.ActiveTeamCar.IsUsableForCalculation);
+    }
+
+    [Fact]
     public void Observe_NewLeaseResetsCadenceAndSequenceWithoutReusingPriorCleanBurnEligibility()
     {
         var firstContext = CreateOwnerPublisherContext(
@@ -218,7 +255,10 @@ public sealed class OverlayBridgeLivePublisherCoordinatorTests
             PublisherSchemaHash: "schema-live-publisher");
     }
 
-    private static LiveTelemetrySnapshot Snapshot(int completedLap, double lapDistancePercent)
+    private static LiveTelemetrySnapshot Snapshot(
+        int completedLap,
+        double lapDistancePercent,
+        bool isInGarage = false)
     {
         var fuel = LiveFuelSnapshot.Unavailable with
         {
@@ -253,7 +293,8 @@ public sealed class OverlayBridgeLivePublisherCoordinatorTests
                 FocusIsPlayer = true,
                 PlayerLapCompleted = completedLap,
                 PlayerLapDistPct = lapDistancePercent,
-                IsOnTrack = true
+                IsOnTrack = true,
+                IsInGarage = isInGarage
             },
             RaceProgress = LiveRaceProgressModel.Empty with
             {

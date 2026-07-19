@@ -173,6 +173,8 @@ internal sealed class OverlayBridgeLivePublisherCoordinator
     private readonly Func<Guid> _snapshotIdFactory;
     private LeaseIdentity? _activeLease;
     private long _lastSequence;
+    private bool _hasPublishedAvailableFacts;
+    private bool _hasPublishedLifecycleInvalidation;
 
     public OverlayBridgeLivePublisherCoordinator(
         OverlayBridgePublicationCadenceTracker? cadenceTracker = null,
@@ -218,6 +220,8 @@ internal sealed class OverlayBridgeLivePublisherCoordinator
             _cadenceTracker.Reset();
             _activeLease = leaseIdentity;
             _lastSequence = 0;
+            _hasPublishedAvailableFacts = false;
+            _hasPublishedLifecycleInvalidation = false;
         }
 
         var decision = _cadenceTracker.Observe(
@@ -242,6 +246,34 @@ internal sealed class OverlayBridgeLivePublisherCoordinator
                         decision.FirstFullyEligibleCompletedLapNumber)));
             if (!projection.IsPublished)
             {
+                if (projection.DeclineReason == OverlayBridgePublicationProjectionDeclineReason.GarageOrSpectator
+                    && _hasPublishedAvailableFacts
+                    && !_hasPublishedLifecycleInvalidation)
+                {
+                    var invalidation = CreateLifecycleInvalidation(
+                        header,
+                        OverlayBridgeFactGroupUnavailableReason.GarageOrSpectator);
+                    if (!invalidation.TryValidate(out _))
+                    {
+                        return new OverlayBridgeLivePublisherResult(
+                            OverlayBridgeLivePublisherOutcome.InvalidGeneratedPublication,
+                            decision,
+                            Publication: null,
+                            ProjectionDeclineReason: null,
+                            ControlContextValidationError: null);
+                    }
+
+                    _lastSequence = invalidation.Header.Sequence;
+                    _hasPublishedAvailableFacts = false;
+                    _hasPublishedLifecycleInvalidation = true;
+                    return new OverlayBridgeLivePublisherResult(
+                        OverlayBridgeLivePublisherOutcome.PublishedLifecycleInvalidation,
+                        decision,
+                        invalidation,
+                        ProjectionDeclineReason: null,
+                        ControlContextValidationError: null);
+                }
+
                 return new OverlayBridgeLivePublisherResult(
                     OverlayBridgeLivePublisherOutcome.ProjectionDeclined,
                     decision,
@@ -261,6 +293,8 @@ internal sealed class OverlayBridgeLivePublisherCoordinator
             }
 
             _lastSequence = header.Sequence;
+            _hasPublishedAvailableFacts = true;
+            _hasPublishedLifecycleInvalidation = false;
             return new OverlayBridgeLivePublisherResult(
                 OverlayBridgeLivePublisherOutcome.PublishedAvailableFacts,
                 decision,
@@ -279,10 +313,18 @@ internal sealed class OverlayBridgeLivePublisherCoordinator
                 ControlContextValidationError: null);
         }
 
+        if (!_hasPublishedAvailableFacts || _hasPublishedLifecycleInvalidation)
+        {
+            return new OverlayBridgeLivePublisherResult(
+                OverlayBridgeLivePublisherOutcome.NoPublication,
+                decision,
+                Publication: null,
+                ProjectionDeclineReason: null,
+                ControlContextValidationError: null);
+        }
+
         var invalidation = CreateLifecycleInvalidation(
-            controlContext,
-            decision,
-            now,
+            CreateHeader(controlContext, decision, now),
             sourceEligibility.IsDriverChangeInProgress
                 ? OverlayBridgeFactGroupUnavailableReason.DriverHandoff
                 : OverlayBridgeFactGroupUnavailableReason.SourceUnavailable);
@@ -297,6 +339,8 @@ internal sealed class OverlayBridgeLivePublisherCoordinator
         }
 
         _lastSequence = invalidation.Header.Sequence;
+        _hasPublishedAvailableFacts = false;
+        _hasPublishedLifecycleInvalidation = true;
         return new OverlayBridgeLivePublisherResult(
             OverlayBridgeLivePublisherOutcome.PublishedLifecycleInvalidation,
             decision,
@@ -344,13 +388,10 @@ internal sealed class OverlayBridgeLivePublisherCoordinator
             PublisherSchemaHash: controlContext.PublisherSchemaHash);
     }
 
-    private OverlayBridgeSectorPublication CreateLifecycleInvalidation(
-        OverlayBridgeLivePublisherControlContext controlContext,
-        OverlayBridgePublicationCadenceDecision decision,
-        DateTimeOffset now,
+    private static OverlayBridgeSectorPublication CreateLifecycleInvalidation(
+        OverlayBridgeSectorPublicationHeader header,
         OverlayBridgeFactGroupUnavailableReason reason)
     {
-        var header = CreateHeader(controlContext, decision, now);
         OverlayBridgeFactGroupProvenance Provenance(OverlayBridgeCapability capability) => new(
             Capability: capability,
             FactSchemaVersion: OverlayBridgeFactContracts.CurrentFactSchemaVersion,

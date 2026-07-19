@@ -73,7 +73,14 @@ internal sealed class OverlayBridgeRoomPolicySigner
             return false;
         }
 
-        if (now.ToUniversalTime() >= signedPolicy.Policy.ExpiresAtUtc)
+        var verifiedAtUtc = now.ToUniversalTime();
+        if (verifiedAtUtc < signedPolicy.Policy.IssuedAtUtc)
+        {
+            error = OverlayBridgeRoomPolicyVerificationError.PolicyNotYetValid;
+            return false;
+        }
+
+        if (verifiedAtUtc >= signedPolicy.Policy.ExpiresAtUtc)
         {
             error = OverlayBridgeRoomPolicyVerificationError.PolicyExpired;
             return false;
@@ -157,5 +164,6 @@ internal enum OverlayBridgeRoomPolicyVerificationError
     InvalidPolicy = 2,
     OwnerBindingMismatch = 3,
     PolicyExpired = 4,
-    InvalidSignature = 5
+    InvalidSignature = 5,
+    PolicyNotYetValid = 6
 }

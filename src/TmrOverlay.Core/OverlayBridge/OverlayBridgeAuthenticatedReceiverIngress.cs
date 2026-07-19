@@ -207,22 +207,21 @@ internal sealed class OverlayBridgeAuthenticatedReceiverIngress
     {
         ArgumentNullException.ThrowIfNull(protectedCircuit);
 
-        OverlayBridgeReceiverClockReading reading;
         lock (gate)
         {
-            reading = receiverClock.Read();
-            if (!TryAdvanceClock(reading))
-            {
-                return CreateRejectedFrameResult(
-                    OverlayBridgeReceiverIngressFrameOutcome.RejectedClockRegression,
-                    reading,
-                    frameStatus: null,
-                    decodeError: OverlayBridgeCborDecodeError.None,
-                    bindingError: OverlayBridgeReceiverPublicationBindingError.None);
-            }
-
             if (phase != OverlayBridgeReceiverIngressPhase.Open)
             {
+                var reading = receiverClock.Read();
+                if (!TryAdvanceClock(reading))
+                {
+                    return CreateRejectedFrameResult(
+                        OverlayBridgeReceiverIngressFrameOutcome.RejectedClockRegression,
+                        reading,
+                        frameStatus: null,
+                        decodeError: OverlayBridgeCborDecodeError.None,
+                        bindingError: OverlayBridgeReceiverPublicationBindingError.None);
+                }
+
                 return CreateRejectedFrameResult(
                     OverlayBridgeReceiverIngressFrameOutcome.RejectedHandshakeRequired,
                     reading,
@@ -244,15 +243,29 @@ internal sealed class OverlayBridgeAuthenticatedReceiverIngress
         }
         catch (IOException)
         {
-            return RejectTransportFailure(reading);
+            return RejectTransportFailure();
         }
         catch (InvalidOperationException)
         {
-            return RejectTransportFailure(reading);
+            return RejectTransportFailure();
         }
 
         lock (gate)
         {
+            // Receipt must be stamped after the full protected frame arrives. Reading the clock
+            // before awaiting Stream.ReadAsync would let a delayed packet look newer than it is
+            // and could extend the normal calculation freshness window.
+            var reading = receiverClock.Read();
+            if (!TryAdvanceClock(reading))
+            {
+                return CreateRejectedFrameResult(
+                    OverlayBridgeReceiverIngressFrameOutcome.RejectedClockRegression,
+                    reading,
+                    frameStatus: frame.Status,
+                    decodeError: frame.DecodeError,
+                    bindingError: OverlayBridgeReceiverPublicationBindingError.None);
+            }
+
             if (phase != OverlayBridgeReceiverIngressPhase.Open)
             {
                 return CreateRejectedFrameResult(
@@ -405,11 +418,21 @@ internal sealed class OverlayBridgeAuthenticatedReceiverIngress
         }
     }
 
-    private OverlayBridgeReceiverIngressFrameResult RejectTransportFailure(
-        OverlayBridgeReceiverClockReading reading)
+    private OverlayBridgeReceiverIngressFrameResult RejectTransportFailure()
     {
         lock (gate)
         {
+            var reading = receiverClock.Read();
+            if (!TryAdvanceClock(reading))
+            {
+                return CreateRejectedFrameResult(
+                    OverlayBridgeReceiverIngressFrameOutcome.RejectedClockRegression,
+                    reading,
+                    frameStatus: null,
+                    decodeError: OverlayBridgeCborDecodeError.None,
+                    bindingError: OverlayBridgeReceiverPublicationBindingError.None);
+            }
+
             return CreateRejectedFrameResult(
                 OverlayBridgeReceiverIngressFrameOutcome.RejectedTransportFailure,
                 reading,

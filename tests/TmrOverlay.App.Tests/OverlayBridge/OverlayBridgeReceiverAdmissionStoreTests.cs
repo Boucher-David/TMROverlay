@@ -329,7 +329,7 @@ public sealed class OverlayBridgeReceiverAdmissionStoreTests
                         OptionalRepairSeconds: null,
                         FastRepairAvailable: false,
                         FastRepairUsed: false),
-                    TeamCarProgressLaps: 15.66d),
+                    TeamCarProgressLaps: 15.66d)),
             Environment: OverlayBridgeFactGroup.Unsupported<OverlayBridgeEnvironmentFacts>(
                 CreateProvenance(header, OverlayBridgeCapability.Environment)),
             SpatialTraffic: OverlayBridgeFactGroup.Unsupported<OverlayBridgeSpatialTrafficFacts>(

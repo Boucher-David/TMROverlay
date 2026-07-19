@@ -247,7 +247,7 @@ public sealed class OverlayBridgeFactContractsTests
                             GapSecondsToClassLeader: 24.2d,
                             IntervalSecondsToPreviousClassRow: 3.2d,
                             TrackLocation: OverlayBridgeTrackLocation.OnTrack)
-                    ]),
+                    ])),
             ActiveTeamCar: OverlayBridgeFactGroup.Available(
                 Provenance(OverlayBridgeCapability.ActiveTeamCar),
                 new OverlayBridgeActiveTeamCarFacts(
@@ -280,7 +280,7 @@ public sealed class OverlayBridgeFactContractsTests
                         OptionalRepairSeconds: null,
                         FastRepairAvailable: false,
                         FastRepairUsed: false),
-                    TeamCarProgressLaps: 15.66d),
+                    TeamCarProgressLaps: 15.66d)),
             Environment: OverlayBridgeFactGroup.Available(
                 Provenance(OverlayBridgeCapability.Environment),
                 new OverlayBridgeEnvironmentFacts(

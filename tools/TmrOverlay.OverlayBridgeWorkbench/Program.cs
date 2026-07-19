@@ -259,7 +259,7 @@ internal sealed class OverlayBridgeWorkbenchRuntime : IAsyncDisposable
         kind = "developer-only-overlay-bridge-workbench",
         bind = "127.0.0.1-only",
         source = "synthetic-contract-fixture",
-        pipeline = "virtual-circuit + ephemeral-mutual-tls + Core-frame + Core-admission + Core-composition",
+        pipeline = "virtual-circuit + ephemeral-mutual-tls + protected-hello + Core-frame + Core-admission + Core-composition",
         permittedTlsProtocols = "Tls12|Tls13",
         persistence = "none",
         telemetry = "none",
@@ -493,6 +493,33 @@ internal sealed class OverlayBridgeWorkbenchTlsCircuit : IAsyncDisposable
                         cancellationToken))
                 .ConfigureAwait(false);
 
+            var circuitId = Guid.Parse("cc46d201-c3ae-4443-8a21-38c1e3d56293");
+            var circuitNonce = SHA256.HashData(Encoding.UTF8.GetBytes("synthetic-bridge-workbench-circuit"));
+            var producerHello = CreateExpectedHello(
+                OverlayBridgeChannelEndpointRole.Publisher,
+                circuitId,
+                circuitNonce);
+            var receiverHello = CreateExpectedHello(
+                OverlayBridgeChannelEndpointRole.Viewer,
+                circuitId,
+                circuitNonce);
+            var helloResults = await Task.WhenAll(
+                    OverlayBridgeChannelHelloHandshake.ExchangeAsync(
+                        producer,
+                        producerHello,
+                        new OverlayBridgeChannelNonceReplayCache(maximumEntries: 8),
+                        cancellationToken),
+                    OverlayBridgeChannelHelloHandshake.ExchangeAsync(
+                        receiver,
+                        receiverHello,
+                        new OverlayBridgeChannelNonceReplayCache(maximumEntries: 8),
+                        cancellationToken))
+                .ConfigureAwait(false);
+            if (helloResults.Any(result => !result.IsAccepted))
+            {
+                throw new AuthenticationException("Synthetic Bridge protected-channel Hello exchange was rejected.");
+            }
+
             return new OverlayBridgeWorkbenchTlsCircuit(
                 pair,
                 producerCertificate,
@@ -531,6 +558,57 @@ internal sealed class OverlayBridgeWorkbenchTlsCircuit : IAsyncDisposable
             critical: false));
         request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
         return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1));
+    }
+
+    private static OverlayBridgeChannelHelloExpectedBinding CreateExpectedHello(
+        OverlayBridgeChannelEndpointRole localRole,
+        Guid circuitId,
+        ReadOnlyMemory<byte> circuitNonce)
+    {
+        return new OverlayBridgeChannelHelloExpectedBinding(
+            protocolVersion: OverlayBridgeProtocolVersion.Current,
+            roomId: "synthetic-room-local",
+            streamId: "synthetic-stream-team-car-47",
+            session: new OverlayBridgeSessionBinding(
+                SessionId: "synthetic-session-daytona",
+                SessionEpoch: 1,
+                TrackKey: "synthetic-track-daytona-road",
+                TeamCarKey: "synthetic-team-car-47"),
+            ownerPolicyHash: CreateSignedPolicyHash(
+                roomId: "synthetic-room-local",
+                roomInstanceId: "synthetic-room-instance-local",
+                policyEpoch: 1),
+            ownerPolicyEpoch: 1,
+            publisherLeaseId: "synthetic-lease-local",
+            publisherLeaseEpoch: 1,
+            localEndpointRole: localRole,
+            circuitId: circuitId,
+            circuitNonce: circuitNonce,
+            negotiatedCapabilities: OverlayBridgeFactContracts.FirstRemoteReleaseCapabilities);
+    }
+
+    private static ReadOnlyMemory<byte> CreateSignedPolicyHash(
+        string roomId,
+        string roomInstanceId,
+        long policyEpoch)
+    {
+        using var ownerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var ownerIdentity = OverlayBridgeDeviceIdentity.Create(
+            "synthetic-owner-device",
+            ownerKey.ExportSubjectPublicKeyInfo());
+        var issuedAtUtc = DateTimeOffset.UtcNow;
+        var policy = new OverlayBridgeRoomPolicy(
+            roomId,
+            roomInstanceId,
+            policyEpoch,
+            OverlayBridgeDevicePolicyBinding.FromIdentity(ownerIdentity),
+            issuedAtUtc,
+            issuedAtUtc.AddHours(1),
+            []);
+        return new OverlayBridgeRoomPolicySigner(ownerIdentity, ownerKey)
+            .Sign(policy)
+            .PolicyHashSha256
+            .ToArray();
     }
 
     private static bool HasSameThumbprint(X509Certificate? presented, X509Certificate2 expected)

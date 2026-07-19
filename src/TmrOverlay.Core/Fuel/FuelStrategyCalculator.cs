@@ -1085,8 +1085,8 @@ internal sealed record FuelStrategyInputs(
             capacity.EffectiveSessionCapacityLiters,
             capacity.PhysicalTankCapacityLiters);
         var fuelLevelLiters = ValidPositive(facts.CurrentFuelLiters);
-        var fuelPercent = fuelLevelLiters is { } fuel && usableCapacity is { } maximum && maximum > 0d
-            ? Math.Clamp(fuel / maximum, 0d, 1d)
+        var fuelPercent = fuelLevelLiters is { } fuelLiters && usableCapacity is { } maximum && maximum > 0d
+            ? Math.Clamp(fuelLiters / maximum, 0d, 1d)
             : (double?)null;
         var acceptedSamples = facts.CleanBurnEvidence.Samples
             .Where(sample => ValidPositive(sample.FuelUsedLiters) is not null)
@@ -1094,7 +1094,7 @@ internal sealed record FuelStrategyInputs(
         var hasMeasuredEvidence = (facts.CleanBurnEvidence.Confidence is FuelTeamCarEvidenceConfidence.Measured
             or FuelTeamCarEvidenceConfidence.High)
             && facts.CleanBurnEvidence.AcceptedSampleCount > 0;
-        var fuel = new LiveFuelSnapshot(
+        var snapshot = new LiveFuelSnapshot(
             HasValidFuel: fuelLevelLiters is not null,
             Source: "bridge-active-team-car",
             FuelLevelLiters: fuelLevelLiters,
@@ -1124,11 +1124,11 @@ internal sealed record FuelStrategyInputs(
 
         if (!hasMeasuredEvidence || acceptedSamples.Length == 0)
         {
-            return fuel;
+            return snapshot;
         }
 
         var fuelPerLap = acceptedSamples.Average(sample => sample.FuelUsedLiters);
-        return fuel.WithMeasuredFuelPerLap(
+        return snapshot.WithMeasuredFuelPerLap(
             fuelPerLap,
             acceptedSamples.Min(sample => sample.FuelUsedLiters),
             acceptedSamples.Max(sample => sample.FuelUsedLiters),

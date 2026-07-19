@@ -176,6 +176,7 @@ internal static class Program
                 services.AddSingleton<OverlayForensicsPackageService>();
                 services.AddSingleton<TelemetryCaptureState>();
                 services.AddSingleton<OverlayBridgeSupportState>();
+                services.AddSingleton<IOverlayBridgeDeviceCredentialStore, OverlayBridgeDeviceCredentialStore>();
                 services.AddSingleton<TelemetryEdgeCaseRecorder>();
                 services.AddSingleton<LiveModelParityRecorder>();
                 services.AddSingleton<LiveOverlayDiagnosticsRecorder>();

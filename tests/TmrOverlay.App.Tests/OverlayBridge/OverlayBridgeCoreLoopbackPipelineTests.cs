@@ -3,6 +3,7 @@ using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using TmrOverlay.App.Tests.OverlayBridge.Fixtures;
 using TmrOverlay.Core.Fuel;
 using TmrOverlay.Core.OverlayBridge;
@@ -274,6 +275,33 @@ public sealed class OverlayBridgeCoreLoopbackPipelineTests
                             CertificateRevocationCheckMode = X509RevocationMode.NoCheck
                         },
                         timeout.Token));
+
+                var circuitId = Guid.Parse("5fef285e-7bf0-4ac4-aefd-2090be479a60");
+                var circuitNonce = SHA256.HashData(Encoding.UTF8.GetBytes("bridge-loopback-circuit-nonce"));
+                var publisherHello = CreateExpectedHello(
+                    OverlayBridgeChannelEndpointRole.Publisher,
+                    circuitId,
+                    circuitNonce);
+                var receiverHello = CreateExpectedHello(
+                    OverlayBridgeChannelEndpointRole.Viewer,
+                    circuitId,
+                    circuitNonce);
+                var helloResults = await Task.WhenAll(
+                    OverlayBridgeChannelHelloHandshake.ExchangeAsync(
+                        publisher,
+                        publisherHello,
+                        new OverlayBridgeChannelNonceReplayCache(maximumEntries: 8),
+                        timeout.Token),
+                    OverlayBridgeChannelHelloHandshake.ExchangeAsync(
+                        receiver,
+                        receiverHello,
+                        new OverlayBridgeChannelNonceReplayCache(maximumEntries: 8),
+                        timeout.Token));
+                if (helloResults.Any(result => !result.IsAccepted))
+                {
+                    throw new AuthenticationException("The protected Bridge channel Hello exchange was rejected.");
+                }
+
                 return new TlsCircuit(circuit, publisherCertificate, receiverCertificate, publisher, receiver);
             }
             catch
@@ -312,6 +340,54 @@ public sealed class OverlayBridgeCoreLoopbackPipelineTests
             return request.CreateSelfSigned(
                 DateTimeOffset.UtcNow.AddMinutes(-1),
                 DateTimeOffset.UtcNow.AddDays(1));
+        }
+
+        private static OverlayBridgeChannelHelloExpectedBinding CreateExpectedHello(
+            OverlayBridgeChannelEndpointRole localRole,
+            Guid circuitId,
+            ReadOnlyMemory<byte> circuitNonce)
+        {
+            return new OverlayBridgeChannelHelloExpectedBinding(
+                protocolVersion: OverlayBridgeProtocolVersion.Current,
+                roomId: "loopback-room-a",
+                streamId: "loopback-stream-a",
+                session: new OverlayBridgeSessionBinding(
+                    SessionId: "loopback-session-a",
+                    SessionEpoch: 4,
+                    TrackKey: "loopback-track-a",
+                    TeamCarKey: "loopback-team-car-a"),
+                ownerPolicyHash: CreateSignedPolicyHash(
+                    roomId: "loopback-room-a",
+                    roomInstanceId: "loopback-room-instance-a",
+                    policyEpoch: 3),
+                ownerPolicyEpoch: 3,
+                publisherLeaseId: "loopback-lease-a",
+                publisherLeaseEpoch: 8,
+                localEndpointRole: localRole,
+                circuitId: circuitId,
+                circuitNonce: circuitNonce,
+                negotiatedCapabilities: OverlayBridgeFactContracts.FirstRemoteReleaseCapabilities);
+        }
+
+        private static ReadOnlyMemory<byte> CreateSignedPolicyHash(
+            string roomId,
+            string roomInstanceId,
+            long policyEpoch)
+        {
+            using var ownerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            var ownerIdentity = OverlayBridgeDeviceIdentity.Create(
+                "loopback-owner-device",
+                ownerKey.ExportSubjectPublicKeyInfo());
+            var policy = new OverlayBridgeRoomPolicy(
+                roomId,
+                roomInstanceId,
+                policyEpoch,
+                OverlayBridgeDevicePolicyBinding.FromIdentity(ownerIdentity),
+                DateTimeOffset.Parse("2026-07-19T12:00:00Z"),
+                DateTimeOffset.Parse("2026-07-19T13:00:00Z"),
+                []);
+            var signed = new OverlayBridgeRoomPolicySigner(ownerIdentity, ownerKey).Sign(policy);
+            return signed.PolicyHashSha256.ToArray();
         }
 
         private static bool HasSameThumbprint(X509Certificate? presented, X509Certificate2 expected)

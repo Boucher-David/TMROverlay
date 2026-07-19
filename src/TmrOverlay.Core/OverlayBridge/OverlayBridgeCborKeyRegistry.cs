@@ -24,6 +24,30 @@ internal static class OverlayBridgeCborKeyRegistry
         public const int MapAdvertisement = 7;
     }
 
+    /// <summary>
+    /// Protected-channel control record exchanged immediately after the inner mutually
+    /// authenticated TLS handshake. These keys are intentionally separate from the publication
+    /// vocabulary: a Hello binds a circuit to an already authenticated control-plane decision;
+    /// it is never a fact payload or a relay-visible envelope.
+    /// </summary>
+    internal static class ChannelHello
+    {
+        public const int ProtocolMajor = 1;
+        public const int ProtocolMinor = 2;
+        public const int RoomId = 3;
+        public const int StreamId = 4;
+        public const int Session = 5;
+        public const int OwnerPolicyHash = 6;
+        public const int OwnerPolicyEpoch = 7;
+        public const int PublisherLeaseId = 8;
+        public const int PublisherLeaseEpoch = 9;
+        public const int EndpointRole = 10;
+        public const int ExpectedPeerRole = 11;
+        public const int CircuitId = 12;
+        public const int CircuitNonce = 13;
+        public const int NegotiatedCapabilities = 14;
+    }
+
     internal static class Header
     {
         public const int ProtocolMajor = 1;

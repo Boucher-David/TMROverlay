@@ -5667,7 +5667,7 @@ def expected_localhost_alias_route(path: str) -> str | None:
 
 def validate_settings_region_manifest(path: str, values: dict[str, object], failures: list[str]) -> None:
     tab = values.get("tab")
-    if tab in (None, "general", "support"):
+    if tab in (None, "general", "support", "overlay-bridge"):
         return
 
     expected_region = normalize_manifest_region(values.get("region"))

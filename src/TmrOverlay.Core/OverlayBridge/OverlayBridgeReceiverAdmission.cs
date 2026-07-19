@@ -78,8 +78,8 @@ internal sealed class OverlayBridgeReceiverAdmissionStore
         {
             // A local receiver may deliberately move to a new expected session. Start a new
             // state in that case so no retained fact can be displayed as if it belonged there.
-            if (context.ExpectedSession is { } expectedSession
-                && SameSession(header.Session, expectedSession))
+            if (context.ExpectedSession is { } newExpectedSession
+                && SameSession(header.Session, newExpectedSession))
             {
                 state = OverlayBridgeReceiverState.Empty with { ActiveSession = header.Session };
             }
@@ -531,7 +531,7 @@ internal sealed record OverlayBridgeReceiverFactGroupState<TFacts>(
             throw new ArgumentOutOfRangeException(nameof(observedAtUtc), "A receiver-observed timestamp is required.");
         }
 
-        var age = LastAcceptedReceiptAtUtc is { } acceptedAtUtc
+        TimeSpan? age = LastAcceptedReceiptAtUtc is { } acceptedAtUtc
             ? observedAtUtc <= acceptedAtUtc ? TimeSpan.Zero : observedAtUtc - acceptedAtUtc
             : null;
 

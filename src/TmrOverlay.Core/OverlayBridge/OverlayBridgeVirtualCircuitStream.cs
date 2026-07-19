@@ -57,7 +57,7 @@ public sealed class OverlayBridgeVirtualCircuitStream : Stream
     private OverlayBridgeVirtualCircuitStream? _peer;
     private int _disposed;
 
-    private OverlayBridgeVirtualCircuitStream(int maximumQueuedBytes)
+    internal OverlayBridgeVirtualCircuitStream(int maximumQueuedBytes)
     {
         _inbound = new InboundBuffer(maximumQueuedBytes);
     }
@@ -119,7 +119,7 @@ public sealed class OverlayBridgeVirtualCircuitStream : Stream
 
     public override int Read(byte[] buffer, int offset, int count)
     {
-        ValidateBufferArguments(buffer, offset, count);
+        ValidateByteArrayArguments(buffer, offset, count);
         return ReadAsync(buffer.AsMemory(offset, count), CancellationToken.None)
             .AsTask()
             .GetAwaiter()
@@ -132,7 +132,7 @@ public sealed class OverlayBridgeVirtualCircuitStream : Stream
         int count,
         CancellationToken cancellationToken)
     {
-        ValidateBufferArguments(buffer, offset, count);
+        ValidateByteArrayArguments(buffer, offset, count);
         return ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
     }
 
@@ -168,7 +168,7 @@ public sealed class OverlayBridgeVirtualCircuitStream : Stream
 
     public override void Write(byte[] buffer, int offset, int count)
     {
-        ValidateBufferArguments(buffer, offset, count);
+        ValidateByteArrayArguments(buffer, offset, count);
         WriteCore(buffer.AsMemory(offset, count), CancellationToken.None);
     }
 
@@ -178,7 +178,7 @@ public sealed class OverlayBridgeVirtualCircuitStream : Stream
         int count,
         CancellationToken cancellationToken)
     {
-        ValidateBufferArguments(buffer, offset, count);
+        ValidateByteArrayArguments(buffer, offset, count);
 
         try
         {
@@ -239,7 +239,7 @@ public sealed class OverlayBridgeVirtualCircuitStream : Stream
         return ValueTask.CompletedTask;
     }
 
-    private void ConnectTo(OverlayBridgeVirtualCircuitStream peer)
+    internal void ConnectTo(OverlayBridgeVirtualCircuitStream peer)
     {
         ArgumentNullException.ThrowIfNull(peer);
 
@@ -273,7 +273,7 @@ public sealed class OverlayBridgeVirtualCircuitStream : Stream
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
     }
 
-    private static void ValidateBufferArguments(byte[] buffer, int offset, int count)
+    private static void ValidateByteArrayArguments(byte[] buffer, int offset, int count)
     {
         ArgumentNullException.ThrowIfNull(buffer);
 

@@ -319,7 +319,7 @@ public sealed class DiagnosticsBundleServiceTests
             });
 
         Assert.Equal(3, ((int?)json?["rowCount"]) ?? -1);
-        Assert.Equal(1, ((int?)json?["sdkCarIdxSlotRowCount"]) ?? -1);
+        Assert.Equal(2, ((int?)json?["sdkCarIdxSlotRowCount"]) ?? -1);
         Assert.Equal(2, ((int?)json?["carClassValidCount"]) ?? -1);
     }
 

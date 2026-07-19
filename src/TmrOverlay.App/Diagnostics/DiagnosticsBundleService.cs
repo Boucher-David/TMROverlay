@@ -4532,7 +4532,10 @@ internal sealed class DiagnosticsBundleService
 
     private static bool HasSdkCarIdxSlot(HistoricalCarProximity car)
     {
-        return car.CarIdx is >= 0 and < 64;
+        // Car rows are emitted only after the live/replay reader validates
+        // them against the current schema. Their index need not fit the old
+        // fixed 64-slot SDK table.
+        return car.CarIdx >= 0;
     }
 
     private static bool HasCompetitorLikeSignal(HistoricalCarProximity car)

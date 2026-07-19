@@ -3,6 +3,7 @@ using System.Drawing.Drawing2D;
 using TmrOverlay.App.Brand;
 using TmrOverlay.App.Diagnostics;
 using TmrOverlay.App.Localhost;
+using TmrOverlay.App.OverlayBridge;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.CarRadar;
 using TmrOverlay.App.Overlays.Content;
@@ -68,6 +69,7 @@ internal sealed class DesignV2SettingsCallbacks
 internal sealed class DesignV2SettingsSurface : Control
 {
     private const string GeneralTabId = "general";
+    private const string OverlayBridgeTabId = "overlay-bridge";
     private const string SupportTabId = "error-logging";
     public const int LogicalCanvasWidth = SettingsGeometry.DesignWidth + SettingsGeometry.NativeCanvasOffsetX * 2;
     public const int LogicalCanvasHeight = SettingsGeometry.DesignHeight + SettingsGeometry.NativeCanvasOffsetY * 2;
@@ -171,6 +173,7 @@ internal sealed class DesignV2SettingsSurface : Control
     private readonly ApplicationSettings _applicationSettings;
     private readonly Dictionary<string, OverlayDefinition> _overlayById;
     private readonly TelemetryCaptureState _captureState;
+    private readonly OverlayBridgeSupportState _overlayBridgeSupportState;
     private readonly DiagnosticsBundleService _diagnosticsBundleService;
     private readonly AppStorageOptions _storageOptions;
     private readonly LocalhostOverlayOptions _localhostOverlayOptions;
@@ -195,6 +198,7 @@ internal sealed class DesignV2SettingsSurface : Control
         ApplicationSettings applicationSettings,
         IReadOnlyList<OverlayDefinition> managedOverlays,
         TelemetryCaptureState captureState,
+        OverlayBridgeSupportState overlayBridgeSupportState,
         DiagnosticsBundleService diagnosticsBundleService,
         AppStorageOptions storageOptions,
         LocalhostOverlayOptions localhostOverlayOptions,
@@ -203,6 +207,7 @@ internal sealed class DesignV2SettingsSurface : Control
     {
         _applicationSettings = applicationSettings;
         _captureState = captureState;
+        _overlayBridgeSupportState = overlayBridgeSupportState;
         _diagnosticsBundleService = diagnosticsBundleService;
         _storageOptions = storageOptions;
         _localhostOverlayOptions = localhostOverlayOptions;
@@ -344,6 +349,13 @@ internal sealed class DesignV2SettingsSurface : Control
             return;
         }
 
+        if (string.Equals(_selectedTabId, OverlayBridgeTabId, StringComparison.OrdinalIgnoreCase))
+        {
+            DrawContentHeader(graphics, "Overlay Bridge", "Read-only bridge health; no transport is active.");
+            DrawOverlayBridgeSupportPage(graphics);
+            return;
+        }
+
         if (!_overlayById.TryGetValue(_selectedTabId, out var definition))
         {
             DrawContentHeader(graphics, "Settings", "Overlay settings and browser-source controls.");
@@ -461,6 +473,11 @@ internal sealed class DesignV2SettingsSurface : Control
         if (string.Equals(_selectedTabId, SupportTabId, StringComparison.OrdinalIgnoreCase))
         {
             BuildSupportControls();
+            return;
+        }
+
+        if (string.Equals(_selectedTabId, OverlayBridgeTabId, StringComparison.OrdinalIgnoreCase))
+        {
             return;
         }
 
@@ -1298,6 +1315,72 @@ internal sealed class DesignV2SettingsSurface : Control
         DrawAnalysisToggleRow(graphics, "Post-race analysis", "Summary analysis", 4, enabled: true, configurable: false);
     }
 
+    private void DrawOverlayBridgeSupportPage(Graphics graphics)
+    {
+        var bridge = OverlayBridgeSupportViewModel.From(_overlayBridgeSupportState.Snapshot());
+        var panel = DesignV2SettingsLayout.SupportBridgePanelBounds();
+        DrawPanel(graphics, panel, "Overlay Bridge");
+
+        DrawBridgeStatusRow(graphics, "Availability", bridge.AvailabilityText, columnIndex: 0, rowIndex: 0);
+        DrawBridgeStatusRow(graphics, "Enabled", bridge.EnabledText, columnIndex: 0, rowIndex: 1);
+        DrawBridgeStatusRow(graphics, "Pairing / transport", bridge.PairingTransportText, columnIndex: 0, rowIndex: 2);
+        DrawBridgeStatusRow(graphics, "Schema version/hash", bridge.SchemaText, columnIndex: 0, rowIndex: 3);
+        DrawBridgeStatusRow(graphics, "Paired clients", bridge.ConnectedPairedClientsText, columnIndex: 1, rowIndex: 0);
+        DrawBridgeStatusRow(graphics, "Latest frame", bridge.LatestFrameAgeText, columnIndex: 1, rowIndex: 1);
+
+        var errorRow = DesignV2SettingsLayout.SupportBridgeErrorRowBounds();
+        DrawText(
+            graphics,
+            "Last safe error",
+            DesignV2SettingsLayout.SupportBridgeLabelBounds(errorRow),
+            12f,
+            FontStyle.Regular,
+            TextSecondary);
+        DrawText(
+            graphics,
+            bridge.LastSafeErrorText,
+            DesignV2SettingsLayout.SupportBridgeValueBounds(errorRow),
+            11f,
+            FontStyle.Bold,
+            TextMuted,
+            alignment: StringAlignment.Far);
+
+        DrawText(
+            graphics,
+            "No listener, pairing, credentials, or telemetry sharing is active in this build.",
+            DesignV2SettingsLayout.SupportBridgeDescriptionLineBounds(0),
+            11f,
+            FontStyle.Regular,
+            TextMuted);
+        DrawText(
+            graphics,
+            "Future sharing is read-only and will require an explicit allowlist.",
+            DesignV2SettingsLayout.SupportBridgeDescriptionLineBounds(1),
+            11f,
+            FontStyle.Regular,
+            TextMuted);
+    }
+
+    private void DrawBridgeStatusRow(Graphics graphics, string label, string value, int columnIndex, int rowIndex)
+    {
+        var row = DesignV2SettingsLayout.SupportBridgeRowBounds(columnIndex, rowIndex);
+        DrawText(
+            graphics,
+            label,
+            DesignV2SettingsLayout.SupportBridgeLabelBounds(row),
+            12f,
+            FontStyle.Regular,
+            TextSecondary);
+        DrawText(
+            graphics,
+            value,
+            DesignV2SettingsLayout.SupportBridgeValueBounds(row),
+            11f,
+            FontStyle.Bold,
+            TextMuted,
+            alignment: StringAlignment.Far);
+    }
+
     private void DrawAnalysisToggleRow(Graphics graphics, string label, string detail, int rowIndex, bool enabled, bool configurable)
     {
         var row = DesignV2SettingsLayout.SupportAnalysisRowBounds(rowIndex);
@@ -2116,6 +2199,7 @@ internal sealed class DesignV2SettingsSurface : Control
     private bool IsKnownTab(string tabId)
     {
         return string.Equals(tabId, GeneralTabId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(tabId, OverlayBridgeTabId, StringComparison.OrdinalIgnoreCase)
             || string.Equals(tabId, SupportTabId, StringComparison.OrdinalIgnoreCase)
             || _overlayById.ContainsKey(tabId);
     }
@@ -2143,7 +2227,8 @@ internal sealed class DesignV2SettingsSurface : Control
             }
         }
 
-        tabs.Add(new SidebarTab(SupportTabId, "Diagnostics"));
+        tabs.Add(new SidebarTab(OverlayBridgeTabId, "Overlay Bridge"));
+        tabs.Add(new SidebarTab(SupportTabId, "Support"));
         return tabs;
     }
 

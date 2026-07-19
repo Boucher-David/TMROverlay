@@ -1,7 +1,7 @@
 {
   "contract": "overlay-scenario-contract/v1",
   "tracker": "v1.2.md",
-  "updated": "2026-05-24",
+  "updated": "2026-07-18",
   "purpose": "Parseable matrix for overlay-specific screenshot, replay, and cross-surface parity scenarios. This is the planning contract for what each overlay must prove across browser review, localhost/OBS, Windows native, compact replay fixtures, and optional full-capture replay.",
   "productDescriptor": {
     "source": "src/TmrOverlay.Core/Overlays/OverlayBehaviorDescriptorCatalog.cs",
@@ -167,6 +167,38 @@
       "gaps": [
         "only local map building is an active production toggle today",
         "disabled analysis toggles need explicit interaction tests before becoming writable product settings"
+      ]
+    },
+    {
+      "id": "settings-support-overlay-bridge-unavailable",
+      "area": "overlay-bridge-settings",
+      "family": "platform-status",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "partial",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "settings/overlay-bridge/general.png",
+        "states/settings-overlay-bridge.png"
+      ],
+      "testFiles": [
+        "tests/TmrOverlay.App.Tests/Settings/OverlayBridgeSupportViewModelTests.cs",
+        "tests/TmrOverlay.App.Tests/Overlays/DesignV2SettingsLayoutTests.cs:OverlayBridgeSupportBoundsUseSharedGeometryContract",
+        "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js:Overlay Bridge application tab is an honest, read-only unavailable state"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:support.bridge.availability.value",
+        "tools/browser-review/render-screenshots.mjs:settingsTabScreenshotPath('overlay-bridge')",
+        "tools/TmrOverlay.WindowsScreenshots/Program.cs:settings-overlay-bridge"
+      ],
+      "assertions": [
+        "Overlay Bridge is a first-class application settings tab, never a driving-overlay settings tab",
+        "the default state is explicitly unavailable and disabled, with no listener, pairing, credentials, or telemetry sharing active",
+        "safe display fields reserve availability, enabled state, pairing/transport state, schema version/hash, paired-client count, latest-frame age, and last-safe-error visibility for a later multi-client transport",
+        "the page exposes no pairing, sharing, credential, or transport action control"
+      ],
+      "gaps": [
+        "browser-review screenshot evidence is deterministic; the native WinForms path uses the same geometry and view model but must be captured on Windows before release",
+        "Support is an application surface, so no localhost/OBS route exists or is implied"
       ]
     },
     {
@@ -427,6 +459,77 @@
       ],
       "gaps": [
         "scenario is still thin: no deterministic screenshot or diagnostics replay proves preview teardown across an actual focus-loss transition"
+      ]
+    }
+  ],
+  "developerScenarios": [
+    {
+      "id": "overlay-bridge-offline-local-workbench",
+      "area": "overlay-bridge",
+      "family": "developer-workbench",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "covered",
+      "surfaces": ["browserReview"],
+      "surfaceExemptions": {
+        "localhostObs": "Not applicable: this is deliberately outside shipped localhost/OBS assets and routes.",
+        "windowsNative": "Not applicable: this is a deterministic developer evidence page, not a Windows product surface."
+      },
+      "artifacts": [
+        "bridge-workbench/current-sector.png",
+        "bridge-workbench/decoder-rejection.png",
+        "bridge-workbench/aged-receipt.png"
+      ],
+      "fixtures": [
+        "tools/browser-review/bridge-workbench/fixtures.mjs"
+      ],
+      "testFiles": [
+        "tests/browser-overlays/bridgeWorkbench.test.js:offline-only import boundary"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:validate_bridge_workbench_manifest",
+        "tools/browser-review/render-screenshots.mjs:bridgeWorkbenchScreenshotCases"
+      ],
+      "assertions": [
+        "three deterministic cases cover a current sector publication, decoder rejection before admission, and an aged receipt whose overlay freshness decision remains pending",
+        "every workbench screenshot proves the offline banner, no-live-runtime statement, two sandboxed fixture documents, no script runtime, and synthetic fixture variant",
+        "the browser-only workbench is not a localhost/OBS or Windows-native product surface and has no live app, telemetry, relay, pairing, or Oracle dependency"
+      ]
+    },
+    {
+      "id": "overlay-bridge-browser-only-local-simulation",
+      "area": "overlay-bridge",
+      "family": "developer-workbench",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "covered",
+      "surfaces": ["browserReview"],
+      "surfaceExemptions": {
+        "localhostObs": "Not applicable: this is deliberately outside shipped localhost/OBS assets and routes.",
+        "windowsNative": "Not applicable: this is deterministic browser-to-browser workflow evidence, not a Windows product surface."
+      },
+      "artifacts": [
+        "bridge-browser-simulation/current-remote.png",
+        "bridge-browser-simulation/held-remote.png",
+        "bridge-browser-simulation/terminal-tombstone.png",
+        "bridge-browser-simulation/sequence-rejection-retains-prior.png"
+      ],
+      "fixtures": [
+        "tools/browser-review/bridge-browser-simulation/fixtures.mjs"
+      ],
+      "testFiles": [
+        "tests/browser-overlays/bridgeBrowserSimulation.test.js:complete expected Core priority decision matrix",
+        "tests/browser-overlays/bridgeBrowserSimulation.pw.spec.js:browser-to-browser fixture events retain each expected Core priority decision"
+      ],
+      "validatorRules": [
+        "package.json:test:bridge",
+        "tests/browser-overlays/bridgeBrowserSimulation.test.js:limits the browser route to BroadcastChannel fixture delivery",
+        "tools/browser-review/render-screenshots.mjs:bridgeBrowserSimulationScreenshotCases",
+        "tools/validate_overlay_screenshots.py:validate_bridge_browser_simulation_manifest"
+      ],
+      "assertions": [
+        "the receiver first opens empty, then receives only a named deterministic synthetic fixture event from the separate producer browser document through BroadcastChannel",
+        "current, held, expired, direct-local precedence, tombstone, session mismatch, and sequence rejection each show an expected Core priority decision while explicitly not executing Core",
+        "fixture decisions prohibit scalar merging: direct local wins atomically; held, expired, and terminal remote facts cannot influence calculation while expired/terminal cases retain Remote Bridge provenance; rejected session/sequence candidates contribute no facts or freshness and preserve a still-current prior accepted group",
+        "the developer-only route family has no production app integration, persistence, telemetry, capture, socket, relay, pairing, cloud service, localhost/OBS route, or Windows-native surface"
       ]
     }
   ],

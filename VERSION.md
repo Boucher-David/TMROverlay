@@ -13,24 +13,26 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.2.4 - Overlay Visibility And Renderer Parity Stability
+### v1.3.0 - Overlay Bridge Developer Foundation
 
-Status: active implementation on branch `v1.2.4`.
+Status: active implementation on branch `v1.3-overlay-bridge`.
 
 Suggested squash title:
 
 ```text
-[v1.2.4] Stabilize overlay visibility and renderer parity
+[v1.3.0] Build Overlay Bridge developer foundation
 ```
 
 Suggested squash body:
 
 ```text
-- Centralize the descriptor-owned session visibility rules used by Windows native, localhost/OBS, browser review, and diagnostics, while retaining legacy persisted `ShowIn*` settings as compatible no-op data.
-- Fix browser-review session-content precedence, stale Track Map clearing after an unavailable poll, missing shared geometry variables, and Fuel's blank-header height drift across native and browser surfaces.
-- Preserve browser-visible Standings and Relative row semantics in the native table adapter, including pit rows, pending-grid rows, placeholder slots, and fastest-lap tones.
-- Add focused session-policy, renderer-contract, and native adapter tests; update scenario evidence and settings/Gap logic documentation.
-- User-data compatibility: no durable user-data or raw-capture format changes. Existing settings remain readable without a migration.
+- Preserve the PR workflow's portable Windows test-build/MSI artifacts so teammate WIP testing remains practical throughout V1.3 development.
+- Make V1.3 the Overlay Bridge milestone and V1.4 the Fuel Calculator V2 milestone; add the native Settings support tab and matching browser/validation coverage without turning Bridge into an OBS/localhost overlay.
+- Carry forward dynamic SDK `CarIdx` schema support so current 72-slot captures remain valid beside the earlier 64-slot corpus.
+- Add the first local-only Overlay Bridge foundation: versioned canonical-CBOR fact contracts, redacted normalized-live projection, capability-group receiver admission/composition, lease/handoff safeguards, bounded loopback virtual circuits, receiver-clock Fuel source selection, and deterministic Core tests. Add a fixed-loopback, synthetic Core workbench with ephemeral mutual TLS and a Windows CI self-test; it remains separate from the app, OBS routes, telemetry, and any remote transport. The first remote policy remains live Active Team Car facts only.
+- Add an offline browser-review producer/consumer workbench with immutable synthetic fixtures and forensic screenshot evidence. It has no live telemetry, pairing, relay, or shared application state.
+- Record the payload-blind Oracle relay design, pairing, freshness, compatibility, track-map, security, and remote-release gates; defer real networking, credentials, relay provisioning, and remote room operation.
+- User-data compatibility: preserve settings/history readers and the raw-capture format. The dynamic `CarIdx` reader accepts wider SDK layouts without changing existing capture semantics; Bridge facts are transient and do not promote teammate state into durable history.
 ```
 
 ## Merged Mainline Milestones

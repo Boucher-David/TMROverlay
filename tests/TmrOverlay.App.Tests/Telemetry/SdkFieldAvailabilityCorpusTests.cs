@@ -13,11 +13,11 @@ public sealed class SdkFieldAvailabilityCorpusTests
         var corpus = ReadCorpus();
 
         Assert.Equal(1, RequiredInt(corpus, "schemaVersion"));
-        Assert.Equal(340, RequiredInt(corpus, "fieldCount"));
-        Assert.Equal(340, RequiredArray(corpus["fields"]).Count);
+        Assert.Equal(367, RequiredInt(corpus, "fieldCount"));
+        Assert.Equal(367, RequiredArray(corpus["fields"]).Count);
 
         var sources = RequiredArray(corpus["sources"]).Select(RequiredObject).ToArray();
-        Assert.Equal(4, sources.Length);
+        Assert.Equal(5, sources.Length);
         Assert.Contains(sources, source => RequiredString(source, "sourceCategory") == "endurance-4h-team-race");
         Assert.Contains(sources, source => RequiredString(source, "sourceCategory") == "endurance-24h-fragment");
         Assert.Contains(sources, source => RequiredString(source, "sourceCategory") == "ai-nascar-limited-tire-race");
@@ -33,6 +33,12 @@ public sealed class SdkFieldAvailabilityCorpusTests
             sources,
             source => RequiredString(source, "sourceCategory") == "pcup-open-practice-pit-service"
                 && RequiredInt(source, "schemaFieldCount") == 334);
+        Assert.Contains(
+            sources,
+            source => RequiredString(source, "sourceCategory") == "acura-offline-testing-dynamic-caridx"
+                && RequiredInt(source, "schemaFieldCount") == 344
+                && RequiredInt(source, "carIdxArrayVariableCount") == 27
+                && RequiredInt(source, "maxCarIdxArrayElementCount") == 72);
 
         var fields = RequiredArray(corpus["fields"]).Select(RequiredObject).ToDictionary(field => RequiredString(field, "name"));
         foreach (var requiredField in new[]
@@ -45,6 +51,7 @@ public sealed class SdkFieldAvailabilityCorpusTests
             "DCDriversSoFar",
             "WeatherDeclaredWet",
             "CarIdxF2Time",
+            "Engine1_RPM",
             "dpLTireChange",
             "dpRTireChange",
             "dpWeightJackerLeft",
@@ -69,9 +76,9 @@ public sealed class SdkFieldAvailabilityCorpusTests
         Assert.True(RequiredDouble(steeringShape, "primitiveValueMaximum") > 1e20);
 
         var perCarShape = RequiredObject(fields["CarIdxF2Time"]["sdkDeclaredShape"]);
-        Assert.Equal(64, RequiredInt(perCarShape, "elementCount"));
-        Assert.Equal(63, RequiredInt(perCarShape, "maxElementIndex"));
-        Assert.Equal(256, RequiredInt(perCarShape, "totalByteLength"));
+        Assert.Equal(72, RequiredInt(perCarShape, "elementCount"));
+        Assert.Equal(71, RequiredInt(perCarShape, "maxElementIndex"));
+        Assert.Equal(288, RequiredInt(perCarShape, "totalByteLength"));
 
         var throttleObserved = RequiredObject(RequiredObject(fields["Throttle"]["observedBySource"])[sourceId]);
         Assert.True(RequiredDouble(throttleObserved, "max") <= 1.00001);

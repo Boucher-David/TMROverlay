@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-05-19
+Last updated: 2026-07-18
 
 ## Project Goal
 
@@ -578,7 +578,7 @@ Treat the docs as schema/reference material, not as a ready-made real-world data
 7. Identify remaining v1/legacy overlay slices and choose the next safe model-v2 migration target without pulling fuel/gap analysis products into the simple-overlay path prematurely.
 8. Keep collecting radar diagnostics for suppressed non-local focus, local progress-missing, side-without-placement, and multiclass cases before expanding beyond local in-car radar.
 9. Harden Track Map after first real usage: current-map quality/status, manual rebuild/replace UX, bundled map QA, confidence/stale/pit-lane screenshot states, and pit-lane-aware live markers when reliable telemetry exists.
-10. Decide the Overlay Bridge v2 shape for teammate-to-teammate data sharing: enable/disable, allowed peers, schema version, connection health, and which normalized model-v2 context should become the trusted peer contract.
+10. Build the v1.3 Overlay Bridge developer foundation: a Windows-published, read-only live monitor/client boundary with explicit enablement, allowed peers, schema version, connection health, and normalized model-v2 contracts. Keep it separate from localhost/OBS, raw capture, and simulator commands; Fuel Calculator V2 is the following v1.4 milestone.
 11. Expand Stream Chat beyond the current Streamlabs-widget localhost source and public Twitch channel modes when needed, keeping provider auth, moderation, rate limits, and offline preview states separate from iRacing telemetry.
 12. Treat overlay builder as a later creator/development platform on top of design-v2 primitives and the bridge schema, not as a prerequisite for the first hand-authored production overlays.
 13. Improve historical aggregation and confidence/source tracking as more user sessions are collected.

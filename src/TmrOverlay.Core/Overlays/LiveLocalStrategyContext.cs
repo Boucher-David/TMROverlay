@@ -152,7 +152,9 @@ internal static class LiveLocalStrategyContext
 
     private static int? ValidCarIdx(int? carIdx)
     {
-        return carIdx is >= 0 and < 64 ? carIdx : null;
+        // CarIdx arrays follow the current SDK schema rather than a fixed 64-slot contract.
+        // Preserve every non-negative value and let the source schema define the upper bound.
+        return carIdx is >= 0 ? carIdx : null;
     }
 
     private static string ReasonCode(OverlayAvailabilityReason reason)

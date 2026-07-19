@@ -786,7 +786,7 @@ test.describe('browser overlay Playwright integration', () => {
     await page.goto('http://localhost:8765/review/settings/general');
 
     await expect(page.locator('h1')).toHaveText('General');
-    await expect(page.locator('.sidebar-tab')).toHaveCount(14);
+    await expect(page.locator('.sidebar-tab')).toHaveCount(15);
     await expect(page.locator('.sidebar-tab.active')).toHaveText('General');
     await expect(page.getByText('Preview off')).toBeVisible();
     await expect(page.locator('.overlay-frame')).toHaveCount(0);
@@ -1080,6 +1080,41 @@ test.describe('browser overlay Playwright integration', () => {
 
     await page.goto('http://localhost:8765/review/app?tab=support');
     await expectRelativeRect(page, '.settings-window', '.support-grid .panel:first-child', { x: 262, y: 178, width: 392, height: 278 });
+  });
+
+  test('Overlay Bridge application tab is an honest, read-only unavailable state', async ({ page }) => {
+    await page.route('**/*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.hostname === 'localhost' && url.pathname === '/review/app') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/html; charset=utf-8',
+          body: renderAppValidatorReviewHtml({
+            selectedTab: 'overlay-bridge'
+          })
+        });
+        return;
+      }
+
+      await route.fulfill({ status: 404, contentType: 'text/plain; charset=utf-8', body: 'not found' });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('http://localhost:8765/review/app?tab=overlay-bridge');
+
+    await expect(page.locator('h1')).toHaveText('Overlay Bridge');
+    await expect(page.getByRole('link', { name: 'Overlay Bridge' })).toHaveClass(/active/);
+    await expect(page.locator('[data-evidence-key="support.bridge.availability.value"]')).toHaveText('Unavailable');
+    await expect(page.locator('[data-evidence-key="support.bridge.enabled.value"]')).toHaveText('Disabled');
+    await expect(page.locator('[data-evidence-key="support.bridge.pairing-transport.value"]')).toHaveText('Not started — transport not implemented');
+    await expect(page.locator('[data-evidence-key="support.bridge.schema.value"]')).toHaveText('Not available');
+    await expect(page.locator('[data-evidence-key="support.bridge.paired-clients.value"]')).toHaveText('0 connected');
+    await expect(page.locator('[data-evidence-key="support.bridge.latest-frame.value"]')).toHaveText('No frames');
+    await expect(page.locator('[data-evidence-key="support.bridge.last-safe-error.value"]')).toHaveText('None reported');
+    await expect(page.getByText('No listener, pairing, credentials, or telemetry sharing is active in this build.')).toBeVisible();
+    await expect(page.getByText('Future sharing is read-only and will require an explicit allowlist.')).toBeVisible();
+    await expect(page.getByRole('button', { name: /pair|connect|share|start/i })).toHaveCount(0);
+    await expectRelativeRect(page, '.settings-window', '.support-bridge-panel', { x: 262, y: 178, width: 834, height: 278 });
   });
 
   test('application settings controls post native-shaped review setting changes', async ({ page }) => {

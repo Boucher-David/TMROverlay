@@ -257,6 +257,11 @@ jobs:
       - name: Build
         run: dotnet build tmrOverlay.sln --configuration Release --no-restore
 
+      - name: Overlay Bridge developer workbench self-test
+        run: |
+          dotnet restore tools\TmrOverlay.OverlayBridgeWorkbench\TmrOverlay.OverlayBridgeWorkbench.csproj
+          dotnet run --project tools\TmrOverlay.OverlayBridgeWorkbench\TmrOverlay.OverlayBridgeWorkbench.csproj --configuration Release --no-restore -- --self-test
+
   windows_tests:
     name: Windows tests
     runs-on: windows-latest
@@ -655,6 +660,8 @@ jobs:
           "manifest_path=$manifestPath" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "informational_version=$informationalVersion" >> $env:GITHUB_OUTPUT
+          $shortSha = "${{ github.sha }}".Substring(0, 7)
+          "short_sha=$shortSha" >> $env:GITHUB_OUTPUT
 
       - name: Audit dry-run publish output
         shell: pwsh
@@ -706,6 +713,26 @@ jobs:
               Get-ChildItem $velopackPath | Format-Table Name, Length
               throw "Velopack dry run output is missing the MSI package, full package, or releases.win-x64.json."
           }
+
+      - name: Upload portable Windows PR test build
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tmroverlay-pr-${{ github.event.pull_request.number }}-windows-x64
+          path: |
+            artifacts/pr-publish-check/**
+            artifacts/pr-publish-check-manifest.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows PR test installer
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tmroverlay-pr-${{ github.event.pull_request.number }}-v${{ steps.publish_dry_run.outputs.version }}-r${{ github.run_number }}-a${{ github.run_attempt }}-${{ steps.publish_dry_run.outputs.short_sha }}-installer
+          path: artifacts/pr-velopack-check/*.msi
+          if-no-files-found: error
+          retention-days: 14
 
   windows_release_package:
     name: Windows release package

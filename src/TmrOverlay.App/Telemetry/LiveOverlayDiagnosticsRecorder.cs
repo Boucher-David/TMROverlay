@@ -3172,7 +3172,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             return "cam_car_idx_missing";
         }
 
-        return sample.RawCamCarIdx is < 0 or >= 64
+        return sample.RawCamCarIdx < 0
             ? "cam_car_idx_invalid"
             : "cam_car_progress_unavailable";
     }

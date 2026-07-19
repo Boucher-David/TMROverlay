@@ -17,6 +17,22 @@ import {
   overlayGeometry,
   settingsBrowserSourceSize
 } from '../../tests/browser-overlays/browserOverlayAssets.js';
+import { renderBridgeWorkbenchHtml } from './bridge-workbench/render.mjs';
+import { renderBridgeBrowserSimulationHtml } from './bridge-browser-simulation/render.mjs';
+
+// Only the developer-only Bridge fixture pages opt into this restrictive CSP. Other browser
+// review pages intentionally use scripts and live-reload during normal overlay development.
+const offlineBridgeWorkbenchHeaders = {
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+  'Referrer-Policy': 'no-referrer'
+};
+
+// The separate browser-to-browser developer simulation needs only an inline script for
+// `BroadcastChannel`. It remains review-only: no network-capable source is permitted.
+const browserBridgeSimulationHeaders = {
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  'Referrer-Policy': 'no-referrer'
+};
 
 const port = Number.parseInt(process.env.TMR_BROWSER_REVIEW_PORT || '5177', 10);
 const initialReviewUnitSystem = normalizeUnitSystem(process.env.TMR_REVIEW_UNIT_SYSTEM || process.env.TMR_UNIT_SYSTEM || 'Metric');
@@ -312,6 +328,30 @@ const server = createServer((request, response) => {
       return;
     }
 
+    const bridgeWorkbenchRoute = bridgeWorkbenchRouteFromPath(path);
+    if (bridgeWorkbenchRoute) {
+      serveHtml(
+        response,
+        renderBridgeWorkbenchHtml({
+          view: bridgeWorkbenchRoute,
+          caseId: url.searchParams.get('case') || 'active-team-live'
+        }),
+        offlineBridgeWorkbenchHeaders);
+      return;
+    }
+
+    const bridgeBrowserSimulationRoute = bridgeBrowserSimulationRouteFromPath(path);
+    if (bridgeBrowserSimulationRoute) {
+      serveHtml(
+        response,
+        renderBridgeBrowserSimulationHtml({
+          view: bridgeBrowserSimulationRoute,
+          caseId: url.searchParams.get('case') || 'current-remote'
+        }),
+        browserBridgeSimulationHeaders);
+      return;
+    }
+
     const overlayId = overlayIdFromPath(path);
     if (overlayId) {
       serveHtml(response, withLiveReload(renderOverlayHtml(overlayId)));
@@ -345,9 +385,22 @@ function createReviewAppState() {
       canCheckUpdates: true,
       canInstallUpdate: false,
       canRestartUpdate: false,
-      updatePendingRestart: false
+      updatePendingRestart: false,
+      bridge: unavailableOverlayBridgeReviewState()
     },
     overlays: Object.create(null)
+  };
+}
+
+function unavailableOverlayBridgeReviewState() {
+  return {
+    availability: 'Unavailable',
+    enabled: false,
+    pairingTransport: 'Not started — transport not implemented',
+    schema: 'Not available',
+    connectedPairedClients: '0 connected',
+    latestFrameAge: 'No frames',
+    lastSafeError: 'None reported'
   };
 }
 
@@ -793,6 +846,32 @@ function overlayIdFromPath(path) {
   }
 
   return null;
+}
+
+function bridgeWorkbenchRouteFromPath(path) {
+  switch (path) {
+    case '/review/bridge/workbench':
+      return 'workbench';
+    case '/review/bridge/producer':
+      return 'producer';
+    case '/review/bridge/consumer':
+      return 'consumer';
+    default:
+      return null;
+  }
+}
+
+function bridgeBrowserSimulationRouteFromPath(path) {
+  switch (path) {
+    case '/review/bridge/local/workbench':
+      return 'workbench';
+    case '/review/bridge/local/producer':
+      return 'producer';
+    case '/review/bridge/local/receiver':
+      return 'receiver';
+    default:
+      return null;
+  }
 }
 
 function reviewLiveSnapshot(previewMode = 'off', searchParams = new URLSearchParams()) {
@@ -4850,8 +4929,11 @@ function broadcastReload() {
   }
 }
 
-function serveHtml(response, body) {
-  response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+function serveHtml(response, body, extraHeaders = {}) {
+  response.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    ...extraHeaders
+  });
   response.end(body);
 }
 

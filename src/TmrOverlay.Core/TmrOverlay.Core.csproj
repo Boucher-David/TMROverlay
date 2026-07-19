@@ -6,4 +6,8 @@
     <AssemblyName>TmrOverlay.Core</AssemblyName>
     <RootNamespace>TmrOverlay.Core</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Formats.Cbor" Version="8.0.0" />
+  </ItemGroup>
 </Project>

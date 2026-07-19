@@ -51,6 +51,7 @@ Current evidence/tooling shape:
 - 2026-05-24: The `v1.2.1-replay-foundation-improvement` branch expands raw-capture replay from linear playback into controllable frame/session-time windows, session-type filtering, optional focus-car override, manifest/header/schema import inspection, production model replay provenance, and a standalone compact import/sample export tool. This is still raw-capture replay foundation work, not Fuel Calculator V2 product logic.
 - 2026-05-24: The teammate GR86 Road Atlanta support bundle timestamped 2026-05-24 19:29:23 UTC did not contain raw replay input, but diagnostics showed update apply/restart limbo rather than a telemetry freeze or TMR overlay input interception: Settings was visible, performance timers were still ticking, `release-updates.json` was `Applying`, and `runtime-state.json` had no clean stop. v1.2.1 moves update handoff to the post-UI shutdown path, adds update-apply shutdown breadcrumbs, and adds `metadata/evidence-quality.json` `updateFlow.applyShutdown` classification so future bundles can report `update_apply_shutdown_incomplete` directly.
 - 2026-05-25: The `v1.2.2-small-fixes` branch is a focused overlay-regression pass from Dallara/team feedback. It filters zero/default timing placeholders before Standings can render, makes Pit Service and Session / Weather size to rendered sections, keeps Relative fixed empty slots visibly dimmed, and refines Flags so practice/test one-to-green/start/global-yellow noise is suppressed while race-start and local actionable flag evidence still displays. It also reduces the default Flags footprint and makes native/browser/localhost flag sizing count-driven. No durable raw-capture or user-data schema change is intended.
+- 2026-07-18: The next V1.x milestone is reset to `v1.3-overlay-bridge`: an opt-in, read-only team-data foundation. It is a remote capability source for existing overlays, not an OBS route or a new driving overlay. One active in-car publisher fans canonical redacted snapshots to many approved teammate devices; each receiver composes those remote capability groups with its own local iRacing state. The detailed proposal, including the locked payload-blind relay posture, is recorded in the V1.3 section below. Fuel Calculator V2 moves intact to the following `v1.4` milestone; no Fuel V2 work should be folded into the bridge branch merely because both consume live model data.
 
 ## Current V1.2 Branch Focus
 
@@ -245,7 +246,7 @@ Likely scope:
 
 V1.x is where heavy analysis overlays and broader platform features should mature, except for the engineer/operator mode, which is large enough to treat as V2.0. These branches can assume the V1.0 core app already has reliable release/support flow and stable core telemetry contracts. They should also assume the V1.1/V1.2 evidence baseline: explicit forensics packages, parseable overlay contracts, app-owned behavior descriptors, compact real-data fixtures, screenshot/manifest parity, and CI lanes that treat validation failures as product evidence until classified.
 
-The immediate patch-line follow-up after v1.2.0 should be v1.2.1 replay/tooling hardening. v1.3 should start only when the branch is ready to build Fuel Calculator V2 on top of that evidence foundation, with Gap, sector, and stint analysis treated as supporting model work for the fuel strategy product.
+The immediate patch-line follow-up after v1.2.0 is v1.2.1 replay/tooling hardening. The next feature milestone is v1.3 Overlay Bridge: a Windows-published, separately consumed live-monitor development boundary that builds on that evidence foundation. Fuel Calculator V2 follows as v1.4, with Gap, sector, and stint analysis treated as supporting model work for the fuel strategy product.
 
 ### V1.0.x Comfort Follow-Up - Windows Cursor Affordances
 
@@ -421,7 +422,280 @@ Success criteria:
 - Large raw captures are not committed to git; durable CI fixtures are redacted/minimized capture slices or explicit normalized replay windows.
 - Replay evidence does not replace real Windows/OBS validation, but it makes the next live validation targeted instead of exploratory.
 
-### v1.3 - Fuel Calculator V2
+### v1.3 - Overlay Bridge: Team Data Source Proposal
+
+Status: product direction agreed on 2026-07-18. The first remote Bridge release uses a payload-blind, end-to-end protected data plane; it does not ship a relay-visible interim telemetry transport. **Current engineering phase:** local Core loopback plus offline/browser-only fixture proof only—no Oracle tenancy, relay deployment, listener, pairing endpoint, app-to-app live connection, or network transport is in scope until those deterministic proofs and Windows validation pass.
+
+#### Decision ledger — locked V1.3 baseline
+
+- **Product/release:** V1.3 is Overlay Bridge; V1.4 is Fuel Calculator V2. Bridge enhances the receiver's existing overlays and is neither a driving overlay nor a localhost/OBS surface. Preserve PR Windows build-publish artifacts for teammate WIP testing.
+- **Room model:** one Owner-admin, many approved teammates, and one active publisher per `room + team-car stream`. Approved Team members may view and become publisher candidates only on confirmed direct in-car telemetry; View-only remains available. The Owner may be offline while approved connections remain; an empty room closes and only its Owner creates a new instance.
+- **Pairing/trust:** Owner creates a short-lived single-use Viewer invitation; the joiner creates a local device identity and the Owner explicitly approves Team member or View-only. There is no room password, QR/PIN/voice check, shared certificate, exported private key, auto-approval, or inbound listener.
+- **Transport:** future Internet transport is hostname-validated outer `wss://` to an Oracle Always Free payload-blind relay plus an end-to-end mutually authenticated `SslStream` TLS circuit for each publisher/viewer pair. Oracle setup and connection are deliberately deferred until local proof and Windows validation.
+- **Publisher/handoff:** sector facts are one-way; lifecycle control is immediate only for state changes. Handoff is automatic and patient: sustained incoming direct evidence, outgoing local draining/relinquish when it agrees, then a short exclusive lease; conflict or absence fails closed rather than picking by arrival order.
+- **Payload/boundary:** canonical CBOR, bounded full sector publications, and versioned capability-group facts—not raw SDK data, app snapshots, settings, history, captures, renderer output, identity labels, or publisher strategy conclusions. V1.3 starts with Active Team Car facts only: fuel/capacity/restrictions, bounded clean burns, pit/repair, source/handoff, and team-car progress.
+- **Source precedence:** remote facts serve a receiver without fresh confirmed direct in-car telemetry. Direct in-car telemetry suppresses every remote live group atomically; Bridge never fills/merges intentional iRacing Max-Cars field gaps. A future Fuel leader witness needs capture proof and separate consent.
+- **Cadence/freshness:** one complete snapshot at each sector plus an immediate snapshot on join/handoff; no per-second fuel heartbeat. Core owns receiver-clock freshness, provenance, cadence observations, and hard invalidation; each consumer declares its own tested current/held/unavailable presentation policy. Fuel is quiet while current, subtly delayed while held, and compactly unavailable without stale numbers once expired/invalidated.
+- **Compatibility:** normal V1.3 additions are optional/additive and backwards-compatible. Never reuse/reinterpret CBOR keys; negotiate minor/capability support and omit unknown fields per peer. A rewrite/removal requires an explicit major incompatibility/migration decision; security can withdraw an unsafe version.
+- **Maps:** map sharing is a separate opt-in, one-time offer/accept asset flow, never sector telemetry or cloud retention. Accepted maps are validated/quarantined `TrackMapStore` candidates, cannot displace a better local map, and start with a 2 MiB asset maximum and 25 MiB Bridge cache.
+- **Local proof:** the developer-only offline fixture workbench renders independent synthetic producer/consumer contract evidence in browser review, alongside Core loopback tests that prove canonical CBOR, signed-policy/identity contracts, mutual TLS virtual circuits, protected Hello binding, decoding, admission, bounded opaque relay fanout, and receiver-core composition. Its static routes have no JS CBOR decoder, socket, Bridge API, relay, pairing, or shared/live state. A deliberately separate browser-only local simulation may use `BroadcastChannel` to hand a sanitized deterministic fixture event from one browser document to another for UI/workflow proof; it has no persistence, app/Core integration, real telemetry, socket, relay, pairing, or network transport, and only displays expected Core decisions. A third, separately invoked Core-backed workbench binds a fixed `127.0.0.1` listener and sends only a built-in synthetic publication through the in-memory protected circuit into one server-side receiver; it clears ambient configuration, accepts no host/source settings, and has a dedicated Windows CI self-test. It is a real Core proof, not two app sessions, a browser-to-browser transport, or a live Mac↔Windows development bridge.
+
+Deferred/research-gated: session/environment facts pending paired capture evidence; leader witness/field or spatial facts pending a concrete safe use; identity labels; actual map transfer encoding/product timing; exact owner transfer; and Oracle provisioning/integration.
+
+#### Remote-release security gates (adversarial review, 2026-07-18)
+
+The current Core loopback is deliberately not a network transport. Before a room can connect to any relay, the implementation must satisfy all of these release gates:
+
+- Bind every accepted publication to an authenticated Hello/control-plane result: exact approved device public-key identity, room-instance policy hash/epoch, circuit nonce, active publisher lease, allowed live source mode, and recipient-granted capability intersection. Header strings and self-asserted lease epochs are not authentication.
+- Make the relay-facing host serialize admission per room/circuit, use monotonic elapsed receipt time for freshness/cadence (retaining UTC only for diagnostics), and define bounded per-viewer queue/backpressure/disconnect behavior that can carry one protected maximum frame plus TLS overhead.
+- Keep revocation as a local hard fuse and keep tombstones closed to the same lease. The current Core enforces those local invariants; the remote control plane must additionally authenticate a new lease/policy/session before reopening a fact group.
+- Reject malformed, wrong-room, stale, replay, capability-policy, and ordering-invalid packets without allowing them to poison already admitted facts. Keep safe health diagnostics separate from the calculation-composition state.
+- Enforce the V1.3 first-release policy at the authenticated receiver boundary: `Live` source mode and Active Team Car capability only. Raw-capture replay remains an explicit local/test pathway, never a room mode.
+- Negotiate outbound optional fields by a mechanical introduced-minor registry and golden old-reader fixtures; never rely on a receiver merely ignoring a value that a sender should have omitted.
+- Keep numerical validation relational and domain-bounded before calculation. The current fact validator binds active facts to the session team-car key, requires fuel plus physical capacity, checks known capacity limits, and requires ordered epoch-local clean-burn samples; future receiver calculations still need overflow defenses.
+
+These gates, policy/lease binding tests, rate-limited/bounded claim replay handling, and real Windows transport validation are required before Oracle provisioning is considered an implementation task. A 2026-07-19 adversarial review reaffirmed this boundary: a green PR build is the next checkpoint, not permission to connect a throwaway browser or LAN transport to Oracle. The current checkpoint implements the production-shaped local vertical slice (platform-kept identity seam, signed owner policy and one-time approval/revocation, role-correct policy-bound mTLS options/Hello, bounded relay circuit/queues, normalized-live publisher coordination, and a separate authenticated Core receiver ingress). It is **not** a deployed remote service: before provisioning, the next implementation phase must add a durable room-policy/revocation authority, authenticated remote admission/lease issuance, circuit closure on expiry/revocation, a shipping app host wired to the live publisher and receiver ingress, and strict outer-WSS/inner-TLS integration tests. Windows CI and the documented native-key validation are necessary gates for that work, not substitutes for it.
+
+#### Product intent
+
+Overlay Bridge is an opt-in remote telemetry source that lets a team fill iRacing's off-car information gaps in the receiver's existing application overlays. It is not a new driving overlay, an OBS/localhost route, a raw telemetry synchronization system, or a way for a client to talk directly to iRacing.
+
+The primary use case is an endurance/team room:
+
+```text
+Windows in-car publisher
+  -> explicit redacted Bridge projection
+  -> approved remote room transport
+  -> many teammate receivers
+  -> capability-group composition with each receiver's local iRacing state
+  -> existing TmrOverlay views
+```
+
+The publisher is normally the active driver. A receiver can still have useful local session and field state while iRacing withholds active-car fuel, burn, pit, or driver-stint data because that receiver is garage-side, spectating, or a teammate outside the car. Bridge fills only those named remote capability groups; it must not silently replace or contaminate canonical local telemetry/history.
+
+#### Room, stream, and trust model
+
+- A room has one owner/admin and many individually approved devices.
+- A room may have many viewers, but exactly one active publisher for a given team-car stream at a time. Protocol naming uses `room + stream` now so a later multi-car team can add separate streams without redesigning the envelope.
+- The active publisher fans one canonical snapshot sequence to every approved viewer. “Same packet” means the same snapshot identity, session epoch, sequence, capability set, and semantic payload. A payload-blind transport may use a recipient-specific protected envelope for each viewer rather than one shared encrypted byte sequence.
+- Roles are Owner/Admin, Viewer, Publisher Candidate, and Active Publisher. A pairing request grants Viewer only. An owner policy authorizes Publisher Candidates, but the active publisher is selected automatically only from a fresh, confirmed direct in-car/enhanced-telemetry source for that `room + stream`. Retain a healthy current publisher to avoid flapping; on a conflict, fail closed rather than choosing unpredictably.
+- The admin approves/revokes device identities and controls room membership. The admin does not distribute a reusable room password or a single shared TLS session; every device has its own protected identity and authenticated connection.
+- The transport is one-way for V1.3 telemetry: viewers do not issue simulator commands, change publisher settings, request raw data, or write into the publisher's local history.
+- No mesh, peer relaying, UPnP, router port forwarding, public localhost listener, roster discovery, or automatic trust is allowed.
+
+#### Publisher lease and automatic driver handoff
+
+**Decision (2026-07-18):** normal handoff is automatic and two-phase, with no driver click or voice confirmation.
+
+1. An approved Publisher Candidate that detects fresh, direct in-car/enhanced telemetry for the bound `room + stream + session` sends a signed eligibility claim to the relay control plane. The claim names its device, the session binding, and a fresh nonce/epoch; it contains no telemetry payload.
+2. The current publisher detects the driver-change transition locally and enters `draining`. Pit entry alone is not a relinquish signal because a normal fuel/tire stop must keep the current publisher. Local driver-control/change signals may begin draining, but loss of confirmed direct in-car source is the final condition.
+3. The current publisher sends a signed relinquish/tombstone when that condition is met. It confirms only that *it* is no longer the source; it does not attest that the candidate is truly driving.
+4. The relay validates owner policy and serializes the claim plus relinquish into the next short, exclusive publisher lease. The relay cannot inspect telemetry or prove who is driving; the incoming app's own direct local evidence is the sole confirmation of that fact.
+5. The incoming publisher starts a new publication epoch and sends one complete current snapshot immediately, then resumes sector-boundary cadence. Qualified burn evidence starts empty for the new driver/publisher epoch; no teammate history or prior driver's evidence window is carried across the handoff.
+
+If the outgoing app crashes, loses network, or cannot relinquish, the incoming candidate renews its claim and may acquire the lease only after the previous short lease expires. Overlapping or contradictory claims fail closed: no device may publish under the losing/expired epoch, and viewers remove the remote group rather than selecting first-arriving data.
+
+The relay needs only minimal control-plane metadata to serialize an owner-policy-authorized lease. Telemetry remains on the payload-blind end-to-end data plane; no raw facts are used to decide who owns a lease. The exact iRacing signal ordering must be verified in driver-swap captures, especially because driver/team count data can be inaccurate for late-joining clients.
+
+#### Room liveness, Owner absence, and recovery boundary
+
+**Decision (2026-07-18):** an Owner does not need to remain connected for an active room to operate. While at least one approved device remains connected, existing approved Viewers and Publisher Candidates may continue to receive data and perform automatic lease handoff under the current Owner-signed policy. The only unavailable actions while the Owner is offline are administrative: invite, revoke, scope/role change, policy renewal, and Owner transfer.
+
+When the relay has detected that the final approved device connection has ended, it closes the live room: dispose all circuits and leases, delete in-memory membership/policy and connection state, retain no telemetry, and reject all old circuit identifiers/publication epochs. This is a live-session close, not deletion of each device's local room configuration.
+
+Only the current Owner device may create the next live room instance by presenting a newly signed policy and new room-instance/publication epoch. A Viewer or Publisher Candidate cannot resurrect an empty room from cached policy. If the Owner key/device is permanently lost, the team creates a new room and re-invites members; V1.3 intentionally has no recovery phrase, cloud-copied Owner key, or automatic Owner promotion.
+
+#### Pairing experience and device lifecycle
+
+Remote pairing uses a shareable link, not QR as the primary flow. QR remains an optional convenient rendering of the same one-time invitation for in-person use.
+
+1. The admin selects **Create viewer invite**. The app creates a high-entropy, opaque, single-use invitation bound to one prospective device and a short expiry (for example, ten minutes).
+2. The admin copies the link to the intended teammate through their normal team channel. The link is an invitation capability, not a durable credential, room password, or data decryption key.
+3. The receiving app opens the link, creates its own device key locally, and presents a pending pairing request. A friendly device name is convenience metadata, not identity.
+4. The admin reviews the pending device, its platform/device label, and requested capability scope, then explicitly approves it. The invitation itself is Viewer-only; at approval the admin chooses **Team member** (the V1.3 default: Viewer plus Publisher Candidate when that app independently confirms direct in-car telemetry) or **View only**. Initial V1.3 scope is Active Team Car only. No voice code, shared room PIN, QR confirmation, or independent safety-phrase check is required.
+5. The invitation is destroyed only after approval. The approved device reconnects using its own protected identity until revoked.
+
+Do not use a permanent room PIN, a multi-use team link, shared client certificates, exported private keys, copied `.pfx` files, certificate-warning bypasses, auto-accepted devices, or an invitation that grants publisher privileges. The Team-member choice is a separate explicit owner approval, not an entitlement carried by the link. The application should offer immediate per-device revoke and a deliberate later admin-transfer flow with fresh confirmation.
+
+This intentionally makes the relay-mediated approval experience a trusted enrollment control-plane dependency: a compromised relay could present the owner with a malicious pending device for approval, but cannot independently forge the owner's signed membership policy or decrypt existing payload-blind data-plane traffic. Keep invitations short-lived, Viewer-only, one-use on approval, and revocable; show the requested role/capabilities prominently and never auto-approve a device.
+
+Private device material must use platform-protected storage (Windows protected key storage / macOS Keychain when supported). It must never be persisted in the ordinary app settings file, captured in diagnostics, written to raw capture/history, included in a shareable link, or printed in logs.
+
+#### Transport and relay posture
+
+Remote teammates need an outbound relay path so joining the room does not require router changes. Every client makes an outbound authenticated encrypted connection; there is no inbound public listener on the publisher machine.
+
+- Use modern TLS with strict certificate/hostname validation, prefer TLS 1.3, never allow plaintext fallback or obsolete protocol versions, and do not use 0-RTT application payloads because Bridge messages are stateful and replay-sensitive.
+- TLS protects each client-to-service channel; pairing and per-device authorization still define who may receive a room stream. Use proven platform/standard cryptographic libraries rather than custom TLS or cipher construction.
+- The recommended endpoint is a payload-blind relay: it routes room envelopes and minimal membership/connection metadata but cannot read, mutate, or retain team telemetry payloads. Sender authenticity and recipient payload validation remain end-to-end responsibilities.
+- A relay-visible interim data plane is out of scope for the first remote release. Any later proposal to terminate telemetry payload protection at the relay must be treated as a material security/product change, documented honestly, and never described as end-to-end encrypted or payload-blind merely because client-to-relay links use TLS.
+- Membership/revocation must be checked at connection time and enforced by the publisher when selecting recipients. A revoked device must stop receiving new snapshots without requiring other teammates to rotate a shared room secret.
+
+TLS supplies authenticated, confidential, integrity-protected channels; it does not itself define room authorization or payload semantics. Current guidance encourages TLS 1.3 and strict modern configurations; retain an explicit compatibility decision if supported Windows versions require a carefully configured TLS 1.2 fallback. See [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446.html), [RFC 9325](https://www.rfc-editor.org/rfc/rfc9325.html), and [NIST SP 800-52r2](https://csrc.nist.gov/pubs/sp/800/52/r2/final).
+
+#### Exact endpoint-to-endpoint cryptographic construction
+
+**Decision (2026-07-18):** use platform TLS twice, not a custom payload cipher, shared room password, HPKE envelope format, MLS group protocol, or a custom Noise implementation.
+
+1. Every application opens an ordinary, hostname-validated outer `wss://` TLS connection to the Oracle relay. This protects the Internet hop and carries minimal control-plane metadata plus bounded opaque circuit frames.
+2. The relay creates an unguessable, two-endpoint virtual circuit for each Active Publisher-to-Viewer pair. It preserves byte order, enforces frame/queue/time limits, and cannot attach a third endpoint. A `BridgeVirtualCircuitStream` adapts that duplex byte circuit to `Stream` semantics; it does not inspect inner bytes.
+3. The Active Publisher acts as the inner TLS server and each Viewer as the inner TLS client. Both run .NET `SslStream` over the virtual circuit and require a certificate from the other endpoint. `SslStream` is deliberately used because it authenticates and encrypts over an application-supplied `Stream`; it is not limited to a direct TCP `NetworkStream`. See [SslStream](https://learn.microsoft.com/en-us/dotnet/api/system.net.security.sslstream).
+4. Each approved device owns a non-exportable ECDSA P-256 private key and a self-signed X.509 leaf certificate. The Owner's signed room policy allowlists the exact device SPKI fingerprint, device identifier, role/capability scope, and expiry. Inner certificate validation accepts a self-signed leaf only when its key, validity, key usage, and policy binding exactly match the current verified policy; an arbitrary self-signed certificate is never trusted. This avoids a shared private CA and makes per-device revocation a policy update rather than a certificate-file rotation.
+5. Inner TLS uses `Tls12 | Tls13`, `RequireEncryption`, mutual certificate authentication, disabled renegotiation, and a dedicated ALPN identifier such as `tmr-overlay-bridge/1`. TLS 1.3 is preferred where the operating system supports it; Windows 10 commonly negotiates TLS 1.2 while Windows 11 supports TLS 1.3, so TLS 1.2 is the intentional compatibility floor, not a downgrade path. See [Microsoft's TLS guidance](https://learn.microsoft.com/en-us/dotnet/framework/network-programming/tls).
+6. Disable `SslStream` TLS session resumption for V1.3 with the .NET `System.Net.Security.DisableTlsResume=true` runtime option. Do not send any Bridge application bytes until inner `AuthenticateAs*Async` succeeds; do not use TLS early data. .NET documents this runtime option specifically for `SslStream` session resumption. See [.NET networking runtime configuration](https://learn.microsoft.com/en-us/dotnet/core/runtime-config/networking).
+7. Immediately after mutual TLS, both endpoints exchange a length-bounded `BridgeChannelHello` inside the protected channel. It binds protocol major/minor, room, stream, session binding, owner-policy hash/epoch, publisher lease/epoch, endpoint roles, circuit identifier, and a fresh circuit nonce. A mismatch, duplicate, unexpected role, expired policy, or stale nonce closes the circuit before it can carry facts.
+
+The Oracle relay sees only outer transport and the minimum circuit/control metadata needed to route and serialize leases. It cannot decrypt a `SectorPublication`, synthesize a valid inner peer, or turn a captured encrypted frame into a valid publication on another circuit. The publisher encrypts the same semantic snapshot separately for each Viewer; this is a deliberate small-team tradeoff for simple membership/revocation and established TLS behavior.
+
+On Windows, create the device key with a persistent CNG key storage provider and non-exportable policy, then use that same key to create a short-lived in-memory self-signed `X509Certificate2` leaf for `SslStream`. Do not use an ephemeral private key, persist/export a `.pfx`, or rely on the Windows certificate store as membership authority; CNG supports an explicit non-exportable key policy. See [CNG key creation parameters](https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.cngkeycreationparameters) and [CNG export policies](https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.cngexportpolicies). The Linux relay holds only its normal outer web certificate/private key; it holds no room/device inner private key.
+
+Validate this construction with loopback circuit tests before connecting Oracle: successful mutual authentication, an unapproved certificate rejection, policy revocation, circuit/hello mixup, stale nonce/lease, reordered circuit frames, size/backpressure limits, reconnect without resumption, and a publisher-to-many-viewer confidentiality test. Windows CI must prove TLS 1.2 compatibility; a Windows 11 runner may additionally prove TLS 1.3.
+
+#### Wire format and compatibility
+
+**Decision (2026-07-18):** use canonical CBOR for every V1.3 Bridge wire object: Owner-signed room policy, control-plane request/response, `BridgeChannelHello`, lifecycle/lease message, and `SectorPublication`. Do not use ad hoc JSON, a shared serialization of app/Core models, or a second signing-only representation.
+
+- Use integer map keys with a published field registry. Required fields are explicit; optional/additive fields have stable keys and are ignored only when the receiving minor protocol version permits them.
+- Serialize every signed object in canonical CBOR before signing/verifying it. The Owner policy signature is over those exact canonical bytes, not a parsed/reformatted object or a JSON rendering.
+- Every reader is an untrusted-input reader: enforce a whole-message limit before decoding, known maximum map/array counts, nesting depth, text/byte-string length, finite numeric/range checks, required-field uniqueness, and rejection of duplicate/unknown required keys. Never deserialize directly into a live model, settings file, or polymorphic runtime type.
+- Keep protocol major/minor/capability fields in the outer envelope and the inner hello. Major mismatch rejects before fact parsing; a minor mismatch uses the mutually supported capabilities and skips only documented additive fields.
+- Canonical CBOR does not make application ordering safe by itself. Publication/session/lease epochs, circuit nonce, snapshot identifier, and monotonic sequence checks remain mandatory before a decoded fact group can be resolved.
+
+Use the .NET `System.Formats.Cbor` primitives behind a small Bridge-owned codec layer with no reflection-based serialization. The layer owns the field registry, validation, canonical writer settings, and negative fixtures. This keeps payload projection intentionally explicit and makes malformed/future-version behavior testable.
+
+Bridge versioning participates in the repository's data-contract snapshot discipline. The V1.3 snapshot must record the Bridge protocol major/minor, fact-schema version, canonical-CBOR field-registry version, supported capability set, and bounds. A change to Bridge facts, their CBOR keys/meaning, capability semantics, or durable Bridge configuration increments the relevant Bridge contract version and adds/updates its versioned snapshot, compatible reader/migration decision, and compatibility tests.
+
+Do **not** use the raw iRacing capture/SDK schema version as the Bridge compatibility counter. A raw field may appear or disappear without changing the normalized Bridge projection; that updates capture evidence/projector tests but not the Bridge contract. Conversely, a Bridge fact/CBOR semantic change must bump the Bridge fact schema and snapshot even when the SDK schema is unchanged. The publisher's source schema hash/version remains envelope diagnostics/provenance only; protocol/fact-schema/capability negotiation determines whether a receiver may consume the payload.
+
+#### Selected relay host: Oracle Cloud Always Free
+
+**Decision (2026-07-18):** operate the first Bridge relay on an Oracle Cloud Always Free VM. This gives the product a small, always-addressable .NET relay with its own control-plane behavior, rather than shaping the protocol around a third-party pub/sub service. Oracle supplies up to two AMD micro VMs or an Arm A1 allocation equivalent to two OCPUs and 12 GB memory in the tenancy's home region, subject to regional capacity. See [Oracle Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
+
+This choice is free infrastructure for a small team, not a production availability promise. Always Free capacity can be temporarily unavailable, and an idle instance can be reclaimed under Oracle's published criteria. Treat a relay outage as a normal no-remote-data condition: the receiver hides expired Bridge groups and local overlays continue to work. Do not generate artificial load merely to avoid reclamation; monitor health and recreate the relay from documented infrastructure configuration if necessary.
+
+The VM is an operational host only. It is not a team identity provider, a telemetry database, or a decryption endpoint. It may see source IPs, connection timing, room/circuit identifiers, byte counts, device enrollment/control metadata, and encrypted outer transport; it must never persist telemetry payloads, raw captures, local history, private device keys, invitation secrets, or decrypted end-to-end traffic.
+
+**Oracle setup runbook (operator-owned, before any public Bridge release):**
+
+1. Create an Oracle Cloud tenancy in the intended home region, enable MFA on the owner account, set a billing alert/budget, and create a dedicated `tmr-overlay-bridge` compartment. Keep the tenancy account operated by the product owner; teammates never need Oracle accounts.
+2. Check Always Free capacity in that home region. Prefer one Ubuntu LTS Arm A1 Flex instance initially sized at **1 OCPU / 6 GB RAM**, leaving free-tier headroom. If A1 capacity is unavailable, retry another availability domain later rather than silently provisioning a paid shape. The AMD micro shape is a fallback only for a very small relay because its published allocation is much smaller.
+3. Create a VCN with one public subnet and a network security group. Allow inbound **TCP 443** only for the relay's outer TLS/WebSocket endpoint. Keep SSH disabled after bootstrap or restrict TCP 22 to the operator's fixed administrative IP; do not expose a database, remote desktop, metrics dashboard, or an app debug port publicly. Oracle's [instance creation guide](https://docs.oracle.com/en-us/iaas/Content/Compute/Tasks/launchinginstance.htm) and [network security group guidance](https://docs.oracle.com/en-us/iaas/tools/oci-cli/latest/oci_cli_docs/cmdref/network/nsg.html) are the authoritative console references.
+4. Give the relay a stable, operator-controlled DNS name and obtain a publicly trusted certificate for that hostname. Clients must validate the hostname and certificate; an IP-address URL, certificate-warning bypass, or self-signed outer certificate is not a release configuration. Domain registration itself is not included in Oracle's free VM allowance.
+5. Install the narrowly scoped relay as a non-root system service with automatic restart, OS security updates, resource limits, bounded structured logs, and a health endpoint available only through the host or restricted administration path. The production process accepts outbound client connections, serializes policy-authorized publisher leases, and forwards opaque, length-bounded virtual-circuit bytes only.
+6. Store only relay operational secrets/certificate automation material in protected host configuration or OCI Vault. Keep private device keys on client devices and owner-signed room policy in the Bridge protocol; do not make a cloud secret or database the authority for team membership.
+7. Configure availability/expiry monitoring and an encrypted, minimal configuration backup/runbook. Alerts must contain no room identifiers, invitations, payload data, or device fingerprints beyond what is necessary to operate the host. Test a clean replacement VM and DNS/certificate cutover before relying on it for an endurance event.
+
+The future relay repository/deployment definition must make these controls reproducible. CI remains entirely local/loopback for protocol tests: it must not require an Oracle tenancy, relay credentials, or an Internet race session. A separate, manually enabled Windows integration stage can use the Oracle test host after deterministic CI passes.
+
+#### Local/remote capability composition
+
+Remote data is a separate receiver-side read model, never a deserialized `LiveTelemetrySnapshot`, a call to `ILiveTelemetrySink`, raw-capture input, local user-history record, or ordinary local settings value. Existing overlays may consume a composed read model with per-group provenance, freshness, and availability.
+
+Every Bridge capability is a versioned, source-neutral **facts contract**. The publisher projects bounded normalized facts; the receiver maps its local telemetry and fresh Bridge facts to the same Core input shape, resolves the whole capability group, then runs its own Core model/calculator. A capability must not transport raw SDK frames, renderer/view-model output, another teammate's private history, or a precomputed strategy recommendation when the receiver can derive the result from the facts. This keeps local direct telemetry authoritative and lets future Core work improve local and Bridge-backed behavior together.
+
+**Bridge boundary (2026-07-18):** Bridge is a one-way team capability source for a receiver that lacks the active in-car/enhanced-telemetry view. It is not a multi-source telemetry repair, reconciliation, or field-completion system. When a receiver has confirmed fresh direct in-car telemetry, it consumes **no remote live-fact group**—including race context, spatial/traffic, environment, and active team-car facts. A separately accepted track-map document remains a local asset selected by `TrackMapStore` quality rules; it is not live teammate telemetry and does not change this boundary.
+
+Composition rules:
+
+1. Bridge fills only explicitly named missing capabilities while the receiver lacks direct in-car/enhanced telemetry. The primary V1.3 gap is active-team-car direct telemetry for an out-of-car teammate.
+2. When the receiver obtains confirmed fresh direct in-car telemetry, suppress every remote live-fact group immediately rather than selecting a local winner per scalar or per car.
+3. An authenticated accepted lifecycle boundary—declared unavailable, driver handoff, garage/spectator transition, source error, tombstone, revoke, a locally confirmed session transition, or direct-local-source precedence—makes the affected group immediately unavailable to calculation. Core may retain the last accepted group only in its separate read state so an overlay can present a bounded, non-calculating delayed/unavailable state; it must never re-enter composition or be silently estimated after a hard invalidation. By contrast, a malformed, wrong-scope/session, capability-denied, replay-disabled, sequence-regressed, or lease-mismatched packet is rejected without changing the last accepted group's receipt, cadence, or terminal state. That prior group remains usable only for its normal receiver-clock freshness window; an invalid packet must not either replace it or poison it.
+4. Do not arbitrarily blend individual scalars from different sources. Resolve coherent capability groups, and expose source/age status where a normal overlay could otherwise be mistaken for local in-car telemetry.
+
+**Intentional field-coverage boundary (2026-07-18):** a partial local all-car field is not, by itself, a degraded-data signal. iRacing's user-selected **Max Cars** and connection/bandwidth choices can intentionally restrict which opponent positions reach a client; the transmitted subset may change as the player moves through the field. The SDK's declared `CarIdx` array capacity likewise does not prove which cars are currently transmitted. Bridge must never infer consent to fill, union, or silently replace missing local cars from `LiveCoverageModel` counts, roster counts, array slots, or a peer's broader field snapshot.
+
+V1.3 therefore has **no automatic remote whole-field augmentation for an in-car receiver**. This prohibition is distinct from an explicitly accepted map asset, which is a separately validated local document rather than live car telemetry. If a future product pass establishes a compelling use, it must be an off-by-default, plainly labelled, per-overlay **Team Field** mode with a separately granted capability and explicit user consent. It would select one atomic remote field presentation for that overlay; it must not merge remote rows into the normal local field, alter safety/radar behavior, or override direct local active-team-car facts.
+
+**Open exception research — timed-race Fuel V2 leader witness:** the only candidate reason to revisit this boundary is a demonstrable strategy error when a deliberately limited local feed omits the *overall leader*. Timed-race lap-budget design uses the overall leader's progress and pace to determine the race finish event; without that evidence, [Fuel Calculator V2](fuel-calculator-v2.md) already classifies the result as `timed-live-clock-no-leader-progress` with lower confidence and must not use it for aggressive fuel/stop-deletion advice. Before creating any Bridge exception, collect paired controlled captures with the same timed/multiclass race at low versus full Max Cars/connection settings and compare: published laps-remaining/fixed-lap sources, leader presence/progress/pace, calculated strategy laps remaining, confidence band, reserve, and actionable recommendation. If the result is not materially different, retain the existing no-augmentation rule. If it is material, design only a separately consented, fuel-specific leader-witness capability with its own provenance/quality tests; do not import a broader remote field or merge car rows.
+
+First remote-release capability matrix:
+
+| Tier | Capability group | Content | Source and safety rule |
+| --- | --- | --- |
+| Essential | Active team-car facts | Active-driver/source state, team-car progress, driver-change/pit state, current fuel, capacity/rules, accepted clean-burn evidence, and repair/service facts | Publish only while the source is genuinely active/in-car. The receiver runs its own Fuel/Pit Core calculations; publisher strategy plans and private history do not cross the Bridge. Tombstone on driver change, garage/spectator transition, session change, or staleness. Never infer teammate fuel. |
+| Likely, capture-confirmed | Session and environment facts | Session phase, flags, clock, track/session conditions, weather, track state, and rules | Add only after paired in-car/off-car captures prove an actual teammate capability gap. Lower-risk, session-scoped, freshness-bounded facts; receiver applies its own presentation and availability rules. |
+| Research-gated | Overall-leader witness / field context | Narrow overall-leader progress/pace evidence first; broader class/position/progress/timing rows only if a concrete use survives capture review | No automatic in-car augmentation or row merge. The Fuel V2 leader-witness experiment is the only currently identified candidate. A broad field capability needs its own product/privacy/evidence decision. |
+| Research-gated | Spatial/traffic facts | Semantic track position, relative car state, occupancy, pit/on-track status | Never alters in-car safety/radar behavior. Add only if real off-car needs prove a safe, cadence-appropriate use; keep separate from renderer geometry. |
+| Separate opt-in asset | Map advertisement and accepted transfer | Local map identity, compatibility hash, quality, and later the explicit one-time asset offer | The receiver first resolves a matching local asset. A later accepted transfer is stored/selected as a local `TrackMapStore` document, not live telemetry. |
+| Deferred | Identity labels | Driver/team names, car numbers, iRating, licence, account/team identifiers | Do not define or negotiate until a specific observed user-facing need passes a privacy/product review. |
+
+The intended Core composition seams are:
+
+```text
+local normalized facts ─┐
+                        ├─ capability-group resolver ─> receiver Core model/calculator ─> existing views
+fresh Bridge facts ─────┘
+```
+
+For a receiver without direct active in-car telemetry, Bridge active-team-car facts feed the same Fuel V2 inputs as local facts. Capture-confirmed session/environment facts may feed the corresponding receiver Core inputs; field and spatial consumers remain research-gated. Map advertisement feeds a local map registry. Once direct in-car telemetry is confirmed, all remote live-fact groups are suppressed. An accepted remote lifecycle boundary or freshness expiry removes the relevant group as unavailable—not partially mixed with a different source. A rejected session/epoch/publisher validation failure instead leaves the prior accepted group subject to its ordinary receiver-age policy.
+
+**Freshness composition decision (2026-07-18, implementation slice 2026-07-19):** the receiver Core retains each last accepted Bridge capability group in a Bridge-specific read state with its provenance, receipt time, publication/session/lease/sequence identity, cadence observations, and terminal admission reason where applicable. Sender wall-clock time is diagnostic provenance only; it must not be the receiver's age clock. The authenticated receiver ingress now takes an injected monotonic receiver clock; the production implementation anchors a diagnostic UTC origin once and advances all pipeline receipt/observation timestamps only with `Stopwatch` elapsed time, so host wall-clock rollback cannot extend a current window. A future remote host must use this ingress/clock boundary rather than supply ad hoc wall-clock values. This state remains separate from `LiveTelemetrySnapshot`, `ILiveTelemetrySink`, local history, and capture input.
+
+Core supplies one clock-correct freshness/availability view, including immediate hard invalidation for an accepted tombstone/unavailable lifecycle state, revoke, a locally confirmed session transition, or direct-local-source precedence. A rejected source/session/lease mismatch or sequence regression leaves the prior accepted state intact and subject only to its normal receiver-clock age policy; it is diagnostic input, not a remote kill switch. Core does not impose one presentation timeout on every overlay. Each Core consumer instead declares and tests its own policy against the shared state: for example, Fuel may calculate from a current group, hold its last complete calculation during a short delayed window without reinterpreting facts, then show its documented unavailable state; a session-context view may retain a different non-calculating stale presentation. No consumer may bypass the capability-group resolver, recombine stale remote facts with local ones, or derive age from renderer/browser clocks.
+
+The current Fuel source seam rechecks the receiver receipt against the composition-provided current window at calculation time, accepts only `Live` remote facts, and accepts direct-local plus remote candidates together so direct-local precedence cannot be bypassed through a remote-only calculator. Remote Fuel consumes no local history, race/session, or stop-plan inputs; its first bounded output is current fuel, accepted burn, and range only.
+
+**Initial Fuel presentation policy:** while remote facts are current, Fuel remains visually quiet and the Bridge tab remains the persistent provenance surface. During the Fuel-specific held window, freeze the last complete calculation and add only a subtle delayed/team-source age signal. After that policy expires—or immediately after a hard invalidation—do not show stale numeric strategy/fuel output; retain a compact unavailable state rather than silently moving or removing the overlay. This presentation is a Fuel policy over the shared Core state, not a Bridge-wide expiry rule.
+
+The initial field projection must not include raw `LatestSample`, iRacing SDK arrays/F2/estimated-time buffers, driver/team names, car numbers, user/team identifiers, iRating, licence, local display settings, paths, logs, raw captures, YAML/session-info files, private diagnostics, history, tokens, or credentials. Use session-scoped opaque car identifiers for logic. Any later identity-label capability needs a concrete observed product use plus an explicit privacy/product decision.
+
+#### Snapshot, versioning, and cadence contract
+
+V1.3 starts with bounded, compact full snapshots, not deltas. A full snapshot on join and at every sector boundary makes reconnection, loss, compatibility, and diagnostics straightforward.
+
+Every envelope must carry at least:
+
+- Bridge protocol major/minor version and supported capabilities.
+- Non-authoritative app version/schema hash for diagnostics.
+- Room/stream opaque identifiers, publisher device identity and lease/publication epoch, session identity, session epoch, canonical snapshot identifier, monotonic sequence, source mode (`live` or explicitly test-only `raw_capture_replay`), sector/lap context, publication time/age, and bounded payload size.
+- Sender integrity/authenticity evidence appropriate to the selected relay trust model.
+
+Compatibility policy:
+
+- Major protocol mismatch: reject safely without attempting to parse the payload.
+- Normal V1.3 schema increments are additive and backwards-compatible: CBOR keys are never reused or reinterpreted, a newer sender negotiates each peer's supported minor version/capabilities and omits unsupported additions, and older bounded readers skip documented optional fields. A missing new field preserves the older, lower-confidence behavior rather than breaking a calculation.
+- A semantic rewrite or removal requires a new major version and an explicit incompatibility/migration decision. A security incident may still withdraw support for an unsafe old version.
+- Schema hash/app version: diagnostic only; never a substitute for protocol/capability negotiation.
+- Unknown capability, malformed value, duplicate/out-of-order sequence, invalid epoch, oversized message, or unsupported source mode: reject that message before it changes previously admitted composition state, and surface a safe health reason. Authenticated lifecycle controls (revoke/tombstone/direct-source precedence) are the only paths that may invalidate retained facts.
+
+Cadence policy:
+
+- **Decision (2026-07-18):** publish one bounded, complete, atomic `SectorPublication` at every sector boundary. It carries all mutually dependent V1.3 fact groups from one compatible capture/session/publisher-lease point; it is never a fuel-only ping. A joining viewer may receive one current complete snapshot immediately, then follows sector cadence. A lap boundary is naturally included when it is also a sector boundary.
+- Do not add a parallel one-second fuel/pit heartbeat in V1.3. The intentional product behavior is data that is at most approximately one sector old, rather than apparently live data assembled from independently timed groups.
+- Send immediate, bounded lifecycle/control messages only when eligibility or validity changes: driver handoff, session change, garage/spectator transition, disconnect, revoke, and tombstone. These messages may mark a remote group unavailable but must not update a subset of telemetry facts or create a partial calculation.
+- Every remote-derived capability retains source mode, source device, sector/lap context, and receiver-observed age. The exact visual treatment can evolve, but the Bridge tab and any view that could otherwise be mistaken for direct local telemetry must be able to present this provenance. Core retains the shared cadence evidence and hard-invalidates unsafe groups; each consumer applies its tested cadence-appropriate current/held/unavailable policy rather than extrapolating after its own expiry.
+
+#### Track-map assets and retained data
+
+Built track maps are potentially useful team value, but are not sector-cadence telemetry payloads. V1.3 advertises a map identity/hash/quality so a receiver can determine whether it already has a compatible local asset.
+
+**Design direction (2026-07-18):** if map transfer is added, it is a one-time, optional, publisher-to-receiver asset exchange, not an automatic room sync, cloud-retained asset, or per-lap/per-sector publication. The publisher must opt in to offer one specific map identity/hash; each receiver independently enables map offers and explicitly accepts the offered version before it is sent and cached locally. A matching cached hash must suppress a repeat transfer. Replacement, retry, or a later improved map requires a new explicit offer/accept action. The relay forwards the end-to-end protected bytes but stores neither map nor telemetry.
+
+After explicit acceptance, a Bridge map must be seamlessly usable by the existing Track Map overlay: the importer validates/quarantines it, then atomically adds it to an app-owned accepted-Bridge cache (for example `%LOCALAPPDATA%\\TmrOverlay\\track-maps\\bridge`) as a `TrackMapStore` candidate. It must not fake an IBT input or take a renderer-specific route; `TrackMapStore` remains the single selection path for native and localhost renderers. Keep this cache distinct from locally generated `track-maps\\user` documents so diagnostics retain truthful provenance and a revoked/deleted Bridge asset can be removed precisely. Select among complete local, accepted-Bridge, and bundled candidates by the existing quality rules: higher confidence first, then fewer missing bins. An accepted Bridge map may fill a missing/incomplete map or replace a genuinely worse map, but it must not displace a better local map; when quality is equal, prefer the local map rather than a newer remote copy. The Bridge-map consumption setting is separate from the existing `track-map.build-from-telemetry` setting.
+
+The eventual import path must use numeric-only structured validation, a bounded transfer and vertex count, content hashes, quarantine, app/track compatibility metadata, user approval, and no executable/path/capture import behavior. V1.3 starts with a **2 MiB maximum accepted asset** and a **25 MiB accepted-Bridge-map cache**; these cover the measured team-map range while keeping transfer and retention conservative. It must reject a map before it becomes a runtime candidate; it must never silently replace a receiver's local map. Transfer encoding and product timing remain deferred until team testing establishes the value.
+
+Future durable Bridge configuration, when needed, belongs in its own versioned app-owned file such as `%LOCALAPPDATA%\\TmrOverlay\\settings\\overlay-bridge.json`. It should contain only configuration version, opaque room/device identifiers, display labels, public-key fingerprints, consent/role/scope, and safe expiry metadata. Private keys stay in OS-protected storage. No payloads, peer telemetry, raw captures, history, secret invitation values, or persistent peer network addresses belong there. Corrupt or future-version configuration fails closed.
+
+The currently implemented Overlay Bridge settings tab is intentionally inert/read-only: unavailable, disabled, no listener, no pairing, no credentials, no persistence, and no telemetry export. It is the UI/evidence starting boundary, not an implied operating transport.
+
+**Local validation workbench decision (2026-07-18, refined 2026-07-19):** before any Oracle work, add a developer-only browser-review fixture workbench with independent producer and consumer documents (which may be viewed side by side or in separate browser tabs). Its initial packs are explicitly labelled `synthetic-contract-fixture`; the separate Core loopback tests prove canonical CBOR encode/decode, TLS virtual circuits, and receiver admission. The static workbench must not claim that its browser data is an emitted production payload until a Core fixture exporter produces and provenance-binds those packs. Static browser JavaScript does not decode CBOR, use `BroadcastChannel` or exchange `postMessage`, retain shared producer/consumer state, connect a socket, call a Bridge API, or use `/api/snapshot`.
+
+The separate route family `/review/bridge/local/*` is a developer-only two-browser workflow check, not an extension of the static workbench. It exchanges only `synthetic-browser-simulation-fixture` envelopes through same-browser-origin `BroadcastChannel`, with no storage, socket, app API, Core execution, live telemetry, capture, room secret, invite, pairing, cloud relay, or network connection. It is not production, Core, CBOR, TLS, relay, or transport evidence. The receiver displays each fixture's expected Core priority decision rather than evaluating it. Its deterministic cases prove the review labels for current remote, held remote, expired remote, direct-local precedence, tombstone, session mismatch, and sequence rejection. Expired and terminal results retain `Remote Bridge` provenance while withholding all facts from calculation; `None` is reserved for no accepted fact group. A session/sequence rejection itself provides no fields and does not refresh receipt age; a previously accepted remote group remains Current/Remote while its original receipt is still fresh, then follows ordinary held/expired policy. The test suite must assert that remote facts are atomic and never scalar-merged with local telemetry. The workbench and this simulation remain outside shipped overlay assets and localhost/OBS routes, and leave the inert Settings tab truthful.
+
+#### Implementation and validation plan
+
+1. **Record the design and threat model.** Keep this proposal, a concrete protocol/threat-model document, and a capability/redaction matrix aligned before network code. Preserve the selected payload-blind relay boundary; then lock the identity-label policy, room ownership transfer, exact end-to-end cryptographic implementation, and supported Windows TLS baseline.
+2. **Build pure contracts and projection tests.** Add the Bridge envelope, protocol/capability declarations, source-neutral facts DTOs, redactor/projector, group provenance/freshness, receiver-side remote state, and capability resolver. The projector requires an already-normalized live `LiveTelemetrySnapshot.Models` graph; it does not invoke the legacy raw-sample fallback, and it never exports renderer output, private history, or strategy conclusions. Clean-burn evidence is additionally scoped to the publisher controller's current confirmed eligibility epoch: a handoff that begins mid-lap waits for the next wholly completed lap before any burn sample can export, and a new publisher begins with no exported burn samples. Prove that identical local and Bridge fact inputs yield identical receiver Core calculations.
+3. **Prove replay composition offline.** Use `ReplayTelemetryHostedService`, `RawCaptureSemanticReplayReader`, and the existing replay/export tools to emulate a Windows publisher and one or more receiver sessions. Exercise sector-boundary atomic publications, immediate lifecycle invalidation, coordinated handoff, outgoing-publisher crash/lease expiry, delayed or conflicting claims, stale data, session mismatch, unsupported schema, invalid payload, and receiver local-source precedence.
+4. **Add deterministic CI security/integration coverage.** Run pure mapper/redaction/schema tests plus loopback transport tests using synthetic fixtures and throwaway certificates. Test one publisher/many viewers, invitation expiry/reuse rejection, per-device approval/revoke, role enforcement, replay-source gating, sequence/epoch rejection, size/rate limits, and safe diagnostics redaction. CI proves deterministic protocol behavior, not real router/firewall/keychain/LAN behavior.
+5. **Implement room configuration and pairing UX.** Add owner/device/role state, one-time Viewer-only invite links, explicit approval, revocation, safe diagnostics, and Settings native/browser evidence. Keep all network endpoints disabled until the user enables a room explicitly.
+6. **Implement the selected relay transport.** Deploy the payload-blind .NET relay to the Oracle Always Free host using the runbook above. Use outbound connections only, enforce device authorization/capability negotiation, and keep source/age/provenance visible. Add full Windows build/screenshot validation and a real Windows publisher to separate monitor/client test before broad teammate testing.
+7. **Validate live team races deliberately.** Capture enough in-car/off-car/driver-swap/pit/spectator data to prove the rules iRacing imposes. Do not use remote data to fill an unproven capability or silently relax a local overlay's in-car safety gate.
+
+Preserve the PR Windows build-publish workflow throughout V1.3 so testers can download WIP installer artifacts. Browser review remains the local development surface, Windows native remains the production/iRacing and screenshot gate, and localhost remains strictly an OBS route rather than Bridge transport.
+
+### v1.4 - Fuel Calculator V2
 
 Goal: rebuild fuel strategy around team-stint evidence instead of stitched scalar estimates.
 Detailed design notes now live in `docs/fuel-calculator-v2.md`, starting with
@@ -434,13 +708,13 @@ Likely scope:
 - Treat tire/repair/pit-service/setup-change evidence as input to strategy but avoid command-capable pit controls in this branch.
 - Treat incident-count increases as suspected-damage candidates only. Confirm later with repair timers, fast-repair counters, or pit-service evidence when available, and estimate pace loss from post-event clean laps while controlling for fuel, tire age/compound, wetness, traffic, pit-out laps, and driver. Gap To Leader can eventually show timeline markers and pace-loss context, while Fuel can consume the simplified repair/unscheduled-stop consequence.
 - Keep user-facing strategy recommendations conservative until enough teammate race data supports them.
-- Use Gap To Leader, sector comparison, and stint laptime analysis as supporting model inputs for Fuel Calculator V2 rather than standalone v1.3 product surfaces.
+- Use Gap To Leader, sector comparison, and stint laptime analysis as supporting model inputs for Fuel Calculator V2 rather than standalone v1.4 product surfaces.
 - Rework gap-to-leader and gap-to-class behavior around race/session semantics where that evidence explains pit windows, pace loss, stint rhythm, or fuel feasibility.
 - Add sector comparison and stint laptime analysis only after model-v2 timing contracts and replay evidence support them.
 - Keep source/evidence UI available because these products derive meaning from telemetry rather than simply displaying direct values.
 - Use replay and live diagnostics to validate edge cases before making advice prominent.
 
-### v1.4 - Track Map Expansion And QA
+### v1.5 - Track Map Expansion And QA
 
 Goal: improve the v0.11 Track Map implementation with better assets, status reporting, and map-quality workflows after the basic local generation path has real usage.
 
@@ -451,18 +725,6 @@ Likely scope:
 - Add deterministic screenshot states for placeholder, preview/low confidence, high confidence, stale markers, and pit-lane marker placement.
 - Improve pit-lane-aware marker placement when live telemetry exposes a reliable pit-lane progress signal.
 - Use iRacing/Data API or other official/reference map sources only as QA references unless licensing and product rules justify bundled assets.
-
-### v1.5 - Overlay Bridge And External Clients
-
-Goal: turn future teammate-to-teammate data sharing into a documented developer/platform boundary after the core contracts have proven themselves. Local OBS/localhost overlays are a separate feature.
-
-Likely scope:
-
-- Define versioned JSON contracts for live telemetry, app health, overlay metadata, selected display settings, peer/session context, and schema capabilities.
-- Keep the bridge disabled by default with explicit settings/support visibility for enabled state, allowed clients, connection count, last error, and schema version.
-- Use normalized `LiveTelemetrySnapshot.Models` instead of exporting overlay-local temporary calculations.
-- Add deterministic bridge fixture tests and sample payloads so external clients can be developed without iRacing running.
-- Explore peer/missed-history context exchange as derived session context only: provenance, session identity, observation window, roster/timing coverage, schema version, and trust labels.
 
 ### v1.6 - Streaming And Broadcast Overlays
 
@@ -620,19 +882,9 @@ Migrate style one overlay at a time with screenshot validation.
 
 ### Overlay Bridge / External Overlay Platform
 
-Overlay Bridge should become the boundary for trusted teammate-to-teammate context sharing after the normalized live snapshot schema is stable enough. Treat it as a platform branch, not as another in-process overlay and not as the local OBS/localhost server.
+The detailed V1.3 team-data design lives in the V1.3 section above. Treat Overlay Bridge as a platform/source boundary, not as another in-process overlay or the local OBS/localhost server. Future external renderers, VR clients, and developer tools should consume the same versioned, redacted, provenance-aware Bridge contracts rather than reaching into raw telemetry, local history, or overlay-local calculations.
 
-Bridge v2 should define:
-
-1. Versioned snapshot contracts for model-v2 telemetry, app health, overlay metadata, and selected display settings.
-2. Safe access controls, explicit enable/disable controls, peer/client status, and schema-version display in the settings panel.
-3. A peer/client development path that consumes normalized app state rather than talking to iRacing directly.
-4. Compatibility rules for bridge clients when model-v2 fields are added, renamed, deprecated, or unavailable.
-5. An opt-in peer/session context path for trusted teammates to share missed-history summaries when one user joins mid-race after another user has already observed the session.
-
-This branch fits after enough Windows overlays consume `LiveTelemetrySnapshot.Models` that the external schema reflects real product semantics instead of temporary overlay-local assumptions.
-
-The peer context path should be treated as derived context exchange, not raw telemetry sync. It should carry provenance, session identity, observation window, roster/timing coverage, schema version, and trust/source labels, then merge only into model-v2 availability as partial remote context. It should not silently overwrite local telemetry, and it should not share raw `telemetry.bin`, source `.ibt` files, or private local history by default.
+The receiver-side composition rule remains invariant for later platform clients: remote data can fill explicitly negotiated capability groups, but it must not silently overwrite canonical local telemetry, raw capture, private local history, or user settings.
 
 ### VR Renderer
 

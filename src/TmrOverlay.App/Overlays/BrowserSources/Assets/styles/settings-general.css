@@ -574,6 +574,86 @@
       margin-top: var(--tmr-settings-support-button-row-gap-y, 12px);
     }
 
+    .support-bridge-panel {
+      position: relative;
+      width: var(--tmr-settings-panel-wide-width, 834px);
+      height: var(--tmr-settings-support-panel-height, 278px);
+    }
+
+    .support-bridge-grid {
+      display: grid;
+      grid-template-columns:
+        var(--tmr-settings-support-bridge-column-width, 379px)
+        var(--tmr-settings-support-bridge-column-width, 379px);
+      gap: var(--tmr-settings-support-bridge-column-gap, 30px);
+    }
+
+    .support-bridge-column {
+      display: grid;
+      grid-auto-rows: var(--tmr-settings-support-bridge-row-height, 28px);
+      gap: calc(
+        var(--tmr-settings-support-bridge-row-stride, 33px)
+        - var(--tmr-settings-support-bridge-row-height, 28px));
+    }
+
+    .support-bridge-row {
+      min-width: 0;
+      height: var(--tmr-settings-support-bridge-row-height, 28px);
+      display: grid;
+      grid-template-columns: var(--tmr-settings-support-bridge-label-width, 150px) minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+    }
+
+    .support-bridge-row.full-width {
+      margin-top: 0;
+    }
+
+    .support-bridge-label {
+      color: var(--tmr-text-secondary);
+      font-size: 12px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .support-bridge-value {
+      min-width: 0;
+      max-width: var(--tmr-settings-support-bridge-value-width, 216px);
+      justify-self: end;
+      overflow: hidden;
+      color: var(--tmr-text-muted);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1;
+      text-align: right;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .support-bridge-row.full-width .support-bridge-value {
+      max-width: calc(
+        var(--tmr-settings-panel-wide-width, 834px)
+        - var(--tmr-settings-panel-padding-x, 22px) * 2
+        - var(--tmr-settings-support-bridge-label-width, 150px)
+        - 8px);
+    }
+
+    .support-bridge-description {
+      position: absolute;
+      top: var(--tmr-settings-support-bridge-description-offset-y, 231px);
+      left: var(--tmr-settings-panel-padding-x, 22px);
+      right: var(--tmr-settings-panel-padding-x, 22px);
+      color: var(--tmr-text-muted);
+      font-size: 11px;
+      line-height: var(--tmr-settings-support-bridge-description-line-height, 14px);
+    }
+
+    .support-bridge-description p + p {
+      margin-top: calc(
+        var(--tmr-settings-support-bridge-description-line-stride, 16px)
+        - var(--tmr-settings-support-bridge-description-line-height, 14px));
+    }
+
     .analysis-control-list {
       display: grid;
       gap: calc(var(--tmr-settings-support-analysis-row-stride, 37px) - var(--tmr-settings-support-analysis-row-height, 31px));

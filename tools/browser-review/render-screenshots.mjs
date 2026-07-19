@@ -91,6 +91,17 @@ const configuredCanvasCaptureBackdrop = {
   scope: 'configured-canvas-screenshot-only'
 };
 const previewModes = ['practice', 'qualifying', 'race'];
+const bridgeWorkbenchScreenshotCases = [
+  ['current-sector', 'active-team-live'],
+  ['decoder-rejection', 'malformed-cbor'],
+  ['aged-receipt', 'stale-publication']
+];
+const bridgeBrowserSimulationScreenshotCases = [
+  ['current-remote', 'current-remote'],
+  ['held-remote', 'held-remote'],
+  ['terminal-tombstone', 'tombstone'],
+  ['sequence-rejection-retains-prior', 'sequence-rejection']
+];
 const nonHappyPathOverlayVariants = [
   { overlayId: 'fuel-calculator', slug: 'waiting', query: 'fixture=fuel-waiting' },
   { overlayId: 'fuel-calculator', slug: 'calculating', query: 'fixture=fuel-calculating' },
@@ -297,6 +308,7 @@ function screenshotRoutes(surface) {
       settingsRoute(settingsAppScreenshotPath('update-failed'), '/review/app?update=failed', { tab: 'general', region: 'general', updateStatus: 'failed' }),
       settingsRoute(settingsTabScreenshotPath('support', 'diagnostics'), '/review/app?tab=support', { tab: 'support', region: 'general' }),
       settingsRoute(settingsTabScreenshotPath('support'), '/review/app?tab=support', { tab: 'support', region: 'general', pathAlias: 'windows-settings-support' }),
+      settingsRoute(settingsTabScreenshotPath('overlay-bridge'), '/review/app?tab=overlay-bridge', { tab: 'overlay-bridge', region: null, comparisonMode: 'browser-review-settings-vs-native-code-path', comparisonLimit: 'Windows-native screenshot requires a Windows run' }),
       settingsRoute(settingsTabScreenshotPath('input-state'), '/review/app?tab=input-state', { tab: 'input-state', overlayId: 'input-state', region: 'general', pathAlias: 'windows-settings-inputs' }),
       settingsRoute(settingsTabScreenshotPath('input-state', 'content'), '/review/app?tab=input-state&region=content', { tab: 'input-state', overlayId: 'input-state', region: 'content', pathAlias: 'windows-settings-inputs-content' }),
       ...settingsComponentRoutes(),
@@ -310,6 +322,10 @@ function screenshotRoutes(surface) {
           `/review/app?preview=${encodeURIComponent(mode)}`,
           { tab: 'general', region: 'general', previewMode: mode }))
     );
+    routes.push(...bridgeWorkbenchScreenshotCases.map(([slug, caseId]) =>
+      bridgeWorkbenchRoute(`bridge-workbench/${slug}.png`, caseId)));
+    routes.push(...bridgeBrowserSimulationScreenshotCases.map(([slug, caseId]) =>
+      bridgeBrowserSimulationRoute(`bridge-browser-simulation/${slug}.png`, caseId)));
 
     for (const overlayId of overlayIds) {
       for (const region of regionsForOverlay(overlayId)) {
@@ -658,10 +674,51 @@ function installerReviewRoute(relativePath, urlPath, metadata = {}) {
   };
 }
 
+function bridgeWorkbenchRoute(relativePath, caseId) {
+  return {
+    relativePath,
+    urlPath: `/review/bridge/workbench?case=${encodeURIComponent(caseId)}`,
+    selector: '[data-workbench-surface="offline-fixture-evidence"]',
+    viewport: { width: 1280, height: 960 },
+    minBytes: 10_000,
+    surface: 'browser-review-bridge-workbench',
+    renderer: 'overlay-bridge-offline-workbench',
+    sourceContract: 'tools/browser-review/bridge-workbench/fixtures.mjs',
+    moduleAsset: 'tools/browser-review/bridge-workbench/render.mjs',
+    fixtureVariant: caseId,
+    captureMode: 'developer-only-offline-fixture-workbench',
+    comparisonMode: 'browser-only-developer-evidence',
+    comparisonLimit: 'No localhost/OBS or Windows-native runtime exists because this is not a product surface.'
+  };
+}
+
+function bridgeBrowserSimulationRoute(relativePath, caseId) {
+  return {
+    relativePath,
+    urlPath: '/review/bridge/local/receiver',
+    selector: '[data-bridge-browser-simulation="receiver"]',
+    viewport: { width: 960, height: 840 },
+    minBytes: 8_000,
+    surface: 'browser-review-bridge-browser-simulation',
+    renderer: 'overlay-bridge-browser-only-simulation',
+    sourceContract: 'tools/browser-review/bridge-browser-simulation/fixtures.mjs',
+    moduleAsset: 'tools/browser-review/bridge-browser-simulation/render.mjs',
+    fixtureVariant: caseId,
+    captureMode: 'developer-only-browser-to-browser-fixture-simulation',
+    comparisonMode: 'browser-only-developer-evidence',
+    comparisonLimit: 'No localhost/OBS or Windows-native runtime exists because this is not a product surface.',
+    browserSimulationCaseId: caseId
+  };
+}
+
 async function captureRoute(page, route, manifest) {
   await page.setViewportSize(route.viewport);
   const url = `${baseUrl}${route.urlPath}`;
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  if (route.browserSimulationCaseId) {
+    await primeBridgeBrowserSimulation(page, route.browserSimulationCaseId, url);
+  } else {
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+  }
   const element = page.locator(route.selector).first();
   await element.waitFor({ state: 'visible', timeout: 5_000 });
   await page.waitForTimeout(settleMilliseconds);
@@ -669,6 +726,8 @@ async function captureRoute(page, route, manifest) {
   const model = await readOverlayModel(route);
   const dom = await readDomDiagnostics(element);
   const runtimeAssets = await readRuntimeAssetEvidence(page, route);
+  const bridgeWorkbenchEvidence = await readBridgeWorkbenchEvidence(page, route);
+  const bridgeBrowserSimulationEvidence = await readBridgeBrowserSimulationEvidence(page, route);
 
   const screenshotPath = join(outputRoot, route.relativePath);
   mkdirSync(dirname(screenshotPath), { recursive: true });
@@ -745,11 +804,78 @@ async function captureRoute(page, route, manifest) {
     modelEvidence: modelLayoutEvidence(model, dom.layout, route),
     v102Evidence: v102EvidenceForRoute(route),
     runtimeAssets,
+    bridgeWorkbenchEvidence,
+    bridgeBrowserSimulationEvidence,
     scenarioEvidence: scenarioEvidence(route, model, dom.layout),
     width: artifact.width,
     height: artifact.height,
     bytes: artifact.bytes
   });
+}
+
+async function primeBridgeBrowserSimulation(page, caseId, receiverUrl) {
+  const producer = await page.context().newPage();
+  try {
+    await producer.goto(
+      `${baseUrl}/review/bridge/local/producer?case=${encodeURIComponent(caseId)}`,
+      { waitUntil: 'domcontentloaded' });
+    await page.goto(receiverUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('#receiver-status').waitFor({ state: 'visible', timeout: 5_000 });
+    await producer.getByRole('button', { name: 'Publish selected synthetic fixture' }).click();
+    await page.locator('#receiver-status').filter({ hasText: 'Received one synthetic fixture event' })
+      .waitFor({ state: 'visible', timeout: 5_000 });
+  } finally {
+    await producer.close();
+  }
+}
+
+async function readBridgeWorkbenchEvidence(page, route) {
+  if (route.surface !== 'browser-review-bridge-workbench') {
+    return null;
+  }
+
+  return page.evaluate((fixtureVariant) => {
+    const banner = document.querySelector('.boundary-banner');
+    const workbench = document.querySelector('[data-workbench-surface="offline-fixture-evidence"]');
+    const iframes = Array.from(document.querySelectorAll('iframe'));
+    const footer = document.querySelector('.boundary-footer');
+    return {
+      contract: 'overlay-bridge-workbench-evidence/v1',
+      developerOnly: true,
+      fixtureTruth: workbench?.getAttribute('data-workbench-surface') || null,
+      fixtureVariant,
+      offlineBanner: String(banner?.textContent || '').replace(/\s+/g, ' ').trim(),
+      noLiveRuntimeStatement: String(footer?.textContent || '').replace(/\s+/g, ' ').trim(),
+      sandboxedDocumentCount: iframes.filter((frame) => frame.hasAttribute('sandbox')).length,
+      scriptCount: document.querySelectorAll('script').length
+    };
+  }, route.fixtureVariant);
+}
+
+async function readBridgeBrowserSimulationEvidence(page, route) {
+  if (route.surface !== 'browser-review-bridge-browser-simulation') {
+    return null;
+  }
+
+  return page.evaluate((fixtureVariant) => {
+    const shell = document.querySelector('[data-bridge-browser-simulation="receiver"]');
+    const status = document.querySelector('#receiver-status');
+    const decision = document.querySelector('#receiver-decision');
+    const metadata = document.querySelector('#receiver-metadata');
+    return {
+      contract: 'overlay-bridge-browser-simulation-evidence/v1',
+      developerOnly: true,
+      fixtureTruth: String(metadata?.textContent || '').includes('synthetic-browser-simulation-fixture')
+        ? 'synthetic-browser-simulation-fixture'
+        : null,
+      fixtureVariant,
+      receiverRole: shell?.getAttribute('data-bridge-browser-simulation') || null,
+      receiverStatus: String(status?.textContent || '').replace(/\s+/g, ' ').trim(),
+      decisionText: String(decision?.textContent || '').replace(/\s+/g, ' ').trim(),
+      scriptCount: document.querySelectorAll('script').length,
+      usesPersistentState: false
+    };
+  }, route.fixtureVariant);
 }
 
 async function injectCaptureTransform(page, route) {
@@ -1008,18 +1134,18 @@ async function readDomDiagnostics(element) {
       const explicit = element.getAttribute('data-evidence-key');
       if (explicit) return explicit;
 
-      if (element.matches('.field-label, .analysis-copy strong')) {
-        const row = element.closest('.field-row[data-evidence-key], .analysis-control-row[data-evidence-key], .status-row[data-evidence-key]');
+      if (element.matches('.field-label, .analysis-copy strong, .support-bridge-label')) {
+        const row = element.closest('.field-row[data-evidence-key], .analysis-control-row[data-evidence-key], .status-row[data-evidence-key], .support-bridge-row[data-evidence-key]');
         const rowKey = row?.getAttribute('data-evidence-key');
         return rowKey ? `${rowKey}.label` : null;
       }
 
-      if (element.matches('.field-value, .value-code, .support-status, .browser-url, .browser-details span, .analysis-state')) {
+      if (element.matches('.field-value, .value-code, .support-status, .browser-url, .browser-details span, .analysis-state, .support-bridge-value')) {
         const valueContainer = element.closest('[data-evidence-role="value"][data-evidence-key]');
         const valueKey = valueContainer?.getAttribute('data-evidence-key');
         if (valueKey) return valueKey;
 
-        const keyedContainer = element.closest('.browser-details[data-evidence-key], .field-row[data-evidence-key], .status-row[data-evidence-key], .analysis-control-row[data-evidence-key]');
+        const keyedContainer = element.closest('.browser-details[data-evidence-key], .field-row[data-evidence-key], .status-row[data-evidence-key], .analysis-control-row[data-evidence-key], .support-bridge-row[data-evidence-key]');
         const containerKey = keyedContainer?.getAttribute('data-evidence-key');
         return containerKey ? `${containerKey}.value` : null;
       }
@@ -1094,12 +1220,12 @@ async function readDomDiagnostics(element) {
       ['settings-content-body', '.content-body'],
       ['settings-region-tabs', '.region-segments'],
       ['settings-region-segment', '.region-segment'],
-      ['settings-section', '.general-top-grid, .support-stack, .support-grid, .overlay-general-grid, .content-stack, .garage-preview-content, .stream-chat-content, .stream-chat-twitch, .stream-chat-streamlabs'],
+      ['settings-section', '.general-top-grid, .support-stack, .support-grid, .support-bridge-panel, .overlay-general-grid, .content-stack, .garage-preview-content, .stream-chat-content, .stream-chat-twitch, .stream-chat-streamlabs'],
       ['settings-panel', '.panel, .garage-preview-stage, .cover-preview'],
       ['settings-panel-title', '.panel h2'],
-      ['settings-field-row', '.field-row, .status-row, .analysis-control-row, .browser-details'],
-      ['settings-field-label', '.field-label, .analysis-copy strong'],
-      ['settings-field-value', '.field-value, .value-code, .support-status, .analysis-state, .analysis-copy span, .browser-url, .browser-details span'],
+      ['settings-field-row', '.field-row, .status-row, .analysis-control-row, .support-bridge-row, .browser-details'],
+      ['settings-field-label', '.field-label, .analysis-copy strong, .support-bridge-label'],
+      ['settings-field-value', '.field-value, .value-code, .support-status, .analysis-state, .analysis-copy span, .support-bridge-value, .browser-url, .browser-details span'],
       ['settings-button', '.action-button, .close-button'],
       ['settings-toggle', '.toggle'],
       ['settings-check', '.check'],
@@ -1116,6 +1242,13 @@ async function readDomDiagnostics(element) {
       ['settings-matrix', '.matrix-table, .toggle-grid, .chrome-table'],
       ['settings-matrix-row', '.matrix-item, .grid-toggle-row, .chrome-row-label'],
       ['settings-matrix-cell', '.matrix-session, .matrix-visible, .matrix-head, .chrome-check, .chrome-head'],
+      ['bridge-workbench', '[data-workbench-surface="offline-fixture-evidence"]'],
+      ['bridge-workbench-banner', '.boundary-banner'],
+      ['bridge-workbench-heading', '.workbench-heading'],
+      ['bridge-workbench-case-nav', '.case-nav'],
+      ['bridge-workbench-pane', '.pane-card'],
+      ['bridge-workbench-fixture-document', '.pane-card iframe'],
+      ['bridge-workbench-footer', '.boundary-footer'],
       ['installer-window', '.installer-window'],
       ['installer-titlebar', '.installer-titlebar'],
       ['installer-body', '.installer-body'],
@@ -1232,6 +1365,11 @@ async function readDomDiagnostics(element) {
       '.track-map-v2',
       '.garage-cover',
       '.stream-chat-body',
+      '[data-workbench-surface="offline-fixture-evidence"]',
+      '.boundary-banner',
+      '.workbench-heading',
+      '.pane-card',
+      '.boundary-footer',
       'canvas',
       'svg'
     ];
@@ -2874,7 +3012,9 @@ function scenarioEvidence(route, model, layout = null) {
     comparisonLimit: route.comparisonLimit || null,
     compositingMode: route.compositingMode || null,
     captureBackdrop: route.captureBackdrop || null,
-    fixture: route.surface?.includes('settings')
+    fixture: route.surface === 'browser-review-bridge-workbench'
+      ? 'browser-review-offline-bridge-workbench-fixture'
+      : route.surface?.includes('settings')
       ? 'browser-review-settings-fixture'
       : route.surface?.includes('installer')
         ? 'browser-review-installer-fixture'

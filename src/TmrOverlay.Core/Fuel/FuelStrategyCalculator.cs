@@ -4,13 +4,27 @@ using TmrOverlay.Core.Telemetry.Live;
 
 namespace TmrOverlay.Core.Fuel;
 
-internal static class FuelStrategyCalculator
+internal static partial class FuelStrategyCalculator
 {
     private const double RealisticFuelSaveThresholdPercent = 0.05d;
 
     public static FuelStrategySnapshot From(LiveTelemetrySnapshot live, SessionHistoryLookupResult history)
     {
         return From(FuelStrategyInputs.From(live), history);
+    }
+
+    /// <summary>
+    /// Produces the intentionally bounded calculation available from one accepted remote Active
+    /// Team Car input. The Bridge capability does not contain race/session/lap-budget facts, so
+    /// this path never reads local history or race state and cannot emit fuel-to-finish or stop
+    /// planning advice. It is private to the source-selection boundary so callers cannot bypass
+    /// direct-local precedence by invoking a remote calculation directly.
+    /// </summary>
+    private static FuelStrategySnapshot FromCurrentRemoteActiveTeamCar(FuelTeamCarInput activeTeamCar)
+    {
+        ArgumentNullException.ThrowIfNull(activeTeamCar);
+        var inputs = FuelStrategyInputs.FromCurrentRemoteActiveTeamCar(activeTeamCar);
+        return From(inputs, SessionHistoryLookupResult.Empty(HistoricalComboIdentity.From(inputs.Context)));
     }
 
     private static FuelStrategySnapshot From(FuelStrategyInputs inputs, SessionHistoryLookupResult history)
@@ -113,7 +127,7 @@ internal static class FuelStrategyCalculator
         {
             return new FuelPerLapSelection(
                 liveFuelPerLap,
-                "measured green lap",
+                inputs.MeasuredFuelPerLapSourceLabel,
                 ValidPositive(historicalRange?.Minimum),
                 ValidPositive(historicalRange?.Maximum));
         }
@@ -982,7 +996,8 @@ internal sealed record FuelStrategyInputs(
     LiveRaceProjectionModel RaceProjection,
     LiveFuelPitModel FuelPit,
     int CompletedStintCount,
-    OverlaySessionKind? SessionKind)
+    OverlaySessionKind? SessionKind,
+    string MeasuredFuelPerLapSourceLabel)
 {
     public static FuelStrategyInputs From(LiveTelemetrySnapshot live)
     {
@@ -995,7 +1010,155 @@ internal sealed record FuelStrategyInputs(
             RaceProjection: models.RaceProjection,
             FuelPit: models.FuelPit,
             CompletedStintCount: live.CompletedStintCount,
-            SessionKind: OverlayAvailabilityEvaluator.CurrentSessionKind(live));
+            SessionKind: OverlayAvailabilityEvaluator.CurrentSessionKind(live),
+            MeasuredFuelPerLapSourceLabel: "measured green lap");
+    }
+
+    /// <summary>
+    /// Maps only the complete remote Active Team Car fact group into the legacy calculator's
+    /// generic input shape. Empty session, race, projection, and history inputs are deliberate:
+    /// none are inferred from the receiver's local telemetry.
+    /// </summary>
+    internal static FuelStrategyInputs FromCurrentRemoteActiveTeamCar(FuelTeamCarInput activeTeamCar)
+    {
+        ArgumentNullException.ThrowIfNull(activeTeamCar);
+
+        var facts = activeTeamCar.Facts;
+        var capacity = facts.FuelCapacity;
+        var context = new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity
+            {
+                CarScreenName = facts.TeamCarKey,
+                DriverCarFuelMaxLiters = ValidPositive(capacity.PhysicalTankCapacityLiters),
+                DriverCarFuelKgPerLiter = ValidPositive(capacity.FuelKgPerLiter)
+            },
+            Track = new HistoricalTrackIdentity
+            {
+                TrackName = activeTeamCar.Provenance.TrackKey
+            },
+            Session = new HistoricalSessionIdentity
+            {
+                SessionType = "bridge-active-team-car",
+                TeamRacing = true
+            },
+            Conditions = new HistoricalSessionInfoConditions()
+        };
+        var fuel = RemoteFuel(activeTeamCar);
+        var fuelPit = LiveFuelPitModel.Empty with
+        {
+            HasData = fuel.HasValidFuel,
+            Quality = fuel.HasValidFuel ? LiveModelQuality.Reliable : LiveModelQuality.Unavailable,
+            Fuel = fuel,
+            PhysicalTankCapacityLiters = ValidPositive(capacity.PhysicalTankCapacityLiters),
+            EffectiveSessionCapacityLiters = ValidPositive(capacity.EffectiveSessionCapacityLiters),
+            MaximumFuelPercent = ValidFuelPercent(capacity.MaximumFuelPercent),
+            FuelKgPerLiter = ValidPositive(capacity.FuelKgPerLiter),
+            OnPitRoad = facts.IsOnPitRoad,
+            PitstopActive = facts.IsPitstopActive == true,
+            PlayerCarInPitStall = facts.IsInPitStall,
+            TeamOnPitRoad = facts.IsOnPitRoad,
+            FuelLevelEvidence = fuel.HasValidFuel
+                ? LiveSignalEvidence.Reliable("bridge-active-team-car")
+                : LiveSignalEvidence.Unavailable("bridge-active-team-car", "remote_current_fuel_unavailable"),
+            MeasuredBurnEvidence = fuel.FuelPerLapLiters is not null
+                ? LiveSignalEvidence.Reliable("bridge-accepted-clean-burn")
+                : LiveSignalEvidence.Unavailable("bridge-accepted-clean-burn", "remote_clean_burn_unavailable")
+        };
+
+        return new FuelStrategyInputs(
+            Context: context,
+            Session: LiveSessionModel.Empty,
+            RaceProgress: LiveRaceProgressModel.Empty,
+            RaceProjection: LiveRaceProjectionModel.Empty,
+            FuelPit: fuelPit,
+            CompletedStintCount: 0,
+            SessionKind: null,
+            MeasuredFuelPerLapSourceLabel: "bridge accepted clean burn");
+    }
+
+    private static LiveFuelSnapshot RemoteFuel(FuelTeamCarInput activeTeamCar)
+    {
+        var facts = activeTeamCar.Facts;
+        var capacity = facts.FuelCapacity;
+        var usableCapacity = FirstValidPositive(
+            capacity.EffectiveSessionCapacityLiters,
+            capacity.PhysicalTankCapacityLiters);
+        var fuelLevelLiters = ValidPositive(facts.CurrentFuelLiters);
+        var fuelPercent = fuelLevelLiters is { } fuelLiters && usableCapacity is { } maximum && maximum > 0d
+            ? Math.Clamp(fuelLiters / maximum, 0d, 1d)
+            : (double?)null;
+        var acceptedSamples = facts.CleanBurnEvidence.Samples
+            .Where(sample => ValidPositive(sample.FuelUsedLiters) is not null)
+            .ToArray();
+        var hasMeasuredEvidence = (facts.CleanBurnEvidence.Confidence is FuelTeamCarEvidenceConfidence.Measured
+            or FuelTeamCarEvidenceConfidence.High)
+            && facts.CleanBurnEvidence.AcceptedSampleCount > 0;
+        var snapshot = new LiveFuelSnapshot(
+            HasValidFuel: fuelLevelLiters is not null,
+            Source: "bridge-active-team-car",
+            FuelLevelLiters: fuelLevelLiters,
+            FuelLevelPercent: fuelPercent,
+            FuelUsePerHourKg: null,
+            FuelUsePerHourLiters: null,
+            FuelPerLapLiters: null,
+            MeasuredFuelPerLapMinimumLiters: null,
+            MeasuredFuelPerLapAverageLiters: null,
+            MeasuredFuelPerLapMaximumLiters: null,
+            MeasuredFuelPerLapSampleCount: 0,
+            LapTimeSeconds: acceptedSamples
+                .Select(sample => ValidLapTime(sample.LapTimeSeconds))
+                .LastOrDefault(seconds => seconds is not null),
+            LapTimeSource: "bridge accepted clean lap",
+            EstimatedMinutesRemaining: null,
+            EstimatedLapsRemaining: null,
+            Confidence: "level-only")
+        {
+            MeasuredFuelBurnSamples = acceptedSamples
+                .Select(sample => new LiveFuelBurnSample(
+                    sample.CompletedLapNumber,
+                    sample.FuelUsedLiters,
+                    sample.LapTimeSeconds))
+                .ToArray()
+        };
+
+        if (!hasMeasuredEvidence || acceptedSamples.Length == 0)
+        {
+            return snapshot;
+        }
+
+        var fuelPerLap = acceptedSamples.Average(sample => sample.FuelUsedLiters);
+        return snapshot.WithMeasuredFuelPerLap(
+            fuelPerLap,
+            acceptedSamples.Min(sample => sample.FuelUsedLiters),
+            acceptedSamples.Max(sample => sample.FuelUsedLiters),
+            Math.Min(facts.CleanBurnEvidence.AcceptedSampleCount, acceptedSamples.Length));
+    }
+
+    private static double? ValidPositive(double? value)
+    {
+        return value is { } scalar && scalar > 0d && !double.IsNaN(scalar) && !double.IsInfinity(scalar)
+            ? scalar
+            : null;
+    }
+
+    private static double? FirstValidPositive(params double?[] values)
+    {
+        return values.Select(ValidPositive).FirstOrDefault(value => value is not null);
+    }
+
+    private static double? ValidFuelPercent(double? value)
+    {
+        return value is { } scalar && scalar >= 0d && scalar <= 100d && !double.IsNaN(scalar) && !double.IsInfinity(scalar)
+            ? scalar
+            : null;
+    }
+
+    private static double? ValidLapTime(double? value)
+    {
+        return value is { } scalar && scalar > 20d && scalar < 1800d && !double.IsNaN(scalar) && !double.IsInfinity(scalar)
+            ? scalar
+            : null;
     }
 }
 

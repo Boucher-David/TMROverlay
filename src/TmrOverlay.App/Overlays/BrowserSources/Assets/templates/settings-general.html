@@ -49,7 +49,16 @@
           canCheckUpdates: config.support?.canCheckUpdates !== false,
           canInstallUpdate: config.support?.canInstallUpdate === true,
           canRestartUpdate: config.support?.canRestartUpdate === true,
-          updatePendingRestart: config.support?.updatePendingRestart === true
+          updatePendingRestart: config.support?.updatePendingRestart === true,
+          bridge: {
+            availability: config.support?.bridge?.availability || 'Unavailable',
+            enabled: config.support?.bridge?.enabled === true,
+            pairingTransport: config.support?.bridge?.pairingTransport || 'Not started — transport not implemented',
+            schema: config.support?.bridge?.schema || 'Not available',
+            connectedPairedClients: config.support?.bridge?.connectedPairedClients || '0 connected',
+            latestFrameAge: config.support?.bridge?.latestFrameAge || 'No frames',
+            lastSafeError: config.support?.bridge?.lastSafeError || 'None reported'
+          }
         }
       };
       normalizeSelectedRegion();
@@ -72,6 +81,7 @@
 
       function knownTab(tabId) {
         return tabId === 'general'
+          || tabId === 'overlay-bridge'
           || tabId === 'support'
           || config.overlays.some((overlay) => overlay.id === tabId);
       }
@@ -172,7 +182,8 @@
         const tabs = [
           { id: 'general', label: 'General' },
           ...config.overlays.map((overlay) => ({ id: overlay.id, label: overlay.title })),
-          { id: 'support', label: 'Diagnostics' }
+          { id: 'overlay-bridge', label: 'Overlay Bridge' },
+          { id: 'support', label: 'Support' }
         ];
         return node('aside', 'sidebar', { 'aria-label': 'Settings sections' }, [
           node('nav', 'sidebar-list', {}, tabs.map((tab) => {
@@ -204,6 +215,9 @@
         }
         if (state.selectedTab === 'support') {
           return renderContentShell('Diagnostics', 'Advanced capture and support bundle tools.', null, renderSupportPage());
+        }
+        if (state.selectedTab === 'overlay-bridge') {
+          return renderContentShell('Overlay Bridge', 'Read-only bridge health; no transport is active.', null, renderOverlayBridgePage());
         }
         const overlay = currentOverlay();
         if (!overlay) {
@@ -343,6 +357,40 @@
             ])
           ])
         ];
+      }
+
+      function renderOverlayBridgePage() {
+        const bridge = state.support.bridge;
+        const leftRows = [
+          ['Availability', bridge.availability, 'availability'],
+          ['Enabled', bridge.enabled ? 'Enabled' : 'Disabled', 'enabled'],
+          ['Pairing / transport', bridge.pairingTransport, 'pairing-transport'],
+          ['Schema version/hash', bridge.schema, 'schema']
+        ];
+        const rightRows = [
+          ['Paired clients', bridge.connectedPairedClients, 'paired-clients'],
+          ['Latest frame', bridge.latestFrameAge, 'latest-frame']
+        ];
+        return [
+          panel('Overlay Bridge', 'support-bridge-panel', [
+            node('div', 'support-bridge-grid', {}, [
+              node('div', 'support-bridge-column', {}, leftRows.map(([label, value, key]) => bridgeStatusRow(label, value, key))),
+              node('div', 'support-bridge-column', {}, rightRows.map(([label, value, key]) => bridgeStatusRow(label, value, key)))
+            ]),
+            bridgeStatusRow('Last safe error', bridge.lastSafeError, 'last-safe-error', { fullWidth: true }),
+            node('div', 'support-bridge-description', {}, [
+              node('p', '', { 'data-evidence-key': 'support.bridge.inactive-notice' }, ['No listener, pairing, credentials, or telemetry sharing is active in this build.']),
+              node('p', '', { 'data-evidence-key': 'support.bridge.allowlist-notice' }, ['Future sharing is read-only and will require an explicit allowlist.'])
+            ])
+          ])
+        ];
+      }
+
+      function bridgeStatusRow(label, value, key, { fullWidth = false } = {}) {
+        return node('div', `support-bridge-row${fullWidth ? ' full-width' : ''}`, { 'data-evidence-key': `support.bridge.${key}` }, [
+          node('span', 'support-bridge-label', { 'data-evidence-key': `support.bridge.${key}.label`, 'data-evidence-role': 'label' }, [label]),
+          node('strong', 'support-bridge-value', { 'data-evidence-key': `support.bridge.${key}.value`, 'data-evidence-role': 'value' }, [value])
+        ]);
       }
 
       function renderOverlayRegion(overlay) {

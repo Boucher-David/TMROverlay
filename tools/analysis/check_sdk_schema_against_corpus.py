@@ -14,6 +14,7 @@ from typing import Any
 
 
 DECLARATION_KEYS = ["typeName", "count", "byteSize", "length", "unit", "description"]
+DYNAMIC_CAR_IDX_PREFIX = "CarIdx"
 
 
 def read_json(path: Path) -> Any:
@@ -51,6 +52,25 @@ def corpus_declaration(field: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def declaration_matches_corpus(name: str, corpus: dict[str, Any], local: dict[str, Any]) -> bool:
+    """Accept a smaller dynamic CarIdx allocation than the corpus ceiling.
+
+    Season 3 2026 grows these arrays with the entry table. The corpus retains
+    the largest observed schema, while individual captures may legitimately
+    expose fewer slots. A wider local allocation is still a reportable drift.
+    """
+    if not corpus:
+        return False
+    if name.startswith(DYNAMIC_CAR_IDX_PREFIX):
+        stable_keys = ["typeName", "byteSize", "unit", "description"]
+        return (
+            all(corpus[key] == local[key] for key in stable_keys)
+            and 0 < local["count"] <= corpus["count"]
+            and local["length"] == local["count"] * local["byteSize"]
+        )
+    return corpus == local
+
+
 def read_capture_schemas(capture_dirs: list[Path]) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, list[str]]]]:
     fields: dict[str, dict[str, Any]] = {}
     variants: dict[str, dict[str, list[str]]] = {}
@@ -81,12 +101,17 @@ def compare(corpus_path: Path, capture_dirs: list[Path]) -> int:
     changed = sorted(
         name
         for name in set(local_fields).intersection(corpus_fields)
-        if local_fields[name] != corpus_fields[name]
+        if not declaration_matches_corpus(name, corpus_fields[name], local_fields[name])
     )
     local_variants = {
         name: variant
         for name, variant in variants.items()
         if len(variant) > 1
+        and any(
+            not declaration_matches_corpus(name, corpus_fields.get(name, {}), declaration)
+            for signature in variant
+            for declaration in [json.loads(signature)]
+        )
     }
 
     print(f"Corpus fields: {len(corpus_fields)}")

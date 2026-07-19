@@ -21,6 +21,7 @@ class OverlayScenarioContractTests(unittest.TestCase):
         self.status_values = set(self.contract["statusValues"])
         self.overlay_by_id = {overlay["id"]: overlay for overlay in self.contract["overlays"]}
         self.settings_scenarios = self.contract.get("settingsScenarios", [])
+        self.developer_scenarios = self.contract.get("developerScenarios", [])
 
     def test_contract_identity_and_control_values_are_known(self):
         self.assertEqual("overlay-scenario-contract/v1", self.contract["contract"])
@@ -112,6 +113,20 @@ class OverlayScenarioContractTests(unittest.TestCase):
                 self.assertIsInstance(scenario.get("area"), str)
                 self.assertNotEqual("", scenario.get("area", "").strip())
 
+    def test_developer_scenarios_declare_their_browser_only_exemptions(self):
+        self.assertIsInstance(self.developer_scenarios, list)
+        self.assertGreater(len(self.developer_scenarios), 0)
+
+        for scenario in self.developer_scenarios:
+            with self.subTest(scenario_id=scenario["id"]):
+                self.assertEqual(["browserReview"], scenario["surfaces"])
+                self.assertIn(scenario["tier"], self.tier_ids)
+                self.assertIn(scenario["status"], self.status_values)
+                exemptions = scenario.get("surfaceExemptions", {})
+                self.assertIsInstance(exemptions, dict)
+                self.assertTrue(exemptions.get("localhostObs"))
+                self.assertTrue(exemptions.get("windowsNative"))
+
     def test_scenarios_reference_known_tiers_statuses_and_surfaces(self):
         scenario_ids: list[str] = []
         for scenario in self.all_scenarios():
@@ -195,6 +210,7 @@ class OverlayScenarioContractTests(unittest.TestCase):
         for overlay in self.contract["overlays"]:
             yield from overlay["scenarios"]
         yield from self.settings_scenarios
+        yield from self.developer_scenarios
 
     def assert_artifact_reference_resolves(self, reference: str, known_artifacts: set[str]):
         if reference in known_artifacts:

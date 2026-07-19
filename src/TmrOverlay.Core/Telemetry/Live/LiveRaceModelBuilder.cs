@@ -30,7 +30,7 @@ internal static class LiveRaceModelBuilder
         var spatial = BuildSpatial(context, sample, proximity);
         var coverage = BuildCoverage(context, scoring, timing, spatial, proximity);
         var raceProgress = BuildRaceProgress(context, sample, session);
-        var fuelPit = BuildFuelPit(sample, fuel);
+        var fuelPit = BuildFuelPit(context, sample, fuel);
 
         return new LiveRaceModels(
             Session: session,
@@ -1745,7 +1745,10 @@ internal static class LiveRaceModelBuilder
             RubberState: context.Conditions.SessionTrackRubberState);
     }
 
-    private static LiveFuelPitModel BuildFuelPit(HistoricalTelemetrySample sample, LiveFuelSnapshot fuel)
+    private static LiveFuelPitModel BuildFuelPit(
+        HistoricalSessionContext context,
+        HistoricalTelemetrySample sample,
+        LiveFuelSnapshot fuel)
     {
         var fuelLevelEvidence = BuildFuelLevelEvidence(sample);
         var instantaneousBurnEvidence = BuildInstantaneousBurnEvidence(sample, fuel);
@@ -1797,6 +1800,12 @@ internal static class LiveRaceModelBuilder
                     ? LiveModelQuality.Partial
                     : LiveModelQuality.Unavailable,
             Fuel: fuel,
+            PhysicalTankCapacityLiters: ValidPositive(context.Car.DriverCarFuelMaxLiters),
+            // A session-specific restriction is not currently normalized. Do not assume that the
+            // physical tank is an allowed session fill; consumers must treat this as unknown.
+            EffectiveSessionCapacityLiters: null,
+            MaximumFuelPercent: null,
+            FuelKgPerLiter: ValidPositive(context.Car.DriverCarFuelKgPerLiter),
             OnPitRoad: sample.OnPitRoad,
             PitstopActive: sample.PitstopActive,
             PlayerCarInPitStall: sample.PlayerCarInPitStall,

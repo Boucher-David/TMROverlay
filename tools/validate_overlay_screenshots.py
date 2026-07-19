@@ -238,6 +238,7 @@ WINDOWS_MINIMUM_PNGS = {
     "states/settings-flags.png": SETTINGS_CAPTURE_SIZE,
     "states/settings-session-weather.png": SETTINGS_CAPTURE_SIZE,
     "states/settings-pit-service.png": SETTINGS_CAPTURE_SIZE,
+    "states/settings-overlay-bridge.png": SETTINGS_CAPTURE_SIZE,
     "states/settings-support.png": SETTINGS_CAPTURE_SIZE,
     **SETTINGS_COMPONENT_PNG_SIZES,
 }
@@ -925,6 +926,7 @@ def browser_review_settings_pngs_for_overlay_ids(overlay_ids: list[str]) -> list
         *(settings_update_screenshot_path(status) for status in SETTINGS_UPDATE_STATUSES),
         settings_tab_screenshot_path("support", "diagnostics"),
         settings_tab_screenshot_path("support"),
+        settings_tab_screenshot_path("overlay-bridge"),
         settings_tab_screenshot_path("input-state"),
         settings_tab_screenshot_path("input-state", "content"),
         *(settings_preview_screenshot_path(mode) for mode in PREVIEW_MODES),
@@ -944,6 +946,17 @@ BROWSER_REVIEW_UPDATE_STATUS_TEXT = {
 
 BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS = SETTINGS_COMPONENT_PNG_SIZES
 BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS = FUTURE_SETTINGS_COMPONENT_PNG_SIZES
+BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS = {
+    "bridge-workbench/current-sector.png",
+    "bridge-workbench/decoder-rejection.png",
+    "bridge-workbench/aged-receipt.png",
+}
+BROWSER_REVIEW_BRIDGE_BROWSER_SIMULATION_PNGS = {
+    "bridge-browser-simulation/current-remote.png",
+    "bridge-browser-simulation/held-remote.png",
+    "bridge-browser-simulation/terminal-tombstone.png",
+    "bridge-browser-simulation/sequence-rejection-retains-prior.png",
+}
 
 BROWSER_REVIEW_INSTALLER_PNGS = [
     "review-installer/welcome.png",
@@ -1525,6 +1538,26 @@ def validate_browser_review_ci(root: Path, min_unique_bytes: int, failures: list
             minimum_size=SETTINGS_CAPTURE_SIZE,
         )
 
+    for relative_path in BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS:
+        validate_png(
+            root=root,
+            relative_path=relative_path,
+            expected_size=None,
+            min_unique_bytes=min_unique_bytes,
+            failures=failures,
+            minimum_size=(720, 400),
+        )
+
+    for relative_path in BROWSER_REVIEW_BRIDGE_BROWSER_SIMULATION_PNGS:
+        validate_png(
+            root=root,
+            relative_path=relative_path,
+            expected_size=None,
+            min_unique_bytes=min_unique_bytes,
+            failures=failures,
+            minimum_size=(720, 400),
+        )
+
     validate_browser_review_settings_component_pngs(root, min_unique_bytes, failures)
     validate_browser_review_installer_pngs(root, min_unique_bytes, failures)
     validate_web_overlay_pngs(root, "browser-overlays", min_unique_bytes, failures)
@@ -1568,6 +1601,26 @@ def validate_browser_localhost_ci(root: Path, min_unique_bytes: int, failures: l
             min_unique_bytes=min_unique_bytes,
             failures=failures,
             minimum_size=SETTINGS_CAPTURE_SIZE,
+        )
+
+    for relative_path in BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS:
+        validate_png(
+            root=root,
+            relative_path=relative_path,
+            expected_size=None,
+            min_unique_bytes=min_unique_bytes,
+            failures=failures,
+            minimum_size=(720, 400),
+        )
+
+    for relative_path in BROWSER_REVIEW_BRIDGE_BROWSER_SIMULATION_PNGS:
+        validate_png(
+            root=root,
+            relative_path=relative_path,
+            expected_size=None,
+            min_unique_bytes=min_unique_bytes,
+            failures=failures,
+            minimum_size=(720, 400),
         )
 
     validate_browser_review_settings_component_pngs(root, min_unique_bytes, failures)
@@ -2094,6 +2147,9 @@ def browser_settings_windows_path(path: str) -> str | None:
             return f"states/settings-general-{name}.png"
         return None
 
+    if name == "overlay-bridge":
+        return "states/settings-overlay-bridge.png"
+
     if name == "support":
         return "states/settings-support.png"
 
@@ -2133,6 +2189,8 @@ def legacy_settings_screenshot_path(stem: str) -> str | None:
         return settings_tab_screenshot_path("support", "diagnostics")
     if stem == "support":
         return settings_tab_screenshot_path("support")
+    if stem == "overlay-bridge":
+        return settings_tab_screenshot_path("overlay-bridge")
     if stem.startswith("inputs"):
         suffix = stem.removeprefix("inputs")
         return settings_tab_screenshot_path("input-state", suffix.removeprefix("-") if suffix else "general")
@@ -2339,6 +2397,8 @@ def browser_review_manifest_paths() -> set[str]:
         | set(BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS)
         | set(BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS)
         | set(BROWSER_REVIEW_INSTALLER_PNGS)
+        | BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS
+        | BROWSER_REVIEW_BRIDGE_BROWSER_SIMULATION_PNGS
     )
     paths.update(web_overlay_manifest_paths("browser-overlays"))
     return paths
@@ -2491,6 +2551,12 @@ def validate_browser_review_manifest(
         if path.startswith("review-installer/"):
             require_manifest_fields(path, screenshot, ["menuId", "moduleAsset", "uiEvidence"], failures)
             require_installer_ui_evidence(path, screenshot.get("uiEvidence"), failures)
+        if path.startswith("bridge-workbench/"):
+            require_manifest_fields(path, screenshot, ["fixtureVariant", "bridgeWorkbenchEvidence"], failures)
+            validate_bridge_workbench_manifest(path, screenshot, failures)
+        if path.startswith("bridge-browser-simulation/"):
+            require_manifest_fields(path, screenshot, ["fixtureVariant", "bridgeBrowserSimulationEvidence"], failures)
+            validate_bridge_browser_simulation_manifest(path, screenshot, failures)
         if path.startswith(("settings/", "components/settings/", "components/settings-future/")):
             require_manifest_fields(path, screenshot, ["tab", "region", "uiEvidence"], failures)
             require_settings_ui_evidence(path, screenshot.get("uiEvidence"), failures)
@@ -2499,6 +2565,70 @@ def validate_browser_review_manifest(
                 validate_settings_shell_transparency(root / path, path, failures)
             if path.startswith(("components/settings/", "components/settings-future/")):
                 validate_browser_settings_component_manifest(path, screenshot, failures)
+
+
+def validate_bridge_workbench_manifest(
+    path: str,
+    screenshot: dict[str, object],
+    failures: list[str],
+) -> None:
+    evidence = screenshot.get("bridgeWorkbenchEvidence")
+    if not isinstance(evidence, dict):
+        failures.append(f"{path}: missing Bridge workbench evidence")
+        return
+
+    if evidence.get("contract") != "overlay-bridge-workbench-evidence/v1":
+        failures.append(f"{path}: Bridge workbench evidence contract is unexpected")
+    if evidence.get("developerOnly") is not True:
+        failures.append(f"{path}: Bridge workbench evidence must declare developerOnly")
+    if evidence.get("fixtureTruth") != "offline-fixture-evidence":
+        failures.append(f"{path}: Bridge workbench fixture truth must remain offline-fixture-evidence")
+    if evidence.get("fixtureVariant") != screenshot.get("fixtureVariant"):
+        failures.append(f"{path}: Bridge workbench fixture variant drifted from route metadata")
+    if evidence.get("sandboxedDocumentCount") != 2:
+        failures.append(f"{path}: Bridge workbench must retain two sandboxed fixture documents")
+    if evidence.get("scriptCount") != 0:
+        failures.append(f"{path}: Bridge workbench must not ship a script runtime")
+
+    offline_banner = str(evidence.get("offlineBanner") or "")
+    required_banner = ("Offline fixture evidence.", "No connection", "Oracle not configured", "no live telemetry")
+    if not all(token in offline_banner for token in required_banner):
+        failures.append(f"{path}: Bridge workbench offline banner is incomplete")
+
+    no_live_statement = str(evidence.get("noLiveRuntimeStatement") or "")
+    required_statement = ("No live app state", "telemetry", "transport", "pairing", "Oracle service", "relay")
+    if not all(token in no_live_statement for token in required_statement):
+        failures.append(f"{path}: Bridge workbench no-live-runtime statement is incomplete")
+
+
+def validate_bridge_browser_simulation_manifest(
+    path: str,
+    screenshot: dict[str, object],
+    failures: list[str],
+) -> None:
+    evidence = screenshot.get("bridgeBrowserSimulationEvidence")
+    if not isinstance(evidence, dict):
+        failures.append(f"{path}: missing Bridge browser simulation evidence")
+        return
+
+    if evidence.get("contract") != "overlay-bridge-browser-simulation-evidence/v1":
+        failures.append(f"{path}: Bridge browser simulation evidence contract is unexpected")
+    if evidence.get("developerOnly") is not True:
+        failures.append(f"{path}: Bridge browser simulation evidence must declare developerOnly")
+    if evidence.get("fixtureTruth") != "synthetic-browser-simulation-fixture":
+        failures.append(f"{path}: Bridge browser simulation fixture truth is unexpected")
+    if evidence.get("fixtureVariant") != screenshot.get("fixtureVariant"):
+        failures.append(f"{path}: Bridge browser simulation fixture variant drifted from route metadata")
+    if evidence.get("receiverRole") != "receiver":
+        failures.append(f"{path}: Bridge browser simulation must capture the receiver after delivery")
+    if "Received one synthetic fixture event" not in str(evidence.get("receiverStatus") or ""):
+        failures.append(f"{path}: Bridge browser simulation receiver did not receive its fixture")
+    if "Expected Core priority decision" not in str(evidence.get("decisionText") or ""):
+        failures.append(f"{path}: Bridge browser simulation must label its decision as expected Core evidence")
+    if evidence.get("scriptCount") != 1:
+        failures.append(f"{path}: Bridge browser simulation must retain its one bounded local script")
+    if evidence.get("usesPersistentState") is not False:
+        failures.append(f"{path}: Bridge browser simulation must not use persistent state")
 
 
 def validate_settings_shell_transparency(path: Path, relative_path: str, failures: list[str]) -> None:
@@ -4253,6 +4383,8 @@ def settings_geometry_required_roles(path: str, is_component_crop: bool) -> set[
             "settings-segment-choice",
             "settings-preview-summary",
         })
+    if surface_path == settings_tab_screenshot_path("overlay-bridge"):
+        required_roles.update({"settings-panel", "settings-field-row", "settings-field-label", "settings-field-value"})
     if surface_path in {settings_tab_screenshot_path("support"), settings_tab_screenshot_path("support", "diagnostics")}:
         required_roles.update({"settings-field-row", "settings-field-label", "settings-field-value", "settings-button", "settings-toggle"})
     if surface_path == settings_tab_screenshot_path("stream-chat", "content"):
@@ -4265,7 +4397,7 @@ def settings_geometry_required_roles(path: str, is_component_crop: bool) -> set[
     if (
         surface_path.startswith("settings/")
         and not surface_path.startswith("settings/app/")
-        and surface_path not in {settings_tab_screenshot_path("support"), settings_tab_screenshot_path("support", "diagnostics")}
+        and surface_path not in {settings_tab_screenshot_path("support"), settings_tab_screenshot_path("support", "diagnostics"), settings_tab_screenshot_path("overlay-bridge")}
         and surface_path != settings_tab_screenshot_path("garage-cover", "preview")
         and not is_region_matrix_page
     ):
@@ -4494,6 +4626,23 @@ def require_settings_critical_text_fields(
     required: tuple[str, ...]
     if tab == "general" and not overlay_id:
         required = ("general.updates.status.label", "general.updates.status.value")
+    elif tab == "overlay-bridge":
+        required = (
+            "support.bridge.availability.label",
+            "support.bridge.availability.value",
+            "support.bridge.enabled.label",
+            "support.bridge.enabled.value",
+            "support.bridge.pairing-transport.label",
+            "support.bridge.pairing-transport.value",
+            "support.bridge.schema.label",
+            "support.bridge.schema.value",
+            "support.bridge.paired-clients.label",
+            "support.bridge.paired-clients.value",
+            "support.bridge.latest-frame.label",
+            "support.bridge.latest-frame.value",
+            "support.bridge.last-safe-error.label",
+            "support.bridge.last-safe-error.value",
+        )
     elif tab in {"support", "error-logging"}:
         required = ("support.bundle.latest.label", "support.bundle.latest.value")
     else:
@@ -5578,7 +5727,7 @@ def expected_localhost_alias_route(path: str) -> str | None:
 
 def validate_settings_region_manifest(path: str, values: dict[str, object], failures: list[str]) -> None:
     tab = values.get("tab")
-    if tab in (None, "general", "support"):
+    if tab in (None, "general", "support", "overlay-bridge"):
         return
 
     expected_region = normalize_manifest_region(values.get("region"))
@@ -13272,6 +13421,7 @@ def compare_sets_allowing_extra(
 def expected_windows_settings_pngs(overlay_ids: list[str]) -> set[str]:
     paths = {
         "states/settings-general.png",
+        "states/settings-overlay-bridge.png",
         "states/settings-support.png",
         "states/settings-general-update-disabled.png",
         "states/settings-general-update-not-installed.png",

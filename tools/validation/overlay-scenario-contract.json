@@ -170,6 +170,38 @@
       ]
     },
     {
+      "id": "settings-support-overlay-bridge-unavailable",
+      "area": "overlay-bridge-settings",
+      "family": "platform-status",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "partial",
+      "surfaces": ["settingsUi"],
+      "artifacts": [
+        "settings/overlay-bridge/general.png",
+        "states/settings-overlay-bridge.png"
+      ],
+      "testFiles": [
+        "tests/TmrOverlay.App.Tests/Settings/OverlayBridgeSupportViewModelTests.cs",
+        "tests/TmrOverlay.App.Tests/Overlays/DesignV2SettingsLayoutTests.cs:OverlayBridgeSupportBoundsUseSharedGeometryContract",
+        "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js:Overlay Bridge application tab is an honest, read-only unavailable state"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:support.bridge.* required text evidence",
+        "tools/browser-review/render-screenshots.mjs:settings/overlay-bridge/general.png",
+        "tools/TmrOverlay.WindowsScreenshots/Program.cs:settings-overlay-bridge"
+      ],
+      "assertions": [
+        "Overlay Bridge is a first-class application settings tab, never a driving-overlay settings tab",
+        "the default state is explicitly unavailable and disabled, with no listener, pairing, credentials, or telemetry sharing active",
+        "safe display fields reserve availability, enabled state, pairing/transport state, schema version/hash, paired-client count, latest-frame age, and last-safe-error visibility for a later multi-client transport",
+        "the page exposes no pairing, sharing, credential, or transport action control"
+      ],
+      "gaps": [
+        "browser-review screenshot evidence is deterministic; the native WinForms path uses the same geometry and view model but must be captured on Windows before release",
+        "Support is an application surface, so no localhost/OBS route exists or is implied"
+      ]
+    },
+    {
       "id": "settings-general-update-action-states",
       "area": "general",
       "family": "settings-actions",

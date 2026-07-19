@@ -296,6 +296,16 @@ internal static class OverlayGeometryContractValues
             PreviewPanelHeight: SettingsGeometry.PreviewPanelHeight,
             PreviewPanelMarginTop: SettingsGeometry.PreviewPanelMarginTop,
             SupportPanelHeight: SettingsGeometry.SupportPanelHeight,
+            SupportBridgeColumnWidth: SettingsGeometry.SupportBridgeColumnWidth,
+            SupportBridgeColumnGap: SettingsGeometry.SupportBridgeColumnGap,
+            SupportBridgeRowHeight: SettingsGeometry.SupportBridgeRowHeight,
+            SupportBridgeRowStride: SettingsGeometry.SupportBridgeRowStride,
+            SupportBridgeLabelWidth: SettingsGeometry.SupportBridgeLabelWidth,
+            SupportBridgeValueWidth: SettingsGeometry.SupportBridgeValueWidth,
+            SupportBridgeErrorRowOffsetY: SettingsGeometry.SupportBridgeErrorRowOffsetY,
+            SupportBridgeDescriptionOffsetY: SettingsGeometry.SupportBridgeDescriptionOffsetY,
+            SupportBridgeDescriptionLineHeight: SettingsGeometry.SupportBridgeDescriptionLineHeight,
+            SupportBridgeDescriptionLineStride: SettingsGeometry.SupportBridgeDescriptionLineStride,
             OverlayControlsPanelHeight: SettingsGeometry.OverlayControlsPanelHeight,
             GarageOverlayControlsPanelHeight: SettingsGeometry.GarageOverlayControlsPanelHeight,
             BrowserSourcePanelWidth: SettingsGeometry.BrowserSourcePanelWidth,
@@ -839,6 +849,16 @@ internal static class OverlayGeometryContractValues
         internal const int PreviewPanelHeight = 196;
         internal const int PreviewPanelMarginTop = 28;
         internal const int SupportPanelHeight = 278;
+        internal const int SupportBridgeColumnWidth = 379;
+        internal const int SupportBridgeColumnGap = 30;
+        internal const int SupportBridgeRowHeight = 28;
+        internal const int SupportBridgeRowStride = 33;
+        internal const int SupportBridgeLabelWidth = 150;
+        internal const int SupportBridgeValueWidth = 216;
+        internal const int SupportBridgeErrorRowOffsetY = 195;
+        internal const int SupportBridgeDescriptionOffsetY = 231;
+        internal const int SupportBridgeDescriptionLineHeight = 14;
+        internal const int SupportBridgeDescriptionLineStride = 16;
         internal const int OverlayControlsPanelHeight = 266;
         internal const int GarageOverlayControlsPanelHeight = 200;
         internal const int BrowserSourcePanelWidth = 414;

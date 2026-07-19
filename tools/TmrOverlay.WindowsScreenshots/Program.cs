@@ -33,6 +33,7 @@ using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.Styling;
 using TmrOverlay.App.Overlays.TrackMap;
+using TmrOverlay.App.OverlayBridge;
 using TmrOverlay.App.Performance;
 using TmrOverlay.App.Settings;
 using TmrOverlay.App.Storage;
@@ -541,6 +542,12 @@ internal static class Program
                 metadata: SettingsMetadata(null, "general", null) with { Status = "failed" }),
             RenderForm(
                 outputRoot,
+                "settings-overlay-bridge",
+                "Settings - Overlay Bridge",
+                () => CreateSettingsForm("Overlay Bridge"),
+                metadata: SettingsMetadata(null, "general", null, "overlay-bridge")),
+            RenderForm(
+                outputRoot,
                 "settings-support",
                 "Settings - Support",
                 () => CreateSettingsForm("Support"),
@@ -858,6 +865,7 @@ internal static class Program
             settings,
             ManagedOverlayDefinitions(),
             captureState,
+            new OverlayBridgeSupportState(),
             new TelemetryEdgeCaseOptions(),
             new LiveModelParityOptions(),
             new LiveOverlayDiagnosticsOptions(),
@@ -3997,6 +4005,7 @@ internal static class Program
             "flags" => "flags",
             "session / weather" => "session-weather",
             "pit service" => "pit-service",
+            "overlay bridge" => "overlay-bridge",
             "support" => "error-logging",
             _ => selectedTabText
         };
@@ -5694,6 +5703,12 @@ internal static class Program
             return;
         }
 
+        if (string.Equals(metadata.Tab, "overlay-bridge", StringComparison.OrdinalIgnoreCase))
+        {
+            AddSettingsOverlayBridgeRows(elements, ref index, capture, offset);
+            return;
+        }
+
         if (string.Equals(metadata.Tab, "support", StringComparison.OrdinalIgnoreCase)
             || string.Equals(metadata.Tab, "error-logging", StringComparison.OrdinalIgnoreCase))
         {
@@ -5786,6 +5801,52 @@ internal static class Program
         {
             AddSettingsMatrixElement(elements, ref index, matrix, capture, offset);
         }
+    }
+
+    private static void AddSettingsOverlayBridgeRows(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        Rectangle capture,
+        Point offset)
+    {
+        var bridge = OverlayBridgeSupportViewModel.From(new OverlayBridgeSupportState().Snapshot());
+
+        AddSettingsOverlayBridgeRow(elements, ref index, "support.bridge.availability", "Availability", bridge.AvailabilityText, DesignV2SettingsLayout.SupportBridgeRowBounds(0, 0), capture, offset);
+        AddSettingsOverlayBridgeRow(elements, ref index, "support.bridge.enabled", "Enabled", bridge.EnabledText, DesignV2SettingsLayout.SupportBridgeRowBounds(0, 1), capture, offset);
+        AddSettingsOverlayBridgeRow(elements, ref index, "support.bridge.pairing-transport", "Pairing / transport", bridge.PairingTransportText, DesignV2SettingsLayout.SupportBridgeRowBounds(0, 2), capture, offset);
+        AddSettingsOverlayBridgeRow(elements, ref index, "support.bridge.schema", "Schema version/hash", bridge.SchemaText, DesignV2SettingsLayout.SupportBridgeRowBounds(0, 3), capture, offset);
+        AddSettingsOverlayBridgeRow(elements, ref index, "support.bridge.paired-clients", "Paired clients", bridge.ConnectedPairedClientsText, DesignV2SettingsLayout.SupportBridgeRowBounds(1, 0), capture, offset);
+        AddSettingsOverlayBridgeRow(elements, ref index, "support.bridge.latest-frame", "Latest frame", bridge.LatestFrameAgeText, DesignV2SettingsLayout.SupportBridgeRowBounds(1, 1), capture, offset);
+        AddSettingsOverlayBridgeRow(elements, ref index, "support.bridge.last-safe-error", "Last safe error", bridge.LastSafeErrorText, DesignV2SettingsLayout.SupportBridgeErrorRowBounds(), capture, offset);
+        AddSettingsPreviewSummary(elements, ref index, "support.bridge.inactive-notice", "No listener, pairing, credentials, or telemetry sharing is active in this build.", DesignV2SettingsLayout.SupportBridgeDescriptionLineBounds(0), capture, offset);
+        AddSettingsPreviewSummary(elements, ref index, "support.bridge.allowlist-notice", "Future sharing is read-only and will require an explicit allowlist.", DesignV2SettingsLayout.SupportBridgeDescriptionLineBounds(1), capture, offset);
+    }
+
+    private static void AddSettingsOverlayBridgeRow(
+        List<Dictionary<string, object?>> elements,
+        ref int index,
+        string key,
+        string label,
+        string value,
+        Rectangle row,
+        Rectangle capture,
+        Point offset)
+    {
+        AddSettingsFieldEvidence(
+            elements,
+            ref index,
+            key,
+            label,
+            value,
+            row,
+            DesignV2SettingsLayout.SupportBridgeLabelBounds(row),
+            DesignV2SettingsLayout.SupportBridgeValueBounds(row),
+            capture,
+            offset,
+            valueColor: OverlayTheme.DesignV2.TextMuted,
+            valueFontSize: 11f,
+            valueBold: true,
+            labelFontSize: 12f);
     }
 
     private static void AddSettingsOverlayGeneralRows(
@@ -6004,12 +6065,13 @@ internal static class Program
         Color? valueColor = null,
         float valueFontSize = 12f,
         bool valueBold = false,
-        bool valueMonospaced = false)
+        bool valueMonospaced = false,
+        float labelFontSize = 13f)
     {
         AddSettingsDrawnTextElement(elements, ref index, "settings-field-row", string.IsNullOrWhiteSpace(value) ? label : $"{label} {value}", rowBounds, capture, offset, OverlayTheme.DesignV2.TextSecondary, 13f, FontStyle.Regular, key, "row");
         if (labelBounds.Width > 1 && labelBounds.Height > 1)
         {
-            AddSettingsDrawnTextElement(elements, ref index, "settings-field-label", label, labelBounds, capture, offset, OverlayTheme.DesignV2.TextSecondary, 13f, FontStyle.Regular, $"{key}.label", "label");
+            AddSettingsDrawnTextElement(elements, ref index, "settings-field-label", label, labelBounds, capture, offset, OverlayTheme.DesignV2.TextSecondary, labelFontSize, FontStyle.Regular, $"{key}.label", "label");
         }
 
         if (!string.IsNullOrWhiteSpace(value) && valueBounds is { } actualValueBounds)
@@ -7142,7 +7204,8 @@ internal static class Program
             }
         }
 
-        tabs.Add(("error-logging", "Diagnostics"));
+        tabs.Add(("overlay-bridge", "Overlay Bridge"));
+        tabs.Add(("error-logging", "Support"));
         return tabs;
     }
 
@@ -7214,6 +7277,11 @@ internal static class Program
             return "Diagnostics Advanced capture and support bundle tools.";
         }
 
+        if (string.Equals(metadata.Tab, "overlay-bridge", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Overlay Bridge Read-only bridge health; no transport is active.";
+        }
+
         var definition = ManagedOverlayDefinitions()
             .FirstOrDefault(candidate => string.Equals(candidate.Id, metadata.OverlayId, StringComparison.OrdinalIgnoreCase));
         return definition is null
@@ -7260,6 +7328,14 @@ internal static class Program
             [
                 ("Enhanced iRacing Telemetry Capture", DesignV2SettingsLayout.SupportCapturePanelBounds()),
                 ("Data Analysis Opt-out", DesignV2SettingsLayout.SupportAnalysisPanelBounds())
+            ];
+        }
+
+        if (string.Equals(metadata.Tab, "overlay-bridge", StringComparison.OrdinalIgnoreCase))
+        {
+            return
+            [
+                ("Overlay Bridge", DesignV2SettingsLayout.SupportBridgePanelBounds())
             ];
         }
 

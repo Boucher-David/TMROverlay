@@ -297,6 +297,7 @@ function screenshotRoutes(surface) {
       settingsRoute(settingsAppScreenshotPath('update-failed'), '/review/app?update=failed', { tab: 'general', region: 'general', updateStatus: 'failed' }),
       settingsRoute(settingsTabScreenshotPath('support', 'diagnostics'), '/review/app?tab=support', { tab: 'support', region: 'general' }),
       settingsRoute(settingsTabScreenshotPath('support'), '/review/app?tab=support', { tab: 'support', region: 'general', pathAlias: 'windows-settings-support' }),
+      settingsRoute(settingsTabScreenshotPath('overlay-bridge'), '/review/app?tab=overlay-bridge', { tab: 'overlay-bridge', region: 'general', comparisonMode: 'browser-review-settings-vs-native-code-path', comparisonLimit: 'Windows-native screenshot requires a Windows run' }),
       settingsRoute(settingsTabScreenshotPath('input-state'), '/review/app?tab=input-state', { tab: 'input-state', overlayId: 'input-state', region: 'general', pathAlias: 'windows-settings-inputs' }),
       settingsRoute(settingsTabScreenshotPath('input-state', 'content'), '/review/app?tab=input-state&region=content', { tab: 'input-state', overlayId: 'input-state', region: 'content', pathAlias: 'windows-settings-inputs-content' }),
       ...settingsComponentRoutes(),
@@ -1008,18 +1009,18 @@ async function readDomDiagnostics(element) {
       const explicit = element.getAttribute('data-evidence-key');
       if (explicit) return explicit;
 
-      if (element.matches('.field-label, .analysis-copy strong')) {
-        const row = element.closest('.field-row[data-evidence-key], .analysis-control-row[data-evidence-key], .status-row[data-evidence-key]');
+      if (element.matches('.field-label, .analysis-copy strong, .support-bridge-label')) {
+        const row = element.closest('.field-row[data-evidence-key], .analysis-control-row[data-evidence-key], .status-row[data-evidence-key], .support-bridge-row[data-evidence-key]');
         const rowKey = row?.getAttribute('data-evidence-key');
         return rowKey ? `${rowKey}.label` : null;
       }
 
-      if (element.matches('.field-value, .value-code, .support-status, .browser-url, .browser-details span, .analysis-state')) {
+      if (element.matches('.field-value, .value-code, .support-status, .browser-url, .browser-details span, .analysis-state, .support-bridge-value')) {
         const valueContainer = element.closest('[data-evidence-role="value"][data-evidence-key]');
         const valueKey = valueContainer?.getAttribute('data-evidence-key');
         if (valueKey) return valueKey;
 
-        const keyedContainer = element.closest('.browser-details[data-evidence-key], .field-row[data-evidence-key], .status-row[data-evidence-key], .analysis-control-row[data-evidence-key]');
+        const keyedContainer = element.closest('.browser-details[data-evidence-key], .field-row[data-evidence-key], .status-row[data-evidence-key], .analysis-control-row[data-evidence-key], .support-bridge-row[data-evidence-key]');
         const containerKey = keyedContainer?.getAttribute('data-evidence-key');
         return containerKey ? `${containerKey}.value` : null;
       }
@@ -1094,12 +1095,12 @@ async function readDomDiagnostics(element) {
       ['settings-content-body', '.content-body'],
       ['settings-region-tabs', '.region-segments'],
       ['settings-region-segment', '.region-segment'],
-      ['settings-section', '.general-top-grid, .support-stack, .support-grid, .overlay-general-grid, .content-stack, .garage-preview-content, .stream-chat-content, .stream-chat-twitch, .stream-chat-streamlabs'],
+      ['settings-section', '.general-top-grid, .support-stack, .support-grid, .support-bridge-panel, .overlay-general-grid, .content-stack, .garage-preview-content, .stream-chat-content, .stream-chat-twitch, .stream-chat-streamlabs'],
       ['settings-panel', '.panel, .garage-preview-stage, .cover-preview'],
       ['settings-panel-title', '.panel h2'],
-      ['settings-field-row', '.field-row, .status-row, .analysis-control-row, .browser-details'],
-      ['settings-field-label', '.field-label, .analysis-copy strong'],
-      ['settings-field-value', '.field-value, .value-code, .support-status, .analysis-state, .analysis-copy span, .browser-url, .browser-details span'],
+      ['settings-field-row', '.field-row, .status-row, .analysis-control-row, .support-bridge-row, .browser-details'],
+      ['settings-field-label', '.field-label, .analysis-copy strong, .support-bridge-label'],
+      ['settings-field-value', '.field-value, .value-code, .support-status, .analysis-state, .analysis-copy span, .support-bridge-value, .browser-url, .browser-details span'],
       ['settings-button', '.action-button, .close-button'],
       ['settings-toggle', '.toggle'],
       ['settings-check', '.check'],

@@ -15,6 +15,7 @@ using TmrOverlay.App.Overlays;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Overlays.Styling;
+using TmrOverlay.App.OverlayBridge;
 using TmrOverlay.App.Performance;
 using TmrOverlay.App.Replay;
 using TmrOverlay.App.Retention;
@@ -174,6 +175,7 @@ internal static class Program
                 services.AddSingleton<DiagnosticsBundleService>();
                 services.AddSingleton<OverlayForensicsPackageService>();
                 services.AddSingleton<TelemetryCaptureState>();
+                services.AddSingleton<OverlayBridgeSupportState>();
                 services.AddSingleton<TelemetryEdgeCaseRecorder>();
                 services.AddSingleton<LiveModelParityRecorder>();
                 services.AddSingleton<LiveOverlayDiagnosticsRecorder>();

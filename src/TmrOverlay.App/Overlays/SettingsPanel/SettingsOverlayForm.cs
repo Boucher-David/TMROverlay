@@ -14,6 +14,7 @@ using TmrOverlay.App.Overlays.Standings;
 using TmrOverlay.App.Overlays.StreamChat;
 using TmrOverlay.App.Overlays.TrackMap;
 using TmrOverlay.App.Overlays.Styling;
+using TmrOverlay.App.OverlayBridge;
 using TmrOverlay.App.Performance;
 using TmrOverlay.App.Storage;
 using TmrOverlay.App.Telemetry;
@@ -54,6 +55,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
     private readonly ApplicationSettings _applicationSettings;
     private readonly IReadOnlyList<OverlayDefinition> _managedOverlays;
     private readonly TelemetryCaptureState _captureState;
+    private readonly OverlayBridgeSupportState _overlayBridgeSupportState;
     private readonly TelemetryEdgeCaseOptions _telemetryEdgeCaseOptions;
     private readonly LiveModelParityOptions _liveModelParityOptions;
     private readonly LiveOverlayDiagnosticsOptions _liveOverlayDiagnosticsOptions;
@@ -117,6 +119,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         ApplicationSettings applicationSettings,
         IReadOnlyList<OverlayDefinition> managedOverlays,
         TelemetryCaptureState captureState,
+        OverlayBridgeSupportState overlayBridgeSupportState,
         TelemetryEdgeCaseOptions telemetryEdgeCaseOptions,
         LiveModelParityOptions liveModelParityOptions,
         LiveOverlayDiagnosticsOptions liveOverlayDiagnosticsOptions,
@@ -145,6 +148,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
         _applicationSettings = applicationSettings;
         _managedOverlays = managedOverlays;
         _captureState = captureState;
+        _overlayBridgeSupportState = overlayBridgeSupportState;
         _telemetryEdgeCaseOptions = telemetryEdgeCaseOptions;
         _liveModelParityOptions = liveModelParityOptions;
         _liveOverlayDiagnosticsOptions = liveOverlayDiagnosticsOptions;
@@ -283,6 +287,7 @@ internal sealed class SettingsOverlayForm : PersistentOverlayForm
             _applicationSettings,
             OrderedSettingsOverlays().ToArray(),
             _captureState,
+            _overlayBridgeSupportState,
             _diagnosticsBundleService,
             _storageOptions,
             _localhostOverlayOptions,

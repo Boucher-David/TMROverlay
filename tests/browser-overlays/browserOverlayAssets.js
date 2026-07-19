@@ -598,10 +598,23 @@ function settingsAppConfig({ previewMode = 'off', selectedTab = 'general', selec
       canCheckUpdates: reviewState?.support?.canCheckUpdates ?? true,
       canInstallUpdate: reviewState?.support?.canInstallUpdate ?? false,
       canRestartUpdate: reviewState?.support?.canRestartUpdate ?? false,
-      updatePendingRestart: reviewState?.support?.updatePendingRestart ?? false
+      updatePendingRestart: reviewState?.support?.updatePendingRestart ?? false,
+      bridge: reviewState?.support?.bridge ?? unavailableOverlayBridgeReviewState()
     },
     sessionLabels: ['Practice', 'Qualifying', 'Race'],
     overlays: settingsAppOverlays(reviewState, normalizedPreviewMode)
+  };
+}
+
+function unavailableOverlayBridgeReviewState() {
+  return {
+    availability: 'Unavailable',
+    enabled: false,
+    pairingTransport: 'Not started — transport not implemented',
+    schema: 'Not available',
+    connectedPairedClients: '0 connected',
+    latestFrameAge: 'No frames',
+    lastSafeError: 'None reported'
   };
 }
 

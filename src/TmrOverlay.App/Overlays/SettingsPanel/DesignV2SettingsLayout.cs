@@ -116,6 +116,84 @@ internal static class DesignV2SettingsLayout
             SettingsGeometry.SupportPanelHeight);
     }
 
+    public static Rectangle SupportBridgePanelBounds()
+    {
+        return new Rectangle(PanelX, PanelNoRegionsY, PanelWideWidth, SettingsGeometry.SupportPanelHeight);
+    }
+
+    public static Rectangle SupportBridgeColumnBounds(int columnIndex)
+    {
+        if (columnIndex is < 0 or > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(columnIndex));
+        }
+
+        var panel = SupportBridgePanelBounds();
+        return new Rectangle(
+            panel.Left + PanelContentInsetX + columnIndex * (SettingsGeometry.SupportBridgeColumnWidth + SettingsGeometry.SupportBridgeColumnGap),
+            panel.Top + SettingsGeometry.FieldRowOffsetY,
+            SettingsGeometry.SupportBridgeColumnWidth,
+            SettingsGeometry.SupportBridgeRowHeight * 4 + SettingsGeometry.SupportBridgeRowStride * 3);
+    }
+
+    public static Rectangle SupportBridgeRowBounds(int columnIndex, int rowIndex)
+    {
+        if (rowIndex is < 0 or > 3)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rowIndex));
+        }
+
+        var column = SupportBridgeColumnBounds(columnIndex);
+        return new Rectangle(
+            column.Left,
+            column.Top + rowIndex * SettingsGeometry.SupportBridgeRowStride,
+            column.Width,
+            SettingsGeometry.SupportBridgeRowHeight);
+    }
+
+    public static Rectangle SupportBridgeErrorRowBounds()
+    {
+        var panel = SupportBridgePanelBounds();
+        return new Rectangle(
+            panel.Left + PanelContentInsetX,
+            panel.Top + SettingsGeometry.SupportBridgeErrorRowOffsetY,
+            panel.Width - PanelContentInsetX * 2,
+            SettingsGeometry.SupportBridgeRowHeight);
+    }
+
+    public static Rectangle SupportBridgeLabelBounds(Rectangle rowBounds)
+    {
+        return new Rectangle(
+            rowBounds.Left,
+            rowBounds.Top + SettingsGeometry.FieldLabelTopOffset,
+            SettingsGeometry.SupportBridgeLabelWidth,
+            SettingsGeometry.FieldLabelHeight);
+    }
+
+    public static Rectangle SupportBridgeValueBounds(Rectangle rowBounds)
+    {
+        return new Rectangle(
+            rowBounds.Right - SettingsGeometry.SupportBridgeValueWidth,
+            rowBounds.Top + SettingsGeometry.FieldValueTopOffset,
+            SettingsGeometry.SupportBridgeValueWidth,
+            SettingsGeometry.FieldValueHeight);
+    }
+
+    public static Rectangle SupportBridgeDescriptionLineBounds(int lineIndex)
+    {
+        if (lineIndex is < 0 or > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lineIndex));
+        }
+
+        var panel = SupportBridgePanelBounds();
+        return new Rectangle(
+            panel.Left + PanelContentInsetX,
+            panel.Top + SettingsGeometry.SupportBridgeDescriptionOffsetY + lineIndex * SettingsGeometry.SupportBridgeDescriptionLineStride,
+            panel.Width - PanelContentInsetX * 2,
+            SettingsGeometry.SupportBridgeDescriptionLineHeight);
+    }
+
     public static Rectangle OverlayControlsPanelBounds(int height)
     {
         return new Rectangle(PanelX, PanelWithRegionsY, PanelSmallWidth, height);

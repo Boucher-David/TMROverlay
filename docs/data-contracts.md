@@ -45,6 +45,8 @@ These can be ignored, overwritten, or dropped if incompatible:
 - logs, performance snapshots, diagnostics bundles, and support bundle outputs
 - temporary caches
 
+Overlay Bridge Support health is also disposable runtime state. The initial support slice intentionally does not add a settings key, credential store, pairing record, client list, raw telemetry export, or durable bridge schema. A later transport must introduce its own versioned durable contract only if it persists user-approved configuration or paired-client metadata.
+
 ## v0.19.0 Baseline
 
 `v0.19.0` is the first release snapshot checked into

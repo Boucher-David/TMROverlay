@@ -275,6 +275,49 @@ public sealed class DesignV2SettingsLayoutTests
     }
 
     [Fact]
+    public void OverlayBridgeSupportBoundsUseSharedGeometryContract()
+    {
+        var bridgePanel = DesignV2SettingsLayout.SupportBridgePanelBounds();
+        Assert.Equal(
+            new Rectangle(
+                SettingsGeometry.NativeCanvasOffsetX + SettingsGeometry.PanelX,
+                SettingsGeometry.NativeCanvasOffsetY + SettingsGeometry.PanelNoRegionsY,
+                SettingsGeometry.PanelWideWidth,
+                SettingsGeometry.SupportPanelHeight),
+            bridgePanel);
+
+        var firstColumn = DesignV2SettingsLayout.SupportBridgeColumnBounds(0);
+        var secondColumn = DesignV2SettingsLayout.SupportBridgeColumnBounds(1);
+        Assert.Equal(firstColumn.Right + SettingsGeometry.SupportBridgeColumnGap, secondColumn.Left);
+        Assert.Equal(SettingsGeometry.SupportBridgeColumnWidth, firstColumn.Width);
+
+        var row = DesignV2SettingsLayout.SupportBridgeRowBounds(0, 2);
+        Assert.Equal(firstColumn.Top + 2 * SettingsGeometry.SupportBridgeRowStride, row.Top);
+        Assert.Equal(SettingsGeometry.SupportBridgeRowHeight, row.Height);
+        Assert.Equal(
+            new Rectangle(
+                row.Left,
+                row.Top + SettingsGeometry.FieldLabelTopOffset,
+                SettingsGeometry.SupportBridgeLabelWidth,
+                SettingsGeometry.FieldLabelHeight),
+            DesignV2SettingsLayout.SupportBridgeLabelBounds(row));
+        Assert.Equal(
+            new Rectangle(
+                row.Right - SettingsGeometry.SupportBridgeValueWidth,
+                row.Top + SettingsGeometry.FieldValueTopOffset,
+                SettingsGeometry.SupportBridgeValueWidth,
+                SettingsGeometry.FieldValueHeight),
+            DesignV2SettingsLayout.SupportBridgeValueBounds(row));
+
+        var errorRow = DesignV2SettingsLayout.SupportBridgeErrorRowBounds();
+        Assert.Equal(bridgePanel.Top + SettingsGeometry.SupportBridgeErrorRowOffsetY, errorRow.Top);
+        Assert.Equal(bridgePanel.Left + PanelContentInsetX, errorRow.Left);
+        Assert.Equal(
+            bridgePanel.Top + SettingsGeometry.SupportBridgeDescriptionOffsetY + SettingsGeometry.SupportBridgeDescriptionLineStride,
+            DesignV2SettingsLayout.SupportBridgeDescriptionLineBounds(1).Top);
+    }
+
+    [Fact]
     public void StreamChatProviderUrlChannelAndSaveBoundsUseContractRows()
     {
         var panel = DesignV2SettingsLayout.StreamChatContentPanelBounds();

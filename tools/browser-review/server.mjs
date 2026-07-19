@@ -345,9 +345,22 @@ function createReviewAppState() {
       canCheckUpdates: true,
       canInstallUpdate: false,
       canRestartUpdate: false,
-      updatePendingRestart: false
+      updatePendingRestart: false,
+      bridge: unavailableOverlayBridgeReviewState()
     },
     overlays: Object.create(null)
+  };
+}
+
+function unavailableOverlayBridgeReviewState() {
+  return {
+    availability: 'Unavailable',
+    enabled: false,
+    pairingTransport: 'Not started — transport not implemented',
+    schema: 'Not available',
+    connectedPairedClients: '0 connected',
+    latestFrameAge: 'No frames',
+    lastSafeError: 'None reported'
   };
 }
 

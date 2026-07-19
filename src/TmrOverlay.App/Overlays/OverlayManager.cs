@@ -27,6 +27,7 @@ using TmrOverlay.Core.Telemetry.Live;
 using TmrOverlay.App.History;
 using Microsoft.Extensions.Logging;
 using TmrOverlay.App.Diagnostics;
+using TmrOverlay.App.OverlayBridge;
 using TmrOverlay.App.Events;
 using TmrOverlay.App.Localhost;
 using TmrOverlay.App.Performance;
@@ -42,6 +43,7 @@ internal sealed class OverlayManager : IDisposable
     private readonly AppStorageOptions _storageOptions;
     private readonly DiagnosticsBundleService _diagnosticsBundleService;
     private readonly TelemetryCaptureState _telemetryCaptureState;
+    private readonly OverlayBridgeSupportState _overlayBridgeSupportState;
     private readonly TelemetryEdgeCaseOptions _telemetryEdgeCaseOptions;
     private readonly LiveModelParityOptions _liveModelParityOptions;
     private readonly LiveOverlayDiagnosticsOptions _liveOverlayDiagnosticsOptions;
@@ -89,6 +91,7 @@ internal sealed class OverlayManager : IDisposable
         AppStorageOptions storageOptions,
         DiagnosticsBundleService diagnosticsBundleService,
         TelemetryCaptureState telemetryCaptureState,
+        OverlayBridgeSupportState overlayBridgeSupportState,
         TelemetryEdgeCaseOptions telemetryEdgeCaseOptions,
         LiveModelParityOptions liveModelParityOptions,
         LiveOverlayDiagnosticsOptions liveOverlayDiagnosticsOptions,
@@ -116,6 +119,7 @@ internal sealed class OverlayManager : IDisposable
         _storageOptions = storageOptions;
         _diagnosticsBundleService = diagnosticsBundleService;
         _telemetryCaptureState = telemetryCaptureState;
+        _overlayBridgeSupportState = overlayBridgeSupportState;
         _telemetryEdgeCaseOptions = telemetryEdgeCaseOptions;
         _liveModelParityOptions = liveModelParityOptions;
         _liveOverlayDiagnosticsOptions = liveOverlayDiagnosticsOptions;
@@ -195,6 +199,7 @@ internal sealed class OverlayManager : IDisposable
                 _settings,
                 ManagedOverlayDefinitions,
                 _telemetryCaptureState,
+                _overlayBridgeSupportState,
                 _telemetryEdgeCaseOptions,
                 _liveModelParityOptions,
                 _liveOverlayDiagnosticsOptions,

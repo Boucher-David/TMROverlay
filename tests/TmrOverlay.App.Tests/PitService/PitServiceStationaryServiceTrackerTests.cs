@@ -5,6 +5,51 @@ namespace TmrOverlay.App.Tests.PitService;
 
 public sealed class PitServiceStationaryServiceTrackerTests
 {
+    [Theory]
+    [InlineData(PitServiceRequestChangeClassifications.None, true)]
+    [InlineData(PitServiceRequestChangeClassifications.CompletionClear, true)]
+    [InlineData(PitServiceRequestChangeClassifications.MaterialMutation, true)]
+    [InlineData(PitServiceRequestChangeClassifications.LegacyUnspecified, false)]
+    [InlineData("unexpected", false)]
+    public void RequestTransitionClassification_RequiresAnExplicitFormatSevenValue(
+        string classification,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            PitServiceRequestChangeClassifications.IsExplicitRequestTransitionClassification(classification));
+    }
+
+    [Fact]
+    public void FuelIncreaseTracker_DetectsSmoothCumulativeRefuelWithDiagnosticsEventSemantics()
+    {
+        var tracker = new PitServiceFuelIncreaseTracker(5d);
+
+        Assert.False(tracker.Track(5d));
+        Assert.False(tracker.Track(5.2d));
+        Assert.True(tracker.Track(5.4d));
+        Assert.False(tracker.Track(5.6d));
+
+        Assert.True(tracker.SawFuelIncrease);
+        Assert.Equal(0.6d, tracker.MaxFuelIncreaseLiters);
+        Assert.Equal(0.6d, tracker.LastFuelIncreaseLiters);
+    }
+
+    [Fact]
+    public void FuelIncreaseTracker_UsesPitWindowLowWaterMarkForGradualRefuelAfterSmallBurn()
+    {
+        var tracker = new PitServiceFuelIncreaseTracker(5d);
+
+        Assert.False(tracker.Track(5d));
+        Assert.False(tracker.Track(4.8d));
+        Assert.False(tracker.Track(5d));
+        Assert.True(tracker.Track(5.2d));
+
+        Assert.True(tracker.SawFuelIncrease);
+        Assert.Equal(0.4d, tracker.MaxFuelIncreaseLiters);
+        Assert.Equal(0.4d, tracker.LastFuelIncreaseLiters);
+    }
+
     [Fact]
     public void Track_ExcludesPitLaneTravelAndPreservesStationaryFuelFlowEvidence()
     {
@@ -42,6 +87,7 @@ public sealed class PitServiceStationaryServiceTrackerTests
         Assert.NotNull(observation);
         Assert.Equal(2d, observation.DurationSeconds);
         Assert.True(observation.RequestChangedDuringService);
+        Assert.Equal(PitServiceRequestChangeClassifications.MaterialMutation, observation.RequestChangeClassification);
         Assert.Equal(4, observation.LastRequest.RequestedTireCount);
         Assert.Equal(4d, observation.PositiveFuelAddedLiters);
         Assert.Null(observation.FuelFlowDurationSeconds);
@@ -61,8 +107,35 @@ public sealed class PitServiceStationaryServiceTrackerTests
 
         Assert.NotNull(observation);
         Assert.True(observation.RequestChangedDuringService);
+        Assert.Equal(PitServiceRequestChangeClassifications.MaterialMutation, observation.RequestChangeClassification);
         Assert.Null(observation.PositiveFuelAddedLiters);
         Assert.Contains("fuel-nonmonotonic", observation.QualificationFlags);
+    }
+
+    [Fact]
+    public void Track_ClassifiesPostRefuelSelectionClearAsCompletionRatherThanMutation()
+    {
+        var tracker = new PitServiceStationaryServiceTracker();
+        var start = new DateTimeOffset(2026, 7, 14, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.Null(tracker.Track(Frame(start, true, true, 5d)));
+        Assert.Null(tracker.Track(Frame(start.AddSeconds(1), true, true, 10d)));
+        Assert.Null(tracker.Track(Frame(start.AddSeconds(2), true, true, 15d)));
+        Assert.Null(tracker.Track(Frame(
+            start.AddSeconds(3),
+            inStall: true,
+            serviceActive: false,
+            fuelLiters: 15d,
+            request: ClearedRequest())));
+
+        var observation = tracker.Finish();
+
+        Assert.NotNull(observation);
+        Assert.Equal(10d, observation.PositiveFuelAddedLiters);
+        Assert.Equal(PitServiceRequestChangeClassifications.CompletionClear, observation.RequestChangeClassification);
+        Assert.False(observation.RequestChangedDuringService);
+        Assert.Contains("request-cleared-at-completion", observation.QualificationFlags);
+        Assert.DoesNotContain("request-changed-during-service", observation.QualificationFlags);
     }
 
     [Fact]
@@ -251,6 +324,20 @@ public sealed class PitServiceStationaryServiceTrackerTests
             Tearoff: false,
             FastRepair: false,
             FuelLiters: 10d,
+            RequestedTireCompoundIndex: 1);
+    }
+
+    private static PitServiceRequestShape ClearedRequest()
+    {
+        return new PitServiceRequestShape(
+            LeftFrontTire: false,
+            RightFrontTire: false,
+            LeftRearTire: false,
+            RightRearTire: false,
+            Fuel: false,
+            Tearoff: false,
+            FastRepair: false,
+            FuelLiters: 15d,
             RequestedTireCompoundIndex: 1);
     }
 

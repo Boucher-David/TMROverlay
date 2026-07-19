@@ -2574,6 +2574,7 @@ function timingSanityEvidence(overlayId, model) {
 function fuelStrategyEvidence(overlayId, model) {
   if (overlayId !== 'fuel-calculator') return null;
   const text = metricModelText(model);
+  const modelReadiness = model?.fuelStrategyEvidence?.modelReadiness;
   let additionalFuelNeedState = 'unavailable';
   if (/\bNeed\s+Covered\b|\bCovered\b/i.test(text)) {
     additionalFuelNeedState = 'not-needed';
@@ -2583,7 +2584,19 @@ function fuelStrategyEvidence(overlayId, model) {
 
   return {
     additionalFuelNeedState: model?.shouldRender === false ? 'unavailable' : additionalFuelNeedState,
-    successCopyRequiresMeasuredNeed: true
+    successCopyRequiresMeasuredNeed: true,
+    // Preserve C# presenter provenance in replay/localhost evidence. Static
+    // browser-review workbench fixtures intentionally omit it because they do
+    // not run the live recorder.
+    modelReadiness: modelReadiness ? {
+      state: modelReadiness.state,
+      isVisible: modelReadiness.isVisible === true,
+      isCollectionComplete: modelReadiness.isCollectionComplete === true,
+      sourceFamilies: Array.isArray(modelReadiness.sourceFamilies) ? modelReadiness.sourceFamilies : [],
+      rowLabels: Array.isArray(modelReadiness.rowLabels) ? modelReadiness.rowLabels : [],
+      evidenceSources: Array.isArray(modelReadiness.evidenceSources) ? modelReadiness.evidenceSources : [],
+      currentSessionEvidenceUpdatedAtUtc: modelReadiness.currentSessionEvidenceUpdatedAtUtc ?? null
+    } : null
   };
 }
 

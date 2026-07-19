@@ -44,6 +44,15 @@ overlay diagnostics contract. A separate Fuel V2 importer can promote selected
 derived sidecar facts into `history/user/fuel-v2/`; V1 strategy remains
 unaffected while `FuelV2History:UseForStrategy=false`.
 
+When a support bundle is created before the active collection finishes, it
+also contains compact, immutable provisional snapshots at
+`metadata/current-edge-cases.json`, `metadata/current-model-parity.json`, and
+`metadata/current-overlay-diagnostics.json` when their observers are enabled.
+Each carries `isFinalized: false`; active pit/flag windows remain active in
+these files and no post-session evaluation or model-promotion decision is
+made. They are support evidence only and neither replace nor modify the
+finalized observer artifacts.
+
 ## Guardrails
 
 - Enabled by default for normal builds; disable it with `LiveOverlayDiagnostics:Enabled=false` or a `TMR_LiveOverlayDiagnostics__Enabled=false` override only when the observer artifact is explicitly unwanted.

@@ -28,6 +28,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
     private readonly AppSettingsStore _settingsStore;
     private readonly AppEventRecorder _events;
     private readonly SessionHistoryStore _sessionHistoryStore;
+    private readonly CurrentSessionCarRadarCalibrationStore _currentSessionCarRadarCalibration;
     private readonly PostRaceAnalysisPipeline _postRaceAnalysisPipeline;
     private readonly DiagnosticsBundleService _diagnosticsBundleService;
     private readonly OverlayForensicsPackageService _forensicsPackageService;
@@ -72,6 +73,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         AppSettingsStore settingsStore,
         AppEventRecorder events,
         SessionHistoryStore sessionHistoryStore,
+        CurrentSessionCarRadarCalibrationStore currentSessionCarRadarCalibration,
         PostRaceAnalysisPipeline postRaceAnalysisPipeline,
         DiagnosticsBundleService diagnosticsBundleService,
         OverlayForensicsPackageService forensicsPackageService,
@@ -94,6 +96,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         _settingsStore = settingsStore;
         _events = events;
         _sessionHistoryStore = sessionHistoryStore;
+        _currentSessionCarRadarCalibration = currentSessionCarRadarCalibration;
         _postRaceAnalysisPipeline = postRaceAnalysisPipeline;
         _diagnosticsBundleService = diagnosticsBundleService;
         _forensicsPackageService = forensicsPackageService;
@@ -156,12 +159,14 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
 
         TelemetryCaptureSession? captureToFinalize;
         HistoricalSessionAccumulator? historyToFinalize;
+        string? sourceIdToComplete;
         var finalization = CaptureFinalizationContext.Empty;
         lock (_sync)
         {
             captureToFinalize = _activeCapture;
             historyToFinalize = _activeHistory;
             finalization = BuildFinalizationContext(captureToFinalize);
+            sourceIdToComplete = _activeSourceId;
             _activeCapture = null;
             _activeHistory = null;
             _activeSourceId = null;
@@ -171,6 +176,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             _sessionInfoSnapshotCount = 0;
             _lastSessionInfoUpdate = -1;
         }
+
+        _currentSessionCarRadarCalibration.CompleteCollection(sourceIdToComplete);
 
         _startupArtifactCancellation.Cancel();
         try
@@ -219,12 +226,14 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
 
         TelemetryCaptureSession? captureToFinalize;
         HistoricalSessionAccumulator? historyToFinalize;
+        string? sourceIdToComplete;
         var finalization = CaptureFinalizationContext.Empty;
         lock (_sync)
         {
             captureToFinalize = _activeCapture;
             historyToFinalize = _activeHistory;
             finalization = BuildFinalizationContext(captureToFinalize);
+            sourceIdToComplete = _activeSourceId;
             _activeCapture = null;
             _activeHistory = null;
             _activeSourceId = null;
@@ -235,6 +244,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             _lastSessionInfoUpdate = -1;
             _frameIndex = 0;
         }
+
+        _currentSessionCarRadarCalibration.CompleteCollection(sourceIdToComplete);
 
         if (captureToFinalize is not null || historyToFinalize is not null)
         {
@@ -403,6 +414,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             var sourceId = BuildCollectionSourceId(sourceStem, ++_collectionGeneration);
             _activeSourceId = sourceId;
             _activeStartedAtUtc = capture?.StartedAtUtc ?? startedAtUtc;
+            _currentSessionCarRadarCalibration.StartCollection(sourceId);
             var edgeCaseSchema = ReadEdgeCaseSchema(sdk);
             _activeRawWatchVariableNames = edgeCaseSchema.WatchedVariables
                 .Select(variable => variable.Name)
@@ -1506,11 +1518,13 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
     private void RecordHistoricalFrame(IRacingSDK sdk, DateTimeOffset capturedAtUtc, int sessionInfoUpdate)
     {
         HistoricalSessionAccumulator? history;
+        string? sourceId;
         IReadOnlyList<string> rawWatchVariableNames;
         IReadOnlyDictionary<string, string> rawWatchVariableGroups;
         lock (_sync)
         {
             history = _activeHistory;
+            sourceId = _activeSourceId;
             rawWatchVariableNames = _activeRawWatchVariableNames;
             rawWatchVariableGroups = _activeRawWatchVariableGroups;
         }
@@ -1858,6 +1872,12 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         try
         {
             history.RecordFrame(sample);
+            if (sourceId is not null)
+            {
+                _currentSessionCarRadarCalibration.Publish(
+                    sourceId,
+                    history.SnapshotRadarCalibration());
+            }
             historySucceeded = true;
         }
         finally

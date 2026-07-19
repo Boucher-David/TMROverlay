@@ -7,14 +7,15 @@ namespace TmrOverlay.Core.Fuel.V2;
 
 internal static class FuelV2HistoryDataVersions
 {
-    // Version 6 is this branch's single learned-history schema step: it keeps
-    // Offline Testing as distinct practice-like evidence and adds direct,
-    // two-sample-confirmed local pit-route checkpoints. Earlier v6 summaries
-    // remain readable with their route list defaulting to empty.
-    public const int ManifestVersion = 4;
-    public const int SummaryVersion = 6;
+    // Version 7 records whether a service-request transition was a material
+    // mid-service mutation or iRacing's normal post-refuel selection clear.
+    // Version 6 keeps Offline Testing as distinct practice-like evidence and
+    // adds direct, two-sample-confirmed local pit-route checkpoints. Earlier
+    // summaries remain readable with their later fields defaulting safely.
+    public const int ManifestVersion = 5;
+    public const int SummaryVersion = 7;
     public const int AggregateVersion = 3;
-    public const int ImportModelVersion = 6;
+    public const int ImportModelVersion = 7;
 
     public static bool IsReadableSummary(int summaryVersion, int importModelVersion)
     {
@@ -23,6 +24,7 @@ internal static class FuelV2HistoryDataVersions
             || (summaryVersion == 3 && importModelVersion == 3)
             || (summaryVersion == 4 && importModelVersion == 4)
             || (summaryVersion == 5 && importModelVersion == 5)
+            || (summaryVersion == 6 && importModelVersion == 6)
             || (summaryVersion == SummaryVersion && importModelVersion == ImportModelVersion);
     }
 }
@@ -476,6 +478,23 @@ internal sealed class FuelV2HistoryEvidenceTotals
 
     public int DriverChangeEventCount { get; init; }
 
+    // First-observed DC values are provenance for late joins, not evidence
+    // that a change happened during this captured segment. Only the confirmed
+    // count below represents a two-frame, single-step team-racing transition.
+    public int? InitialDriversSoFar { get; init; }
+
+    public int? FinalDriversSoFar { get; init; }
+
+    public int? InitialDriverChangeLapStatus { get; init; }
+
+    public int? FinalDriverChangeLapStatus { get; init; }
+
+    public int ConfirmedDriverSwapCount { get; init; }
+
+    public int UnconfirmedDriverChangeEventCount { get; init; }
+
+    public int DriverChangeLapStatusChangeCount { get; init; }
+
     public int FramesWithLocalFuel { get; init; }
 
     public int FramesWithTeamProgress { get; init; }
@@ -625,6 +644,18 @@ internal sealed class FuelV2HistoryTeamStint
     public required string DriverRole { get; init; }
 
     public IReadOnlyList<string> ConfidenceFlags { get; init; } = [];
+
+    public int? DriversSoFarAtStart { get; init; }
+
+    public int? DriversSoFarAtEnd { get; init; }
+
+    public int? DriverChangeLapStatusAtStart { get; init; }
+
+    public int? DriverChangeLapStatusAtEnd { get; init; }
+
+    public bool StartsAfterConfirmedDriverSwap { get; init; }
+
+    public bool EndsAtConfirmedDriverSwap { get; init; }
 }
 
 internal sealed class FuelV2HistoryAggregate

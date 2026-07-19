@@ -30,6 +30,11 @@ internal sealed record CarRadarCalibrationProfile(
                 Source: "bundled-spec");
         }
 
+        if (TryCreate(history?.CurrentSessionAggregate, "current-session", out var currentSessionProfile))
+        {
+            return currentSessionProfile;
+        }
+
         if (TryCreate(history?.UserAggregate, "user", out var userProfile))
         {
             return userProfile;

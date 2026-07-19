@@ -166,6 +166,7 @@ internal static class Program
                 services.AddSingleton<FuelV2HistoryNormalBurnQueryService>();
                 services.AddSingleton<FuelV2PitServiceTireHistoryQueryService>();
                 services.AddSingleton<FuelV2ModelReadinessQueryService>();
+                services.AddSingleton<CurrentSessionCarRadarCalibrationStore>();
                 services.AddSingleton<SessionHistoryQueryService>();
                 services.AddSingleton<StreamChatOverlaySource>();
                 services.AddSingleton<BrowserOverlayModelFactory>();
@@ -183,6 +184,8 @@ internal static class Program
                 services.AddSingleton<LiveModelParityRecorder>();
                 services.AddSingleton<LiveOverlayDiagnosticsRecorder>();
                 services.AddSingleton<FuelV2CaptureRecorder>();
+                services.AddSingleton<IFuelV2CurrentSessionEvidenceSource>(services =>
+                    services.GetRequiredService<FuelV2CaptureRecorder>());
                 services.AddSingleton<AppPerformanceState>();
                 services.AddSingleton<AppPerformanceSnapshotRecorder>();
                 services.AddSingleton<ReleaseUpdateService>();

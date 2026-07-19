@@ -15,7 +15,8 @@ internal sealed class FuelV2HistoryImporter
     private const int FirstClassifiedCaptureFormatVersion = 2;
     private const int StationaryServiceCaptureFormatVersion = 3;
     private const int PitRouteCaptureFormatVersion = 6;
-    private const int CurrentCaptureFormatVersion = 6;
+    private const int RequestTransitionCaptureFormatVersion = 7;
+    private const int CurrentCaptureFormatVersion = RequestTransitionCaptureFormatVersion;
     private const int MaxRejectedLapBurnWindowExamples = 20;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -83,6 +84,7 @@ internal sealed class FuelV2HistoryImporter
                 or StationaryServiceCaptureFormatVersion
                 or 4
                 or 5
+                or PitRouteCaptureFormatVersion
                 or CurrentCaptureFormatVersion))
         {
             return FuelV2HistoryImportResult.Skipped("unsupported_capture_format");
@@ -210,7 +212,9 @@ internal sealed class FuelV2HistoryImporter
             return false;
         }
 
-        return observations.All(IsUsableStationaryServiceObservation)
+        return observations.All(observation => IsUsableStationaryServiceObservation(
+                observation,
+                artifact.FormatVersion >= RequestTransitionCaptureFormatVersion))
             && observations.Count == pitService.RetainedStationaryServiceObservationCount
             && pitService.StationaryServiceObservationCount
                 == pitService.RetainedStationaryServiceObservationCount
@@ -218,11 +222,15 @@ internal sealed class FuelV2HistoryImporter
     }
 
     private static bool IsUsableStationaryServiceObservation(
-        PitServiceStationaryServiceObservation observation)
+        PitServiceStationaryServiceObservation observation,
+        bool requireRequestTransitionClassification)
     {
         return observation.EntryRequest is not null
             && observation.LastRequest is not null
-            && observation.QualificationFlags is not null;
+            && observation.QualificationFlags is not null
+            && (!requireRequestTransitionClassification
+                || PitServiceRequestChangeClassifications.IsExplicitRequestTransitionClassification(
+                    observation.RequestChangeClassification));
     }
 
     private static bool HasUsablePitRouteEvidence(FuelV2CaptureArtifact artifact)
@@ -312,6 +320,13 @@ internal sealed class FuelV2HistoryImporter
                 DroppedPitRouteObservationCount = artifact.PitService.DroppedPitRouteObservationCount,
                 TeamStintCount = artifact.Team.TeamStintCount,
                 DriverChangeEventCount = artifact.Team.DriverChangeEventCount,
+                InitialDriversSoFar = artifact.Team.InitialDriversSoFar,
+                FinalDriversSoFar = artifact.Team.FinalDriversSoFar,
+                InitialDriverChangeLapStatus = artifact.Team.InitialDriverChangeLapStatus,
+                FinalDriverChangeLapStatus = artifact.Team.FinalDriverChangeLapStatus,
+                ConfirmedDriverSwapCount = artifact.Team.ConfirmedDriverSwapCount,
+                UnconfirmedDriverChangeEventCount = artifact.Team.UnconfirmedDriverChangeEventCount,
+                DriverChangeLapStatusChangeCount = artifact.Team.DriverChangeLapStatusChangeCount,
                 FramesWithLocalFuel = artifact.Fuel.FramesWithLocalFuel,
                 FramesWithTeamProgress = artifact.Fuel.FramesWithTeamProgress,
                 FramesWithTeamProgressWithoutLocalFuel = artifact.Fuel.FramesWithTeamProgressWithoutLocalFuel,
@@ -684,7 +699,13 @@ internal sealed class FuelV2HistoryImporter
             FuelUsedLiters = source.FuelUsedLiters,
             FuelPerLapLiters = source.FuelPerLapLiters,
             DriverRole = source.DriverRole,
-            ConfidenceFlags = source.ConfidenceFlags
+            ConfidenceFlags = source.ConfidenceFlags,
+            DriversSoFarAtStart = source.DriversSoFarAtStart,
+            DriversSoFarAtEnd = source.DriversSoFarAtEnd,
+            DriverChangeLapStatusAtStart = source.DriverChangeLapStatusAtStart,
+            DriverChangeLapStatusAtEnd = source.DriverChangeLapStatusAtEnd,
+            StartsAfterConfirmedDriverSwap = source.StartsAfterConfirmedDriverSwap,
+            EndsAtConfirmedDriverSwap = source.EndsAtConfirmedDriverSwap
         };
     }
 

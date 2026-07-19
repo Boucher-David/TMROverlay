@@ -685,7 +685,10 @@ internal sealed class FuelV2HistoryStore
             || summary.StationaryServiceObservations.Any(observation => observation is null
                 || observation.EntryRequest is null
                 || observation.LastRequest is null
-                || observation.QualificationFlags is null)
+                || observation.QualificationFlags is null
+                || (summary.SummaryVersion >= 7
+                    && !PitServiceRequestChangeClassifications.IsExplicitRequestTransitionClassification(
+                        observation.RequestChangeClassification)))
             || summary.PitRouteObservations is null
             || summary.PitRouteObservations.Any(observation => observation is null
                 || observation.PitEntry is null

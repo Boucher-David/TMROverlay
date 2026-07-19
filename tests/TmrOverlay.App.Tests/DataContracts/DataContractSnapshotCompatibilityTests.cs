@@ -33,6 +33,10 @@ public sealed class DataContractSnapshotCompatibilityTests
     private const int V0190TrackMapGenerationVersion = 1;
     private const int V0190RawCaptureManifestFormatVersion = 1;
     private const int V0190RuntimeStateVersion = 1;
+    private const int V130FuelV2SummaryVersion = 5;
+    private const int CurrentFuelV2SummaryVersion = 7;
+    private const int CurrentFuelV2ManifestVersion = 5;
+    private const int CurrentFuelV2AggregateVersion = 3;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -101,9 +105,12 @@ public sealed class DataContractSnapshotCompatibilityTests
                 1,
                 v123Document.RootElement.GetProperty("durableContracts").GetProperty("fuelV2History").GetProperty("summaryVersion").GetInt32());
             Assert.Equal(
-                5,
+                V130FuelV2SummaryVersion,
                 v130Document.RootElement.GetProperty("durableContracts").GetProperty("fuelV2History").GetProperty("summaryVersion").GetInt32());
-            Assert.Equal(6, FuelV2HistoryDataVersions.SummaryVersion);
+            Assert.Equal(CurrentFuelV2SummaryVersion, FuelV2HistoryDataVersions.SummaryVersion);
+            Assert.Equal(CurrentFuelV2SummaryVersion, FuelV2HistoryDataVersions.ImportModelVersion);
+            Assert.Equal(CurrentFuelV2ManifestVersion, FuelV2HistoryDataVersions.ManifestVersion);
+            Assert.Equal(CurrentFuelV2AggregateVersion, FuelV2HistoryDataVersions.AggregateVersion);
 
             var v130SummaryPath = V130SnapshotPath(
                 "history",
@@ -251,6 +258,111 @@ public sealed class DataContractSnapshotCompatibilityTests
             });
             Assert.True(selection.IsAvailable);
             Assert.Equal(3.1d, selection.Burn?.Value);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task FrozenClassifiedFormatSixFuelV2Summary_RemainsByteStableAndSelectableAfterMaintenance()
+    {
+        var root = TempRoot("tmr-data-contract-fuel-v2-format-six");
+        try
+        {
+            var storage = CreateStorage(root);
+            var options = new FuelV2HistoryOptions
+            {
+                Enabled = true,
+                UseForStrategy = false,
+                ResolvedHistoryRoot = Path.Combine(storage.UserHistoryRoot, "fuel-v2")
+            };
+            var store = new FuelV2HistoryStore(options);
+            var frozenJson = File.ReadAllText(V130SnapshotPath(
+                "compatibility",
+                "fuel-v2-format6-summary.json"));
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(frozenJson, JsonOptions)
+                ?? throw new InvalidOperationException("Frozen Fuel V2 format-6 summary did not deserialize.");
+            var summaryPath = FuelV2HistoryStore.SummaryPath(
+                Path.Combine(store.GetSessionDirectory(summary.Scope.Combo), "summaries"),
+                summary);
+            Directory.CreateDirectory(Path.GetDirectoryName(summaryPath)!);
+            File.WriteAllText(summaryPath, frozenJson);
+
+            await store.MaintainAsync(CancellationToken.None);
+
+            Assert.Equal(frozenJson, File.ReadAllText(summaryPath));
+            var summaries = store.ReadExactSummaries(summary.Scope.Combo);
+            Assert.Equal(FuelV2HistorySummaryReadStatus.Available, summaries.Status);
+            var retained = Assert.Single(summaries.Summaries);
+            Assert.Equal(6, retained.SummaryVersion);
+            Assert.Equal(6, retained.ImportModelVersion);
+            Assert.True(Assert.Single(retained.PitRouteObservations).HasCompleteRoute);
+
+            var query = new FuelV2HistoryNormalBurnQueryService(options, store);
+            var selection = query.Lookup(new HistoricalSessionContext
+            {
+                Car = new HistoricalCarIdentity { CarId = 1, CarPath = "example-car" },
+                Track = new HistoricalTrackIdentity { TrackId = 2, TrackName = "test-track", TrackConfigName = "Full" },
+                Session = new HistoricalSessionIdentity { SessionType = "Race" },
+                Conditions = new HistoricalSessionInfoConditions()
+            });
+            Assert.True(selection.IsAvailable);
+            Assert.Equal(3.1d, selection.Burn?.Value);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public void FormatSevenFuelV2Summary_RejectsLegacyRequestTransitionFallback()
+    {
+        var root = TempRoot("tmr-data-contract-fuel-v2-format-seven-request-transition");
+        try
+        {
+            var storage = CreateStorage(root);
+            var options = new FuelV2HistoryOptions
+            {
+                Enabled = true,
+                UseForStrategy = false,
+                ResolvedHistoryRoot = Path.Combine(storage.UserHistoryRoot, "fuel-v2")
+            };
+            var store = new FuelV2HistoryStore(options);
+            var malformedV7 = JsonNode.Parse(File.ReadAllText(V130SnapshotPath(
+                "history",
+                "fuel-v2",
+                "cars",
+                "car-id-1",
+                "tracks",
+                "track-id-2-config-46756c6c",
+                "sessions",
+                "race",
+                "summaries",
+                "sha256-v130-example.json")))!.AsObject();
+            malformedV7["summaryVersion"] = CurrentFuelV2SummaryVersion;
+            malformedV7["importModelVersion"] = CurrentFuelV2SummaryVersion;
+            // The format-5 fixture has a stationary observation but no
+            // requestChangeClassification property. Its deserialization
+            // default is legacy-unspecified, which is compatible only with
+            // pre-v7 summaries.
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(
+                malformedV7.ToJsonString(JsonOptions),
+                JsonOptions)
+                ?? throw new InvalidOperationException("Malformed Fuel V2 format-7 summary did not deserialize.");
+            var summaryPath = FuelV2HistoryStore.SummaryPath(
+                Path.Combine(store.GetSessionDirectory(summary.Scope.Combo), "summaries"),
+                summary);
+            Directory.CreateDirectory(Path.GetDirectoryName(summaryPath)!);
+            File.WriteAllText(summaryPath, malformedV7.ToJsonString(JsonOptions));
+
+            var read = store.ReadExactSummaries(summary.Scope.Combo);
+
+            Assert.Equal(FuelV2HistorySummaryReadStatus.Unreadable, read.Status);
+            Assert.Empty(read.Summaries);
+            Assert.Equal(1, read.IgnoredUnreadableSummaryCount);
         }
         finally
         {

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using TmrOverlay.App.Events;
+using TmrOverlay.App.History;
 using TmrOverlay.App.Storage;
 using TmrOverlay.App.Telemetry;
 using TmrOverlay.Core.History;
@@ -269,6 +270,190 @@ public sealed class FuelV2CaptureRecorderTests
     }
 
     [Fact]
+    public void CurrentSessionEvidence_UpdatesModelReadinessOnlyAfterStationaryServiceCloses()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-fuel-v2-current-session-readiness-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var recorder = new FuelV2CaptureRecorder(
+                new FuelV2CaptureOptions
+                {
+                    Enabled = true,
+                    MaxStationaryServiceObservations = 5
+                },
+                storage,
+                new AppEventRecorder(storage),
+                NullLogger<FuelV2CaptureRecorder>.Instance);
+            var historyOptions = new FuelV2HistoryOptions
+            {
+                Enabled = true,
+                UseForStrategy = false,
+                ResolvedHistoryRoot = Path.Combine(storage.UserHistoryRoot, "fuel-v2")
+            };
+            var readiness = new FuelV2ModelReadinessQueryService(
+                historyOptions,
+                new FuelV2HistoryStore(historyOptions),
+                recorder);
+            var startedAtUtc = DateTimeOffset.Parse("2026-07-15T23:27:00Z");
+            var context = CapacityContext(sessionNum: 0, sessionType: "Practice", capPercent: 1d);
+            recorder.StartCollection("current-session-readiness", startedAtUtc);
+
+            recorder.RecordFrame(StationaryServiceSnapshot(
+                context,
+                fuelLevelLiters: 20d,
+                capturedAtUtc: startedAtUtc.AddSeconds(1),
+                sequence: 1,
+                inStall: true,
+                serviceActive: true,
+                requestFlags: 0x10,
+                tireSetsUsed: 2,
+                leftFrontTiresUsed: 10,
+                rightFrontTiresUsed: 20,
+                leftRearTiresUsed: 30,
+                rightRearTiresUsed: 40));
+            recorder.RecordFrame(StationaryServiceSnapshot(
+                context,
+                fuelLevelLiters: 25d,
+                capturedAtUtc: startedAtUtc.AddSeconds(3),
+                sequence: 2,
+                inStall: true,
+                serviceActive: true,
+                requestFlags: 0x10,
+                tireSetsUsed: 2,
+                leftFrontTiresUsed: 10,
+                rightFrontTiresUsed: 20,
+                leftRearTiresUsed: 30,
+                rightRearTiresUsed: 40));
+
+            var activeReadiness = readiness.Lookup(context);
+            Assert.Empty(activeReadiness.EvidenceSources ?? []);
+            Assert.Equal(
+                FuelV2ModelReadinessState.Missing,
+                activeReadiness.Rows.Single(row => row.Label == "Refuel")
+                    .Cells.Single(cell => cell.Label == "Small fill").State);
+
+            recorder.RecordFrame(StationaryServiceSnapshot(
+                context,
+                fuelLevelLiters: 30d,
+                capturedAtUtc: startedAtUtc.AddSeconds(5),
+                sequence: 3,
+                inStall: true,
+                serviceActive: true,
+                requestFlags: 0x10,
+                tireSetsUsed: 2,
+                leftFrontTiresUsed: 10,
+                rightFrontTiresUsed: 20,
+                leftRearTiresUsed: 30,
+                rightRearTiresUsed: 40));
+            recorder.RecordFrame(StationaryServiceSnapshot(
+                context,
+                fuelLevelLiters: 30d,
+                capturedAtUtc: startedAtUtc.AddSeconds(6),
+                sequence: 4,
+                inStall: false,
+                serviceActive: false,
+                requestFlags: 0,
+                tireSetsUsed: 2,
+                leftFrontTiresUsed: 10,
+                rightFrontTiresUsed: 20,
+                leftRearTiresUsed: 30,
+                rightRearTiresUsed: 40));
+
+            var closedReadiness = readiness.Lookup(context);
+            Assert.Contains(FuelV2ModelReadinessEvidenceSource.CurrentSession, closedReadiness.EvidenceSources!);
+            Assert.Equal(startedAtUtc.AddSeconds(5), closedReadiness.CurrentSessionEvidenceUpdatedAtUtc);
+            Assert.Equal(
+                FuelV2ModelReadinessState.Confirmed,
+                closedReadiness.Rows.Single(row => row.Label == "Refuel")
+                    .Cells.Single(cell => cell.Label == "Small fill").State);
+            Assert.Equal(
+                FuelV2ModelReadinessState.Confirmed,
+                closedReadiness.Rows.Single(row => row.Label == "Refuel")
+                    .Cells.Single(cell => cell.Label == "Fuel flow").State);
+
+            recorder.CompleteCollection(startedAtUtc.AddSeconds(7), captureDirectory: null);
+
+            var resetReadiness = readiness.Lookup(context);
+            Assert.Empty(resetReadiness.EvidenceSources ?? []);
+            Assert.Equal(
+                FuelV2ModelReadinessState.Missing,
+                resetReadiness.Rows.Single(row => row.Label == "Refuel")
+                    .Cells.Single(cell => cell.Label == "Small fill").State);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CompleteCollection_DetectsSmoothPitWindowRefuelFromCumulativeFuelIncrease()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-fuel-v2-capture-recorder-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var recorder = new FuelV2CaptureRecorder(
+                new FuelV2CaptureOptions { Enabled = true },
+                storage,
+                new AppEventRecorder(storage),
+                NullLogger<FuelV2CaptureRecorder>.Instance);
+            var startedAtUtc = DateTimeOffset.Parse("2026-07-14T12:00:00Z");
+            var context = CapacityContext(sessionNum: 0, sessionType: "Race", capPercent: 1d);
+            recorder.StartCollection("smooth-pit-refuel", startedAtUtc);
+
+            foreach (var (offsetSeconds, fuelLevelLiters) in new[]
+            {
+                (0d, 5.0d),
+                (1d, 5.2d),
+                (2d, 5.4d),
+                (3d, 5.6d)
+            })
+            {
+                recorder.RecordFrame(StationaryServiceSnapshot(
+                    context,
+                    fuelLevelLiters,
+                    startedAtUtc.AddSeconds(offsetSeconds),
+                    sequence: (long)offsetSeconds + 1,
+                    inStall: true,
+                    serviceActive: true,
+                    requestFlags: 0x10,
+                    tireSetsUsed: 2));
+            }
+
+            recorder.RecordFrame(StationaryServiceSnapshot(
+                context,
+                fuelLevelLiters: 5.6d,
+                capturedAtUtc: startedAtUtc.AddSeconds(4),
+                sequence: 5,
+                inStall: false,
+                serviceActive: false,
+                requestFlags: 0,
+                tireSetsUsed: 2));
+
+            var path = recorder.CompleteCollection(startedAtUtc.AddSeconds(5), captureDirectory: null);
+
+            Assert.NotNull(path);
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var pitWindow = document.RootElement.GetProperty("pitWindows").EnumerateArray().Single();
+            Assert.True(pitWindow.GetProperty("sawFuelIncrease").GetBoolean());
+            Assert.Equal(0.6d, pitWindow.GetProperty("maxFuelIncreaseLiters").GetDouble(), 3);
+            Assert.Equal(1, document.RootElement.GetProperty("pitService").GetProperty("pitWindowsWithFuelIncrease").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void CompleteCollection_RecordsAConfirmedLocalPitRouteFromNormalizedLiveFrames()
     {
         var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-fuel-v2-capture-recorder-test", Guid.NewGuid().ToString("N"));
@@ -419,6 +604,123 @@ public sealed class FuelV2CaptureRecorderTests
                 .GetProperty("pitService")
                 .GetProperty("pitRouteObservationCount")
                 .GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CompleteCollection_ConfirmsAndAnnotatesTeamStintsOnlyAfterAStableSingleStepDriverSwap()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-fuel-v2-driver-swap-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var recorder = new FuelV2CaptureRecorder(
+                new FuelV2CaptureOptions { Enabled = true },
+                storage,
+                new AppEventRecorder(storage),
+                NullLogger<FuelV2CaptureRecorder>.Instance);
+            var startedAtUtc = DateTimeOffset.Parse("2026-07-17T12:00:00Z");
+            var context = CapacityContext(sessionNum: 0, sessionType: "Race", capPercent: 1d, teamRacing: true);
+            recorder.StartCollection("confirmed-driver-swap", startedAtUtc);
+
+            recorder.RecordFrame(TeamStintSnapshot(context, 70d, startedAtUtc.AddSeconds(1), 1, 2, 10, 0.10d));
+            recorder.RecordFrame(TeamStintSnapshot(context, 69d, startedAtUtc.AddSeconds(2), 2, 2, 11, 0.20d));
+            recorder.RecordFrame(TeamStintSnapshot(context, 68d, startedAtUtc.AddSeconds(3), 3, 3, 11, 0.30d));
+            recorder.RecordFrame(TeamStintSnapshot(context, 67d, startedAtUtc.AddSeconds(4), 4, 3, 11, 0.40d));
+            recorder.RecordFrame(TeamStintSnapshot(context, 66d, startedAtUtc.AddSeconds(5), 5, 3, 11, 0.50d));
+
+            var path = recorder.CompleteCollection(startedAtUtc.AddSeconds(6), captureDirectory: null);
+
+            Assert.NotNull(path);
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var rootElement = document.RootElement;
+            var team = rootElement.GetProperty("team");
+            Assert.Equal(2, team.GetProperty("initialDriversSoFar").GetInt32());
+            Assert.Equal(3, team.GetProperty("finalDriversSoFar").GetInt32());
+            Assert.Equal(10, team.GetProperty("initialDriverChangeLapStatus").GetInt32());
+            Assert.Equal(11, team.GetProperty("finalDriverChangeLapStatus").GetInt32());
+            Assert.Equal(1, team.GetProperty("driverChangeEventCount").GetInt32());
+            Assert.Equal(1, team.GetProperty("confirmedDriverSwapCount").GetInt32());
+            Assert.Equal(0, team.GetProperty("unconfirmedDriverChangeEventCount").GetInt32());
+            Assert.Equal(1, team.GetProperty("driverChangeLapStatusChangeCount").GetInt32());
+
+            var stints = rootElement.GetProperty("teamStints").EnumerateArray().ToArray();
+            Assert.Equal(2, stints.Length);
+            Assert.Equal(2, stints[0].GetProperty("driversSoFarAtStart").GetInt32());
+            Assert.Equal(3, stints[0].GetProperty("driversSoFarAtEnd").GetInt32());
+            Assert.True(stints[0].GetProperty("endsAtConfirmedDriverSwap").GetBoolean());
+            Assert.False(stints[0].GetProperty("startsAfterConfirmedDriverSwap").GetBoolean());
+            Assert.Equal(3, stints[1].GetProperty("driversSoFarAtStart").GetInt32());
+            Assert.True(stints[1].GetProperty("startsAfterConfirmedDriverSwap").GetBoolean());
+            Assert.False(stints[1].GetProperty("endsAtConfirmedDriverSwap").GetBoolean());
+            Assert.Contains(
+                rootElement.GetProperty("eventSamples").EnumerateArray(),
+                sample => sample.GetProperty("kind").GetString() == "driver-control.swap-confirmed");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CompleteCollection_DoesNotSplitTeamStintsForLateJoinLapStatusOrMultiDriverCounterMovement()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-fuel-v2-driver-swap-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var recorder = new FuelV2CaptureRecorder(
+                new FuelV2CaptureOptions { Enabled = true },
+                storage,
+                new AppEventRecorder(storage),
+                NullLogger<FuelV2CaptureRecorder>.Instance);
+            var startedAtUtc = DateTimeOffset.Parse("2026-07-17T12:00:00Z");
+            var context = CapacityContext(sessionNum: 0, sessionType: "Race", capPercent: 1d, teamRacing: true);
+            recorder.StartCollection("unconfirmed-driver-swap", startedAtUtc);
+
+            // A late connection can first see a non-one count. It is retained
+            // as baseline provenance only. DCLapStatus then changes, but it
+            // cannot prove a swap. A 2-to-4 counter jump also stays factual
+            // and unconfirmed because the collector cannot identify/split two
+            // missing driver transitions safely.
+            recorder.RecordFrame(TeamStintSnapshot(context, 70d, startedAtUtc.AddSeconds(1), 1, 2, 10, 0.10d));
+            recorder.RecordFrame(TeamStintSnapshot(context, 69d, startedAtUtc.AddSeconds(2), 2, 2, 11, 0.20d));
+            recorder.RecordFrame(TeamStintSnapshot(context, 68d, startedAtUtc.AddSeconds(3), 3, 4, 11, 0.30d));
+            recorder.RecordFrame(TeamStintSnapshot(context, 67d, startedAtUtc.AddSeconds(4), 4, 4, 11, 0.40d));
+
+            var path = recorder.CompleteCollection(startedAtUtc.AddSeconds(5), captureDirectory: null);
+
+            Assert.NotNull(path);
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var rootElement = document.RootElement;
+            var team = rootElement.GetProperty("team");
+            Assert.Equal(2, team.GetProperty("initialDriversSoFar").GetInt32());
+            Assert.Equal(4, team.GetProperty("finalDriversSoFar").GetInt32());
+            Assert.Equal(1, team.GetProperty("driverChangeEventCount").GetInt32());
+            Assert.Equal(0, team.GetProperty("confirmedDriverSwapCount").GetInt32());
+            Assert.Equal(1, team.GetProperty("unconfirmedDriverChangeEventCount").GetInt32());
+            Assert.Equal(1, team.GetProperty("driverChangeLapStatusChangeCount").GetInt32());
+            Assert.Single(rootElement.GetProperty("teamStints").EnumerateArray());
+            Assert.DoesNotContain(
+                rootElement.GetProperty("eventSamples").EnumerateArray(),
+                sample => sample.GetProperty("kind").GetString() == "driver-control.swap-confirmed");
+            Assert.Contains(
+                rootElement.GetProperty("eventSamples").EnumerateArray(),
+                sample => sample.GetProperty("kind").GetString() == "driver-control.lap-status-changed");
+            Assert.Contains(
+                rootElement.GetProperty("eventSamples").EnumerateArray(),
+                sample => sample.GetProperty("kind").GetString() == "driver-control.change-unconfirmed");
         }
         finally
         {

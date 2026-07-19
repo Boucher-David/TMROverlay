@@ -1,6 +1,6 @@
 # iRacing 2026 Release-Note Audit
 
-Reviewed 2026-07-15 against the [iRacing 2026 release-note index](https://support.iracing.com/support/solutions/31000076778), the current `irsdkSharp` ingestion path, raw-capture schema, replay reader, and Fuel V2 contracts.
+Reviewed 2026-07-17 against the [iRacing 2026 release-note index](https://support.iracing.com/support/solutions/31000076778), the current `irsdkSharp` ingestion path, raw-capture schema, replay reader, and Fuel V2 contracts. The current index still ends at Season 3 Patch 3 Hotfix 1 (2026-07-14), so there is no newer SDK/session-data release-note impact to add for this follow-up.
 
 ## Required changes found
 
@@ -11,7 +11,10 @@ Season 3 Patch 1 added the `[Misc] irsdkLogAllCars=1` option and allows the `Car
 - Live collection and raw replay now derive their `CarIdx` loop bound from the current SDK/captured schema across the shared core timing arrays.
 - The raw format was already forward-safe: `telemetry-schema.json` retains each variable's actual `Count`, and `telemetry.bin` retains the complete buffer. This does not require a capture-format or durable-history version bump.
 - Core local-context/radar/history and diagnostics accept normalized, non-negative `CarIdx` values rather than applying a second hard-coded cap.
-- Browser-review mirrors that rule, and replay coverage includes a 65-entry schema with player/focus at index 64.
+- Browser-review mirrors that rule. The real Windows Acura capture
+  `capture-20260714-193157-308` exposes all 27 `CarIdx*` arrays with 72 slots;
+  the redacted availability corpus retains that source shape, and replay
+  regression coverage populates player/focus at its last valid index (71).
 
 TmrOverlay does **not** write the user's iRacing `app.ini`. To collect all active-entry rows, users who need that evidence must opt into `[Misc] irsdkLogAllCars=1` in iRacing. The app still captures the actual schema it receives, whether or not that option is enabled.
 
@@ -44,7 +47,11 @@ continue to require normal local focus/progress.
 
 ## Follow-up evidence to collect
 
-- A Windows capture with `irsdkLogAllCars=1` and more than 64 entrants, then replay it through timing, relative, standings, radar, and diagnostics.
+- The July 14 Acura and Mercedes Windows captures establish the 72-slot schema,
+  but the Acura capture has one driver and therefore cannot prove populated
+  high-index opponent rows. Collect an `irsdkLogAllCars=1` session with more
+  than 64 active entrants, then replay it through timing, relative, standings,
+  radar, and diagnostics.
 - A current Season 3 pit-service capture that records `DCRuleSet` alongside observed stationary-service counters. It may validate a future service-rules contract, but must not be converted into timing advice by label alone.
 - A multi-pace-start/late-driver-swap capture to validate the existing race-control and team-stint provenance against the fixed SDK behaviour.
 

@@ -34,6 +34,7 @@ internal sealed class TelemetryEdgeCaseRecorder
     private int _observationCount;
     private int _droppedObservationCount;
     private int _sampledFrameCount;
+    private bool _collectionFinalized;
 
     public TelemetryEdgeCaseRecorder(
         TelemetryEdgeCaseOptions options,
@@ -77,6 +78,7 @@ internal sealed class TelemetryEdgeCaseRecorder
             _observationCount = 0;
             _droppedObservationCount = 0;
             _sampledFrameCount = 0;
+            _collectionFinalized = false;
         }
     }
 
@@ -141,6 +143,8 @@ internal sealed class TelemetryEdgeCaseRecorder
                 return null;
             }
 
+            _collectionFinalized = true;
+
             foreach (var clip in _activeClips)
             {
                 clip.IsComplete = true;
@@ -187,6 +191,43 @@ internal sealed class TelemetryEdgeCaseRecorder
                 path,
                 _clips.Count);
             return path;
+        }
+    }
+
+    // A support bundle can be requested while the collection is still active.
+    // Return a detached view without completing clips or writing a durable
+    // artifact; finalization remains the sole persistence boundary.
+    public TelemetryEdgeCaseSupportSnapshot? CreateSupportSnapshot(DateTimeOffset capturedAtUtc)
+    {
+        if (!_options.Enabled)
+        {
+            return null;
+        }
+
+        lock (_sync)
+        {
+            if (_collectionFinalized || _sourceId is null || _startedAtUtc is null)
+            {
+                return null;
+            }
+
+            return new TelemetryEdgeCaseSupportSnapshot(
+                IsFinalized: false,
+                CapturedAtUtc: capturedAtUtc,
+                SourceId: _sourceId,
+                StartedAtUtc: _startedAtUtc.Value,
+                ClipCount: _clips.Count,
+                ActiveClipCount: _activeClips.Count,
+                ObservationCount: _observationCount,
+                DroppedObservationCount: _droppedObservationCount,
+                SampledFrameCount: _sampledFrameCount,
+                ObservationSummaries: _observationSummaries.Values
+                    .OrderBy(summary => summary.FirstDetectedAtUtc)
+                    .ThenBy(summary => summary.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(summary => summary.Build())
+                    .ToArray(),
+                FinalContextFrames: _ring.ToArray(),
+                Clips: _clips.Select(clip => clip.Build()).ToArray());
         }
     }
 
@@ -396,6 +437,20 @@ internal sealed record TelemetryEdgeCaseArtifact(
     TelemetryEdgeCaseArtifactOptions Options,
     RawTelemetrySchemaSnapshot Schema,
     int ClipCount,
+    int ObservationCount,
+    int DroppedObservationCount,
+    int SampledFrameCount,
+    IReadOnlyList<TelemetryEdgeCaseObservationSummary> ObservationSummaries,
+    IReadOnlyList<TelemetryEdgeCaseFrame> FinalContextFrames,
+    IReadOnlyList<TelemetryEdgeCaseClip> Clips);
+
+internal sealed record TelemetryEdgeCaseSupportSnapshot(
+    bool IsFinalized,
+    DateTimeOffset CapturedAtUtc,
+    string SourceId,
+    DateTimeOffset StartedAtUtc,
+    int ClipCount,
+    int ActiveClipCount,
     int ObservationCount,
     int DroppedObservationCount,
     int SampledFrameCount,

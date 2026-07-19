@@ -7,6 +7,7 @@ using TmrOverlay.App.Overlays.Flags;
 using TmrOverlay.App.Storage;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Overlays;
+using TmrOverlay.Core.PitService;
 using TmrOverlay.Core.Telemetry.EdgeCases;
 using TmrOverlay.Core.Telemetry.Live;
 
@@ -17,7 +18,6 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private const double SectorBoundarySeedThreshold = 0.0125d;
     private const double LapStartSeedThreshold = 0.02d;
     private const double MaximumContinuousSectorProgressDelta = 0.12d;
-    private const double MinimumPitWindowFuelIncreaseLiters = 0.25d;
     private const int MaxPitWindowSamples = 20;
     private const int BlackFlagMask = 0x00010000 | 0x00020000 | 0x00080000 | 0x00200000 | 0x00400000;
     private const int YellowFamilyFlagMask = 0x00000008
@@ -262,6 +262,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
     private int _trackMapPersonalBestSectorFrames;
     private int _trackMapBestLapSectorFrames;
     private int _trackMapFullLapHighlightFrames;
+    private bool _collectionFinalized;
 
     public LiveOverlayDiagnosticsRecorder(
         LiveOverlayDiagnosticsOptions options,
@@ -503,6 +504,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             _pitWindows.Clear();
             _sampleFrames.Clear();
             _eventSamples.Clear();
+            _collectionFinalized = false;
         }
     }
 
@@ -556,6 +558,8 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             {
                 return null;
             }
+
+            _collectionFinalized = true;
 
             try
             {
@@ -820,6 +824,70 @@ internal sealed class LiveOverlayDiagnosticsRecorder
                 _logger.LogWarning(exception, "Failed to save live overlay diagnostics artifact for {SourceId}.", _sourceId);
                 return null;
             }
+        }
+    }
+
+    // A compact immutable view for an on-demand support bundle. Do not close
+    // the active pit/flag windows here: the finalized artifact remains the
+    // only record allowed to turn in-progress state into completed evidence.
+    public LiveOverlayDiagnosticsSupportSnapshot? CreateSupportSnapshot(DateTimeOffset capturedAtUtc)
+    {
+        if (!_options.Enabled)
+        {
+            return null;
+        }
+
+        lock (_sync)
+        {
+            if (_collectionFinalized || _sourceId is null || _startedAtUtc is null)
+            {
+                return null;
+            }
+
+            return new LiveOverlayDiagnosticsSupportSnapshot(
+                IsFinalized: false,
+                CapturedAtUtc: capturedAtUtc,
+                SourceId: _sourceId,
+                StartedAtUtc: _startedAtUtc.Value,
+                Totals: new LiveOverlayDiagnosticsTotals(
+                    FrameCount: _frameCount,
+                    SampledFrameCount: _sampledFrameCount,
+                    DroppedFrameSampleCount: _droppedFrameSampleCount,
+                    DroppedEventSampleCount: _droppedEventSampleCount,
+                    SessionFrameCounts: Sorted(_sessionFrameCounts)),
+                FocusUnavailableFrames: _focusUnavailableFrames,
+                Flags: new LiveOverlayDiagnosticsSupportFlags(
+                    FramesWithRawFlags: _flagsFramesWithRawFlags,
+                    FramesWithDisplayFlags: _flagsFramesWithDisplayFlags,
+                    WaitingFrames: _flagsWaitingFrames,
+                    DisplayTransitionFrames: _flagsDisplayTransitionFrames,
+                    DisplayClearedTransitionFrames: _flagsDisplayClearedTransitionFrames,
+                    RawFlagCounts: Sorted(_flagsRawFlagCounts)),
+                Radar: new LiveOverlayDiagnosticsSupportRadar(
+                    FramesWithData: _radarFramesWithData,
+                    NonPlayerFocusFrames: _radarNonPlayerFocusFrames,
+                    LocalUnavailablePitOrGarageFrames: _radarLocalUnavailablePitOrGarageFrames,
+                    SideSignalFrames: _radarSideSignalFrames,
+                    SideTransitionFrames: _radarSideTransitionFrames,
+                    SideTransitionCounts: Sorted(_radarSideTransitionCounts)),
+                Fuel: new LiveOverlayDiagnosticsSupportFuel(
+                    FramesWithFuelLevel: _fuelFramesWithLevel,
+                    DriverControlFrames: _fuelDriverControlFrames,
+                    PitContextFrames: _fuelPitContextFrames,
+                    PitServiceChangeFrames: _fuelPitServiceChangeFrames,
+                    FuelIncreaseEventFrames: _fuelIncreaseEventFrames,
+                    CompletedPitWindowCount: _pitWindows.Count,
+                    HasActivePitWindow: _activePitWindow is not null,
+                    PitWindows: _pitWindows.ToArray()),
+                RawTelemetry: new LiveOverlayDiagnosticsSupportRawTelemetry(
+                    DriverControlSignalFrames: _rawDriverControlSignalFrames,
+                    DriverControlChangeFrames: _rawDriverControlChangeFrames,
+                    PitCommandSignalFrames: _rawPitCommandSignalFrames,
+                    PitCommandChangeFrames: _rawPitCommandChangeFrames,
+                    DriverControlChangeCounts: Sorted(_rawDriverControlChangeCounts),
+                    PitCommandChangeCounts: Sorted(_rawPitCommandChangeCounts)),
+                SampleFrames: _sampleFrames.ToArray(),
+                EventSamples: _eventSamples.ToArray());
         }
     }
 
@@ -3499,6 +3567,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
             StartSessionTimeSeconds = startSessionTimeSeconds;
             EntryFuelLiters = entryFuelLiters;
             LastFuelLiters = entryFuelLiters;
+            FuelIncreaseTracker = new PitServiceFuelIncreaseTracker(entryFuelLiters);
             EntrySessionFlagsHex = entrySessionFlagsHex;
             LastSessionFlagsHex = entrySessionFlagsHex;
             EntryPitServiceStatus = entryPitServiceStatus;
@@ -3516,6 +3585,8 @@ internal sealed class LiveOverlayDiagnosticsRecorder
         public double? EntryFuelLiters { get; }
 
         public double? LastFuelLiters { get; private set; }
+
+        private PitServiceFuelIncreaseTracker FuelIncreaseTracker { get; }
 
         public string EntrySessionFlagsHex { get; }
 
@@ -3537,7 +3608,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
 
         public double? LastSessionTimeSeconds { get; private set; }
 
-        public bool SawFuelIncrease { get; private set; }
+        public bool SawFuelIncrease => FuelIncreaseTracker.SawFuelIncrease;
 
         public bool SawBlackFlag { get; private set; }
 
@@ -3547,9 +3618,9 @@ internal sealed class LiveOverlayDiagnosticsRecorder
 
         public bool SawPitServiceChange { get; private set; }
 
-        public double? MaxFuelIncreaseLiters { get; private set; }
+        public double? MaxFuelIncreaseLiters => FuelIncreaseTracker.MaxFuelIncreaseLiters;
 
-        public double? LastFuelIncreaseLiters { get; private set; }
+        public double? LastFuelIncreaseLiters => FuelIncreaseTracker.LastFuelIncreaseLiters;
 
         public bool ConsumedFuelIncreaseEvent { get; set; }
 
@@ -3577,31 +3648,7 @@ internal sealed class LiveOverlayDiagnosticsRecorder
 
             if (fuelLiters is { } currentFuel)
             {
-                var frameIncreaseLiters = LastFuelLiters is { } previousFuel
-                    ? currentFuel - previousFuel
-                    : (double?)null;
-                var netIncreaseLiters = EntryFuelLiters is { } entryFuel
-                    ? currentFuel - entryFuel
-                    : frameIncreaseLiters;
-                var hasFrameIncrease = frameIncreaseLiters.GetValueOrDefault() > MinimumPitWindowFuelIncreaseLiters;
-                var hasNetIncrease = netIncreaseLiters.GetValueOrDefault() > MinimumPitWindowFuelIncreaseLiters;
-                if (hasFrameIncrease || hasNetIncrease)
-                {
-                    var hadFuelIncrease = SawFuelIncrease;
-                    var detectedIncreaseLiters = hasFrameIncrease
-                        ? frameIncreaseLiters!.Value
-                        : netIncreaseLiters!.Value;
-                    var cumulativeIncreaseLiters = netIncreaseLiters is > 0d
-                        ? netIncreaseLiters.Value
-                        : detectedIncreaseLiters;
-                    SawFuelIncrease = true;
-                    LastFuelIncreaseLiters = detectedIncreaseLiters;
-                    MaxFuelIncreaseLiters = MaxFuelIncreaseLiters is { } max
-                        ? Math.Max(max, cumulativeIncreaseLiters)
-                        : cumulativeIncreaseLiters;
-                    ConsumedFuelIncreaseEvent = hasFrameIncrease || !hadFuelIncrease;
-                }
-
+                ConsumedFuelIncreaseEvent = FuelIncreaseTracker.Track(currentFuel);
                 LastFuelLiters = currentFuel;
             }
         }
@@ -3808,6 +3855,54 @@ internal sealed record LiveOverlayDiagnosticsArtifact(
     RawTelemetryDiagnosticsSummary RawTelemetry,
     IReadOnlyList<LiveOverlayDiagnosticsFrameSample> SampleFrames,
     IReadOnlyList<LiveOverlayDiagnosticsEventSample> EventSamples);
+
+internal sealed record LiveOverlayDiagnosticsSupportSnapshot(
+    bool IsFinalized,
+    DateTimeOffset CapturedAtUtc,
+    string SourceId,
+    DateTimeOffset StartedAtUtc,
+    LiveOverlayDiagnosticsTotals Totals,
+    int FocusUnavailableFrames,
+    LiveOverlayDiagnosticsSupportFlags Flags,
+    LiveOverlayDiagnosticsSupportRadar Radar,
+    LiveOverlayDiagnosticsSupportFuel Fuel,
+    LiveOverlayDiagnosticsSupportRawTelemetry RawTelemetry,
+    IReadOnlyList<LiveOverlayDiagnosticsFrameSample> SampleFrames,
+    IReadOnlyList<LiveOverlayDiagnosticsEventSample> EventSamples);
+
+internal sealed record LiveOverlayDiagnosticsSupportFlags(
+    int FramesWithRawFlags,
+    int FramesWithDisplayFlags,
+    int WaitingFrames,
+    int DisplayTransitionFrames,
+    int DisplayClearedTransitionFrames,
+    IReadOnlyDictionary<string, int> RawFlagCounts);
+
+internal sealed record LiveOverlayDiagnosticsSupportRadar(
+    int FramesWithData,
+    int NonPlayerFocusFrames,
+    int LocalUnavailablePitOrGarageFrames,
+    int SideSignalFrames,
+    int SideTransitionFrames,
+    IReadOnlyDictionary<string, int> SideTransitionCounts);
+
+internal sealed record LiveOverlayDiagnosticsSupportFuel(
+    int FramesWithFuelLevel,
+    int DriverControlFrames,
+    int PitContextFrames,
+    int PitServiceChangeFrames,
+    int FuelIncreaseEventFrames,
+    int CompletedPitWindowCount,
+    bool HasActivePitWindow,
+    IReadOnlyList<PitWindowDiagnosticsSample> PitWindows);
+
+internal sealed record LiveOverlayDiagnosticsSupportRawTelemetry(
+    int DriverControlSignalFrames,
+    int DriverControlChangeFrames,
+    int PitCommandSignalFrames,
+    int PitCommandChangeFrames,
+    IReadOnlyDictionary<string, int> DriverControlChangeCounts,
+    IReadOnlyDictionary<string, int> PitCommandChangeCounts);
 
 internal sealed record LiveOverlayDiagnosticsArtifactOptions(
     double MinimumFrameSpacingSeconds,

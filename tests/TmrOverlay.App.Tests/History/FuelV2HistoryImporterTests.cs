@@ -1237,6 +1237,9 @@ public sealed class FuelV2HistoryImporterTests
                     "*.json"))),
                 JsonOptions));
             var retained = Assert.Single(summary.PitRouteObservations);
+            Assert.Equal(FuelV2HistoryDataVersions.SummaryVersion, summary.SummaryVersion);
+            Assert.Equal(FuelV2HistoryDataVersions.ImportModelVersion, summary.ImportModelVersion);
+            Assert.Equal(6, summary.SourceVersions.CaptureFormatVersion);
             Assert.True(retained.HasCompleteRoute);
             Assert.Equal("driver-pit-track-percent:0.068197", retained.Assignment.PitBoxIdentity);
             Assert.Equal(1, summary.Evidence.PitRouteObservationCount);
@@ -1358,13 +1361,46 @@ public sealed class FuelV2HistoryImporterTests
         try
         {
             var storage = CreateStorage(root);
-            var artifactPath = WriteArtifact(root, CreateArtifact(formatVersion: 7));
+            var artifactPath = WriteArtifact(root, CreateArtifact(formatVersion: 8));
             var importer = CreateImporter(storage);
 
             var result = await importer.ImportAsync(artifactPath, CancellationToken.None);
 
             Assert.False(result.Imported);
             Assert.Equal("unsupported_capture_format", result.Reason);
+            Assert.False(Directory.Exists(Path.Combine(storage.UserHistoryRoot, "fuel-v2")));
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_FormatSevenRequiresExplicitRequestTransitionClassification()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact(formatVersion: 7);
+            artifact = artifact with
+            {
+                PitService = artifact.PitService with
+                {
+                    StationaryServiceObservationCount = 1,
+                    RetainedStationaryServiceObservationCount = 1
+                },
+                // The default is the legacy compatibility value. A genuine
+                // v7 producer must write one of the explicit classifications.
+                StationaryServiceObservations = [CreateStationaryServiceObservation(artifact.StartedAtUtc.AddMinutes(12))]
+            };
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+
+            Assert.False(result.Imported);
+            Assert.Equal("artifact_incomplete", result.Reason);
             Assert.False(Directory.Exists(Path.Combine(storage.UserHistoryRoot, "fuel-v2")));
         }
         finally

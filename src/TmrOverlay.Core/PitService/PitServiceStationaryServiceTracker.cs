@@ -60,7 +60,7 @@ internal sealed class PitServiceStationaryServiceTracker
         private bool _sawPitStall;
         private bool _sawServiceActive;
         private bool _sawRepair;
-        private bool _requestChangedDuringService;
+        private readonly List<RequestChangeEvent> _requestChanges = [];
         private bool _sawFuelRegression;
         private bool _sawInteriorMissingFuel;
         private bool _telemetryInterrupted;
@@ -121,7 +121,14 @@ internal sealed class PitServiceStationaryServiceTracker
                 _previousFuelLiters = frame.FuelLiters;
             }
 
-            _requestChangedDuringService |= frame.Request != _last.Request;
+            if (frame.Request != _last.Request)
+            {
+                _requestChanges.Add(new RequestChangeEvent(
+                    Previous: _last.Request,
+                    Current: frame.Request,
+                    CapturedAtUtc: frame.CapturedAtUtc));
+            }
+
             _last = frame;
             _sampleCount++;
             _sawPitStall |= frame.PlayerCarInPitStall;
@@ -142,6 +149,9 @@ internal sealed class PitServiceStationaryServiceTracker
             var fuelFlowUsable = _positiveFuelAddedLiters > 0d
                 && !_sawFuelRegression
                 && !_sawInteriorMissingFuel;
+            var requestChangeClassification = ClassifyRequestChanges();
+            var requestChangedDuringService = requestChangeClassification
+                == PitServiceRequestChangeClassifications.MaterialMutation;
             var flags = new List<string>();
             if (!_sawPitStall)
             {
@@ -167,9 +177,13 @@ internal sealed class PitServiceStationaryServiceTracker
                 flags.Add("fuel-flow-duration-unresolved");
             }
 
-            if (_requestChangedDuringService)
+            if (requestChangedDuringService)
             {
                 flags.Add("request-changed-during-service");
+            }
+            else if (requestChangeClassification == PitServiceRequestChangeClassifications.CompletionClear)
+            {
+                flags.Add("request-cleared-at-completion");
             }
 
             if (_sawRepair)
@@ -195,7 +209,7 @@ internal sealed class PitServiceStationaryServiceTracker
                 FuelFlowDurationSeconds: fuelFlowUsable && fuelFlowSeconds is > 0d ? fuelFlowSeconds : null,
                 EntryRequest: _entry.Request,
                 LastRequest: _last.Request,
-                RequestChangedDuringService: _requestChangedDuringService,
+                RequestChangedDuringService: requestChangedDuringService,
                 StartSessionTimeSeconds: _entry.SessionTimeSeconds,
                 EndSessionTimeSeconds: _last.SessionTimeSeconds,
                 SampleCount: _sampleCount,
@@ -220,8 +234,32 @@ internal sealed class PitServiceStationaryServiceTracker
                 SawPitStall: _sawPitStall,
                 SawServiceActive: _sawServiceActive,
                 SawRepair: _sawRepair,
-                QualificationFlags: flags);
+                QualificationFlags: flags,
+                RequestChangeClassification: requestChangeClassification);
         }
+
+        private string ClassifyRequestChanges()
+        {
+            if (_requestChanges.Count == 0)
+            {
+                return PitServiceRequestChangeClassifications.None;
+            }
+
+            // iRacing commonly clears every selected service flag only after
+            // the final observed refuel sample. Keep that durable raw fact,
+            // but do not turn it into a false mid-service mutation.
+            var hasOnlyCompletionClears = _lastFuelIncreaseAtUtc is { } lastFuelIncreaseAtUtc
+                && _requestChanges.All(change => change.CapturedAtUtc >= lastFuelIncreaseAtUtc
+                    && change.Current.IsSelectionClear());
+            return hasOnlyCompletionClears
+                ? PitServiceRequestChangeClassifications.CompletionClear
+                : PitServiceRequestChangeClassifications.MaterialMutation;
+        }
+
+        private sealed record RequestChangeEvent(
+            PitServiceRequestShape Previous,
+            PitServiceRequestShape Current,
+            DateTimeOffset CapturedAtUtc);
 
         private static double? Difference(double? entry, double? exit)
         {
@@ -293,6 +331,17 @@ internal sealed record PitServiceRequestShape(
         + (RightFrontTire ? 1 : 0)
         + (LeftRearTire ? 1 : 0)
         + (RightRearTire ? 1 : 0);
+
+    // PitSvFuel can retain the completed fill amount after iRacing has cleared
+    // the actual selection flags. Do not require it to become null or zero to
+    // recognize the normal post-service clear.
+    public bool IsSelectionClear() => !LeftFrontTire
+        && !RightFrontTire
+        && !LeftRearTire
+        && !RightRearTire
+        && !Fuel
+        && !Tearoff
+        && !FastRepair;
 
     public static PitServiceRequestShape From(LivePitServiceRequest request)
     {
@@ -578,7 +627,10 @@ internal static class PitServiceTireChangeClassifier
 
         var requestedShape = PitServiceTireShape.From(observation.EntryRequest);
         var requestChanged = observation.RequestChangedDuringService
-            || observation.EntryRequest != observation.LastRequest;
+            || observation.QualificationFlags.Contains("request-changed-during-service", StringComparer.OrdinalIgnoreCase)
+            || observation.RequestChangeClassification == PitServiceRequestChangeClassifications.MaterialMutation
+            || (observation.EntryRequest != observation.LastRequest
+                && observation.RequestChangeClassification != PitServiceRequestChangeClassifications.CompletionClear);
         var flags = new List<string>();
         if (requestChanged)
         {
@@ -691,6 +743,35 @@ internal static class PitServiceTireChangeClassifier
     }
 }
 
+internal static class PitServiceRequestChangeClassifications
+{
+    // The missing-property default keeps legacy summaries conservative: their
+    // entry/exit request difference is still treated as a mutation by readers.
+    public const string LegacyUnspecified = "legacy-unspecified";
+    public const string None = "none";
+    public const string CompletionClear = "completion-clear";
+    public const string MaterialMutation = "material-mutation";
+
+    public static bool IsKnown(string? value)
+    {
+        return value is None
+            or CompletionClear
+            or MaterialMutation
+            or LegacyUnspecified;
+    }
+
+    // Format 7 made this classification a required durable field. Retain the
+    // legacy value for older summaries, but never let it satisfy the explicit
+    // format-7 contract when a field is absent or a malformed producer emits
+    // the compatibility default.
+    public static bool IsExplicitRequestTransitionClassification(string? value)
+    {
+        return value is None
+            or CompletionClear
+            or MaterialMutation;
+    }
+}
+
 internal sealed record PitServiceStationaryServiceObservation(
     DateTimeOffset StartedAtUtc,
     DateTimeOffset EndedAtUtc,
@@ -725,4 +806,5 @@ internal sealed record PitServiceStationaryServiceObservation(
     bool SawPitStall,
     bool SawServiceActive,
     bool SawRepair,
-    IReadOnlyList<string> QualificationFlags);
+    IReadOnlyList<string> QualificationFlags,
+    string RequestChangeClassification = PitServiceRequestChangeClassifications.LegacyUnspecified);

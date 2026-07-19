@@ -98,22 +98,26 @@ public sealed class RawCaptureTelemetrySampleBuilderTests
     }
 
     [Fact]
-    public void Build_UsesCapturedCarIdxSchemaLengthInsteadOfLegacySixtyFourSlotLimit()
+    public void Build_UsesCapturedSeventyTwoSlotCarIdxSchemaInsteadOfLegacySixtyFourSlotLimit()
     {
-        const int expandedCarIdx = 64;
+        // `capture-20260714-193157-308` is a real Windows capture whose
+        // 27 CarIdx arrays all expose 72 elements. Populate its last valid
+        // index so this regression proves replay uses captured schema shape.
+        const int capturedCarIdxSlotCount = 72;
+        const int expandedCarIdx = capturedCarIdxSlotCount - 1;
         var frame = RawFrameBuilder.Create()
             .AddInt("PlayerCarIdx")
             .AddInt("CamCarIdx")
-            .AddIntArray("CarIdxClass", 65)
-            .AddIntArray("CarIdxLapCompleted", 65)
-            .AddDoubleArray("CarIdxLapDistPct", 65)
-            .AddIntArray("CarIdxTrackSurface", 65)
-            .AddIntArray("CarIdxPosition", 65)
-            .AddIntArray("CarIdxClassPosition", 65)
-            .AddDoubleArray("CarIdxF2Time", 65)
-            .AddDoubleArray("CarIdxEstTime", 65)
-            .AddDoubleArray("CarIdxLastLapTime", 65)
-            .AddDoubleArray("CarIdxBestLapTime", 65)
+            .AddIntArray("CarIdxClass", capturedCarIdxSlotCount)
+            .AddIntArray("CarIdxLapCompleted", capturedCarIdxSlotCount)
+            .AddDoubleArray("CarIdxLapDistPct", capturedCarIdxSlotCount)
+            .AddIntArray("CarIdxTrackSurface", capturedCarIdxSlotCount)
+            .AddIntArray("CarIdxPosition", capturedCarIdxSlotCount)
+            .AddIntArray("CarIdxClassPosition", capturedCarIdxSlotCount)
+            .AddDoubleArray("CarIdxF2Time", capturedCarIdxSlotCount)
+            .AddDoubleArray("CarIdxEstTime", capturedCarIdxSlotCount)
+            .AddDoubleArray("CarIdxLastLapTime", capturedCarIdxSlotCount)
+            .AddDoubleArray("CarIdxBestLapTime", capturedCarIdxSlotCount)
             .Build();
 
         for (var carIdx = 0; carIdx <= expandedCarIdx; carIdx++)

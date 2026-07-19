@@ -231,6 +231,45 @@ public sealed class FuelV2OverlayViewModelTests
     }
 
     [Fact]
+    public void From_PracticeModelReadinessKeepsCurrentSessionEvidenceFactual()
+    {
+        var current = CurrentFuelSnapshot();
+        var snapshot = current with
+        {
+            Models = current.Models with
+            {
+                Session = current.Models.Session with { SessionType = "Practice" }
+            }
+        };
+        var readiness = new FuelV2ModelReadiness(
+            IsVisible: true,
+            IsCollectionComplete: false,
+            SourceFamilies: ["practice"],
+            Detail: "current session",
+            Rows:
+            [
+                new FuelV2ModelReadinessRow(
+                    "Refuel",
+                    "Stationary local service · current session",
+                    [new FuelV2ModelReadinessCell("Small fill", "measured", FuelV2ModelReadinessState.Confirmed, true)])
+            ],
+            EvidenceSources: [FuelV2ModelReadinessEvidenceSource.CurrentSession],
+            CurrentSessionEvidenceUpdatedAtUtc: DateTimeOffset.Parse("2026-07-15T23:28:39Z"));
+
+        var viewModel = FuelV2OverlayViewModel.From(
+            snapshot,
+            "Metric",
+            snapshot.LastUpdatedAtUtc!.Value,
+            modelReadiness: readiness);
+
+        var row = Assert.Single(viewModel.Overlay.MetricSections
+            .Single(section => section.Title == "Model Readiness").Rows);
+        Assert.Equal("Stationary local service · current session", row.Detail);
+        Assert.Contains(row.Segments, segment => segment.Label == "Small fill" && segment.Value == "measured");
+        Assert.DoesNotContain(viewModel.Overlay.Rows, row => row.Label.Contains("Plan", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void From_CompletedPracticeModelReadinessDoesNotRender()
     {
         var current = CurrentFuelSnapshot();

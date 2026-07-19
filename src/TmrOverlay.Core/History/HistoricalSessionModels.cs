@@ -476,6 +476,15 @@ internal sealed class HistoricalRadarCalibrationSummary
     public string[] ConfidenceFlags { get; init; } = [];
 }
 
+// An in-process view of only completed radar side windows. It is intentionally
+// separate from HistoricalSessionSummary: callers may use it while a session
+// is still collecting, but it is never a persistence request or a substitute
+// for the finalized session summary.
+internal sealed record HistoricalSessionRadarCalibrationSnapshot(
+    HistoricalComboIdentity Combo,
+    HistoricalCarIdentity Car,
+    HistoricalRadarCalibrationSummary? RadarCalibration);
+
 internal sealed class HistoricalRadarCalibrationMetric
 {
     public int SampleCount { get; set; }

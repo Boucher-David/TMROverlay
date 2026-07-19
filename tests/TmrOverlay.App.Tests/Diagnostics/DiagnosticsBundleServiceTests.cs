@@ -16,6 +16,7 @@ using TmrOverlay.App.TrackMaps;
 using TmrOverlay.App.Updates;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Settings;
+using TmrOverlay.Core.Telemetry.EdgeCases;
 using TmrOverlay.Core.Telemetry.Live;
 using Xunit;
 
@@ -23,6 +24,61 @@ namespace TmrOverlay.App.Tests.Diagnostics;
 
 public sealed class DiagnosticsBundleServiceTests
 {
+    [Fact]
+    public void CreateBundle_IncludesProvisionalActiveTelemetryObserverSnapshots()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var events = new AppEventRecorder(storage);
+            var startedAtUtc = DateTimeOffset.Parse("2026-07-15T18:00:00Z");
+            var edgeCases = new TelemetryEdgeCaseRecorder(
+                new TelemetryEdgeCaseOptions { Enabled = true },
+                storage,
+                events,
+                NullLogger<TelemetryEdgeCaseRecorder>.Instance);
+            var modelParity = new LiveModelParityRecorder(
+                new LiveModelParityOptions { Enabled = true },
+                storage,
+                events,
+                NullLogger<LiveModelParityRecorder>.Instance);
+            var overlayDiagnostics = new LiveOverlayDiagnosticsRecorder(
+                new LiveOverlayDiagnosticsOptions { Enabled = true },
+                storage,
+                events,
+                NullLogger<LiveOverlayDiagnosticsRecorder>.Instance);
+            edgeCases.StartCollection("active-source", startedAtUtc, RawTelemetrySchemaSnapshot.Empty);
+            modelParity.StartCollection("active-source", startedAtUtc);
+            overlayDiagnostics.StartCollection("active-source", startedAtUtc);
+
+            var state = new TelemetryCaptureState();
+            var liveTelemetry = new TestLiveTelemetrySource(LiveTelemetrySnapshot.Empty);
+            var (service, _) = CreateDiagnosticsBundleService(
+                root,
+                storage,
+                state,
+                liveTelemetry,
+                edgeCases,
+                modelParity,
+                overlayDiagnostics);
+
+            var bundlePath = service.CreateBundle();
+
+            using var archive = ZipFile.OpenRead(bundlePath);
+            Assert.False(((bool?)ReadJsonEntry(archive, "metadata/current-edge-cases.json")?["isFinalized"]) ?? true);
+            Assert.False(((bool?)ReadJsonEntry(archive, "metadata/current-model-parity.json")?["isFinalized"]) ?? true);
+            Assert.False(((bool?)ReadJsonEntry(archive, "metadata/current-overlay-diagnostics.json")?["isFinalized"]) ?? true);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     [Fact]
     public void UpdateFailureSummary_ClassifiesRecoveredTransientFailures()
     {
@@ -2220,7 +2276,10 @@ public sealed class DiagnosticsBundleServiceTests
         string root,
         AppStorageOptions storage,
         TelemetryCaptureState state,
-        ILiveTelemetrySource liveTelemetry)
+        ILiveTelemetrySource liveTelemetry,
+        TelemetryEdgeCaseRecorder? edgeCaseRecorder = null,
+        LiveModelParityRecorder? liveModelParityRecorder = null,
+        LiveOverlayDiagnosticsRecorder? liveOverlayDiagnosticsRecorder = null)
     {
         var localhostState = new LocalhostOverlayState(new LocalhostOverlayOptions());
         var performance = new AppPerformanceState();
@@ -2260,7 +2319,10 @@ public sealed class DiagnosticsBundleServiceTests
             new ForegroundWindowTracker(),
             releaseUpdates,
             streamChatSource,
-            NullLogger<DiagnosticsBundleService>.Instance);
+            NullLogger<DiagnosticsBundleService>.Instance,
+            edgeCaseRecorder: edgeCaseRecorder,
+            liveModelParityRecorder: liveModelParityRecorder,
+            liveOverlayDiagnosticsRecorder: liveOverlayDiagnosticsRecorder);
 
         return (service, streamChatSource);
     }

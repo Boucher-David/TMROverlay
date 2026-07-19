@@ -80,6 +80,9 @@ internal sealed class DiagnosticsBundleService
     private readonly ForegroundWindowTracker _foregroundWindowTracker;
     private readonly ReleaseUpdateService _releaseUpdates;
     private readonly StreamChatOverlaySource _streamChatSource;
+    private readonly TelemetryEdgeCaseRecorder? _edgeCaseRecorder;
+    private readonly LiveModelParityRecorder? _liveModelParityRecorder;
+    private readonly LiveOverlayDiagnosticsRecorder? _liveOverlayDiagnosticsRecorder;
     private readonly ILogger<DiagnosticsBundleService> _logger;
     private readonly object _sync = new();
     private string? _lastBundlePath;
@@ -109,7 +112,10 @@ internal sealed class DiagnosticsBundleService
         StreamChatOverlaySource streamChatSource,
         ILogger<DiagnosticsBundleService> logger,
         FuelV2CaptureOptions? fuelV2CaptureOptions = null,
-        FuelV2HistoryOptions? fuelV2HistoryOptions = null)
+        FuelV2HistoryOptions? fuelV2HistoryOptions = null,
+        TelemetryEdgeCaseRecorder? edgeCaseRecorder = null,
+        LiveModelParityRecorder? liveModelParityRecorder = null,
+        LiveOverlayDiagnosticsRecorder? liveOverlayDiagnosticsRecorder = null)
     {
         _storageOptions = storageOptions;
         _liveModelParityOptions = liveModelParityOptions;
@@ -132,6 +138,9 @@ internal sealed class DiagnosticsBundleService
         _foregroundWindowTracker = foregroundWindowTracker;
         _releaseUpdates = releaseUpdates;
         _streamChatSource = streamChatSource;
+        _edgeCaseRecorder = edgeCaseRecorder;
+        _liveModelParityRecorder = liveModelParityRecorder;
+        _liveOverlayDiagnosticsRecorder = liveOverlayDiagnosticsRecorder;
         _logger = logger;
     }
 
@@ -201,6 +210,7 @@ internal sealed class DiagnosticsBundleService
                 AddTextEntry(archive, "metadata/stream-chat.json", JsonSerializer.Serialize(StreamChatDiagnostics(), JsonOptions));
                 AddTextEntry(archive, "metadata/flags.json", JsonSerializer.Serialize(FlagsDiagnostics(), JsonOptions));
                 AddTextEntry(archive, "metadata/live-telemetry-synthesis.json", JsonSerializer.Serialize(LiveTelemetrySynthesis(), JsonOptions));
+                AddActiveTelemetryObserverSnapshots(archive, createdAtUtc);
                 metadataSucceeded = true;
             }
             finally
@@ -458,6 +468,36 @@ internal sealed class DiagnosticsBundleService
                 AppPerformanceMetricIds.DiagnosticsBundleCreate,
                 bundleStarted,
                 bundleSucceeded);
+        }
+    }
+
+    private void AddActiveTelemetryObserverSnapshots(ZipArchive archive, DateTimeOffset capturedAtUtc)
+    {
+        var edgeCases = _edgeCaseRecorder?.CreateSupportSnapshot(capturedAtUtc);
+        if (edgeCases is not null)
+        {
+            AddTextEntry(
+                archive,
+                "metadata/current-edge-cases.json",
+                JsonSerializer.Serialize(edgeCases, JsonOptions));
+        }
+
+        var modelParity = _liveModelParityRecorder?.CreateSupportSnapshot(capturedAtUtc);
+        if (modelParity is not null)
+        {
+            AddTextEntry(
+                archive,
+                "metadata/current-model-parity.json",
+                JsonSerializer.Serialize(modelParity, JsonOptions));
+        }
+
+        var overlayDiagnostics = _liveOverlayDiagnosticsRecorder?.CreateSupportSnapshot(capturedAtUtc);
+        if (overlayDiagnostics is not null)
+        {
+            AddTextEntry(
+                archive,
+                "metadata/current-overlay-diagnostics.json",
+                JsonSerializer.Serialize(overlayDiagnostics, JsonOptions));
         }
     }
 

@@ -70,6 +70,17 @@ internal sealed class HistoricalSessionAccumulator
         }
     }
 
+    public HistoricalSessionRadarCalibrationSnapshot SnapshotRadarCalibration()
+    {
+        lock (_sync)
+        {
+            return new HistoricalSessionRadarCalibrationSnapshot(
+                HistoricalComboIdentity.From(_context),
+                _context.Car,
+                BuildRadarCalibration());
+        }
+    }
+
     public HistoricalSessionSummary BuildSummary(
         string sourceCaptureId,
         DateTimeOffset startedAtUtc,

@@ -3298,7 +3298,13 @@ internal sealed class BrowserOverlayModelFactory
             IsVisible: readiness?.IsVisible == true,
             IsCollectionComplete: readiness?.IsCollectionComplete == true,
             SourceFamilies: readiness?.SourceFamilies ?? [],
-            RowLabels: readiness?.Rows.Select(row => row.Label).ToArray() ?? []);
+            RowLabels: readiness?.Rows.Select(row => row.Label).ToArray() ?? [],
+            EvidenceSources: readiness?.EvidenceSources?
+                .Select(source => source == FuelV2ModelReadinessEvidenceSource.CurrentSession
+                    ? "current-session"
+                    : "durable-history")
+                .ToArray() ?? [],
+            CurrentSessionEvidenceUpdatedAtUtc: readiness?.CurrentSessionEvidenceUpdatedAtUtc);
     }
 
     private static BrowserOverlayFuelStrategyEvidence FuelStrategyEvidence(FuelStrategySnapshot? strategy)
@@ -4313,7 +4319,9 @@ internal sealed record BrowserOverlayModelReadinessEvidence(
     bool IsVisible,
     bool IsCollectionComplete,
     IReadOnlyList<string> SourceFamilies,
-    IReadOnlyList<string> RowLabels);
+    IReadOnlyList<string> RowLabels,
+    IReadOnlyList<string> EvidenceSources,
+    DateTimeOffset? CurrentSessionEvidenceUpdatedAtUtc);
 
 internal sealed record BrowserOverlayLayoutEvidence(
     int ContentRowCount,

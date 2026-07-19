@@ -215,7 +215,7 @@ The current implementation is intentionally narrow:
   seconds or “free tires” claim. Summary/import versions are `5`; manifest is
   still `3` and the fuel-burn aggregate is still `2`; older formats remain
   readable under their original evidence limits.
-- Fuel V2 history format 6 is this branch's single summary/import schema step.
+- Fuel V2 history format 6 is a summary/import schema step.
   It promotes clean `Offline Testing` sidecars into a distinct `test` family
   using the existing Practice-equivalent accepted-lap quality gates and retains
   new format-6 direct local pit-route observations beside immutable exact
@@ -230,6 +230,16 @@ The current implementation is intentionally narrow:
   versions are `6`, manifest is `4`, and rebuilt aggregates are `3`; compatible
   format-5 summaries remain readable (with an empty route list) and their aggregates rebuild without
   rewriting the immutable summaries.
+- Fuel V2 history format 7 gives stationary-service request transitions an
+  explicit classification. A material request mutation remains ineligible for
+  later refuel/tire timing learning, while a request that iRacing clears only
+  after the final observed fuel-flow frame is recorded as `completion-clear`
+  and does not discard an otherwise clean observed refuel. Its pit-window
+  refuel detector also shares the diagnostics cumulative entry/low-water rule,
+  so gradual fills no longer depend on a single large frame delta. Summary and
+  import versions are `7`, manifest is `5`, and the fuel-burn aggregate remains
+  `3`; format-6 summaries remain readable with legacy request transitions
+  handled conservatively.
 - `HistorySchemaCompatibilityTests` snapshots durable summary, aggregate, and analysis model shapes so schema changes force a compatibility review during test validation
 
 Radar calibration history is car-scoped, not track/session-scoped. Summaries may store clean `CarLeftRight` side-window durations, identity-backed body-length estimates, and confidence flags. The car-level aggregate stops accepting new learned samples once the body-length metric is trusted. Live radar uses exact bundled car specifications first, trusted user calibration second, low-confidence bundled estimates third, and the hard-coded default only when none of those are available.

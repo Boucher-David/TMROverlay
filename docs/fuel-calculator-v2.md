@@ -3404,8 +3404,9 @@ Test/Practice collection decision: the actual V2 overlay may show a **Model
 Readiness** section only for verified local Test or Practice sessions. It is a
 compact matrix, not a duplicate Fuel/Lap row: the top-half Fuel Usage row remains
 the only usage display. The matrix reports exact car + exact layout `test` /
-`practice` history for (1) `To box`, `From box`, `Full stop`, and detected `Pit
-box`, plus an optional no-stall `Pit lane pass` calibration; (2) a clean
+`practice` history and, before import, closed observations from that exact
+verified active session for (1) `To box`, `From box`, `Full stop`, and detected
+`Pit box`, plus an optional no-stall `Pit lane pass` calibration; (2) a clean
 `Small fill`, `Large fill`, timed `Fuel flow`, `Fuel only`, and `Fuel + tires`
 sample; and (3) counter-confirmed tire services in driver-facing cells: `1
 tire` (all four corners), `Fronts`, `Rears`, `Left`, `Right`, and `4 tires`.
@@ -3418,8 +3419,13 @@ two-sample-confirmed leg has complete, non-regressing fuel evidence; `Full stop`
 requires both clean legs in one stopped route. This preserves useful partial
 archive evidence without overstating it as a complete pit-route model.
 `Fuel only` also requires exact counters to prove no tire was changed; `Fuel +
-tires` initially requires a clean counter-confirmed four-tire service. It uses
-raw pit requests and `DCRuleSet` only as stored provenance—neither is a
+tires` initially requires a clean counter-confirmed four-tire service. A
+current-session observation is eligible only after its stationary-service or
+route tracker closes; an active stop, incomplete route, changed session
+occurrence, or missing exact car/layout identity remains invisible to the
+matrix. This in-memory evidence carries no strategy inputs and resets at
+collection finalization, leaving the sidecar/import path as the durable source.
+It uses raw pit requests and `DCRuleSet` only as stored provenance—neither is a
 readiness cell or proof of service order/timing. Once the four required route
 facts, both refuel extremes plus fuel-only/fuel-with-tires evidence, all four
 single tire corners, each of the four two-tire services, and a four-tire
@@ -4757,9 +4763,11 @@ Fuel V2 diagnostic capture boundary:
   effective-cap limitation, sampled fuel/progress/pit/weather/lap-budget inputs,
   accepted/rejected lap-burn windows, sector burn samples, pit windows, team
   stint windows, driver-change events, source/missing-signal counts, and
-  synthetic-replay suitability. Format-6 also retains bounded stationary-service
+  synthetic-replay suitability. Format-7 also retains bounded stationary-service
   observations separately from pit-lane windows; those carry the local request
-  shape, service status/flags, fuel-flow cadence, qualification failures, and
+  shape, service status/flags, fuel-flow cadence, qualification failures, a
+  material-mutation versus completion-clear request-transition classification,
+  and
   entry/exit plus delta snapshots for total, side, axle, and exact four-corner
   tire counters where the SDK exposes them. It independently records bounded
   two-sample-confirmed local pit-route checkpoints (pit entry, stall arrival,
@@ -4774,7 +4782,9 @@ Fuel V2 diagnostic capture boundary:
   `aggregate.json` files. Format 2 split immutable telemetry-session segments;
   format 3 added stationary-service source evidence; format 4 adds exact
   tire-counter snapshots/deltas; format 5 adds raw `DCRuleSet` provenance to
-  the session scope; format 6 adds direct local pit-route source evidence.
+  the session scope; format 6 adds direct local pit-route source evidence; and
+  format 7 aligns cumulative/low-water pit-window refuel detection with live
+  diagnostics while retaining the request-transition classification.
   Reusable evidence is grouped by exact car
   + exact track layout (with session family separate), while race length/fuel-cap
   facts remain context rather than history keys. Version-1 connection records

@@ -18,11 +18,19 @@ import {
   settingsBrowserSourceSize
 } from '../../tests/browser-overlays/browserOverlayAssets.js';
 import { renderBridgeWorkbenchHtml } from './bridge-workbench/render.mjs';
+import { renderBridgeBrowserSimulationHtml } from './bridge-browser-simulation/render.mjs';
 
 // Only the developer-only Bridge fixture pages opt into this restrictive CSP. Other browser
 // review pages intentionally use scripts and live-reload during normal overlay development.
 const offlineBridgeWorkbenchHeaders = {
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+  'Referrer-Policy': 'no-referrer'
+};
+
+// The separate browser-to-browser developer simulation needs only an inline script for
+// `BroadcastChannel`. It remains review-only: no network-capable source is permitted.
+const browserBridgeSimulationHeaders = {
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   'Referrer-Policy': 'no-referrer'
 };
 
@@ -329,6 +337,18 @@ const server = createServer((request, response) => {
           caseId: url.searchParams.get('case') || 'active-team-live'
         }),
         offlineBridgeWorkbenchHeaders);
+      return;
+    }
+
+    const bridgeBrowserSimulationRoute = bridgeBrowserSimulationRouteFromPath(path);
+    if (bridgeBrowserSimulationRoute) {
+      serveHtml(
+        response,
+        renderBridgeBrowserSimulationHtml({
+          view: bridgeBrowserSimulationRoute,
+          caseId: url.searchParams.get('case') || 'current-remote'
+        }),
+        browserBridgeSimulationHeaders);
       return;
     }
 
@@ -836,6 +856,19 @@ function bridgeWorkbenchRouteFromPath(path) {
       return 'producer';
     case '/review/bridge/consumer':
       return 'consumer';
+    default:
+      return null;
+  }
+}
+
+function bridgeBrowserSimulationRouteFromPath(path) {
+  switch (path) {
+    case '/review/bridge/local/workbench':
+      return 'workbench';
+    case '/review/bridge/local/producer':
+      return 'producer';
+    case '/review/bridge/local/receiver':
+      return 'receiver';
     default:
       return null;
   }

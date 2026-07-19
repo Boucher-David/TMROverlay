@@ -43,13 +43,21 @@ internal sealed class OverlayBridgeReceiverAdmissionStore
 
         if (context.HasFreshDirectInCarTelemetry)
         {
-            state = WithTerminalReason(state, OverlayBridgeReceiverTerminalReason.DirectLocalPrecedence, receivedAtUtc);
+            state = WithTerminalReason(
+                state,
+                OverlayBridgeReceiverTerminalReason.DirectLocalPrecedence,
+                receivedAtUtc);
+
             return new OverlayBridgeReceiverAdmissionResult(
                 OverlayBridgeReceiverAdmissionOutcome.SuppressedByDirectLocalPrecedence,
                 state);
         }
 
-        state = ClearDirectLocalPrecedence(state);
+        // Clearing a local direct-source boundary is a local lifecycle transition, not an
+        // implication of an incoming packet. In particular, a rejected peer publication must
+        // never restore retained Bridge facts while local in-car telemetry is still authoritative.
+        // Hosts call ApplyLocalDirectPrecedence(false, ...) after they have independently
+        // observed that the direct source is no longer fresh.
 
         var header = publication.Header;
         if (!context.Allows(header.SourceMode))
@@ -101,6 +109,17 @@ internal sealed class OverlayBridgeReceiverAdmissionStore
         if (!CanResumeTombstonedGroups(publication, identity))
         {
             return Reject(OverlayBridgeReceiverAdmissionOutcome.RejectedTombstonedLease);
+        }
+
+        // A local hard precedence boundary remains in force until the host independently clears
+        // it. We still validate a packet first so malformed/session-mismatched traffic retains
+        // its diagnostic rejection outcome, but a valid remote frame cannot silently make
+        // retained facts authoritative again while the receiver knows it is in-car.
+        if (HasActiveDirectLocalPrecedence(state))
+        {
+            return new OverlayBridgeReceiverAdmissionResult(
+                OverlayBridgeReceiverAdmissionOutcome.SuppressedByDirectLocalPrecedence,
+                state);
         }
 
         state = state with
@@ -323,6 +342,15 @@ internal sealed class OverlayBridgeReceiverAdmissionStore
             SpatialTraffic = previous.SpatialTraffic.ClearDirectLocalPrecedence(),
             MapAdvertisement = previous.MapAdvertisement.ClearDirectLocalPrecedence()
         };
+    }
+
+    private static bool HasActiveDirectLocalPrecedence(OverlayBridgeReceiverState receiverState)
+    {
+        // ApplyLocalDirectPrecedence applies this hard boundary atomically to every group. The
+        // Active Team Car check keeps the first-release receiver fail-closed even if a malformed
+        // in-memory state ever carries inconsistent group terminal reasons.
+        return receiverState.ActiveTeamCar.TerminalReason
+            == OverlayBridgeReceiverTerminalReason.DirectLocalPrecedence;
     }
 
     private static bool MatchesScope(

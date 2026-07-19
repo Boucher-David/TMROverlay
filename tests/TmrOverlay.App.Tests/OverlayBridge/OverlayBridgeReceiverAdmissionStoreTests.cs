@@ -236,6 +236,56 @@ public sealed class OverlayBridgeReceiverAdmissionStoreTests
     }
 
     [Fact]
+    public void Admit_RejectedPeerPublicationCannotClearExplicitLocalDirectPrecedence()
+    {
+        var store = new OverlayBridgeReceiverAdmissionStore();
+        var publication = CreatePublication();
+        var receivedAtUtc = DateTimeOffset.Parse("2026-07-18T21:03:00Z");
+        store.Admit(publication, ContextFor(publication), receivedAtUtc);
+        var suppressed = store.ApplyLocalDirectPrecedence(true, receivedAtUtc.AddSeconds(1));
+        var wrongSession = WithPublicationIdentity(
+            publication,
+            sequence: publication.Header.Sequence + 1,
+            session: publication.Header.Session with { SessionId = "session-other", SessionEpoch = 5 });
+
+        var rejected = store.Admit(
+            wrongSession,
+            ContextFor(publication),
+            receivedAtUtc.AddSeconds(2));
+
+        Assert.Equal(OverlayBridgeReceiverAdmissionOutcome.RejectedSessionMismatch, rejected.Outcome);
+        Assert.Equal(
+            OverlayBridgeReceiverTerminalReason.DirectLocalPrecedence,
+            rejected.State.ActiveTeamCar.TerminalReason);
+        Assert.False(rejected.State.ActiveTeamCar.IsUsableForCalculation);
+        Assert.Equal(suppressed.State.ActiveTeamCar.LastAcceptedReceiptAtUtc, rejected.State.ActiveTeamCar.LastAcceptedReceiptAtUtc);
+        Assert.Equal(publication.Header.Sequence, rejected.State.ActiveTeamCar.LastAcceptedPublication!.Sequence);
+    }
+
+    [Fact]
+    public void Admit_AcceptedDriverHandoffLifecycleGroupImmediatelyStopsCalculation()
+    {
+        var store = new OverlayBridgeReceiverAdmissionStore();
+        var publication = CreatePublication();
+        var receivedAtUtc = DateTimeOffset.Parse("2026-07-18T21:04:00Z");
+        store.Admit(publication, ContextFor(publication), receivedAtUtc);
+        var handoffHeader = WithPublicationIdentity(publication, publication.Header.Sequence + 1).Header;
+        var handoff = WithHeader(publication, handoffHeader) with
+        {
+            ActiveTeamCar = OverlayBridgeFactGroup.Unavailable<OverlayBridgeActiveTeamCarFacts>(
+                CreateProvenance(handoffHeader, OverlayBridgeCapability.ActiveTeamCar),
+                OverlayBridgeFactGroupUnavailableReason.DriverHandoff)
+        };
+
+        var result = store.Admit(handoff, ContextFor(handoff), receivedAtUtc.AddSeconds(1));
+
+        Assert.Equal(OverlayBridgeReceiverAdmissionOutcome.Accepted, result.Outcome);
+        Assert.Equal(OverlayBridgeReceiverTerminalReason.DriverHandoff, result.State.ActiveTeamCar.TerminalReason);
+        Assert.False(result.State.ActiveTeamCar.IsUsableForCalculation);
+        Assert.Equal(62d, result.State.ActiveTeamCar.RetainedFacts!.CurrentFuelLiters);
+    }
+
+    [Fact]
     public void Admit_RejectsReplayAndWiderCapabilitiesUnderFirstReleasePolicyWithoutMutatingState()
     {
         var store = new OverlayBridgeReceiverAdmissionStore();

@@ -160,6 +160,35 @@ public sealed class OverlayAvailabilityEvaluatorTests
     }
 
     [Fact]
+    public void LiveLocalStrategyContext_AcceptsCarIdxBeyondTheLegacySixtyFourSlotLimit()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = LocalStrategySnapshot(now, playerCarIdx: 71, focusCarIdx: 71);
+
+        var fuel = LiveLocalStrategyContext.ForFuelCalculator(snapshot, now);
+
+        Assert.True(fuel.IsAvailable);
+        Assert.Equal("available", fuel.Reason);
+    }
+
+    [Theory]
+    [InlineData(-1, 71, "player_car_unavailable")]
+    [InlineData(71, -1, "focus_unavailable")]
+    public void LiveLocalStrategyContext_RejectsNegativePlayerOrFocusCarIdx(
+        int playerCarIdx,
+        int focusCarIdx,
+        string expectedReason)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = LocalStrategySnapshot(now, playerCarIdx, focusCarIdx);
+
+        var fuel = LiveLocalStrategyContext.ForFuelCalculator(snapshot, now);
+
+        Assert.False(fuel.IsAvailable);
+        Assert.Equal(expectedReason, fuel.Reason);
+    }
+
+    [Fact]
     public void LiveLocalStrategyContext_AllowsLocalPitRoadContext()
     {
         var now = DateTimeOffset.UtcNow;

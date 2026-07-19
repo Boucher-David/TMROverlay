@@ -96,6 +96,12 @@ const bridgeWorkbenchScreenshotCases = [
   ['decoder-rejection', 'malformed-cbor'],
   ['aged-receipt', 'stale-publication']
 ];
+const bridgeBrowserSimulationScreenshotCases = [
+  ['current-remote', 'current-remote'],
+  ['held-remote', 'held-remote'],
+  ['terminal-tombstone', 'tombstone'],
+  ['sequence-rejection-retains-prior', 'sequence-rejection']
+];
 const nonHappyPathOverlayVariants = [
   { overlayId: 'fuel-calculator', slug: 'waiting', query: 'fixture=fuel-waiting' },
   { overlayId: 'fuel-calculator', slug: 'calculating', query: 'fixture=fuel-calculating' },
@@ -318,6 +324,8 @@ function screenshotRoutes(surface) {
     );
     routes.push(...bridgeWorkbenchScreenshotCases.map(([slug, caseId]) =>
       bridgeWorkbenchRoute(`bridge-workbench/${slug}.png`, caseId)));
+    routes.push(...bridgeBrowserSimulationScreenshotCases.map(([slug, caseId]) =>
+      bridgeBrowserSimulationRoute(`bridge-browser-simulation/${slug}.png`, caseId)));
 
     for (const overlayId of overlayIds) {
       for (const region of regionsForOverlay(overlayId)) {
@@ -684,10 +692,33 @@ function bridgeWorkbenchRoute(relativePath, caseId) {
   };
 }
 
+function bridgeBrowserSimulationRoute(relativePath, caseId) {
+  return {
+    relativePath,
+    urlPath: '/review/bridge/local/receiver',
+    selector: '[data-bridge-browser-simulation="receiver"]',
+    viewport: { width: 960, height: 840 },
+    minBytes: 8_000,
+    surface: 'browser-review-bridge-browser-simulation',
+    renderer: 'overlay-bridge-browser-only-simulation',
+    sourceContract: 'tools/browser-review/bridge-browser-simulation/fixtures.mjs',
+    moduleAsset: 'tools/browser-review/bridge-browser-simulation/render.mjs',
+    fixtureVariant: caseId,
+    captureMode: 'developer-only-browser-to-browser-fixture-simulation',
+    comparisonMode: 'browser-only-developer-evidence',
+    comparisonLimit: 'No localhost/OBS or Windows-native runtime exists because this is not a product surface.',
+    browserSimulationCaseId: caseId
+  };
+}
+
 async function captureRoute(page, route, manifest) {
   await page.setViewportSize(route.viewport);
   const url = `${baseUrl}${route.urlPath}`;
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  if (route.browserSimulationCaseId) {
+    await primeBridgeBrowserSimulation(page, route.browserSimulationCaseId, url);
+  } else {
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+  }
   const element = page.locator(route.selector).first();
   await element.waitFor({ state: 'visible', timeout: 5_000 });
   await page.waitForTimeout(settleMilliseconds);
@@ -696,6 +727,7 @@ async function captureRoute(page, route, manifest) {
   const dom = await readDomDiagnostics(element);
   const runtimeAssets = await readRuntimeAssetEvidence(page, route);
   const bridgeWorkbenchEvidence = await readBridgeWorkbenchEvidence(page, route);
+  const bridgeBrowserSimulationEvidence = await readBridgeBrowserSimulationEvidence(page, route);
 
   const screenshotPath = join(outputRoot, route.relativePath);
   mkdirSync(dirname(screenshotPath), { recursive: true });
@@ -773,11 +805,28 @@ async function captureRoute(page, route, manifest) {
     v102Evidence: v102EvidenceForRoute(route),
     runtimeAssets,
     bridgeWorkbenchEvidence,
+    bridgeBrowserSimulationEvidence,
     scenarioEvidence: scenarioEvidence(route, model, dom.layout),
     width: artifact.width,
     height: artifact.height,
     bytes: artifact.bytes
   });
+}
+
+async function primeBridgeBrowserSimulation(page, caseId, receiverUrl) {
+  const producer = await page.context().newPage();
+  try {
+    await producer.goto(
+      `${baseUrl}/review/bridge/local/producer?case=${encodeURIComponent(caseId)}`,
+      { waitUntil: 'domcontentloaded' });
+    await page.goto(receiverUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('#receiver-status').waitFor({ state: 'visible', timeout: 5_000 });
+    await producer.getByRole('button', { name: 'Publish selected synthetic fixture' }).click();
+    await page.locator('#receiver-status').filter({ hasText: 'Received one synthetic fixture event' })
+      .waitFor({ state: 'visible', timeout: 5_000 });
+  } finally {
+    await producer.close();
+  }
 }
 
 async function readBridgeWorkbenchEvidence(page, route) {
@@ -799,6 +848,32 @@ async function readBridgeWorkbenchEvidence(page, route) {
       noLiveRuntimeStatement: String(footer?.textContent || '').replace(/\s+/g, ' ').trim(),
       sandboxedDocumentCount: iframes.filter((frame) => frame.hasAttribute('sandbox')).length,
       scriptCount: document.querySelectorAll('script').length
+    };
+  }, route.fixtureVariant);
+}
+
+async function readBridgeBrowserSimulationEvidence(page, route) {
+  if (route.surface !== 'browser-review-bridge-browser-simulation') {
+    return null;
+  }
+
+  return page.evaluate((fixtureVariant) => {
+    const shell = document.querySelector('[data-bridge-browser-simulation="receiver"]');
+    const status = document.querySelector('#receiver-status');
+    const decision = document.querySelector('#receiver-decision');
+    const metadata = document.querySelector('#receiver-metadata');
+    return {
+      contract: 'overlay-bridge-browser-simulation-evidence/v1',
+      developerOnly: true,
+      fixtureTruth: String(metadata?.textContent || '').includes('synthetic-browser-simulation-fixture')
+        ? 'synthetic-browser-simulation-fixture'
+        : null,
+      fixtureVariant,
+      receiverRole: shell?.getAttribute('data-bridge-browser-simulation') || null,
+      receiverStatus: String(status?.textContent || '').replace(/\s+/g, ' ').trim(),
+      decisionText: String(decision?.textContent || '').replace(/\s+/g, ' ').trim(),
+      scriptCount: document.querySelectorAll('script').length,
+      usesPersistentState: false
     };
   }, route.fixtureVariant);
 }

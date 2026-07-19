@@ -7,6 +7,26 @@ namespace TmrOverlay.App.Tests.Telemetry;
 public sealed class LiveProximitySnapshotTests
 {
     [Fact]
+    public void LiveLocalRadarContext_AcceptsCarIdxBeyondTheLegacySixtyFourSlotLimit()
+    {
+        var sample = CreateSample(playerCarIdx: 71, focusCarIdx: 71);
+
+        Assert.True(LiveLocalRadarContext.CanUse(sample));
+        Assert.True(LiveLocalRadarContext.IsAvailable(sample));
+        Assert.Equal(71, LiveLocalRadarContext.ReferenceCarIdx(sample));
+    }
+
+    [Fact]
+    public void LiveLocalRadarContext_RejectsNegativeCarIdx()
+    {
+        var sample = CreateSample(playerCarIdx: -1, focusCarIdx: -1);
+
+        Assert.False(LiveLocalRadarContext.CanUse(sample));
+        Assert.False(LiveLocalRadarContext.IsAvailable(sample));
+        Assert.Null(LiveLocalRadarContext.ReferenceCarIdx(sample));
+    }
+
+    [Fact]
     public void From_MapsSideWarningAndWrapsPhysicalLapDistance()
     {
         var context = new HistoricalSessionContext

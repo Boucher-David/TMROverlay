@@ -951,6 +951,12 @@ BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS = {
     "bridge-workbench/decoder-rejection.png",
     "bridge-workbench/aged-receipt.png",
 }
+BROWSER_REVIEW_BRIDGE_BROWSER_SIMULATION_PNGS = {
+    "bridge-browser-simulation/current-remote.png",
+    "bridge-browser-simulation/held-remote.png",
+    "bridge-browser-simulation/terminal-tombstone.png",
+    "bridge-browser-simulation/sequence-rejection-retains-prior.png",
+}
 
 BROWSER_REVIEW_INSTALLER_PNGS = [
     "review-installer/welcome.png",
@@ -1542,6 +1548,16 @@ def validate_browser_review_ci(root: Path, min_unique_bytes: int, failures: list
             minimum_size=(720, 400),
         )
 
+    for relative_path in BROWSER_REVIEW_BRIDGE_BROWSER_SIMULATION_PNGS:
+        validate_png(
+            root=root,
+            relative_path=relative_path,
+            expected_size=None,
+            min_unique_bytes=min_unique_bytes,
+            failures=failures,
+            minimum_size=(720, 400),
+        )
+
     validate_browser_review_settings_component_pngs(root, min_unique_bytes, failures)
     validate_browser_review_installer_pngs(root, min_unique_bytes, failures)
     validate_web_overlay_pngs(root, "browser-overlays", min_unique_bytes, failures)
@@ -1588,6 +1604,16 @@ def validate_browser_localhost_ci(root: Path, min_unique_bytes: int, failures: l
         )
 
     for relative_path in BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS:
+        validate_png(
+            root=root,
+            relative_path=relative_path,
+            expected_size=None,
+            min_unique_bytes=min_unique_bytes,
+            failures=failures,
+            minimum_size=(720, 400),
+        )
+
+    for relative_path in BROWSER_REVIEW_BRIDGE_BROWSER_SIMULATION_PNGS:
         validate_png(
             root=root,
             relative_path=relative_path,
@@ -2372,6 +2398,7 @@ def browser_review_manifest_paths() -> set[str]:
         | set(BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS)
         | set(BROWSER_REVIEW_INSTALLER_PNGS)
         | BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS
+        | BROWSER_REVIEW_BRIDGE_BROWSER_SIMULATION_PNGS
     )
     paths.update(web_overlay_manifest_paths("browser-overlays"))
     return paths
@@ -2527,6 +2554,9 @@ def validate_browser_review_manifest(
         if path.startswith("bridge-workbench/"):
             require_manifest_fields(path, screenshot, ["fixtureVariant", "bridgeWorkbenchEvidence"], failures)
             validate_bridge_workbench_manifest(path, screenshot, failures)
+        if path.startswith("bridge-browser-simulation/"):
+            require_manifest_fields(path, screenshot, ["fixtureVariant", "bridgeBrowserSimulationEvidence"], failures)
+            validate_bridge_browser_simulation_manifest(path, screenshot, failures)
         if path.startswith(("settings/", "components/settings/", "components/settings-future/")):
             require_manifest_fields(path, screenshot, ["tab", "region", "uiEvidence"], failures)
             require_settings_ui_evidence(path, screenshot.get("uiEvidence"), failures)
@@ -2569,6 +2599,36 @@ def validate_bridge_workbench_manifest(
     required_statement = ("No live app state", "telemetry", "transport", "pairing", "Oracle service", "relay")
     if not all(token in no_live_statement for token in required_statement):
         failures.append(f"{path}: Bridge workbench no-live-runtime statement is incomplete")
+
+
+def validate_bridge_browser_simulation_manifest(
+    path: str,
+    screenshot: dict[str, object],
+    failures: list[str],
+) -> None:
+    evidence = screenshot.get("bridgeBrowserSimulationEvidence")
+    if not isinstance(evidence, dict):
+        failures.append(f"{path}: missing Bridge browser simulation evidence")
+        return
+
+    if evidence.get("contract") != "overlay-bridge-browser-simulation-evidence/v1":
+        failures.append(f"{path}: Bridge browser simulation evidence contract is unexpected")
+    if evidence.get("developerOnly") is not True:
+        failures.append(f"{path}: Bridge browser simulation evidence must declare developerOnly")
+    if evidence.get("fixtureTruth") != "synthetic-browser-simulation-fixture":
+        failures.append(f"{path}: Bridge browser simulation fixture truth is unexpected")
+    if evidence.get("fixtureVariant") != screenshot.get("fixtureVariant"):
+        failures.append(f"{path}: Bridge browser simulation fixture variant drifted from route metadata")
+    if evidence.get("receiverRole") != "receiver":
+        failures.append(f"{path}: Bridge browser simulation must capture the receiver after delivery")
+    if "Received one synthetic fixture event" not in str(evidence.get("receiverStatus") or ""):
+        failures.append(f"{path}: Bridge browser simulation receiver did not receive its fixture")
+    if "Expected Core priority decision" not in str(evidence.get("decisionText") or ""):
+        failures.append(f"{path}: Bridge browser simulation must label its decision as expected Core evidence")
+    if evidence.get("scriptCount") != 1:
+        failures.append(f"{path}: Bridge browser simulation must retain its one bounded local script")
+    if evidence.get("usesPersistentState") is not False:
+        failures.append(f"{path}: Bridge browser simulation must not use persistent state")
 
 
 def validate_settings_shell_transparency(path: Path, relative_path: str, failures: list[str]) -> None:

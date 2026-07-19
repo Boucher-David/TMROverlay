@@ -104,7 +104,8 @@ Terminology going forward:
 The browser review server is the preferred non-Windows overlay development loop:
 
 - `npm run review:browser` serves fixture-backed browser review URLs from the same assets used by localhost pages.
-- Review routes are available under `/review/app`, `/review/settings/general`, `/review/overlays/<overlay-id>`, and `/overlays/<overlay-id>`. The developer-only Overlay Bridge workbench is separately available at `/review/bridge/workbench`; it contains synthetic offline fixture evidence only and is neither a localhost/OBS route nor a live relay/client.
+- Review routes are available under `/review/app`, `/review/settings/general`, `/review/overlays/<overlay-id>`, and `/overlays/<overlay-id>`. The developer-only Overlay Bridge workbench is separately available at `/review/bridge/workbench`; it contains synthetic offline fixture evidence only and is neither a localhost/OBS route nor a live relay/client. A separate, browser-only local simulation starts at `/review/bridge/local/workbench`: open its receiver and producer links in two local browser documents, then publish a sanitized fixture. It uses `BroadcastChannel` only, has no persistence or app/Core integration, and displays expected Core decisions rather than executing them.
+- `tools/TmrOverlay.OverlayBridgeWorkbench` is a separate, Core-backed local developer tool: it binds only to `127.0.0.1`, serves synthetic producer/receiver pages, and invokes the virtual-circuit, ephemeral-mTLS, frame/decode, admission, and composition seams. It is not part of the app, browser-review server, localhost/OBS routes, release solution, or production transport. Run its `--self-test` before manually opening the two pages; its tool README records the strict no-telemetry/no-secret/no-Oracle boundary.
 - Asset changes are read from source and trigger browser reloads through lightweight polling.
 - This validates browser layout, JavaScript behavior, and localhost parity; Windows CI or a real Windows run still owns native focus, topmost, click-through, and iRacing SDK behavior.
 
@@ -123,6 +124,7 @@ Useful local validation:
 
 ```bash
 npm run test:browser
+npm run test:bridge # focused browser-to-browser synthetic fixture simulation
 npm run test:localhost
 npm run test:evidence-contract # separate semantic evidence/provenance lane
 npm run test:browser:install # first run only, when Playwright's Chromium cache is missing

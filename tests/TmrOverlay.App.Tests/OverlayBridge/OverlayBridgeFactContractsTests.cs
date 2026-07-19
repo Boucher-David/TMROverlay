@@ -91,6 +91,22 @@ public sealed class OverlayBridgeFactContractsTests
     }
 
     [Fact]
+    public void SectorPublication_RejectsAvailableActiveTeamCarFactsDuringDriverHandoff()
+    {
+        var publication = CreatePublication();
+        var invalid = publication with
+        {
+            ActiveTeamCar = publication.ActiveTeamCar with
+            {
+                Facts = publication.ActiveTeamCar.Facts! with { IsDriverChangeInProgress = true }
+            }
+        };
+
+        Assert.False(invalid.TryValidate(out var error));
+        Assert.Equal(OverlayBridgePublicationValidationError.InvalidActiveTeamCarFacts, error);
+    }
+
+    [Fact]
     public void SectorPublication_RejectsMissingOrOverCapacityCurrentFuel()
     {
         var publication = CreatePublication();

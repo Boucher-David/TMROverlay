@@ -494,6 +494,43 @@
         "every workbench screenshot proves the offline banner, no-live-runtime statement, two sandboxed fixture documents, no script runtime, and synthetic fixture variant",
         "the browser-only workbench is not a localhost/OBS or Windows-native product surface and has no live app, telemetry, relay, pairing, or Oracle dependency"
       ]
+    },
+    {
+      "id": "overlay-bridge-browser-only-local-simulation",
+      "area": "overlay-bridge",
+      "family": "developer-workbench",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "covered",
+      "surfaces": ["browserReview"],
+      "surfaceExemptions": {
+        "localhostObs": "Not applicable: this is deliberately outside shipped localhost/OBS assets and routes.",
+        "windowsNative": "Not applicable: this is deterministic browser-to-browser workflow evidence, not a Windows product surface."
+      },
+      "artifacts": [
+        "bridge-browser-simulation/current-remote.png",
+        "bridge-browser-simulation/held-remote.png",
+        "bridge-browser-simulation/terminal-tombstone.png",
+        "bridge-browser-simulation/sequence-rejection-retains-prior.png"
+      ],
+      "fixtures": [
+        "tools/browser-review/bridge-browser-simulation/fixtures.mjs"
+      ],
+      "testFiles": [
+        "tests/browser-overlays/bridgeBrowserSimulation.test.js:complete expected Core priority decision matrix",
+        "tests/browser-overlays/bridgeBrowserSimulation.pw.spec.js:browser-to-browser fixture events retain each expected Core priority decision"
+      ],
+      "validatorRules": [
+        "package.json:test:bridge",
+        "tests/browser-overlays/bridgeBrowserSimulation.test.js:limits the browser route to BroadcastChannel fixture delivery",
+        "tools/browser-review/render-screenshots.mjs:bridgeBrowserSimulationScreenshotCases",
+        "tools/validate_overlay_screenshots.py:validate_bridge_browser_simulation_manifest"
+      ],
+      "assertions": [
+        "the receiver first opens empty, then receives only a named deterministic synthetic fixture event from the separate producer browser document through BroadcastChannel",
+        "current, held, expired, direct-local precedence, tombstone, session mismatch, and sequence rejection each show an expected Core priority decision while explicitly not executing Core",
+        "fixture decisions prohibit scalar merging: direct local wins atomically; held, expired, and terminal remote facts cannot influence calculation while expired/terminal cases retain Remote Bridge provenance; rejected session/sequence candidates contribute no facts or freshness and preserve a still-current prior accepted group",
+        "the developer-only route family has no production app integration, persistence, telemetry, capture, socket, relay, pairing, cloud service, localhost/OBS route, or Windows-native surface"
+      ]
     }
   ],
   "overlays": [

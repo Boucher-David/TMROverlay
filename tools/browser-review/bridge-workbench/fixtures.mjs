@@ -255,9 +255,9 @@ const fixtureCases = deepFreeze({
     consumer: {
       outcome: 'Rejected: sequence regression',
       outcomeTone: 'error',
-      coreBoundary: 'Synthetic contract fixture retains the prior accepted facts only for explanation and marks them unusable for calculation.',
+      coreBoundary: 'Synthetic contract fixture rejects the candidate without changing the prior accepted group. That group remains subject to its ordinary receiver-age policy.',
       availability: [
-        ['Active team car', 'Prior fact retained; calculation unavailable'],
+        ['Active team car', 'Prior accepted group unchanged; freshness policy decides'],
         ['Race context', 'Not granted'],
         ['Environment', 'Not granted'],
         ['Spatial traffic', 'Not granted']
@@ -266,7 +266,7 @@ const fixtureCases = deepFreeze({
         ['Fixture truth', 'synthetic-contract-fixture'],
         ['Safe error class', 'Sequence regression'],
         ['Receiver state', 'Rejected'],
-        ['Stored facts', 'Retained only; sequence rejected']
+        ['Stored facts', 'Unchanged; sequence did not refresh receipt or cadence']
       ]
     }
   },

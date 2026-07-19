@@ -241,6 +241,9 @@ internal static class OverlayBridgePublicationValidator
             || !IsOpaqueIdentifier(facts.TeamCarId)
             || !string.Equals(facts.TeamCarId, header.Session.TeamCarKey, StringComparison.Ordinal)
             || facts.SourceState != OverlayBridgeTeamCarSourceState.ConfirmedInCar
+            // The publisher must encode a handoff as the explicit unavailable DriverHandoff
+            // lifecycle group. An available group may never carry a competing transition flag.
+            || facts.IsDriverChangeInProgress
             || facts.IsInGarage
             || !IsRequiredNonNegativeFinite(facts.CurrentFuelLiters)
             || !IsNonNegativeFinite(facts.TeamCarProgressLaps)

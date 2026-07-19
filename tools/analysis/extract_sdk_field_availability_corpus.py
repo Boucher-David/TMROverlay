@@ -10,6 +10,7 @@ session-info identity values.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import struct
@@ -99,6 +100,8 @@ def source_category(capture_id: str) -> str:
         return "ai-nascar-limited-tire-race"
     if capture_id == "capture-20260516-204700-385":
         return "pcup-open-practice-pit-service"
+    if capture_id == "capture-20260714-193157-308":
+        return "acura-offline-testing-dynamic-caridx"
     if capture_id.startswith("capture-20260502-"):
         return "endurance-24h-adjacent"
     return "raw-capture"
@@ -353,6 +356,13 @@ def capture_field_stats(capture_dir: Path, stride: int) -> tuple[dict[str, Any],
         "appVersion": (manifest.get("appVersion") or {}).get("version"),
         "identityShape": session_info_identity_shape(latest_session),
     }
+    car_idx_counts = [
+        int(row.get("count") or 0)
+        for row in schema_rows
+        if str(row.get("name") or "").startswith("CarIdx")
+    ]
+    source["carIdxArrayVariableCount"] = len(car_idx_counts)
+    source["maxCarIdxArrayElementCount"] = max(car_idx_counts, default=0)
     return source, stats
 
 
@@ -406,6 +416,81 @@ def build_corpus(capture_dirs: list[Path], short_stride: int, long_stride: int) 
     }
 
 
+def maximum_declared_shape(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    """Retain the largest observed schema shape for a field across captures.
+
+    `CarIdx*` arrays now vary with the entry table. The tracked corpus is an
+    availability ceiling, not a claim that every capture has every slot, so it
+    needs the largest observed declaration while source records retain the
+    per-capture maximum.
+    """
+    existing_shape = existing.get("sdkDeclaredShape") or {}
+    incoming_shape = incoming.get("sdkDeclaredShape") or {}
+    existing_count = int(existing.get("count") or existing_shape.get("elementCount") or 0)
+    incoming_count = int(incoming.get("count") or incoming_shape.get("elementCount") or 0)
+    if incoming_count <= existing_count:
+        return existing
+
+    updated = copy.deepcopy(existing)
+    updated["count"] = incoming.get("count")
+    updated["sdkDeclaredShape"] = copy.deepcopy(incoming_shape)
+    return updated
+
+
+def legacy_source_car_idx_shape(corpus: dict[str, Any], capture_id: str) -> tuple[int, int]:
+    """Derive a legacy source's dynamic-array summary before adding it.
+
+    Corpus versions before the Season 3 evidence did not store this compact
+    source-level summary. Their field declarations still unambiguously carry
+    the source's 64-slot shape, so preserve that evidence while migrating.
+    """
+    counts = [
+        int(field.get("count") or 0)
+        for field in corpus.get("fields", [])
+        if str(field.get("name") or "").startswith("CarIdx")
+        and capture_id in field.get("presentInSources", [])
+    ]
+    return len(counts), max(counts, default=0)
+
+
+def merge_with_existing_corpus(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    """Add current captures without discarding older local-capture evidence."""
+    merged = copy.deepcopy(existing)
+    merged_sources = merged.setdefault("sources", [])
+    known_source_ids = {str(source.get("captureId") or "") for source in merged_sources}
+
+    for source in merged_sources:
+        if "carIdxArrayVariableCount" not in source or "maxCarIdxArrayElementCount" not in source:
+            variable_count, max_element_count = legacy_source_car_idx_shape(existing, str(source.get("captureId") or ""))
+            source["carIdxArrayVariableCount"] = variable_count
+            source["maxCarIdxArrayElementCount"] = max_element_count
+
+    for source in incoming.get("sources", []):
+        capture_id = str(source.get("captureId") or "")
+        if capture_id in known_source_ids:
+            continue
+        merged_sources.append(copy.deepcopy(source))
+        known_source_ids.add(capture_id)
+
+    merged_fields = {str(field["name"]): field for field in merged.get("fields", [])}
+    for incoming_field in incoming.get("fields", []):
+        name = str(incoming_field["name"])
+        if name not in merged_fields:
+            merged_fields[name] = copy.deepcopy(incoming_field)
+            continue
+
+        field = maximum_declared_shape(merged_fields[name], incoming_field)
+        merged_fields[name] = field
+        for capture_id in incoming_field.get("presentInSources", []):
+            if capture_id not in field["presentInSources"]:
+                field["presentInSources"].append(capture_id)
+        field["observedBySource"].update(copy.deepcopy(incoming_field.get("observedBySource", {})))
+
+    merged["fieldCount"] = len(merged_fields)
+    merged["fields"] = [merged_fields[name] for name in sorted(merged_fields)]
+    return merged
+
+
 def write_markdown(path: Path, corpus: dict[str, Any]) -> None:
     category_counts: dict[str, int] = {}
     for field_info in corpus["fields"]:
@@ -420,18 +505,18 @@ def write_markdown(path: Path, corpus: dict[str, Any]) -> None:
         f"- Sources: {len(corpus['sources'])}",
         f"- SDK fields: {corpus['fieldCount']}",
         "- Raw telemetry frames and private session-info identity values are not included.",
-        "- `sdkDeclaredShape` records SDK/storage shape maximums; observed min/max values come from sampled captures.",
+        "- `sdkDeclaredShape` records the largest SDK/storage shape observed in this corpus; source rows preserve each capture's dynamic `CarIdx*` maximum. Observed min/max values come from sampled captures.",
         "",
         "## Sources",
         "",
-        "| Capture | Category | Frames | Schema Fields | Sampled Frames | Identity Shape |",
-        "| --- | --- | ---: | ---: | ---: | --- |",
+        "| Capture | Category | Frames | Schema Fields | CarIdx Slots | Sampled Frames | Identity Shape |",
+        "| --- | --- | ---: | ---: | ---: | ---: | --- |",
     ]
     for source in corpus["sources"]:
         identity = source["identityShape"]
         lines.append(
             f"| {source['captureId']} | {source['sourceCategory']} | {source['frameCount']} | "
-            f"{source['schemaFieldCount']} | {source['sampledFrameCount']} | "
+            f"{source['schemaFieldCount']} | {source.get('maxCarIdxArrayElementCount', '—')} | {source['sampledFrameCount']} | "
             f"drivers {identity['driverCount']}; user names {identity['hasUserNameCount']}; "
             f"team names {identity['hasTeamNameCount']}; blank class names {identity['blankCarClassShortNameCount']} |"
         )
@@ -486,6 +571,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("fixtures/telemetry-analysis/sdk-field-availability-corpus.md"),
     )
+    parser.add_argument(
+        "--existing-corpus",
+        type=Path,
+        help="Merge new capture evidence into this tracked corpus instead of replacing older local-capture evidence.",
+    )
     parser.add_argument("--short-stride", type=int, default=60)
     parser.add_argument("--long-stride", type=int, default=600)
     return parser.parse_args()
@@ -495,6 +585,8 @@ def main() -> int:
     args = parse_args()
     capture_dirs = [Path(value) for value in args.captures] if args.captures is not None else capture_dirs_from_root(args.capture_root)
     corpus = build_corpus(capture_dirs, max(1, args.short_stride), max(1, args.long_stride))
+    if args.existing_corpus is not None:
+        corpus = merge_with_existing_corpus(read_json(args.existing_corpus), corpus)
     write_json(args.output, corpus)
     write_markdown(args.markdown_output, corpus)
     print(f"Wrote {corpus['fieldCount']} SDK fields from {len(corpus['sources'])} captures to {args.output}")

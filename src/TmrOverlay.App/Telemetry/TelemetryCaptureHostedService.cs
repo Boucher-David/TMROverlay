@@ -28,6 +28,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
     private readonly AppSettingsStore _settingsStore;
     private readonly AppEventRecorder _events;
     private readonly SessionHistoryStore _sessionHistoryStore;
+    private readonly CurrentSessionCarRadarCalibrationStore _currentSessionCarRadarCalibration;
     private readonly PostRaceAnalysisPipeline _postRaceAnalysisPipeline;
     private readonly DiagnosticsBundleService _diagnosticsBundleService;
     private readonly OverlayForensicsPackageService _forensicsPackageService;
@@ -48,6 +49,12 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
     private HistoricalSessionAccumulator? _activeHistory;
     private Task _finalizerTask = Task.CompletedTask;
     private Task _startupArtifactTask = Task.CompletedTask;
+    // Session transitions happen on the SDK callback. Compact sidecars are
+    // written there, but history promotion is serialized off that callback so
+    // aggregate rebuilds cannot race or delay live telemetry ingestion.
+    private Task _fuelV2HistoryImportTask = Task.CompletedTask;
+    private string? _fuelV2RecorderSourceId;
+    private long _collectionGeneration;
     private string? _activeSourceId;
     private DateTimeOffset? _activeStartedAtUtc;
     private IReadOnlyList<string> _activeRawWatchVariableNames = [];
@@ -66,6 +73,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         AppSettingsStore settingsStore,
         AppEventRecorder events,
         SessionHistoryStore sessionHistoryStore,
+        CurrentSessionCarRadarCalibrationStore currentSessionCarRadarCalibration,
         PostRaceAnalysisPipeline postRaceAnalysisPipeline,
         DiagnosticsBundleService diagnosticsBundleService,
         OverlayForensicsPackageService forensicsPackageService,
@@ -88,6 +96,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         _settingsStore = settingsStore;
         _events = events;
         _sessionHistoryStore = sessionHistoryStore;
+        _currentSessionCarRadarCalibration = currentSessionCarRadarCalibration;
         _postRaceAnalysisPipeline = postRaceAnalysisPipeline;
         _diagnosticsBundleService = diagnosticsBundleService;
         _forensicsPackageService = forensicsPackageService;
@@ -134,7 +143,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             _options.ResolvedCaptureRoot,
             _ibtOptions.TelemetryRoot);
         _startupArtifactTask = Task.Run(
-            () => RecoverPendingPostSessionArtifactsAsync(_startupArtifactCancellation.Token),
+            () => RecoverStartupArtifactsAsync(_startupArtifactCancellation.Token),
             CancellationToken.None);
         return Task.CompletedTask;
     }
@@ -150,12 +159,14 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
 
         TelemetryCaptureSession? captureToFinalize;
         HistoricalSessionAccumulator? historyToFinalize;
+        string? sourceIdToComplete;
         var finalization = CaptureFinalizationContext.Empty;
         lock (_sync)
         {
             captureToFinalize = _activeCapture;
             historyToFinalize = _activeHistory;
             finalization = BuildFinalizationContext(captureToFinalize);
+            sourceIdToComplete = _activeSourceId;
             _activeCapture = null;
             _activeHistory = null;
             _activeSourceId = null;
@@ -165,6 +176,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             _sessionInfoSnapshotCount = 0;
             _lastSessionInfoUpdate = -1;
         }
+
+        _currentSessionCarRadarCalibration.CompleteCollection(sourceIdToComplete);
 
         _startupArtifactCancellation.Cancel();
         try
@@ -191,6 +204,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             _state.RecordError($"Capture finalizer failed: {exception.Message}");
             throw;
         }
+
+        await AwaitFuelV2HistoryImportsAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private void HandleConnected()
@@ -211,12 +226,14 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
 
         TelemetryCaptureSession? captureToFinalize;
         HistoricalSessionAccumulator? historyToFinalize;
+        string? sourceIdToComplete;
         var finalization = CaptureFinalizationContext.Empty;
         lock (_sync)
         {
             captureToFinalize = _activeCapture;
             historyToFinalize = _activeHistory;
             finalization = BuildFinalizationContext(captureToFinalize);
+            sourceIdToComplete = _activeSourceId;
             _activeCapture = null;
             _activeHistory = null;
             _activeSourceId = null;
@@ -227,6 +244,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             _lastSessionInfoUpdate = -1;
             _frameIndex = 0;
         }
+
+        _currentSessionCarRadarCalibration.CompleteCollection(sourceIdToComplete);
 
         if (captureToFinalize is not null || historyToFinalize is not null)
         {
@@ -387,9 +406,15 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             }
 
             _activeHistory = new HistoricalSessionAccumulator();
-            var sourceId = capture?.CaptureId ?? $"session-{startedAtUtc:yyyyMMdd-HHmmss-fff}";
+            var sourceStem = capture?.CaptureId
+                ?? BuildRollingCollectionSourceStem(startedAtUtc, Guid.NewGuid());
+            // A source identifier is also the Fuel V2 recorder ownership
+            // token. Do not rely on a millisecond timestamp (or capture
+            // directory stem) to distinguish a disconnect/reconnect pair.
+            var sourceId = BuildCollectionSourceId(sourceStem, ++_collectionGeneration);
             _activeSourceId = sourceId;
             _activeStartedAtUtc = capture?.StartedAtUtc ?? startedAtUtc;
+            _currentSessionCarRadarCalibration.StartCollection(sourceId);
             var edgeCaseSchema = ReadEdgeCaseSchema(sdk);
             _activeRawWatchVariableNames = edgeCaseSchema.WatchedVariables
                 .Select(variable => variable.Name)
@@ -407,7 +432,10 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             _edgeCaseRecorder.StartCollection(sourceId, _activeStartedAtUtc.Value, edgeCaseSchema);
             _liveModelParityRecorder.StartCollection(sourceId, _activeStartedAtUtc.Value);
             _liveOverlayDiagnosticsRecorder.StartCollection(sourceId, _activeStartedAtUtc.Value);
-            _fuelV2CaptureRecorder.StartCollection(sourceId, _activeStartedAtUtc.Value);
+            // Fuel V2 is started lazily by RecordFuelV2Frame. A disconnect
+            // finalizer may still be draining the prior source when iRacing
+            // reconnects; retain that owner until it has completed so the new
+            // source cannot reset the singleton recorder underneath it.
 
             if (capture is not null)
             {
@@ -426,6 +454,18 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
 
             return capture;
         }
+    }
+
+    internal static string BuildCollectionSourceId(string sourceStem, long collectionGeneration)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceStem);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(collectionGeneration);
+        return $"{sourceStem}-g{collectionGeneration:D6}";
+    }
+
+    internal static string BuildRollingCollectionSourceStem(DateTimeOffset startedAtUtc, Guid collectionNonce)
+    {
+        return $"session-{startedAtUtc:yyyyMMdd-HHmmss-fff}-{collectionNonce:N}";
     }
 
     private TelemetryCaptureSession? TryStartRawCaptureLocked(
@@ -844,6 +884,17 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         };
     }
 
+    // Season 3 2026 made the CarIdx SDK arrays grow with the actual entry
+    // table. Derive the bound from this session's telemetry rather than
+    // assuming the former fixed 64-slot table.
+    private static int ReadCarIdxSlotCount(IRacingSDK sdk)
+    {
+        return CarIdxTelemetrySchema.TimingArrayNames
+            .Select(variableName => sdk.GetData(variableName) is Array values ? values.Length : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+    }
+
     private static int? ToInt32OrNull(object? value)
     {
         return value switch
@@ -901,11 +952,11 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         };
     }
 
-    private static CarProgress? ReadLeaderProgress(IRacingSDK sdk)
+    private static CarProgress? ReadLeaderProgress(IRacingSDK sdk, int carIdxSlotCount)
     {
         CarProgress? bestProgress = null;
 
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var progress = ReadCarProgress(sdk, carIdx, requireLapProgress: false);
             if (progress is null)
@@ -932,7 +983,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return bestProgress;
     }
 
-    private static CarProgress? ReadClassLeaderProgress(IRacingSDK sdk, int referenceCarIdx)
+    private static CarProgress? ReadClassLeaderProgress(IRacingSDK sdk, int referenceCarIdx, int carIdxSlotCount)
     {
         var referenceClass = ReadInt32ArrayElement(sdk, "CarIdxClass", referenceCarIdx);
         if (referenceClass is null)
@@ -941,7 +992,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         }
 
         CarProgress? bestClassProgress = null;
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var carClass = ReadInt32ArrayElement(sdk, "CarIdxClass", carIdx);
             if (carClass != referenceClass)
@@ -974,7 +1025,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return bestClassProgress;
     }
 
-    private static FocusCarSelection ReadFocusCarSelection(IRacingSDK sdk)
+    private static FocusCarSelection ReadFocusCarSelection(IRacingSDK sdk, int carIdxSlotCount)
     {
         var camCarIdx = ReadNullableInt32(sdk, "CamCarIdx");
         if (camCarIdx is null)
@@ -982,7 +1033,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             return new FocusCarSelection(null, null, "cam_car_idx_missing");
         }
 
-        if (camCarIdx is < 0 or >= 64)
+        if (camCarIdx is < 0 || camCarIdx >= carIdxSlotCount)
         {
             return new FocusCarSelection(camCarIdx, null, "cam_car_idx_invalid");
         }
@@ -1030,7 +1081,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             TireCompound: ReadInt32ArrayElement(sdk, "CarIdxTireCompound", carIdx));
     }
 
-    private static IReadOnlyList<HistoricalCarProximity> ReadNearbyCars(IRacingSDK sdk, int referenceCarIdx)
+    private static IReadOnlyList<HistoricalCarProximity> ReadNearbyCars(IRacingSDK sdk, int referenceCarIdx, int carIdxSlotCount)
     {
         if (referenceCarIdx < 0)
         {
@@ -1038,7 +1089,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         }
 
         var cars = new List<HistoricalCarProximity>();
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             if (carIdx == referenceCarIdx)
             {
@@ -1071,7 +1122,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return cars;
     }
 
-    private static IReadOnlyList<HistoricalCarProximity> ReadClassCars(IRacingSDK sdk, int referenceCarIdx)
+    private static IReadOnlyList<HistoricalCarProximity> ReadClassCars(IRacingSDK sdk, int referenceCarIdx, int carIdxSlotCount)
     {
         if (referenceCarIdx < 0)
         {
@@ -1085,7 +1136,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         }
 
         var cars = new List<HistoricalCarProximity>();
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var carClass = ReadInt32ArrayElement(sdk, "CarIdxClass", carIdx);
             if (carClass != referenceClass)
@@ -1125,10 +1176,10 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         return cars;
     }
 
-    private static IReadOnlyList<HistoricalCarProximity> ReadAllTimingCars(IRacingSDK sdk)
+    private static IReadOnlyList<HistoricalCarProximity> ReadAllTimingCars(IRacingSDK sdk, int carIdxSlotCount)
     {
         var cars = new List<HistoricalCarProximity>();
-        for (var carIdx = 0; carIdx < 64; carIdx++)
+        for (var carIdx = 0; carIdx < carIdxSlotCount; carIdx++)
         {
             var lapCompleted = ReadInt32ArrayElement(sdk, "CarIdxLapCompleted", carIdx);
             var lapDistPct = ReadDoubleArrayElement(sdk, "CarIdxLapDistPct", carIdx);
@@ -1467,11 +1518,13 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
     private void RecordHistoricalFrame(IRacingSDK sdk, DateTimeOffset capturedAtUtc, int sessionInfoUpdate)
     {
         HistoricalSessionAccumulator? history;
+        string? sourceId;
         IReadOnlyList<string> rawWatchVariableNames;
         IReadOnlyDictionary<string, string> rawWatchVariableGroups;
         lock (_sync)
         {
             history = _activeHistory;
+            sourceId = _activeSourceId;
             rawWatchVariableNames = _activeRawWatchVariableNames;
             rawWatchVariableGroups = _activeRawWatchVariableGroups;
         }
@@ -1483,7 +1536,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         try
         {
             var playerCarIdx = ReadInt32(sdk, "PlayerCarIdx");
-            var focusSelection = ReadFocusCarSelection(sdk);
+            var carIdxSlotCount = ReadCarIdxSlotCount(sdk);
+            var focusSelection = ReadFocusCarSelection(sdk, carIdxSlotCount);
             var focusCarIdx = focusSelection.FocusCarIdx;
             var focusProgress = focusCarIdx is { } focusProgressCarIdx
                 ? ReadCarProgress(sdk, focusProgressCarIdx, requireLapProgress: false)
@@ -1494,7 +1548,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             var leaderSucceeded = false;
             try
             {
-                leaderProgress = ReadLeaderProgress(sdk);
+                leaderProgress = ReadLeaderProgress(sdk, carIdxSlotCount);
                 leaderSucceeded = true;
             }
             finally
@@ -1510,7 +1564,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             var classLeaderSucceeded = false;
             try
             {
-                classLeaderProgress = ReadClassLeaderProgress(sdk, playerCarIdx);
+                classLeaderProgress = ReadClassLeaderProgress(sdk, playerCarIdx, carIdxSlotCount);
                 classLeaderSucceeded = true;
             }
             finally
@@ -1525,7 +1579,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 ? null
                 : focusCarIdx == playerCarIdx
                     ? classLeaderProgress
-                    : ReadClassLeaderProgress(sdk, focusCarIdx.Value);
+                    : ReadClassLeaderProgress(sdk, focusCarIdx.Value, carIdxSlotCount);
 
             IReadOnlyList<HistoricalCarProximity> nearbyCars;
             var nearbyStarted = Stopwatch.GetTimestamp();
@@ -1533,7 +1587,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             try
             {
                 nearbyCars = focusCarIdx is { } nearbyFocusCarIdx
-                    ? ReadNearbyCars(sdk, nearbyFocusCarIdx)
+                    ? ReadNearbyCars(sdk, nearbyFocusCarIdx, carIdxSlotCount)
                     : [];
                 nearbySucceeded = true;
             }
@@ -1550,7 +1604,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
             var classCarsSucceeded = false;
             try
             {
-                classCars = ReadClassCars(sdk, playerCarIdx);
+                classCars = ReadClassCars(sdk, playerCarIdx, carIdxSlotCount);
                 classCarsSucceeded = true;
             }
             finally
@@ -1565,8 +1619,8 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 ? []
                 : focusCarIdx == playerCarIdx
                     ? classCars
-                    : ReadClassCars(sdk, focusCarIdx.Value);
-            var allCars = ReadAllTimingCars(sdk);
+                    : ReadClassCars(sdk, focusCarIdx.Value, carIdxSlotCount);
+            var allCars = ReadAllTimingCars(sdk, carIdxSlotCount);
 
             sample = new HistoricalTelemetrySample(
                 CapturedAtUtc: capturedAtUtc,
@@ -1774,7 +1828,7 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 var liveSnapshot = _liveTelemetrySource.Snapshot();
                 _liveModelParityRecorder.RecordFrame(liveSnapshot);
                 _liveOverlayDiagnosticsRecorder.RecordFrame(liveSnapshot, rawWatch);
-                _fuelV2CaptureRecorder.RecordFrame(liveSnapshot, rawWatch);
+                RecordFuelV2Frame(liveSnapshot, rawWatch);
             }
             catch (Exception exception)
             {
@@ -1818,6 +1872,12 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         try
         {
             history.RecordFrame(sample);
+            if (sourceId is not null)
+            {
+                _currentSessionCarRadarCalibration.Publish(
+                    sourceId,
+                    history.SnapshotRadarCalibration());
+            }
             historySucceeded = true;
         }
         finally
@@ -1851,6 +1911,15 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         try
         {
             _state.MarkCaptureStopped();
+            // Finalize the session-segment recorder before slower capture,
+            // history, and analysis work. That minimizes the reconnect gap
+            // during which the next source must defer its first Fuel V2 frame.
+            await CompleteFuelV2CaptureAsync(
+                    capture?.DirectoryPath,
+                    DateTimeOffset.UtcNow,
+                    finalization.SourceId)
+                .ConfigureAwait(false);
+            fuelV2CaptureCompleted = true;
             if (capture is not null)
             {
                 var captureFinalizeStarted = Stopwatch.GetTimestamp();
@@ -1962,9 +2031,6 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
 
             CompleteLiveOverlayDiagnostics(capture?.DirectoryPath, capture?.FinishedAtUtc ?? DateTimeOffset.UtcNow);
             overlayDiagnosticsCompleted = true;
-            await CompleteFuelV2CaptureAsync(capture?.DirectoryPath, capture?.FinishedAtUtc ?? DateTimeOffset.UtcNow).ConfigureAwait(false);
-            fuelV2CaptureCompleted = true;
-
             if (capture is not null)
             {
                 await WritePostSessionArtifactsAsync(
@@ -1998,7 +2064,11 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
 
             if (!fuelV2CaptureCompleted)
             {
-                await CompleteFuelV2CaptureAsync(capture?.DirectoryPath, capture?.FinishedAtUtc ?? DateTimeOffset.UtcNow).ConfigureAwait(false);
+                await CompleteFuelV2CaptureAsync(
+                        capture?.DirectoryPath,
+                        capture?.FinishedAtUtc ?? DateTimeOffset.UtcNow,
+                        finalization.SourceId)
+                    .ConfigureAwait(false);
             }
 
             _performance.RecordOperation(
@@ -2042,23 +2112,124 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
         }
     }
 
-    private async Task CompleteFuelV2CaptureAsync(string? captureDirectory, DateTimeOffset finishedAtUtc)
+    private async Task CompleteFuelV2CaptureAsync(
+        string? captureDirectory,
+        DateTimeOffset finishedAtUtc,
+        string? expectedSourceId)
     {
         try
         {
-            var artifactPath = _fuelV2CaptureRecorder.CompleteCollection(finishedAtUtc, captureDirectory);
-            var importResult = await _fuelV2HistoryImporter.ImportAsync(artifactPath, CancellationToken.None).ConfigureAwait(false);
-            if (!importResult.Imported)
+            if (string.IsNullOrWhiteSpace(expectedSourceId))
             {
-                _logger.LogInformation(
-                    "Skipped Fuel V2 learned history import after capture finalization: {Reason}.",
-                    importResult.Reason);
+                return;
             }
+
+            string? artifactPath;
+            lock (_sync)
+            {
+                if (!string.Equals(_fuelV2RecorderSourceId, expectedSourceId, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                artifactPath = _fuelV2CaptureRecorder.CompleteCollection(
+                    finishedAtUtc,
+                    captureDirectory,
+                    expectedSourceId);
+                _fuelV2RecorderSourceId = null;
+            }
+
+            QueueFuelV2HistoryImport(artifactPath);
+            await AwaitFuelV2HistoryImportsAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "Failed to complete Fuel V2 capture artifact or learned history import.");
         }
+    }
+
+    private void RecordFuelV2Frame(LiveTelemetrySnapshot snapshot, RawTelemetryWatchSnapshot rawWatch)
+    {
+        string? captureDirectory;
+        string? sourceId;
+        DateTimeOffset? startedAtUtc;
+        lock (_sync)
+        {
+            captureDirectory = _activeCapture?.DirectoryPath;
+            sourceId = _activeSourceId;
+            startedAtUtc = _activeStartedAtUtc;
+            if (string.IsNullOrWhiteSpace(sourceId) || startedAtUtc is null)
+            {
+                return;
+            }
+
+            if (_fuelV2RecorderSourceId is null)
+            {
+                _fuelV2CaptureRecorder.StartCollection(sourceId, startedAtUtc.Value);
+                _fuelV2RecorderSourceId = sourceId;
+            }
+
+            if (!string.Equals(_fuelV2RecorderSourceId, sourceId, StringComparison.Ordinal))
+            {
+                // The previous source is being completed. The next callback
+                // will begin this source only after that ownership clears.
+                return;
+            }
+        }
+
+        foreach (var artifactPath in _fuelV2CaptureRecorder.RecordFrame(snapshot, rawWatch, captureDirectory))
+        {
+            QueueFuelV2HistoryImport(artifactPath);
+        }
+    }
+
+    private void QueueFuelV2HistoryImport(string? artifactPath)
+    {
+        if (string.IsNullOrWhiteSpace(artifactPath))
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            _fuelV2HistoryImportTask = _fuelV2HistoryImportTask
+                .ContinueWith(
+                    async _ =>
+                    {
+                        try
+                        {
+                            var importResult = await _fuelV2HistoryImporter
+                                .ImportAsync(artifactPath, CancellationToken.None)
+                                .ConfigureAwait(false);
+                            if (!importResult.Imported)
+                            {
+                                _logger.LogInformation(
+                                    "Skipped Fuel V2 learned history import for {ArtifactPath}: {Reason}.",
+                                    artifactPath,
+                                    importResult.Reason);
+                            }
+                        }
+                        catch (Exception exception)
+                        {
+                            _logger.LogWarning(exception, "Failed to import Fuel V2 learned history artifact {ArtifactPath}.", artifactPath);
+                        }
+                    },
+                    CancellationToken.None,
+                    TaskContinuationOptions.None,
+                    TaskScheduler.Default)
+                .Unwrap();
+        }
+    }
+
+    private async Task AwaitFuelV2HistoryImportsAsync(CancellationToken cancellationToken)
+    {
+        Task pending;
+        lock (_sync)
+        {
+            pending = _fuelV2HistoryImportTask;
+        }
+
+        await pending.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RecoverPendingPostSessionArtifactsAsync(CancellationToken cancellationToken)
@@ -2126,6 +2297,113 @@ internal sealed class TelemetryCaptureHostedService : IHostedService
                 ["error"] = exception.GetType().Name
             });
             _logger.LogWarning(exception, "Startup post-session artifact recovery failed.");
+        }
+    }
+
+    private async Task RecoverStartupArtifactsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _fuelV2HistoryImporter.MaintainAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _events.Record("fuel_v2_history_maintenance_failed", new Dictionary<string, string?>
+            {
+                ["error"] = exception.GetType().Name
+            });
+            _logger.LogWarning(exception, "Startup Fuel V2 history maintenance failed.");
+        }
+
+        await RecoverPendingFuelV2HistoryImportsAsync(cancellationToken).ConfigureAwait(false);
+        await RecoverPendingPostSessionArtifactsAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RecoverPendingFuelV2HistoryImportsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            IEnumerable<string> captureArtifacts = Directory.Exists(_options.ResolvedCaptureRoot)
+                ? Directory
+                    .EnumerateFiles(
+                        _options.ResolvedCaptureRoot,
+                        $"*{_fuelV2CaptureRecorder.OutputFileName}",
+                        SearchOption.AllDirectories)
+                    .Where(path => string.Equals(
+                        Path.GetFileName(Path.GetDirectoryName(path)),
+                        _fuelV2CaptureRecorder.CaptureDirectoryName,
+                        StringComparison.OrdinalIgnoreCase))
+                : [];
+            IEnumerable<string> rollingArtifacts = Directory.Exists(_fuelV2CaptureRecorder.DiagnosticsLogRoot)
+                ? Directory.EnumerateFiles(
+                    _fuelV2CaptureRecorder.DiagnosticsLogRoot,
+                    $"*{_fuelV2CaptureRecorder.OutputFileName}",
+                    SearchOption.TopDirectoryOnly)
+                : [];
+            var artifacts = captureArtifacts
+                .Concat(rollingArtifacts)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(path => new FileInfo(path))
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .Select(file => file.FullName)
+                .ToArray();
+            if (artifacts.Length == 0)
+            {
+                return;
+            }
+
+            var importedCount = 0;
+            foreach (var artifactPath in artifacts)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    var result = await _fuelV2HistoryImporter
+                        .ImportAsync(artifactPath, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (result.Imported)
+                    {
+                        importedCount++;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(
+                        exception,
+                        "Startup Fuel V2 history recovery skipped failed sidecar {ArtifactPath} and will continue.",
+                        artifactPath);
+                }
+            }
+
+            _events.Record("fuel_v2_history_recovery_completed", new Dictionary<string, string?>
+            {
+                ["artifactCount"] = artifacts.Length.ToString(),
+                ["importedCount"] = importedCount.ToString()
+            });
+            _logger.LogInformation(
+                "Startup Fuel V2 history recovery replayed {ArtifactCount} compact sidecars ({ImportedCount} imported or refreshed).",
+                artifacts.Length,
+                importedCount);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Startup recovery is best-effort and may be cancelled during app shutdown.
+        }
+        catch (Exception exception)
+        {
+            _events.Record("fuel_v2_history_recovery_failed", new Dictionary<string, string?>
+            {
+                ["error"] = exception.GetType().Name
+            });
+            _logger.LogWarning(exception, "Startup Fuel V2 learned-history recovery failed.");
         }
     }
 

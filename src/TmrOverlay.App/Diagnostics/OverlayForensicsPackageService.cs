@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using TmrOverlay.App.Events;
 using TmrOverlay.App.Overlays.BrowserSources;
 using TmrOverlay.App.Storage;
+using TmrOverlay.App.Telemetry;
 
 namespace TmrOverlay.App.Diagnostics;
 
@@ -33,15 +34,18 @@ internal sealed class OverlayForensicsPackageService
     private readonly AppStorageOptions _storageOptions;
     private readonly AppEventRecorder _events;
     private readonly ILogger<OverlayForensicsPackageService> _logger;
+    private readonly FuelV2CaptureOptions _fuelV2CaptureOptions;
 
     public OverlayForensicsPackageService(
         AppStorageOptions storageOptions,
         AppEventRecorder events,
-        ILogger<OverlayForensicsPackageService> logger)
+        ILogger<OverlayForensicsPackageService> logger,
+        FuelV2CaptureOptions? fuelV2CaptureOptions = null)
     {
         _storageOptions = storageOptions;
         _events = events;
         _logger = logger;
+        _fuelV2CaptureOptions = fuelV2CaptureOptions ?? new FuelV2CaptureOptions();
     }
 
     public string CreateInitialPackage(
@@ -218,8 +222,9 @@ internal sealed class OverlayForensicsPackageService
         };
     }
 
-    private static object BuildInputInventory(string captureDirectory, string? diagnosticsBundlePath, string captureId)
+    private object BuildInputInventory(string captureDirectory, string? diagnosticsBundlePath, string captureId)
     {
+        var fuelV2Captures = FuelV2CaptureFiles(captureDirectory);
         return new
         {
             SchemaVersion = 1,
@@ -234,11 +239,34 @@ internal sealed class OverlayForensicsPackageService
                 CaptureSynthesis = FileInfoOrNull(Path.Combine(captureDirectory, "capture-synthesis.json")),
                 LiveOverlayDiagnostics = FileInfoOrNull(Path.Combine(captureDirectory, "live-overlay-diagnostics.json")),
                 LiveModelParity = FileInfoOrNull(Path.Combine(captureDirectory, "live-model-parity.json")),
-                FuelV2Capture = FileInfoOrNull(Path.Combine(captureDirectory, "fuel-v2-capture", "fuel-v2-diagnostics.json")),
+                // Keep the single latest item for older support readers. The
+                // per-segment list is capped for package size, so report both
+                // counts rather than implying that it is a complete capture.
+                FuelV2Capture = FileInfoOrNull(fuelV2Captures.RecentPaths.FirstOrDefault()),
+                FuelV2Captures = fuelV2Captures.RecentPaths.Select(FileInfoOrNull).ToArray(),
+                FuelV2CaptureTotalCount = fuelV2Captures.TotalCount,
+                FuelV2CaptureIncludedCount = fuelV2Captures.RecentPaths.Count,
+                FuelV2CaptureTruncated = fuelV2Captures.TotalCount > fuelV2Captures.RecentPaths.Count,
                 IbtAnalysisStatus = FileInfoOrNull(Path.Combine(captureDirectory, "ibt-analysis", "status.json"))
             },
             DiagnosticsBundle = FileInfoOrNull(diagnosticsBundlePath)
         };
+    }
+
+    private FuelV2CaptureInventory FuelV2CaptureFiles(string captureDirectory)
+    {
+        var directory = Path.Combine(captureDirectory, _fuelV2CaptureOptions.CaptureDirectoryName);
+        if (!Directory.Exists(directory))
+        {
+            return FuelV2CaptureInventory.Empty;
+        }
+
+        var paths = Directory
+            .EnumerateFiles(directory, $"*{_fuelV2CaptureOptions.OutputFileName}", SearchOption.TopDirectoryOnly)
+            .OrderByDescending(path => File.GetLastWriteTimeUtc(path))
+            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return new FuelV2CaptureInventory(paths.Length, paths.Take(20).ToArray());
     }
 
     private static object BuildPackageStatus(string outputDirectory, string captureId, string source)
@@ -1093,4 +1121,11 @@ internal sealed class OverlayForensicsPackageService
         double? AgeSeconds,
         double ThresholdSeconds,
         IReadOnlyList<string> MissingEvidence);
+}
+
+internal sealed record FuelV2CaptureInventory(
+    int TotalCount,
+    IReadOnlyList<string> RecentPaths)
+{
+    public static FuelV2CaptureInventory Empty { get; } = new(0, []);
 }

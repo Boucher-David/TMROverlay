@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text;
 using TmrOverlay.Core.Fuel.V2;
+using TmrOverlay.Core.PitService;
 using Xunit;
 
 namespace TmrOverlay.App.Tests.History;
@@ -10,12 +11,17 @@ public sealed class FuelV2HistorySchemaCompatibilityTests
     private const string ExpectedFuelV2HistorySchema = """
 FuelV2HistoryManifest
   AggregateCount: int
+  ClassifiedSummaryCount: int
   CurrentAggregateVersion: int
   CurrentImportModelVersion: int
   CurrentSummaryVersion: int
   LastImportedSourceId: string
+  LegacyUnclassifiedSummaryCount: int
   ManifestVersion: int
+  MisfiledSummaryCount: int
   SummaryCount: int
+  UnclassifiedV2SummaryCount: int
+  UnreadableSummaryCount: int
   UpdatedAtUtc: DateTimeOffset
   UseForStrategy: bool
 FuelV2HistorySummary
@@ -27,16 +33,21 @@ FuelV2HistorySummary
   ImportModelVersion: int
   ImportedAtUtc: DateTimeOffset
   LapBudget: FuelV2HistoryLapBudgetFacts
+  PitRouteObservations: IReadOnlyList<PitServiceRouteObservation>
   PitWindows: IReadOnlyList<FuelV2HistoryPitWindow>
   Quality: FuelV2HistoryQuality
+  RaceLength: FuelV2HistoryRaceLengthFacts
   RejectedLapBurnWindowExamples: IReadOnlyList<FuelV2HistoryLapBurnWindow>
   RejectedLapBurnWindowReasonCounts: IReadOnlyDictionary<string, int>
   Scope: FuelV2HistorySessionScope
   SectorBurnWindows: IReadOnlyList<FuelV2HistorySectorBurnWindow>
+  SessionIntegrity: FuelV2HistorySessionIntegrity
   SourceArtifact: FuelV2HistorySourceArtifact
   SourceId: string
   SourceVersions: FuelV2HistorySourceVersions
   StartedAtUtc: DateTimeOffset
+  StationaryServiceObservations: IReadOnlyList<PitServiceStationaryServiceObservation>
+  SummaryId: string
   SummaryVersion: int
   TeamStints: IReadOnlyList<FuelV2HistoryTeamStint>
 FuelV2HistorySourceArtifact
@@ -60,6 +71,8 @@ FuelV2HistoryComboIdentity
   CarKey: string
   SessionKey: string
   TrackKey: string
+  TrackLayoutIdentitySource: string
+  TrackLayoutKey: string
 FuelV2HistoryCarIdentity
   CarClassId: int?
   CarClassShortName: string
@@ -79,6 +92,7 @@ FuelV2HistoryTrackIdentity
 FuelV2HistorySessionIdentity
   BuildVersion: string
   CurrentSessionNum: int?
+  DCRuleSet: string
   EventType: string
   Official: bool?
   SeasonId: int?
@@ -87,9 +101,29 @@ FuelV2HistorySessionIdentity
   SessionLapsText: string
   SessionName: string
   SessionNum: int?
+  SessionTimeText: string
   SessionType: string
   SubSessionId: int?
   TeamRacing: bool?
+FuelV2HistoryRaceLengthFacts
+  DeclaredLapCount: int?
+  DeclaredSessionLapsText: string
+  DeclaredSessionTimeText: string
+  ObservedRaceLaps: int?
+  ObservedSessionLapsTotal: int?
+  ObservedSessionTimeTotalSeconds: double?
+FuelV2HistorySessionIntegrity
+  BoundaryKind: string
+  CaptureScope: string
+  ConnectionSourceId: string
+  ExactCarVerified: bool
+  ExactTrackLayoutVerified: bool
+  IsClassifiedForHistory: bool
+  SegmentOrdinal: int?
+  SessionFamily: string
+  SessionOccurrenceKey: string
+  SessionOccurrenceSupportsReconnectDeduplication: bool
+  SessionOccurrenceVerified: bool
 FuelV2HistoryTrackSector
   SectorNum: int
   SectorStartPct: double?
@@ -103,17 +137,23 @@ FuelV2HistoryEvidenceTotals
   AcceptedSectorWindowCount: int
   ContextFlagCounts: IReadOnlyDictionary<string, int>
   DriverChangeEventCount: int
+  DroppedPitRouteObservationCount: int
+  DroppedStationaryServiceObservationCount: int
   FrameCount: int
   FramesWithLocalFuel: int
   FramesWithTeamProgress: int
   FramesWithTeamProgressWithoutLocalFuel: int
   FuelEvidenceCounts: IReadOnlyDictionary<string, int>
+  PitRouteObservationCount: int
   PitWindowCount: int
   PitWindowsWithFuelIncrease: int
   RaceControlCounts: IReadOnlyDictionary<string, int>
   RejectedLapBurnWindowCount: int
   RejectedSectorWindowCount: int
+  RetainedPitRouteObservationCount: int
+  RetainedStationaryServiceObservationCount: int
   SampledFrameCount: int
+  StationaryServiceObservationCount: int
   TeamStintCount: int
   WeatherCounts: IReadOnlyDictionary<string, int>
 FuelV2HistoryFuelCapacityFacts
@@ -169,6 +209,128 @@ FuelV2HistoryPitWindow
   SawPitStall: bool
   SawRepair: bool
   StartCapturedAtUtc: DateTimeOffset
+PitServiceRequestShape
+  FastRepair: bool
+  Fuel: bool
+  FuelLiters: double?
+  LeftFrontTire: bool
+  LeftRearTire: bool
+  RequestedTireCompoundIndex: int?
+  RequestedTireCount: int
+  RightFrontTire: bool
+  RightRearTire: bool
+  Tearoff: bool
+PitServiceStationaryServiceObservation
+  DurationSeconds: double
+  EndSessionTimeSeconds: double?
+  EndedAtUtc: DateTimeOffset
+  EntryFuelLiters: double?
+  EntryRawFlags: int?
+  EntryRawStatus: int?
+  EntryRequest: PitServiceRequestShape
+  EntryTeamOrLocalFastRepairsUsed: int?
+  EntryTireCounters: PitServiceTireCounterSnapshot
+  EntryTireSetsUsed: int?
+  ExitFuelLiters: double?
+  ExitTeamOrLocalFastRepairsUsed: int?
+  ExitTireCounters: PitServiceTireCounterSnapshot
+  ExitTireSetsUsed: int?
+  FuelFlowDurationSeconds: double?
+  FuelFlowEndedAtUtc: DateTimeOffset?
+  FuelFlowStartedAtUtc: DateTimeOffset?
+  LastRawFlags: int?
+  LastRawStatus: int?
+  LastRequest: PitServiceRequestShape
+  MaxFrameGapSeconds: double?
+  NetFuelDeltaLiters: double?
+  PositiveFuelAddedLiters: double?
+  QualificationFlags: IReadOnlyList<string>
+  RequestChangedDuringService: bool
+  SampleCount: int
+  SawPitStall: bool
+  SawRepair: bool
+  SawServiceActive: bool
+  StartSessionTimeSeconds: double?
+  StartedAtUtc: DateTimeOffset
+  TeamOrLocalFastRepairsUsedDelta: int?
+  TireCounterDelta: PitServiceTireCounterDelta
+  TireSetsUsedDelta: int?
+PitServiceRouteObservation
+  Assignment: PitServiceRouteAssignment
+  BoxEntry: PitServiceRouteCheckpoint
+  BoxExit: PitServiceRouteCheckpoint
+  BoxToExitFuelUsedLiters: double?
+  BoxToExitSeconds: double?
+  EntryToBoxFuelUsedLiters: double?
+  EntryToBoxSeconds: double?
+  HasCompletePitLanePass: bool
+  HasCompleteRoute: bool
+  HasObservedBoxEntry: bool
+  HasObservedBoxExit: bool
+  HasQualifiedBoxToExitLeg: bool
+  HasQualifiedEntryToBoxLeg: bool
+  MaxFrameGapSeconds: double?
+  PitEntry: PitServiceRouteCheckpoint
+  PitExit: PitServiceRouteCheckpoint
+  QualificationFlags: IReadOnlyList<string>
+  SampleCount: int
+PitServiceRouteAssignment
+  DCRuleSet: string
+  DriverPitTrackPct: double?
+  IsComplete: bool
+  PitBoxIdentity: string
+  PitSpeedRuleIdentity: string
+  TrackNumPitStalls: int?
+  TrackPitSpeedLimitKph: double?
+PitServiceRouteCheckpoint
+  CapturedAtUtc: DateTimeOffset
+  ConfirmedAtUtc: DateTimeOffset
+  FuelLiters: double?
+  LapDistPct: double?
+  LocalIdentityProvenance: string
+  OnPitRoad: bool
+  PlayerCarInPitStall: bool
+  Sequence: Int64
+  SessionTick: int
+  SessionTimeSeconds: double?
+PitServiceTireCounterSnapshot
+  FrontTireSetsAvailable: int?
+  FrontTireSetsUsed: int?
+  LeftFrontTiresAvailable: int?
+  LeftFrontTiresUsed: int?
+  LeftRearTiresAvailable: int?
+  LeftRearTiresUsed: int?
+  LeftTireSetsAvailable: int?
+  LeftTireSetsUsed: int?
+  RearTireSetsAvailable: int?
+  RearTireSetsUsed: int?
+  RightFrontTiresAvailable: int?
+  RightFrontTiresUsed: int?
+  RightRearTiresAvailable: int?
+  RightRearTiresUsed: int?
+  RightTireSetsAvailable: int?
+  RightTireSetsUsed: int?
+  TireSetsAvailable: int?
+  TireSetsUsed: int?
+PitServiceTireCounterDelta
+  FrontTireSetsAvailable: int?
+  FrontTireSetsUsed: int?
+  LeftFrontTiresAvailable: int?
+  LeftFrontTiresUsed: int?
+  LeftRearTiresAvailable: int?
+  LeftRearTiresUsed: int?
+  LeftTireSetsAvailable: int?
+  LeftTireSetsUsed: int?
+  RearTireSetsAvailable: int?
+  RearTireSetsUsed: int?
+  RightFrontTiresAvailable: int?
+  RightFrontTiresUsed: int?
+  RightRearTiresAvailable: int?
+  RightRearTiresUsed: int?
+  RightTireSetsAvailable: int?
+  RightTireSetsUsed: int?
+  TireSetsAvailable: int?
+  TireSetsUsed: int?
 FuelV2HistoryTeamStint
   ConfidenceFlags: IReadOnlyList<string>
   DistanceLaps: double?
@@ -185,13 +347,16 @@ FuelV2HistoryAggregate
   AcceptedSectorFuelUsedLiters: FuelV2HistoryMetric
   AcceptedSectorProjectionLitersPerLap: FuelV2HistoryMetric
   AggregateVersion: int
+  ClassifiedSessionCount: int
   ContextFlagCounts: Dictionary<string, int>
+  ExcludedDuplicateOccurrenceSummaryCount: int
   FirstStartedAtUtc: DateTimeOffset?
   FuelEvidenceCounts: Dictionary<string, int>
   LapBudgetMissingSignalCounts: Dictionary<string, int>
   LapBudgetSourceCounts: Dictionary<string, int>
   LastFinishedAtUtc: DateTimeOffset?
   LearningEligibleSessionCount: int
+  LegacyUnclassifiedSessionCount: int
   LocalDriverStintFuelPerLapLiters: FuelV2HistoryMetric
   LocalDriverStintLaps: FuelV2HistoryMetric
   PitFuelAddedLiters: FuelV2HistoryMetric
@@ -213,12 +378,14 @@ FuelV2HistoryAggregate
   TotalRejectedSectorWindows: int
   TotalSampledFrameCount: int
   TotalTeamStints: int
+  UnclassifiedV2SessionCount: int
   UpdatedAtUtc: DateTimeOffset
   WeatherCounts: Dictionary<string, int>
 FuelV2HistorySourceReference
   ImportedAtUtc: DateTimeOffset
   SourceArtifactSha256: string
   SourceId: string
+  SummaryId: string
 FuelV2HistoryMetric
   Maximum: double?
   Mean: double?
@@ -247,6 +414,8 @@ FuelV2HistoryMetric
             typeof(FuelV2HistoryCarIdentity),
             typeof(FuelV2HistoryTrackIdentity),
             typeof(FuelV2HistorySessionIdentity),
+            typeof(FuelV2HistoryRaceLengthFacts),
+            typeof(FuelV2HistorySessionIntegrity),
             typeof(FuelV2HistoryTrackSector),
             typeof(FuelV2HistoryQuality),
             typeof(FuelV2HistoryEvidenceTotals),
@@ -255,6 +424,13 @@ FuelV2HistoryMetric
             typeof(FuelV2HistoryLapBurnWindow),
             typeof(FuelV2HistorySectorBurnWindow),
             typeof(FuelV2HistoryPitWindow),
+            typeof(PitServiceRequestShape),
+            typeof(PitServiceStationaryServiceObservation),
+            typeof(PitServiceRouteObservation),
+            typeof(PitServiceRouteAssignment),
+            typeof(PitServiceRouteCheckpoint),
+            typeof(PitServiceTireCounterSnapshot),
+            typeof(PitServiceTireCounterDelta),
             typeof(FuelV2HistoryTeamStint),
             typeof(FuelV2HistoryAggregate),
             typeof(FuelV2HistorySourceReference),
@@ -314,4 +490,5 @@ FuelV2HistoryMetric
     {
         return value.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
     }
+
 }

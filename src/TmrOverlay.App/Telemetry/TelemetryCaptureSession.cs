@@ -88,7 +88,9 @@ internal sealed class TelemetryCaptureSession : IAsyncDisposable
         Action<TelemetryCaptureWriteStatus>? writeStatusChanged = null)
     {
         var startedAtUtc = DateTimeOffset.UtcNow;
-        var captureId = $"capture-{startedAtUtc:yyyyMMdd-HHmmss-fff}";
+        var captureId = CreateUniqueCaptureId(
+            rootDirectory,
+            $"capture-{startedAtUtc:yyyyMMdd-HHmmss-fff}");
         var directoryPath = Path.Combine(rootDirectory, captureId);
 
         Directory.CreateDirectory(directoryPath);
@@ -123,6 +125,24 @@ internal sealed class TelemetryCaptureSession : IAsyncDisposable
             manifest,
             queueCapacity,
             writeStatusChanged);
+    }
+
+    // Raw capture directories are durable evidence. A fast reconnect can
+    // occur within the old millisecond timestamp resolution, so preserve the
+    // timestamp stem for support readability while reserving a unique suffix
+    // instead of reopening and overwriting the prior capture directory.
+    internal static string CreateUniqueCaptureId(string rootDirectory, string timestampStem)
+    {
+        Directory.CreateDirectory(rootDirectory);
+        var candidate = timestampStem;
+        var ordinal = 0;
+        while (Directory.Exists(Path.Combine(rootDirectory, candidate)))
+        {
+            ordinal++;
+            candidate = $"{timestampStem}-r{ordinal:D3}";
+        }
+
+        return candidate;
     }
 
     public bool TryQueueFrame(TelemetryFrameEnvelope frame)

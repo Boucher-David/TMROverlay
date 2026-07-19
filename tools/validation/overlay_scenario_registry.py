@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,19 @@ from typing import Iterator
 
 DEFAULT_CONTRACT_PATH = Path(__file__).with_name("overlay-scenario-contract.json")
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def canonical_text_sha256(path: Path) -> str:
+    """Hash tracked text independently of checkout newline conversion.
+
+    Scenario reports are produced on Windows and compared in a Linux job. Git
+    may materialize the same JSON contract with CRLF on Windows, so raw-byte
+    hashes describe the checkout rather than the contract. Binary screenshot
+    manifests intentionally retain byte-exact hashing in their own runners.
+    """
+    text = path.read_text(encoding="utf-8")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 SCENARIO_VALIDATOR_HOOKS: dict[str, tuple[str, ...]] = {
     "garage-cover-live-eligibility": (
@@ -56,6 +70,19 @@ class ScenarioResolution:
         )
 
 
+@dataclass(frozen=True)
+class ScenarioExecutionCase:
+    suite_id: str
+    runner: str
+    overlay_id: str
+    scenario_id: str
+    surface: str
+    artifact_path: str
+    expected_fixture_variant: str
+    expected_should_render: bool
+    expected_body_kind: str
+
+
 def load_contract(path: Path = DEFAULT_CONTRACT_PATH) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -78,6 +105,112 @@ def scenario_by_id(contract: dict, scenario_id: str) -> tuple[str, dict]:
     if len(matches) > 1:
         raise KeyError(f"Duplicate overlay scenario id {scenario_id!r}")
     return matches[0]
+
+
+def iter_execution_cases(
+    contract: dict,
+    screenshots_module: ModuleType,
+    suite_id: str | None = None,
+) -> Iterator[ScenarioExecutionCase]:
+    """Resolve runnable screenshot evidence without making JSON product input.
+
+    The scenario contract remains a validation/evidence registry. Execution
+    suites bind a small named family of covered scenarios to generated
+    manifests after the screenshot validator has already proven their content.
+    """
+    suites = contract.get("executionSuites", [])
+    if not isinstance(suites, list):
+        raise ValueError("executionSuites must be a list")
+
+    known_surfaces = {
+        "browserReview": "browser-overlays/",
+        "localhostObs": "localhost-overlays/",
+        "windowsNative": "native-overlays/",
+    }
+    seen_suite_ids: set[str] = set()
+    for suite in suites:
+        current_suite_id = str(suite.get("id") or "")
+        if not current_suite_id:
+            raise ValueError("execution suite is missing id")
+        if current_suite_id in seen_suite_ids:
+            raise ValueError(f"duplicate execution suite id {current_suite_id!r}")
+        seen_suite_ids.add(current_suite_id)
+        if suite_id is not None and current_suite_id != suite_id:
+            continue
+
+        runner = str(suite.get("runner") or "")
+        if runner != "screenshot-manifest/v1":
+            raise ValueError(f"{current_suite_id}: unsupported runner {runner!r}")
+        cases = suite.get("cases")
+        if not isinstance(cases, list) or not cases:
+            raise ValueError(f"{current_suite_id}: cases must be a non-empty list")
+        scenario_ids = [case.get("scenarioId") for case in cases if isinstance(case, dict)]
+        if len(scenario_ids) != len(cases) or any(not isinstance(scenario_id, str) or not scenario_id for scenario_id in scenario_ids):
+            raise ValueError(f"{current_suite_id}: each case requires scenarioId")
+        if len(set(scenario_ids)) != len(scenario_ids):
+            raise ValueError(f"{current_suite_id}: scenarioIds must be unique")
+
+        for declared_case in cases:
+            scenario_id = declared_case["scenarioId"]
+            expected_fixture_variant = str(declared_case.get("fixtureVariant") or "")
+            if not expected_fixture_variant:
+                raise ValueError(f"{current_suite_id}/{scenario_id}: fixtureVariant is required")
+            expected_should_render = declared_case.get("shouldRender")
+            if not isinstance(expected_should_render, bool):
+                raise ValueError(f"{current_suite_id}/{scenario_id}: shouldRender must be a boolean")
+            expected_body_kind = str(declared_case.get("bodyKind") or "")
+            if not expected_body_kind:
+                raise ValueError(f"{current_suite_id}/{scenario_id}: bodyKind is required")
+            overlay_id, scenario = scenario_by_id(contract, scenario_id)
+            resolution = resolve_scenario(contract, scenario_id, screenshots_module)
+            if resolution.status != "covered":
+                raise ValueError(f"{current_suite_id}/{scenario_id}: execution requires covered status")
+            if resolution.unresolved_references:
+                raise ValueError(
+                    f"{current_suite_id}/{scenario_id}: unresolved evidence references "
+                    + ", ".join(resolution.unresolved_references))
+
+            artifacts_by_surface: dict[str, list[str]] = {}
+            for artifact in scenario.get("artifacts", []):
+                for surface, prefix in known_surfaces.items():
+                    if artifact.startswith(prefix):
+                        artifacts_by_surface.setdefault(surface, []).append(artifact)
+                        break
+
+            declared_surfaces = {
+                surface
+                for surface in scenario.get("surfaces", [])
+                if surface in known_surfaces
+            }
+            missing_surfaces = declared_surfaces - set(artifacts_by_surface)
+            extra_surfaces = set(artifacts_by_surface) - declared_surfaces
+            if missing_surfaces or extra_surfaces:
+                raise ValueError(
+                    f"{current_suite_id}/{scenario_id}: execution artifacts must cover exactly the declared "
+                    f"browser/native surfaces; missing={sorted(missing_surfaces)!r}, extra={sorted(extra_surfaces)!r}")
+
+            for surface, artifacts in sorted(artifacts_by_surface.items()):
+                if surface not in scenario.get("surfaces", []):
+                    raise ValueError(f"{current_suite_id}/{scenario_id}: {surface} artifact is undeclared")
+                expected = [
+                    artifact for artifact in artifacts
+                    if artifact.endswith(f"/{expected_fixture_variant}.png")
+                    or artifact.endswith(f"-{expected_fixture_variant}.png")
+                ]
+                if len(expected) != 1:
+                    raise ValueError(
+                        f"{current_suite_id}/{scenario_id}: expected exactly one {surface} "
+                        f"{expected_fixture_variant!r} artifact, found {expected!r}")
+                yield ScenarioExecutionCase(
+                    suite_id=current_suite_id,
+                    runner=runner,
+                    overlay_id=overlay_id,
+                    scenario_id=scenario_id,
+                    surface=surface,
+                    artifact_path=expected[0],
+                    expected_fixture_variant=expected_fixture_variant,
+                    expected_should_render=expected_should_render,
+                    expected_body_kind=expected_body_kind)
 
 
 def resolve_scenario(

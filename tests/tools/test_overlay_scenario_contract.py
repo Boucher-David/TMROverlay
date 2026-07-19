@@ -21,6 +21,7 @@ class OverlayScenarioContractTests(unittest.TestCase):
         self.status_values = set(self.contract["statusValues"])
         self.overlay_by_id = {overlay["id"]: overlay for overlay in self.contract["overlays"]}
         self.settings_scenarios = self.contract.get("settingsScenarios", [])
+        self.execution_suites = self.contract.get("executionSuites", [])
 
     def test_contract_identity_and_control_values_are_known(self):
         self.assertEqual("overlay-scenario-contract/v1", self.contract["contract"])
@@ -144,6 +145,67 @@ class OverlayScenarioContractTests(unittest.TestCase):
                     any(scenario.get(key) for key in evidence_keys),
                     "Covered scenarios must cite a screenshot artifact, fixture, test, or validator rule.",
                 )
+
+    def test_execution_suites_bind_unique_covered_scenarios_without_becoming_product_input(self):
+        self.assertIsInstance(self.execution_suites, list)
+        self.assertGreater(len(self.execution_suites), 0)
+        suite_ids = [suite.get("id") for suite in self.execution_suites]
+        self.assertEqual(sorted(set(suite_ids)), sorted(suite_ids))
+
+        known_scenarios = {scenario["id"]: scenario for scenario in self.all_scenarios()}
+        for suite in self.execution_suites:
+            with self.subTest(suite_id=suite["id"]):
+                self.assertEqual("screenshot-manifest/v1", suite.get("runner"))
+                cases = suite.get("cases")
+                self.assertIsInstance(cases, list)
+                scenario_ids = [case.get("scenarioId") for case in cases]
+                self.assertEqual(sorted(set(scenario_ids)), sorted(scenario_ids))
+                self.assertGreater(len(scenario_ids), 0)
+                for case in cases:
+                    scenario_id = case["scenarioId"]
+                    self.assertIsInstance(case.get("fixtureVariant"), str)
+                    self.assertTrue(case["fixtureVariant"])
+                    self.assertIsInstance(case.get("shouldRender"), bool)
+                    self.assertIsInstance(case.get("bodyKind"), str)
+                    self.assertTrue(case["bodyKind"])
+                    scenario = known_scenarios[scenario_id]
+                    self.assertEqual("covered", scenario["status"])
+                    self.assertTrue(scenario["artifacts"])
+
+    def test_runtime_transition_suite_covers_every_shared_browser_overlay_without_claiming_fixture_semantics(self):
+        suite = self.contract.get("runtimeTransitionSuite")
+        self.assertIsInstance(suite, dict)
+        self.assertEqual("all-overlay-visible-hidden-visible", suite.get("id"))
+        self.assertEqual("overlay-runtime-transition/v1", suite.get("contract"))
+        self.assertEqual(
+            {"browserReview", "localhostObs", "windowsNative"},
+            set(suite.get("surfaces", [])),
+        )
+        self.assertEqual(
+            {
+                "standings": "table",
+                "relative": "table",
+                "fuel-calculator": "metrics",
+                "session-weather": "metrics",
+                "pit-service": "metrics",
+                "input-state": "inputs",
+                "car-radar": "car-radar",
+                "gap-to-leader": "graph",
+                "track-map": "track-map",
+                "flags": "flags",
+                "garage-cover": "garage-cover",
+                "stream-chat": "stream-chat",
+            },
+            {case["overlayId"]: case["bodyKind"] for case in suite.get("cases", [])},
+        )
+        self.assertEqual(
+            [
+                "tests/browser-overlays/browserOverlayProductionTransition.pw.spec.js",
+                "tests/TmrOverlay.App.Tests/Localhost/LocalhostOverlayHostedServiceTests.cs:EveryLocalhostOverlay_ClearsTheProductionModelWhenDisabledAndBuildsItAgainWhenRestored",
+                "tests/TmrOverlay.App.Tests/Overlays/OverlayAvailabilityEvaluatorTests.cs:NativeOverlayToggle_TransitionsVisibleHiddenVisibleForEverySupportedNativeOverlay",
+            ],
+            suite.get("testFiles"),
+        )
 
     def test_populated_session_mode_scenarios_do_not_reference_hidden_artifacts(self):
         for scenario in self.all_scenarios():

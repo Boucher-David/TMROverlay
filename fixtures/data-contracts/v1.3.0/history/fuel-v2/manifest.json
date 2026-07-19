@@ -1,0 +1,16 @@
+{
+  "manifestVersion": 3,
+  "currentSummaryVersion": 5,
+  "currentAggregateVersion": 2,
+  "currentImportModelVersion": 5,
+  "updatedAtUtc": "2026-07-13T12:31:00+00:00",
+  "useForStrategy": false,
+  "summaryCount": 1,
+  "aggregateCount": 1,
+  "classifiedSummaryCount": 1,
+  "legacyUnclassifiedSummaryCount": 0,
+  "unclassifiedV2SummaryCount": 0,
+  "unreadableSummaryCount": 0,
+  "misfiledSummaryCount": 0,
+  "lastImportedSourceId": "capture-example-fuel-v2-s001-race"
+}

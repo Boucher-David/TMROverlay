@@ -9,6 +9,11 @@ namespace TmrOverlay.App.Telemetry;
 internal static class CaptureSynthesisService
 {
     private const string SynthesisFileName = "capture-synthesis.json";
+    // Version 3 adds the normalized session-scoped pit assignment and pit
+    // speed/stall metadata needed to interpret later pit-route observations.
+    // Version 2 previously added DriverInfo.DriverCarIdx for the narrow local
+    // driver/camera display fallback.
+    private const int CurrentSynthesisVersion = 3;
     private const int FileHeaderBytes = 32;
     private const int FrameHeaderBytes = 32;
     private const int MaxSampledFrames = 20_000;
@@ -323,7 +328,7 @@ internal static class CaptureSynthesisService
             .ToArray();
 
         return new CaptureSynthesisDocument(
-            SynthesisVersion: 1,
+            SynthesisVersion: CurrentSynthesisVersion,
             GeneratedAtUtc: DateTimeOffset.UtcNow,
             CaptureId: manifest?.CaptureId ?? new DirectoryInfo(captureDirectory).Name,
             Context: sessionContext,

@@ -154,6 +154,10 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
     private readonly ILiveTelemetrySource _liveTelemetrySource;
     private readonly TrackMapStore _trackMapStore;
     private readonly SessionHistoryQueryService _historyQueryService;
+    private readonly FuelV2OverlayOptions _fuelV2OverlayOptions;
+    private readonly FuelV2PitServiceTireHistoryQueryService? _fuelV2TireHistoryQueryService;
+    private readonly FuelV2HistoryNormalBurnQueryService? _fuelV2NormalHistoryQueryService;
+    private readonly FuelV2ModelReadinessQueryService? _fuelV2ModelReadinessQueryService;
     private readonly StreamChatOverlaySource _streamChatSource;
     private readonly AppPerformanceState _performanceState;
     private readonly ILogger _logger;
@@ -215,7 +219,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         OverlaySettings settings,
         string fontFamily,
         string unitSystem,
-        Action saveSettings)
+        Action saveSettings,
+        FuelV2OverlayOptions? fuelV2OverlayOptions = null,
+        FuelV2PitServiceTireHistoryQueryService? fuelV2TireHistoryQueryService = null,
+        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null,
+        FuelV2ModelReadinessQueryService? fuelV2ModelReadinessQueryService = null)
         : base(settings, saveSettings, definition.DefaultWidth, definition.DefaultHeight)
     {
         _kind = kind;
@@ -223,6 +231,10 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         _liveTelemetrySource = liveTelemetrySource;
         _trackMapStore = trackMapStore;
         _historyQueryService = historyQueryService;
+        _fuelV2OverlayOptions = fuelV2OverlayOptions ?? FuelV2OverlayOptions.Disabled;
+        _fuelV2TireHistoryQueryService = fuelV2TireHistoryQueryService;
+        _fuelV2NormalHistoryQueryService = fuelV2NormalHistoryQueryService;
+        _fuelV2ModelReadinessQueryService = fuelV2ModelReadinessQueryService;
         _streamChatSource = streamChatSource;
         _performanceState = performanceState;
         _logger = logger;
@@ -576,8 +588,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             DesignV2LiveOverlayKind.Standings => BuildStandingsModel(snapshot, now),
             DesignV2LiveOverlayKind.Relative => BuildRelativeModel(snapshot, now),
             DesignV2LiveOverlayKind.FuelCalculator => BuildFuelModel(snapshot, now),
-            DesignV2LiveOverlayKind.SessionWeather => FromSimple(_sessionWeatherBuilder.Build(snapshot, now, _unitSystem, _settings)),
-            DesignV2LiveOverlayKind.PitService => FromSimple(_pitServiceBuilder.Build(snapshot, now, _unitSystem, _settings)),
+            DesignV2LiveOverlayKind.SessionWeather => SimpleModelFrom(_sessionWeatherBuilder.Build(snapshot, now, _unitSystem, _settings)),
+            DesignV2LiveOverlayKind.PitService => SimpleModelFrom(_pitServiceBuilder.Build(snapshot, now, _unitSystem, _settings)),
             DesignV2LiveOverlayKind.InputState => BuildInputModel(snapshot, now),
             DesignV2LiveOverlayKind.Flags => BuildFlagsModel(snapshot, now),
             DesignV2LiveOverlayKind.CarRadar => BuildRadarModel(snapshot, now),
@@ -981,8 +993,29 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
 
     private DesignV2OverlayModel BuildFuelModel(LiveTelemetrySnapshot snapshot, DateTimeOffset now)
     {
+        if (_fuelV2OverlayOptions.Enabled)
+        {
+            var tireHistory = _fuelV2TireHistoryQueryService?.Lookup(
+                snapshot.Context,
+                snapshot.Models.PitService.Request);
+            var normalHistory = _fuelV2NormalHistoryQueryService?.Lookup(snapshot.Context);
+            var modelReadiness = _fuelV2ModelReadinessQueryService?.Lookup(snapshot.Context);
+            var v2ViewModel = FuelV2OverlayViewModel.From(
+                snapshot,
+                _unitSystem,
+                now,
+                _settings,
+                tireHistory,
+                normalHistory,
+                modelReadiness);
+            return SimpleModelFrom(v2ViewModel.Overlay) with
+            {
+                FuelV2TireHistory = v2ViewModel.TireHistory
+            };
+        }
+
         var strategyModel = LiveFuelStrategyModel.From(snapshot, now, LookupHistory);
-        if (!strategyModel.IsAvailable)
+        if (!strategyModel.IsAvailable && !FuelLapsWorkbenchViewModel.Enabled)
         {
             return new DesignV2OverlayModel(
                 "Fuel Calculator",
@@ -999,7 +1032,13 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             _unitSystem,
             maximumRows: FuelVisibleRowsForHeight(RenderLayoutRectangle().Height, ShowFooterForSettings(_kind, _settings, snapshot)),
             contentSettings: _settings);
-        var metricSections = viewModel.MetricSections.Select(section => new DesignV2MetricSection(
+        // Match BrowserOverlayModelFactory's contract: empty sections are
+        // absent rather than renderer-visible empty headings.  Keeping this
+        // projection pure lets the parity tests compare body semantics without
+        // constructing a WinForms form.
+        var metricSections = viewModel.MetricSections
+            .Where(section => section.Rows.Count > 0)
+            .Select(section => new DesignV2MetricSection(
             section.Title,
             section.Rows.Select(row => new DesignV2MetricRow(
                 row.Label,
@@ -3081,7 +3120,11 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             ShouldRender: !viewModel.IsWaiting && flags.Length > 0);
     }
 
-    private DesignV2OverlayModel FromSimple(SimpleTelemetryOverlayViewModel viewModel)
+    // This is a pure native projection, intentionally exposed to the test
+    // assembly so semantic parity can be checked without constructing a
+    // WinForms window. It remains renderer-local rather than becoming a new
+    // cross-renderer runtime model.
+    internal static DesignV2OverlayModel SimpleModelFrom(SimpleTelemetryOverlayViewModel viewModel)
     {
         var shouldRender = HasSimpleTelemetryContent(viewModel);
         var rows = viewModel.Rows.Select(row => new DesignV2MetricRow(
@@ -3097,22 +3140,27 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 segment.RotationDegrees)).ToArray(),
             RowColorHex = row.RowColorHex
         }).ToArray();
-        var metricSections = viewModel.MetricSections.Select(section => new DesignV2MetricSection(
-            section.Title,
-            section.Rows.Select(row => new DesignV2MetricRow(
-                row.Label,
-                row.Value,
-                EvidenceFor(row.Tone))
-            {
-                Segments = row.Segments.Select(segment => new DesignV2MetricSegment(
-                    segment.Label,
-                    segment.Value,
-                    EvidenceFor(segment.Tone),
-                    segment.AccentHex,
-                    segment.RotationDegrees)).ToArray(),
-                RowColorHex = row.RowColorHex
-            }).ToArray())).ToArray();
-        var gridSections = viewModel.Sections.Select(section => new DesignV2MetricGridSection(
+        var metricSections = viewModel.MetricSections
+            .Where(section => section.Rows.Count > 0)
+            .Select(section => new DesignV2MetricSection(
+                section.Title,
+                section.Rows.Select(row => new DesignV2MetricRow(
+                    row.Label,
+                    row.Value,
+                    EvidenceFor(row.Tone))
+                {
+                    Segments = row.Segments.Select(segment => new DesignV2MetricSegment(
+                        segment.Label,
+                        segment.Value,
+                        EvidenceFor(segment.Tone),
+                        segment.AccentHex,
+                        segment.RotationDegrees)).ToArray(),
+                    RowColorHex = row.RowColorHex
+                }).ToArray()))
+            .ToArray();
+        var gridSections = viewModel.Sections
+            .Where(section => section.Rows.Count > 0)
+            .Select(section => new DesignV2MetricGridSection(
             section.Title,
             section.Headers,
             section.Rows.Select(row => new DesignV2MetricGridRow(
@@ -3120,7 +3168,8 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
                 row.Cells.Select(cell => new DesignV2MetricGridCell(
                     cell.Value,
                     EvidenceFor(cell.Tone))).ToArray(),
-                EvidenceFor(row.Tone))).ToArray())).ToArray();
+                EvidenceFor(row.Tone))).ToArray()))
+            .ToArray();
         return new DesignV2OverlayModel(
             viewModel.Title,
             viewModel.Status,
@@ -3997,7 +4046,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
             16);
         var valueRect = MetricValueRect(rowRect, row.Segments.Count > 0);
         var segments = new List<DesignV2LayoutMetricSegment>();
-        var count = Math.Min(6, row.Segments.Count);
+        var count = Math.Min(geometry.MaximumMetricSegmentColumns, row.Segments.Count);
         if (count > 0)
         {
             var gap = geometry.ValueSegmentGap;
@@ -5737,7 +5786,7 @@ internal sealed class DesignV2LiveOverlayForm : PersistentOverlayForm, IUnitSyst
         RectangleF rect,
         IReadOnlyList<DesignV2MetricSegment> segments)
     {
-        var count = Math.Min(6, segments.Count);
+        var count = Math.Min(MetricGeometry.MaximumMetricSegmentColumns, segments.Count);
         if (count <= 0)
         {
             return;
@@ -9338,7 +9387,8 @@ internal sealed record DesignV2OverlayModel(
     string? HeaderText = null,
     bool ShowFooter = true,
     bool ShouldRender = true,
-    bool ShowHeader = true);
+    bool ShowHeader = true,
+    FuelV2TireHistoryCellViewModel? FuelV2TireHistory = null);
 
 internal abstract record DesignV2Body;
 

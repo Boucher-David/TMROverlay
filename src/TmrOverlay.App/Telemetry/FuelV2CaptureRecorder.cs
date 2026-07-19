@@ -3,32 +3,28 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using TmrOverlay.App.Events;
+using TmrOverlay.App.History;
 using TmrOverlay.App.Storage;
 using TmrOverlay.Core.AppInfo;
+using TmrOverlay.Core.Fuel.V2;
 using TmrOverlay.Core.History;
+using TmrOverlay.Core.Overlays;
+using TmrOverlay.Core.PitService;
 using TmrOverlay.Core.Telemetry.EdgeCases;
 using TmrOverlay.Core.Telemetry.Live;
 
 namespace TmrOverlay.App.Telemetry;
 
-internal sealed class FuelV2CaptureRecorder
+internal sealed class FuelV2CaptureRecorder : IFuelV2CurrentSessionEvidenceSource
 {
     private const int GreenSessionState = 4;
     private const int OnTrackSurface = 3;
-    private const int YellowFamilyFlagMask = 0x00000008
-        | 0x00000040
-        | 0x00000100
-        | 0x00000200
-        | 0x00002000
-        | 0x00004000
-        | 0x00008000;
     private const double MinimumAcceptedLapProgress = 0.95d;
     private const double MaximumAcceptedLapProgress = 1.25d;
     private const double MinimumFuelBurnLiters = 0.05d;
     private const double MaximumFuelBurnLitersPerLap = 40d;
     private const double MinimumLapSeconds = 20d;
     private const double MaximumLapSeconds = 1800d;
-    private const double MinimumPitFuelIncreaseLiters = 0.25d;
 
     private static readonly string[] RawValueNames =
     [
@@ -79,6 +75,7 @@ internal sealed class FuelV2CaptureRecorder
     private readonly AppStorageOptions _storageOptions;
     private readonly AppEventRecorder _events;
     private readonly ILogger<FuelV2CaptureRecorder> _logger;
+    private readonly FuelV2HistoryNormalBurnQueryService? _normalHistoryQueryService;
     private readonly object _sync = new();
     private readonly Dictionary<string, int> _sessionFrameCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _contextFlagCounts = new(StringComparer.OrdinalIgnoreCase);
@@ -88,6 +85,11 @@ internal sealed class FuelV2CaptureRecorder
     private readonly Dictionary<string, int> _raceControlCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _weatherScopeCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _pitServiceRequestCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _raceBurnSelectorStateCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _raceBurnSelectorBucketCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _raceBurnSelectorCandidateBucketCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _raceBurnSelectorConflictCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _raceBurnSelectorHistoryStatusCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DateTimeOffset> _lastSampledFrameAtUtcBySessionKind = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _sampleFrameCountsBySessionKind = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<FuelV2FrameSample> _sampleFrames = [];
@@ -96,9 +98,16 @@ internal sealed class FuelV2CaptureRecorder
     private readonly List<FuelV2LapBurnWindowSample> _rejectedLapBurnWindows = [];
     private readonly List<FuelV2SectorBurnSample> _sectorBurnSamples = [];
     private readonly List<FuelV2PitWindowSample> _pitWindows = [];
+    private readonly List<PitServiceStationaryServiceObservation> _stationaryServiceObservations = [];
+    private readonly List<PitServiceRouteObservation> _pitRouteObservations = [];
     private readonly List<FuelV2TeamStintSample> _teamStints = [];
+    private readonly List<FuelV2RaceBurnSelectorShadowTransition> _raceBurnSelectorTransitions = [];
+    private string? _connectionSourceId;
+    private int _nextSessionOrdinal;
     private string? _sourceId;
     private DateTimeOffset? _startedAtUtc;
+    private FuelV2CaptureSessionIdentity? _sessionIdentity;
+    private string _sessionBoundaryKind = "first-observed";
     private string? _lastArtifactPath;
     private int _frameCount;
     private int _sampledFrameCount;
@@ -119,34 +128,61 @@ internal sealed class FuelV2CaptureRecorder
     private int _sectorBurnRejectedCount;
     private int _pitWindowCount;
     private int _pitWindowsWithFuelIncrease;
+    private int _stationaryServiceObservationCount;
+    private int _droppedStationaryServiceObservationCount;
+    private int _pitRouteObservationCount;
+    private int _droppedPitRouteObservationCount;
     private int _teamStintCount;
     private int _driverChangeEventCount;
+    private int _confirmedDriverSwapCount;
+    private int _unconfirmedDriverChangeEventCount;
+    private int _driverChangeLapStatusChangeCount;
     private double? _minFuelLiters;
     private double? _maxFuelLiters;
+    private CapacityObservationScope? _capacityObservationScope;
+    private double? _maxObservedFuelForCapacityScopeLiters;
     private double? _lastFuelLiters;
     private double? _maxObservedFuelIncreaseLiters;
     private double? _maxObservedFuelDecreaseLiters;
+    private int? _initialDriversSoFar;
     private int? _lastDriversSoFar;
+    private int? _initialDriverChangeLapStatus;
+    private int? _lastDriverChangeLapStatus;
     private FuelV2SessionScopeSample? _latestSessionScope;
     private FuelAnchor? _cleanLapAnchor;
     private FuelAnchor? _currentLapAnchor;
     private SectorAnchor? _sectorAnchor;
     private PitWindowBuilder? _activePitWindow;
+    private PitServiceStationaryServiceTracker _stationaryServiceTracker = new();
+    private PitServiceRouteTracker _pitServiceRouteTracker = new();
     private TeamStintBuilder? _activeTeamStint;
+    private PendingDriverSwap? _pendingDriverSwap;
+    private bool _nextTeamStintStartsAfterConfirmedDriverSwap;
+    private FuelV2RaceBurnEvidenceSelectionTracker _raceBurnSelector = new();
+    private FuelV2RaceBurnSelectorShadowTransition? _latestRaceBurnSelectorTransition;
+    private int _raceBurnSelectorFramesEvaluated;
+    private long _currentSessionEvidenceRevision;
+    private DateTimeOffset? _currentSessionEvidenceUpdatedAtUtc;
 
     public FuelV2CaptureRecorder(
         FuelV2CaptureOptions options,
         AppStorageOptions storageOptions,
         AppEventRecorder events,
-        ILogger<FuelV2CaptureRecorder> logger)
+        ILogger<FuelV2CaptureRecorder> logger,
+        FuelV2HistoryNormalBurnQueryService? normalHistoryQueryService = null)
     {
         _options = options;
         _storageOptions = storageOptions;
         _events = events;
         _logger = logger;
+        _normalHistoryQueryService = normalHistoryQueryService;
     }
 
     public string DiagnosticsLogRoot => Path.Combine(_storageOptions.LogsRoot, _options.LogDirectoryName);
+
+    public string OutputFileName => _options.OutputFileName;
+
+    public string CaptureDirectoryName => _options.CaptureDirectoryName;
 
     public string? LastArtifactPath
     {
@@ -159,78 +195,143 @@ internal sealed class FuelV2CaptureRecorder
         }
     }
 
+    // Exposes only observations whose local evidence window has already
+    // closed. The current-session bridge is deliberately factual and ephemeral:
+    // it is never written to learned history here and cannot expose an active
+    // stop, an inferred strategy, or a partially confirmed route.
+    public FuelV2CurrentSessionEvidenceSnapshot GetCurrentSessionEvidenceSnapshot()
+    {
+        lock (_sync)
+        {
+            var evidence = _sessionIdentity is { IsReadyToRecord: true } identity
+                && _latestSessionScope is { } scope
+                && _currentSessionEvidenceUpdatedAtUtc is { } updatedAtUtc
+                ? new FuelV2CurrentSessionEvidence(
+                    identity,
+                    scope,
+                    updatedAtUtc,
+                    _stationaryServiceObservations.ToArray(),
+                    _pitRouteObservations.ToArray())
+                : null;
+            return new FuelV2CurrentSessionEvidenceSnapshot(
+                _currentSessionEvidenceRevision,
+                evidence);
+        }
+    }
+
     public void StartCollection(string sourceId, DateTimeOffset startedAtUtc)
     {
         lock (_sync)
         {
-            _sourceId = sourceId;
-            _startedAtUtc = startedAtUtc;
+            _connectionSourceId = sourceId;
+            _nextSessionOrdinal = 0;
             _lastArtifactPath = null;
-            _frameCount = 0;
-            _sampledFrameCount = 0;
-            _droppedFrameSampleCount = 0;
-            _droppedEventSampleCount = 0;
-            _framesWithLocalFuel = 0;
-            _framesWithTeamProgress = 0;
-            _framesWithTeamProgressWithoutLocalFuel = 0;
-            _framesWithInstantaneousBurn = 0;
-            _framesWithMeasuredBurn = 0;
-            _framesBaselineEligible = 0;
-            _framesWithLapBudget = 0;
-            _framesWithRaceProjection = 0;
-            _framesWithSectorMetadata = 0;
-            _acceptedLapBurnWindowCount = 0;
-            _rejectedLapBurnWindowCount = 0;
-            _sectorBurnWindowCount = 0;
-            _sectorBurnRejectedCount = 0;
-            _pitWindowCount = 0;
-            _pitWindowsWithFuelIncrease = 0;
-            _teamStintCount = 0;
-            _driverChangeEventCount = 0;
-            _minFuelLiters = null;
-            _maxFuelLiters = null;
-            _lastFuelLiters = null;
-            _maxObservedFuelIncreaseLiters = null;
-            _maxObservedFuelDecreaseLiters = null;
-            _lastDriversSoFar = null;
-            _latestSessionScope = null;
-            _cleanLapAnchor = null;
-            _currentLapAnchor = null;
-            _sectorAnchor = null;
-            _activePitWindow = null;
-            _activeTeamStint = null;
-            _sessionFrameCounts.Clear();
-            _contextFlagCounts.Clear();
-            _fuelEvidenceCounts.Clear();
-            _lapBudgetSourceCounts.Clear();
-            _lapBudgetMissingSignalCounts.Clear();
-            _raceControlCounts.Clear();
-            _weatherScopeCounts.Clear();
-            _pitServiceRequestCounts.Clear();
-            _lastSampledFrameAtUtcBySessionKind.Clear();
-            _sampleFrameCountsBySessionKind.Clear();
-            _sampleFrames.Clear();
-            _eventSamples.Clear();
-            _acceptedLapBurnWindows.Clear();
-            _rejectedLapBurnWindows.Clear();
-            _sectorBurnSamples.Clear();
-            _pitWindows.Clear();
-            _teamStints.Clear();
+            ResetSessionState();
         }
     }
 
-    public void RecordFrame(LiveTelemetrySnapshot snapshot, RawTelemetryWatchSnapshot? rawWatch = null)
+    private void ResetSessionState()
+    {
+        _sourceId = null;
+        _startedAtUtc = null;
+        _sessionIdentity = null;
+        _sessionBoundaryKind = "first-observed";
+        _frameCount = 0;
+        _sampledFrameCount = 0;
+        _droppedFrameSampleCount = 0;
+        _droppedEventSampleCount = 0;
+        _framesWithLocalFuel = 0;
+        _framesWithTeamProgress = 0;
+        _framesWithTeamProgressWithoutLocalFuel = 0;
+        _framesWithInstantaneousBurn = 0;
+        _framesWithMeasuredBurn = 0;
+        _framesBaselineEligible = 0;
+        _framesWithLapBudget = 0;
+        _framesWithRaceProjection = 0;
+        _framesWithSectorMetadata = 0;
+        _acceptedLapBurnWindowCount = 0;
+        _rejectedLapBurnWindowCount = 0;
+        _sectorBurnWindowCount = 0;
+        _sectorBurnRejectedCount = 0;
+        _pitWindowCount = 0;
+        _pitWindowsWithFuelIncrease = 0;
+        _stationaryServiceObservationCount = 0;
+        _droppedStationaryServiceObservationCount = 0;
+        _pitRouteObservationCount = 0;
+        _droppedPitRouteObservationCount = 0;
+        _teamStintCount = 0;
+        _driverChangeEventCount = 0;
+        _confirmedDriverSwapCount = 0;
+        _unconfirmedDriverChangeEventCount = 0;
+        _driverChangeLapStatusChangeCount = 0;
+        _minFuelLiters = null;
+        _maxFuelLiters = null;
+        _capacityObservationScope = null;
+        _maxObservedFuelForCapacityScopeLiters = null;
+        _lastFuelLiters = null;
+        _maxObservedFuelIncreaseLiters = null;
+        _maxObservedFuelDecreaseLiters = null;
+        _initialDriversSoFar = null;
+        _lastDriversSoFar = null;
+        _initialDriverChangeLapStatus = null;
+        _lastDriverChangeLapStatus = null;
+        _latestSessionScope = null;
+        _cleanLapAnchor = null;
+        _currentLapAnchor = null;
+        _sectorAnchor = null;
+        _activePitWindow = null;
+        _stationaryServiceTracker = new PitServiceStationaryServiceTracker();
+        _pitServiceRouteTracker = new PitServiceRouteTracker(_options.MaximumPitRouteFrameGapSeconds);
+        _activeTeamStint = null;
+        _pendingDriverSwap = null;
+        _nextTeamStintStartsAfterConfirmedDriverSwap = false;
+        _sessionFrameCounts.Clear();
+        _contextFlagCounts.Clear();
+        _fuelEvidenceCounts.Clear();
+        _lapBudgetSourceCounts.Clear();
+        _lapBudgetMissingSignalCounts.Clear();
+        _raceControlCounts.Clear();
+        _weatherScopeCounts.Clear();
+        _pitServiceRequestCounts.Clear();
+        _raceBurnSelectorStateCounts.Clear();
+        _raceBurnSelectorBucketCounts.Clear();
+        _raceBurnSelectorCandidateBucketCounts.Clear();
+        _raceBurnSelectorConflictCounts.Clear();
+        _raceBurnSelectorHistoryStatusCounts.Clear();
+        _lastSampledFrameAtUtcBySessionKind.Clear();
+        _sampleFrameCountsBySessionKind.Clear();
+        _sampleFrames.Clear();
+        _eventSamples.Clear();
+        _acceptedLapBurnWindows.Clear();
+        _rejectedLapBurnWindows.Clear();
+        _sectorBurnSamples.Clear();
+        _pitWindows.Clear();
+        _stationaryServiceObservations.Clear();
+        _pitRouteObservations.Clear();
+        _teamStints.Clear();
+        _raceBurnSelectorTransitions.Clear();
+        _raceBurnSelector = new FuelV2RaceBurnEvidenceSelectionTracker();
+        _latestRaceBurnSelectorTransition = null;
+        _raceBurnSelectorFramesEvaluated = 0;
+        _currentSessionEvidenceUpdatedAtUtc = null;
+        _currentSessionEvidenceRevision++;
+    }
+
+    public IReadOnlyList<string> RecordFrame(
+        LiveTelemetrySnapshot snapshot,
+        RawTelemetryWatchSnapshot? rawWatch = null,
+        string? captureDirectory = null)
     {
         if (!_options.Enabled)
         {
-            return;
+            return [];
         }
 
         lock (_sync)
         {
-            if (_sourceId is null)
+            if (_connectionSourceId is null)
             {
-                return;
+                return [];
             }
 
             var models = snapshot.CompleteModels();
@@ -238,12 +339,59 @@ internal sealed class FuelV2CaptureRecorder
             var capturedAtUtc = snapshot.LastUpdatedAtUtc
                 ?? sample?.CapturedAtUtc
                 ?? DateTimeOffset.UtcNow;
+            var requestedIdentity = FuelV2CaptureSessionIdentity.From(snapshot, models.Session);
+            var completedArtifacts = new List<string>();
+            if (_sessionIdentity is not null && _sessionIdentity.Contradicts(requestedIdentity))
+            {
+                var completed = CompleteActiveSession(capturedAtUtc, captureDirectory, "session-transition");
+                if (completed is not null)
+                {
+                    completedArtifacts.Add(completed);
+                }
+
+                ResetSessionState();
+            }
+
+            if (_sessionIdentity is null)
+            {
+                // Do not let an unqualified SDK refresh become the opening
+                // frames of an eventually strategy-grade segment. We wait for
+                // a complete car/layout/session-occurrence identity instead.
+                if (!requestedIdentity.IsReadyToRecord)
+                {
+                    return completedArtifacts;
+                }
+
+                BeginSession(
+                    requestedIdentity,
+                    capturedAtUtc,
+                    completedArtifacts.Count > 0 ? "session-transition" : "first-observed");
+            }
+            else
+            {
+                // A transient metadata loss cannot safely be attributed to an
+                // active classified segment. Skipping that frame is safer than
+                // later claiming its fuel/lap evidence belongs to this car,
+                // layout, and session occurrence.
+                if (!requestedIdentity.CanConfirm(_sessionIdentity))
+                {
+                    return completedArtifacts;
+                }
+
+                _sessionIdentity = _sessionIdentity.Merge(requestedIdentity);
+            }
+
             var sessionKind = SessionKind(snapshot.Context, models.Session);
             var progress = TeamProgress(sample);
             var currentFuel = CurrentFuelLiters(snapshot, models);
             var contextFlags = ContextFlags(sample, models, progress, currentFuel, _lastFuelLiters, _currentLapAnchor);
             var lapProjection = CurrentLapProjection(sample, progress, currentFuel);
-            _latestSessionScope = SessionScope(snapshot, models);
+            UpdateCapacityObservationScope(snapshot, currentFuel);
+            _latestSessionScope = SessionScope(
+                snapshot,
+                models,
+                currentFuel,
+                _maxObservedFuelForCapacityScopeLiters);
 
             _frameCount++;
             Increment(_sessionFrameCounts, sessionKind);
@@ -253,15 +401,18 @@ internal sealed class FuelV2CaptureRecorder
             }
 
             RecordFuelEvidence(snapshot, models, currentFuel, progress);
+            RecordRaceBurnSelectorShadow(snapshot, capturedAtUtc);
             RecordLapBudget(models);
             RecordRaceControl(sample, models);
             RecordWeather(models.Weather);
             RecordPitService(models.PitService);
             TrackLapBurnWindow(sample, progress, currentFuel, contextFlags, capturedAtUtc);
             TrackSectorBurn(sample, models, progress, currentFuel, contextFlags, capturedAtUtc);
+            TrackStationaryServiceObservation(sample, models, currentFuel, capturedAtUtc);
+            TrackPitRoute(snapshot, sample, models, currentFuel, capturedAtUtc);
             TrackPitWindow(sample, models, currentFuel, capturedAtUtc);
+            TrackDriverChange(sample, snapshot, models, capturedAtUtc);
             TrackTeamStint(sample, progress, currentFuel, contextFlags, capturedAtUtc);
-            TrackDriverChange(sample, snapshot, capturedAtUtc);
             RecordSampleFrame(
                 snapshot,
                 models,
@@ -272,10 +423,15 @@ internal sealed class FuelV2CaptureRecorder
                 lapProjection,
                 contextFlags,
                 capturedAtUtc);
+
+            return completedArtifacts;
         }
     }
 
-    public string? CompleteCollection(DateTimeOffset finishedAtUtc, string? captureDirectory)
+    public string? CompleteCollection(
+        DateTimeOffset finishedAtUtc,
+        string? captureDirectory,
+        string? expectedConnectionSourceId = null)
     {
         if (!_options.Enabled)
         {
@@ -284,18 +440,55 @@ internal sealed class FuelV2CaptureRecorder
 
         lock (_sync)
         {
-            if (_sourceId is null || _startedAtUtc is null)
+            if (expectedConnectionSourceId is not null
+                && !string.Equals(_connectionSourceId, expectedConnectionSourceId, StringComparison.Ordinal))
             {
                 return null;
             }
 
-            try
-            {
-                FinalizeActivePitWindow(finishedAtUtc);
-                FinalizeActiveTeamStint(finishedAtUtc);
+            var path = CompleteActiveSession(finishedAtUtc, captureDirectory, "collector-stop");
+            ResetSessionState();
+            _connectionSourceId = null;
+            _nextSessionOrdinal = 0;
+            return path;
+        }
+    }
 
-                var artifact = new FuelV2CaptureArtifact(
-                    FormatVersion: 1,
+    private void BeginSession(
+        FuelV2CaptureSessionIdentity sessionIdentity,
+        DateTimeOffset startedAtUtc,
+        string boundaryKind)
+    {
+        _sessionIdentity = sessionIdentity;
+        _sessionBoundaryKind = boundaryKind;
+        _startedAtUtc = startedAtUtc;
+        _nextSessionOrdinal++;
+        _sourceId = FuelV2CaptureSessionIdentity.SourceId(
+            _connectionSourceId!,
+            _nextSessionOrdinal,
+            sessionIdentity.SessionFamily);
+    }
+
+    private string? CompleteActiveSession(
+        DateTimeOffset finishedAtUtc,
+        string? captureDirectory,
+        string boundaryKind)
+    {
+        if (_sourceId is null || _startedAtUtc is null || _sessionIdentity is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            AddBoundaryEvent(boundaryKind, finishedAtUtc);
+            FinalizeActiveStationaryServiceObservation();
+            FinalizeActivePitRouteObservation();
+            FinalizeActivePitWindow(finishedAtUtc);
+            FinalizeActiveTeamStint(finishedAtUtc);
+
+            var artifact = new FuelV2CaptureArtifact(
+                    FormatVersion: 7,
                     SourceId: _sourceId,
                     StartedAtUtc: _startedAtUtc.Value,
                     FinishedAtUtc: finishedAtUtc,
@@ -309,7 +502,7 @@ internal sealed class FuelV2CaptureRecorder
                         Mode: string.IsNullOrWhiteSpace(captureDirectory) ? "rolling-log" : "raw-capture-sidecar",
                         CaptureDirectoryAttached: !string.IsNullOrWhiteSpace(captureDirectory),
                         CaptureDirectoryName: _options.CaptureDirectoryName,
-                        OutputFileName: _options.OutputFileName,
+                        OutputFileName: ArtifactFileName(_sourceId),
                         RawTelemetryExcluded: true,
                         DurableHistoryMutated: false),
                     SessionScope: _latestSessionScope,
@@ -321,7 +514,10 @@ internal sealed class FuelV2CaptureRecorder
                         MaxRejectedLapWindows: _options.MaxRejectedLapWindows,
                         MaxSectorBurnSamples: _options.MaxSectorBurnSamples,
                         MaxPitWindows: _options.MaxPitWindows,
-                        MaxTeamStints: _options.MaxTeamStints),
+                        MaxTeamStints: _options.MaxTeamStints,
+                        MaxStationaryServiceObservations: _options.MaxStationaryServiceObservations,
+                        MaxPitRouteObservations: _options.MaxPitRouteObservations,
+                        MaximumPitRouteFrameGapSeconds: _options.MaximumPitRouteFrameGapSeconds),
                     Totals: new FuelV2CaptureTotals(
                         FrameCount: _frameCount,
                         SampledFrameCount: _sampledFrameCount,
@@ -353,14 +549,28 @@ internal sealed class FuelV2CaptureRecorder
                     PitService: new FuelV2PitServiceEvidenceSummary(
                         PitWindowCount: _pitWindowCount,
                         PitWindowsWithFuelIncrease: _pitWindowsWithFuelIncrease,
-                        RequestCounts: Sorted(_pitServiceRequestCounts)),
+                        RequestCounts: Sorted(_pitServiceRequestCounts),
+                        StationaryServiceObservationCount: _stationaryServiceObservationCount,
+                        RetainedStationaryServiceObservationCount: _stationaryServiceObservations.Count,
+                        DroppedStationaryServiceObservationCount: _droppedStationaryServiceObservationCount,
+                        PitRouteObservationCount: _pitRouteObservationCount,
+                        RetainedPitRouteObservationCount: _pitRouteObservations.Count,
+                        DroppedPitRouteObservationCount: _droppedPitRouteObservationCount),
                     Team: new FuelV2TeamEvidenceSummary(
                         TeamStintCount: _teamStintCount,
-                        DriverChangeEventCount: _driverChangeEventCount),
+                        DriverChangeEventCount: _driverChangeEventCount,
+                        InitialDriversSoFar: _initialDriversSoFar,
+                        FinalDriversSoFar: _lastDriversSoFar,
+                        InitialDriverChangeLapStatus: _initialDriverChangeLapStatus,
+                        FinalDriverChangeLapStatus: _lastDriverChangeLapStatus,
+                        ConfirmedDriverSwapCount: _confirmedDriverSwapCount,
+                        UnconfirmedDriverChangeEventCount: _unconfirmedDriverChangeEventCount,
+                        DriverChangeLapStatusChangeCount: _driverChangeLapStatusChangeCount),
                     RaceControl: new FuelV2RaceControlEvidenceSummary(
                         StateCounts: Sorted(_raceControlCounts)),
                     Weather: new FuelV2WeatherEvidenceSummary(
                         ScopeCounts: Sorted(_weatherScopeCounts)),
+                    RaceBurnSelectorShadow: BuildRaceBurnSelectorShadowEvidence(),
                     SyntheticReplaySuitability: BuildSyntheticReplaySuitability(),
                     SampleFrames: _sampleFrames.ToArray(),
                     AcceptedLapBurnWindows: _acceptedLapBurnWindows.ToArray(),
@@ -368,11 +578,18 @@ internal sealed class FuelV2CaptureRecorder
                     SectorBurnSamples: _sectorBurnSamples.ToArray(),
                     PitWindows: _pitWindows.ToArray(),
                     TeamStints: _teamStints.ToArray(),
-                    EventSamples: _eventSamples.ToArray());
+                    EventSamples: _eventSamples.ToArray(),
+                    SessionLineage: _sessionIdentity.ToLineage(
+                        _connectionSourceId,
+                        _nextSessionOrdinal,
+                        _sessionBoundaryKind,
+                        boundaryKind),
+                    StationaryServiceObservations: _stationaryServiceObservations.ToArray(),
+                    PitRouteObservations: _pitRouteObservations.ToArray());
 
                 var path = ResolveArtifactPath(captureDirectory, _sourceId);
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                File.WriteAllText(path, JsonSerializer.Serialize(artifact, JsonOptions), Encoding.UTF8);
+                WriteArtifactAtomically(path, artifact);
                 _lastArtifactPath = path;
                 _events.Record("fuel_v2_capture_saved", new Dictionary<string, string?>
                 {
@@ -396,7 +613,6 @@ internal sealed class FuelV2CaptureRecorder
                 return null;
             }
         }
-    }
 
     private void RecordFuelEvidence(
         LiveTelemetrySnapshot snapshot,
@@ -464,6 +680,133 @@ internal sealed class FuelV2CaptureRecorder
         Increment(_fuelEvidenceCounts, EvidenceKey(models.FuelPit.BaselineEligibilityEvidence));
     }
 
+    // This is deliberately capture-only. It evaluates the first strategy
+    // policy against normalized live evidence and the display-only exact
+    // history bucket, but no overlay, pit request, or durable history import
+    // reads the result. Recording it now lets real sessions prove (or reject)
+    // conservative disagreement behavior before that policy is promoted.
+    private void RecordRaceBurnSelectorShadow(
+        LiveTelemetrySnapshot snapshot,
+        DateTimeOffset capturedAtUtc)
+    {
+        if (!string.Equals(_sessionIdentity?.SessionFamily, "race", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var historical = _normalHistoryQueryService?.Lookup(
+            snapshot.Context,
+            FuelV2HistoryLookupPurpose.Workbench);
+        var composed = FuelV2LiveSnapshotComposer.From(
+            snapshot,
+            new FuelV2LiveSnapshotOptions(
+                HistoricalNormalSeed: historical?.IsAvailable == true
+                    ? historical.Burn
+                    : null));
+        var selection = _raceBurnSelector.Select(
+            composed.BurnWindows,
+            new FuelV2RaceBurnEvidenceSelectionOptions(
+                IncludeDisplayOnlyEvidenceForShadowCapture: true));
+        var conflict = RaceBurnSelectorConflict(composed.BurnWindows, historical);
+        var transition = new FuelV2RaceBurnSelectorShadowTransition(
+            CapturedAtUtc: capturedAtUtc,
+            State: selection.State.ToString(),
+            SelectedBucket: BucketName(selection.BurnBucketId),
+            SelectedFuelPerLapLiters: Round(selection.Burn?.Value),
+            CandidateBucket: BucketName(selection.CandidateBucketId),
+            CandidateFuelPerLapLiters: Round(selection.CandidateBurn?.Value),
+            HistoricalStatus: historical?.Status.ToString() ?? "not-configured",
+            HistoricalFuelPerLapLiters: Round(historical?.Burn?.Value),
+            Conflict: conflict,
+            Flags: selection.StateFlags.Select(flag => flag.ToString()).ToArray(),
+            Reason: selection.Reason,
+            ShadowOnly: true,
+            WouldSeedPlanIfPromoted: selection.CanSeedPlan,
+            WouldDriveAdviceIfPromoted: selection.CanDriveAdvice);
+
+        _raceBurnSelectorFramesEvaluated++;
+        Increment(_raceBurnSelectorStateCounts, transition.State);
+        Increment(_raceBurnSelectorBucketCounts, transition.SelectedBucket ?? "unavailable");
+        Increment(_raceBurnSelectorCandidateBucketCounts, transition.CandidateBucket ?? "unavailable");
+        Increment(_raceBurnSelectorConflictCounts, transition.Conflict);
+        Increment(_raceBurnSelectorHistoryStatusCounts, transition.HistoricalStatus);
+        if (!SameRaceBurnSelectorDecision(_latestRaceBurnSelectorTransition, transition)
+            && _raceBurnSelectorTransitions.Count < _options.MaxEventExamplesPerSession)
+        {
+            _raceBurnSelectorTransitions.Add(transition);
+        }
+
+        _latestRaceBurnSelectorTransition = transition;
+    }
+
+    private FuelV2RaceBurnSelectorShadowEvidence BuildRaceBurnSelectorShadowEvidence()
+    {
+        return new FuelV2RaceBurnSelectorShadowEvidence(
+            ShadowOnly: true,
+            FramesEvaluated: _raceBurnSelectorFramesEvaluated,
+            StateCounts: Sorted(_raceBurnSelectorStateCounts),
+            SelectedBucketCounts: Sorted(_raceBurnSelectorBucketCounts),
+            CandidateBucketCounts: Sorted(_raceBurnSelectorCandidateBucketCounts),
+            ConflictCounts: Sorted(_raceBurnSelectorConflictCounts),
+            HistoricalStatusCounts: Sorted(_raceBurnSelectorHistoryStatusCounts),
+            Latest: _latestRaceBurnSelectorTransition,
+            Transitions: _raceBurnSelectorTransitions.ToArray());
+    }
+
+    private static bool SameRaceBurnSelectorDecision(
+        FuelV2RaceBurnSelectorShadowTransition? previous,
+        FuelV2RaceBurnSelectorShadowTransition next)
+    {
+        return previous is not null
+            && string.Equals(previous.State, next.State, StringComparison.Ordinal)
+            && string.Equals(previous.SelectedBucket, next.SelectedBucket, StringComparison.Ordinal)
+            && string.Equals(previous.CandidateBucket, next.CandidateBucket, StringComparison.Ordinal)
+            && string.Equals(previous.HistoricalStatus, next.HistoricalStatus, StringComparison.Ordinal)
+            && string.Equals(previous.Conflict, next.Conflict, StringComparison.Ordinal)
+            && Math.Abs((previous.SelectedFuelPerLapLiters ?? 0d) - (next.SelectedFuelPerLapLiters ?? 0d)) < 0.000001d
+            && Math.Abs((previous.CandidateFuelPerLapLiters ?? 0d) - (next.CandidateFuelPerLapLiters ?? 0d)) < 0.000001d
+            && Math.Abs((previous.HistoricalFuelPerLapLiters ?? 0d) - (next.HistoricalFuelPerLapLiters ?? 0d)) < 0.000001d;
+    }
+
+    private static string RaceBurnSelectorConflict(
+        FuelV2FuelPerLapWindows windows,
+        FuelV2HistoryNormalBurnSelection? historical)
+    {
+        if (historical?.IsAvailable != true || historical.Burn?.Value is not { } historicalBurn)
+        {
+            return "history-unavailable";
+        }
+
+        var live = MostConservativeConfirmedLiveBurn(windows);
+        if (live?.Value is not { } liveBurn)
+        {
+            return "live-unconfirmed";
+        }
+
+        const double agreementToleranceLitersPerLap = 0.05d;
+        return liveBurn > historicalBurn + agreementToleranceLitersPerLap
+            ? "live-higher"
+            : liveBurn < historicalBurn - agreementToleranceLitersPerLap
+                ? "live-lower"
+                : "agrees";
+    }
+
+    private static FuelV2Scalar? MostConservativeConfirmedLiveBurn(FuelV2FuelPerLapWindows windows)
+    {
+        var candidates = new[] { windows.FiveLapAverage, windows.TenLapAverage }
+            .Where(candidate => candidate is { HasValue: true, HasTypedBurnEvidence: true })
+            .Cast<FuelV2Scalar>()
+            .ToArray();
+        return candidates.Length == 0
+            ? null
+            : candidates.OrderByDescending(candidate => candidate.Value).First();
+    }
+
+    private static string? BucketName(FuelV2BurnBucketId? bucketId)
+    {
+        return bucketId?.ToString();
+    }
+
     private void RecordLapBudget(LiveRaceModels models)
     {
         if (models.RaceProgress.RaceLapsRemaining is not null
@@ -501,7 +844,7 @@ internal sealed class FuelV2CaptureRecorder
     private void RecordRaceControl(HistoricalTelemetrySample? sample, LiveRaceModels models)
     {
         Increment(_raceControlCounts, $"state:{models.Session.SessionState?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}");
-        if (HasYellowFamily(models.Session.SessionFlags ?? sample?.SessionFlags))
+        if (LiveRaceControlFlags.HasYellowFamily(models.Session.SessionFlags ?? sample?.SessionFlags))
         {
             Increment(_raceControlCounts, "yellow-family");
         }
@@ -698,6 +1041,55 @@ internal sealed class FuelV2CaptureRecorder
         _activePitWindow.Update(capturedAtUtc, sample?.SessionTime, currentFuel, models);
     }
 
+    private void TrackStationaryServiceObservation(
+        HistoricalTelemetrySample? sample,
+        LiveRaceModels models,
+        double? currentFuel,
+        DateTimeOffset capturedAtUtc)
+    {
+        var completed = _stationaryServiceTracker.Track(
+            PitServiceObservationFrame.From(
+                capturedAtUtc,
+                models.PitService,
+                currentFuel,
+                sample?.SessionTime));
+        if (completed is not null)
+        {
+            RecordStationaryServiceObservation(completed);
+        }
+    }
+
+    private void TrackPitRoute(
+        LiveTelemetrySnapshot snapshot,
+        HistoricalTelemetrySample? sample,
+        LiveRaceModels models,
+        double? currentFuel,
+        DateTimeOffset capturedAtUtc)
+    {
+        // TeamOnPitRoad is intentionally absent here: pit-route history is a
+        // local-car physical measurement, never a team-wide state guess.
+        var local = LiveLocalStrategyContext.ForFuelV2FactualLocalContext(snapshot, capturedAtUtc);
+        var completed = _pitServiceRouteTracker.Track(new PitServiceRouteObservationFrame(
+            CapturedAtUtc: capturedAtUtc,
+            SessionTimeSeconds: sample?.SessionTime,
+            SessionTick: sample?.SessionTick ?? 0,
+            Sequence: snapshot.Sequence,
+            IsReliable: local.IsAvailable && sample is not null && !sample.IsInGarage,
+            OnPitRoad: models.FuelPit.OnPitRoad,
+            PlayerCarInPitStall: models.FuelPit.PlayerCarInPitStall,
+            IsInGarage: sample?.IsInGarage == true,
+            FuelLiters: currentFuel,
+            LapDistPct: sample?.LapDistPct,
+            LocalIdentityProvenance: local.Reason == "session_driver_camera_identity_fallback"
+                ? "session-driver-camera-fallback"
+                : "strict-local",
+            Assignment: PitServiceRouteAssignment.From(snapshot.Context)));
+        if (completed is not null)
+        {
+            RecordPitRouteObservation(completed);
+        }
+    }
+
     private void TrackTeamStint(
         HistoricalTelemetrySample? sample,
         LapProgress? progress,
@@ -716,30 +1108,166 @@ internal sealed class FuelV2CaptureRecorder
 
         if (_activeTeamStint is null)
         {
-            _activeTeamStint = TeamStintBuilder.Start(capturedAtUtc, sample.SessionTime, progress, currentFuel);
+            _activeTeamStint = TeamStintBuilder.Start(
+                capturedAtUtc,
+                sample.SessionTime,
+                progress,
+                currentFuel,
+                DriverControlState());
+            _activeTeamStint.MarkStartsAfterConfirmedDriverSwap(_nextTeamStintStartsAfterConfirmedDriverSwap);
+            _nextTeamStintStartsAfterConfirmedDriverSwap = false;
         }
 
-        _activeTeamStint.Update(capturedAtUtc, sample.SessionTime, progress, currentFuel);
+        _activeTeamStint.Update(
+            capturedAtUtc,
+            sample.SessionTime,
+            progress,
+            currentFuel,
+            DriverControlState());
     }
 
-    private void TrackDriverChange(HistoricalTelemetrySample? sample, LiveTelemetrySnapshot snapshot, DateTimeOffset capturedAtUtc)
+    private void TrackDriverChange(
+        HistoricalTelemetrySample? sample,
+        LiveTelemetrySnapshot snapshot,
+        LiveRaceModels models,
+        DateTimeOffset capturedAtUtc)
     {
-        if (sample?.DriversSoFar is not { } driversSoFar)
+        if (sample is null)
         {
             return;
+        }
+
+        var previousDriverChangeLapStatus = _lastDriverChangeLapStatus;
+        TrackDriverChangeLapStatus(sample.DriverChangeLapStatus, snapshot, capturedAtUtc);
+
+        if (sample.DriversSoFar is not { } driversSoFar || driversSoFar < 0)
+        {
+            return;
+        }
+
+        _initialDriversSoFar ??= driversSoFar;
+
+        if (_pendingDriverSwap is { } pending)
+        {
+            // A one-frame counter movement is not enough to split a team
+            // stint. The server-side count must be visible again on a newer
+            // frame before it becomes a confirmed driver-swap boundary.
+            if (driversSoFar == pending.CurrentDriversSoFar
+                && IsNewerObservation(snapshot.Sequence, capturedAtUtc, pending))
+            {
+                ConfirmDriverSwap(
+                    pending,
+                    driversSoFar,
+                    sample.DriverChangeLapStatus,
+                    snapshot,
+                    capturedAtUtc);
+                _pendingDriverSwap = null;
+            }
+            else if (driversSoFar != pending.CurrentDriversSoFar)
+            {
+                _pendingDriverSwap = null;
+            }
         }
 
         if (_lastDriversSoFar is { } previous && previous != driversSoFar)
         {
             _driverChangeEventCount++;
+            if (IsTeamRacing(snapshot, models) && driversSoFar == previous + 1)
+            {
+                _pendingDriverSwap = new PendingDriverSwap(
+                    PreviousDriversSoFar: previous,
+                    CurrentDriversSoFar: driversSoFar,
+                    FirstObservedAtUtc: capturedAtUtc,
+                    Sequence: snapshot.Sequence,
+                    PreviousDriverChangeLapStatus: previousDriverChangeLapStatus,
+                    CurrentDriverChangeLapStatus: sample.DriverChangeLapStatus);
+                AddEvent(
+                    "driver-control.swap-candidate",
+                    $"DCDriversSoFar increased from {previous} to {driversSoFar}; awaiting a second matching team-racing frame before splitting a stint.",
+                    snapshot,
+                    capturedAtUtc);
+            }
+            else
+            {
+                _unconfirmedDriverChangeEventCount++;
+                var reason = !IsTeamRacing(snapshot, models)
+                    ? "team-racing-unconfirmed"
+                    : driversSoFar > previous + 1
+                        ? "multiple-driver-count-change"
+                        : "non-monotonic-driver-count-change";
+                AddEvent(
+                    "driver-control.change-unconfirmed",
+                    $"DCDriversSoFar changed from {previous} to {driversSoFar}; no driver-swap stint boundary was recorded ({reason}).",
+                    snapshot,
+                    capturedAtUtc);
+            }
+        }
+
+        _lastDriversSoFar = driversSoFar;
+    }
+
+    private void TrackDriverChangeLapStatus(
+        int? driverChangeLapStatus,
+        LiveTelemetrySnapshot snapshot,
+        DateTimeOffset capturedAtUtc)
+    {
+        if (driverChangeLapStatus is not { } current)
+        {
+            return;
+        }
+
+        _initialDriverChangeLapStatus ??= current;
+        if (_lastDriverChangeLapStatus is { } previous && previous != current)
+        {
+            _driverChangeLapStatusChangeCount++;
             AddEvent(
-                "driver-control.changed",
-                $"DCDriversSoFar changed from {previous} to {driversSoFar}",
+                "driver-control.lap-status-changed",
+                $"DCLapStatus changed from {previous} to {current}; status alone never confirms a driver swap or splits a stint.",
                 snapshot,
                 capturedAtUtc);
         }
 
-        _lastDriversSoFar = driversSoFar;
+        _lastDriverChangeLapStatus = current;
+    }
+
+    private void ConfirmDriverSwap(
+        PendingDriverSwap pending,
+        int currentDriversSoFar,
+        int? currentDriverChangeLapStatus,
+        LiveTelemetrySnapshot snapshot,
+        DateTimeOffset capturedAtUtc)
+    {
+        _confirmedDriverSwapCount++;
+        _nextTeamStintStartsAfterConfirmedDriverSwap = true;
+        FinalizeActiveTeamStint(
+            capturedAtUtc,
+            endsAtConfirmedDriverSwap: true,
+            endingDriverControl: new DriverControlState(
+                currentDriversSoFar,
+                currentDriverChangeLapStatus));
+        AddEvent(
+            "driver-control.swap-confirmed",
+            $"DCDriversSoFar increased from {pending.PreviousDriversSoFar} to {pending.CurrentDriversSoFar} and persisted on a second team-racing frame; a factual team-stint boundary was recorded.",
+            snapshot,
+            capturedAtUtc);
+    }
+
+    private static bool IsTeamRacing(LiveTelemetrySnapshot snapshot, LiveRaceModels models)
+    {
+        return models.Session.TeamRacing == true || snapshot.Context.Session.TeamRacing == true;
+    }
+
+    private static bool IsNewerObservation(
+        long sequence,
+        DateTimeOffset capturedAtUtc,
+        PendingDriverSwap pending)
+    {
+        return sequence > pending.Sequence || capturedAtUtc > pending.FirstObservedAtUtc;
+    }
+
+    private DriverControlState DriverControlState()
+    {
+        return new DriverControlState(_lastDriversSoFar, _lastDriverChangeLapStatus);
     }
 
     private void RecordSampleFrame(
@@ -897,14 +1425,78 @@ internal sealed class FuelV2CaptureRecorder
         _activePitWindow = null;
     }
 
-    private void FinalizeActiveTeamStint(DateTimeOffset endedAtUtc)
+    private void FinalizeActiveStationaryServiceObservation()
+    {
+        var completed = _stationaryServiceTracker.Finish();
+        if (completed is not null)
+        {
+            RecordStationaryServiceObservation(completed);
+        }
+    }
+
+    private void FinalizeActivePitRouteObservation()
+    {
+        var completed = _pitServiceRouteTracker.Finish();
+        if (completed is not null)
+        {
+            RecordPitRouteObservation(completed);
+        }
+    }
+
+    private void RecordStationaryServiceObservation(PitServiceStationaryServiceObservation observation)
+    {
+        _stationaryServiceObservationCount++;
+        if (_stationaryServiceObservations.Count < _options.MaxStationaryServiceObservations)
+        {
+            _stationaryServiceObservations.Add(observation);
+            RecordCurrentSessionEvidenceUpdate(observation.EndedAtUtc);
+        }
+        else
+        {
+            _droppedStationaryServiceObservationCount++;
+        }
+    }
+
+    private void RecordPitRouteObservation(PitServiceRouteObservation observation)
+    {
+        _pitRouteObservationCount++;
+        if (_pitRouteObservations.Count < _options.MaxPitRouteObservations)
+        {
+            _pitRouteObservations.Add(observation);
+            RecordCurrentSessionEvidenceUpdate(
+                observation.PitExit?.ConfirmedAtUtc
+                ?? observation.BoxExit?.ConfirmedAtUtc
+                ?? observation.BoxEntry?.ConfirmedAtUtc
+                ?? observation.PitEntry.ConfirmedAtUtc);
+        }
+        else
+        {
+            _droppedPitRouteObservationCount++;
+        }
+    }
+
+    private void RecordCurrentSessionEvidenceUpdate(DateTimeOffset completedAtUtc)
+    {
+        _currentSessionEvidenceUpdatedAtUtc = _currentSessionEvidenceUpdatedAtUtc is { } existing
+            ? existing >= completedAtUtc ? existing : completedAtUtc
+            : completedAtUtc;
+        _currentSessionEvidenceRevision++;
+    }
+
+    private void FinalizeActiveTeamStint(
+        DateTimeOffset endedAtUtc,
+        bool endsAtConfirmedDriverSwap = false,
+        DriverControlState? endingDriverControl = null)
     {
         if (_activeTeamStint is not { } stint)
         {
             return;
         }
 
-        var sample = stint.Build(endedAtUtc);
+        var sample = stint.Build(
+            endedAtUtc,
+            endingDriverControl ?? DriverControlState(),
+            endsAtConfirmedDriverSwap);
         if (sample.DistanceLaps.GetValueOrDefault() >= 0.1d || sample.DurationSeconds.GetValueOrDefault() >= 30d)
         {
             _teamStintCount++;
@@ -961,14 +1553,52 @@ internal sealed class FuelV2CaptureRecorder
             Detail: detail));
     }
 
+    private void AddBoundaryEvent(string boundaryKind, DateTimeOffset capturedAtUtc)
+    {
+        if (_eventSamples.Count >= _options.MaxEventExamplesPerSession)
+        {
+            _droppedEventSampleCount++;
+            return;
+        }
+
+        _eventSamples.Add(new FuelV2EventSample(
+            Kind: "session-boundary",
+            CapturedAtUtc: capturedAtUtc,
+            SessionTimeSeconds: null,
+            Sequence: 0,
+            Detail: boundaryKind));
+    }
+
+    private string ArtifactFileName(string sourceId)
+    {
+        return $"{SanitizeFileName(sourceId)}-{_options.OutputFileName}";
+    }
+
+    private static void WriteArtifactAtomically(string path, FuelV2CaptureArtifact artifact)
+    {
+        var temporaryPath = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(artifact, JsonOptions), Encoding.UTF8);
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
+    }
+
     private string ResolveArtifactPath(string? captureDirectory, string sourceId)
     {
         if (!string.IsNullOrWhiteSpace(captureDirectory))
         {
-            return Path.Combine(captureDirectory, _options.CaptureDirectoryName, _options.OutputFileName);
+            return Path.Combine(captureDirectory, _options.CaptureDirectoryName, ArtifactFileName(sourceId));
         }
 
-        return Path.Combine(DiagnosticsLogRoot, $"{SanitizeFileName(sourceId)}-{_options.OutputFileName}");
+        return Path.Combine(DiagnosticsLogRoot, ArtifactFileName(sourceId));
     }
 
     private static IReadOnlyList<string> ContextFlags(
@@ -1012,7 +1642,7 @@ internal sealed class FuelV2CaptureRecorder
             flags.Add("non-green-session-state");
         }
 
-        if (HasYellowFamily(models.Session.SessionFlags ?? sample.SessionFlags))
+        if (LiveRaceControlFlags.HasYellowFamily(models.Session.SessionFlags ?? sample.SessionFlags))
         {
             flags.Add("caution-or-yellow");
         }
@@ -1219,11 +1849,6 @@ internal sealed class FuelV2CaptureRecorder
             ?? "unknown";
     }
 
-    private static bool HasYellowFamily(int? flags)
-    {
-        return (flags.GetValueOrDefault() & YellowFamilyFlagMask) != 0;
-    }
-
     private static string EvidenceKey(LiveSignalEvidence evidence)
     {
         return evidence.MissingReason is null
@@ -1267,6 +1892,32 @@ internal sealed class FuelV2CaptureRecorder
         return !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
+    private void UpdateCapacityObservationScope(LiveTelemetrySnapshot snapshot, double? currentFuelLiters)
+    {
+        var context = snapshot.Context;
+        var scope = new CapacityObservationScope(
+            CarKey: snapshot.Combo.CarKey,
+            SessionKey: snapshot.Combo.SessionKey,
+            CurrentSessionNum: context.Session.CurrentSessionNum,
+            SessionNum: context.Session.SessionNum,
+            SubSessionId: context.Session.SubSessionId,
+            PhysicalTankCapacityLiters: context.Car.DriverCarFuelMaxLiters,
+            DriverCarMaxFuelPercent: context.FuelCapacityRules.DriverCarMaxFuelPercent,
+            CarClassMaxFuelPercent: context.FuelCapacityRules.CarClassMaxFuelPercent);
+        if (scope != _capacityObservationScope)
+        {
+            _capacityObservationScope = scope;
+            _maxObservedFuelForCapacityScopeLiters = null;
+        }
+
+        if (currentFuelLiters is { } fuelLiters && IsPositiveFinite(fuelLiters))
+        {
+            _maxObservedFuelForCapacityScopeLiters = Math.Max(
+                _maxObservedFuelForCapacityScopeLiters ?? 0d,
+                fuelLiters);
+        }
+    }
+
     private static string FormatRawFlagsHex(int? flags)
     {
         return flags is { } value
@@ -1280,15 +1931,45 @@ internal sealed class FuelV2CaptureRecorder
         return string.Concat(sourceId.Select(character => invalid.Contains(character) ? '-' : character));
     }
 
-    private static FuelV2SessionScopeSample SessionScope(LiveTelemetrySnapshot snapshot, LiveRaceModels models)
+    private static FuelV2SessionScopeSample SessionScope(
+        LiveTelemetrySnapshot snapshot,
+        LiveRaceModels models,
+        double? currentFuelLiters,
+        double? maxObservedFuelLiters)
     {
         var context = snapshot.Context;
         var combo = snapshot.Combo;
+        var observedFuelCandidates = new[] { currentFuelLiters, maxObservedFuelLiters }
+            .Where(value => IsPositiveFinite(value))
+            .Select(value => value!.Value)
+            .ToArray();
+        var observedFuel = observedFuelCandidates.Length > 0
+            ? observedFuelCandidates.Max()
+            : (double?)null;
+        var capacity = FuelV2EffectiveCapacityResolver.From(
+            context.Car.DriverCarFuelMaxLiters,
+            context.FuelCapacityRules.DriverCarMaxFuelPercent,
+            context.FuelCapacityRules.CarClassMaxFuelPercent,
+            observedFuel);
+        var carIdentity = FuelV2HistoryIdentity.Car(
+            context.Car.CarId,
+            context.Car.CarPath);
+        var layout = FuelV2HistoryIdentity.TrackLayout(
+            context.Track.TrackId,
+            context.Track.TrackName,
+            FirstNonEmpty(context.Track.TrackDisplayName, models.Session.TrackDisplayName),
+            context.Track.TrackConfigName);
+        var sessionFamily = FuelV2HistoryIdentity.SessionFamily(
+            FirstNonEmpty(models.Session.SessionType, context.Session.SessionType),
+            FirstNonEmpty(models.Session.SessionName, context.Session.SessionName),
+            FirstNonEmpty(models.Session.EventType, context.Session.EventType));
         return new FuelV2SessionScopeSample(
             Combo: new FuelV2ComboScope(
-                CarKey: combo.CarKey,
+                CarKey: carIdentity.Key,
                 TrackKey: combo.TrackKey,
-                SessionKey: combo.SessionKey),
+                SessionKey: sessionFamily,
+                TrackLayoutKey: layout.Key,
+                TrackLayoutIdentitySource: layout.Source),
             Car: new FuelV2CarScope(
                 CarId: context.Car.CarId,
                 CarPath: context.Car.CarPath,
@@ -1318,15 +1999,19 @@ internal sealed class FuelV2CaptureRecorder
                 SeasonId: context.Session.SeasonId,
                 SessionId: context.Session.SessionId,
                 SubSessionId: context.Session.SubSessionId,
-                BuildVersion: context.Session.BuildVersion),
+                BuildVersion: context.Session.BuildVersion,
+                DCRuleSet: context.Session.DCRuleSet,
+                SessionTimeText: context.Session.SessionTime),
             FuelCapacity: new FuelV2FuelCapacityScope(
                 PhysicalTankCapacityLiters: Round(context.Car.DriverCarFuelMaxLiters),
                 FuelKgPerLiter: Round(context.Car.DriverCarFuelKgPerLiter),
-                EffectiveSessionCapacityLiters: null,
-                EffectiveSessionCapacitySource: "not_available_in_current_models",
-                DriverCarMaxFuelPercent: null,
-                CarClassMaxFuelPercent: null,
-                Limitation: "Effective event fuel-cap parsing is not implemented; capture preserves physical tank capacity and observed fuel maxima only."),
+                EffectiveSessionCapacityLiters: Round(capacity.EffectiveCapacityLiters),
+                EffectiveSessionCapacitySource: FuelV2EffectiveCapacityResolver.SourceLabel(capacity.Source),
+                DriverCarMaxFuelPercent: Round(capacity.DriverCarMaxFuelPercent),
+                CarClassMaxFuelPercent: Round(capacity.CarClassMaxFuelPercent),
+                Limitation: capacity.CanDriveFuelAdvice
+                    ? string.Empty
+                    : string.Join(',', capacity.StateFlags.Select(flag => flag.ToString()))),
             TrackSectors: context.Sectors
                 .OrderBy(sector => sector.SectorNum)
                 .Select(sector => new FuelV2TrackSectorScope(sector.SectorNum, Round(sector.SectorStartPct)))
@@ -1347,6 +2032,30 @@ internal sealed class FuelV2CaptureRecorder
     }
 
     private sealed record LapProgress(string Source, int LapCompleted, double LapDistPct, double ProgressLaps);
+
+    // Both values are raw driver-control provenance. The collector deliberately
+    // does not assign a driver identity or interpret DCLapStatus enum values.
+    private sealed record DriverControlState(
+        int? DriversSoFar,
+        int? DriverChangeLapStatus);
+
+    private sealed record PendingDriverSwap(
+        int PreviousDriversSoFar,
+        int CurrentDriversSoFar,
+        DateTimeOffset FirstObservedAtUtc,
+        long Sequence,
+        int? PreviousDriverChangeLapStatus,
+        int? CurrentDriverChangeLapStatus);
+
+    private sealed record CapacityObservationScope(
+        string CarKey,
+        string SessionKey,
+        int? CurrentSessionNum,
+        int? SessionNum,
+        int? SubSessionId,
+        double? PhysicalTankCapacityLiters,
+        double? DriverCarMaxFuelPercent,
+        double? CarClassMaxFuelPercent);
 
     private sealed record FuelAnchor(
         int LapCompleted,
@@ -1400,10 +2109,9 @@ internal sealed class FuelV2CaptureRecorder
         private readonly DateTimeOffset _startedAtUtc;
         private readonly double? _startSessionTimeSeconds;
         private readonly double? _entryFuelLiters;
+        private readonly PitServiceFuelIncreaseTracker _fuelIncreaseTracker;
         private double? _lastSessionTimeSeconds;
         private double? _lastFuelLiters;
-        private double? _maxFuelIncreaseLiters;
-        private bool _sawFuelIncrease;
         private bool _sawPitStall;
         private bool _sawPitService;
         private bool _sawRepair;
@@ -1418,6 +2126,7 @@ internal sealed class FuelV2CaptureRecorder
             _startSessionTimeSeconds = sessionTimeSeconds;
             _lastSessionTimeSeconds = sessionTimeSeconds;
             _entryFuelLiters = fuelLiters;
+            _fuelIncreaseTracker = new PitServiceFuelIncreaseTracker(fuelLiters);
             _lastFuelLiters = fuelLiters;
             _entryPitServiceFlags = models.FuelPit.PitServiceFlags;
             _lastPitServiceFlags = models.FuelPit.PitServiceFlags;
@@ -1441,19 +2150,7 @@ internal sealed class FuelV2CaptureRecorder
 
             if (fuelLiters is { } currentFuel)
             {
-                var fuelIncrease = _lastFuelLiters is { } previousFuel
-                    ? currentFuel - previousFuel
-                    : _entryFuelLiters is { } entryFuel
-                        ? currentFuel - entryFuel
-                        : (double?)null;
-                if (fuelIncrease is > MinimumPitFuelIncreaseLiters)
-                {
-                    _sawFuelIncrease = true;
-                    _maxFuelIncreaseLiters = _maxFuelIncreaseLiters is null
-                        ? fuelIncrease
-                        : Math.Max(_maxFuelIncreaseLiters.Value, fuelIncrease.Value);
-                }
-
+                _fuelIncreaseTracker.Track(currentFuel);
                 _lastFuelLiters = currentFuel;
             }
         }
@@ -1469,8 +2166,8 @@ internal sealed class FuelV2CaptureRecorder
                 EntryFuelLiters: Round(_entryFuelLiters),
                 ExitFuelLiters: Round(_lastFuelLiters),
                 NetFuelDeltaLiters: _entryFuelLiters is { } entry && _lastFuelLiters is { } exit ? Round(exit - entry) : null,
-                MaxFuelIncreaseLiters: Round(_maxFuelIncreaseLiters),
-                SawFuelIncrease: _sawFuelIncrease,
+                MaxFuelIncreaseLiters: Round(_fuelIncreaseTracker.MaxFuelIncreaseLiters),
+                SawFuelIncrease: _fuelIncreaseTracker.SawFuelIncrease,
                 SawPitStall: _sawPitStall,
                 SawPitService: _sawPitService,
                 SawRepair: _sawRepair,
@@ -1486,30 +2183,53 @@ internal sealed class FuelV2CaptureRecorder
         private readonly DateTimeOffset _startedAtUtc;
         private readonly double _startSessionTimeSeconds;
         private readonly LapProgress _startProgress;
+        private readonly DriverControlState _startDriverControl;
         private double? _fuelStartLiters;
         private double? _fuelEndLiters;
         private DateTimeOffset _lastCapturedAtUtc;
         private double _lastSessionTimeSeconds;
         private LapProgress _lastProgress;
         private bool _sawLocalFuel;
+        private bool _startsAfterConfirmedDriverSwap;
 
-        private TeamStintBuilder(DateTimeOffset startedAtUtc, double sessionTimeSeconds, LapProgress progress, double? fuelLiters)
+        private TeamStintBuilder(
+            DateTimeOffset startedAtUtc,
+            double sessionTimeSeconds,
+            LapProgress progress,
+            double? fuelLiters,
+            DriverControlState driverControl)
         {
             _startedAtUtc = startedAtUtc;
             _startSessionTimeSeconds = sessionTimeSeconds;
             _startProgress = progress;
+            _startDriverControl = driverControl;
             _lastCapturedAtUtc = startedAtUtc;
             _lastSessionTimeSeconds = sessionTimeSeconds;
             _lastProgress = progress;
             TrackFuel(fuelLiters);
         }
 
-        public static TeamStintBuilder Start(DateTimeOffset startedAtUtc, double sessionTimeSeconds, LapProgress progress, double? fuelLiters)
+        public static TeamStintBuilder Start(
+            DateTimeOffset startedAtUtc,
+            double sessionTimeSeconds,
+            LapProgress progress,
+            double? fuelLiters,
+            DriverControlState driverControl)
         {
-            return new TeamStintBuilder(startedAtUtc, sessionTimeSeconds, progress, fuelLiters);
+            return new TeamStintBuilder(startedAtUtc, sessionTimeSeconds, progress, fuelLiters, driverControl);
         }
 
-        public void Update(DateTimeOffset capturedAtUtc, double sessionTimeSeconds, LapProgress progress, double? fuelLiters)
+        public void MarkStartsAfterConfirmedDriverSwap(bool startsAfterConfirmedDriverSwap)
+        {
+            _startsAfterConfirmedDriverSwap = startsAfterConfirmedDriverSwap;
+        }
+
+        public void Update(
+            DateTimeOffset capturedAtUtc,
+            double sessionTimeSeconds,
+            LapProgress progress,
+            double? fuelLiters,
+            DriverControlState driverControl)
         {
             _lastCapturedAtUtc = capturedAtUtc;
             _lastSessionTimeSeconds = sessionTimeSeconds;
@@ -1517,7 +2237,10 @@ internal sealed class FuelV2CaptureRecorder
             TrackFuel(fuelLiters);
         }
 
-        public FuelV2TeamStintSample Build(DateTimeOffset fallbackEndedAtUtc)
+        public FuelV2TeamStintSample Build(
+            DateTimeOffset fallbackEndedAtUtc,
+            DriverControlState endingDriverControl,
+            bool endsAtConfirmedDriverSwap)
         {
             var fuelUsed = _fuelStartLiters is { } startFuel && _fuelEndLiters is { } endFuel
                 ? Math.Max(0d, startFuel - endFuel)
@@ -1537,7 +2260,43 @@ internal sealed class FuelV2CaptureRecorder
                 FuelUsedLiters: Round(fuelUsed),
                 FuelPerLapLiters: fuelUsed is { } used && distance > 0d ? Round(used / distance) : null,
                 DriverRole: _sawLocalFuel ? "local-driver-scalar" : "team-driver-inferred",
-                ConfidenceFlags: _sawLocalFuel ? ["local_fuel_scalar", "team_progress"] : ["team_progress", "fuel_unavailable"]);
+                ConfidenceFlags: ConfidenceFlags(endingDriverControl, endsAtConfirmedDriverSwap),
+                DriversSoFarAtStart: _startDriverControl.DriversSoFar,
+                DriversSoFarAtEnd: endingDriverControl.DriversSoFar,
+                DriverChangeLapStatusAtStart: _startDriverControl.DriverChangeLapStatus,
+                DriverChangeLapStatusAtEnd: endingDriverControl.DriverChangeLapStatus,
+                StartsAfterConfirmedDriverSwap: _startsAfterConfirmedDriverSwap,
+                EndsAtConfirmedDriverSwap: endsAtConfirmedDriverSwap);
+        }
+
+        private IReadOnlyList<string> ConfidenceFlags(
+            DriverControlState endingDriverControl,
+            bool endsAtConfirmedDriverSwap)
+        {
+            var flags = new List<string>(_sawLocalFuel
+                ? ["local_fuel_scalar", "team_progress"]
+                : ["team_progress", "fuel_unavailable"]);
+            if (_startDriverControl.DriversSoFar is not null || endingDriverControl.DriversSoFar is not null)
+            {
+                flags.Add("driver_count_observed");
+            }
+
+            if (_startDriverControl.DriverChangeLapStatus is not null || endingDriverControl.DriverChangeLapStatus is not null)
+            {
+                flags.Add("driver_change_lap_status_observed");
+            }
+
+            if (_startsAfterConfirmedDriverSwap)
+            {
+                flags.Add("starts_after_confirmed_driver_swap");
+            }
+
+            if (endsAtConfirmedDriverSwap)
+            {
+                flags.Add("ends_at_confirmed_driver_swap");
+            }
+
+            return flags;
         }
 
         private void TrackFuel(double? fuelLiters)
@@ -1579,7 +2338,217 @@ internal sealed record FuelV2CaptureArtifact(
     IReadOnlyList<FuelV2SectorBurnSample> SectorBurnSamples,
     IReadOnlyList<FuelV2PitWindowSample> PitWindows,
     IReadOnlyList<FuelV2TeamStintSample> TeamStints,
-    IReadOnlyList<FuelV2EventSample> EventSamples);
+    IReadOnlyList<FuelV2EventSample> EventSamples,
+    FuelV2CaptureSessionLineage? SessionLineage = null,
+    IReadOnlyList<PitServiceStationaryServiceObservation>? StationaryServiceObservations = null,
+    FuelV2RaceBurnSelectorShadowEvidence? RaceBurnSelectorShadow = null,
+    IReadOnlyList<PitServiceRouteObservation>? PitRouteObservations = null);
+
+// This is an in-process handoff, not a durable history shape. Its revision is
+// independent from the learned-history store so live presenters can observe a
+// newly closed service/route event before the session sidecar is finalized and
+// imported.
+internal interface IFuelV2CurrentSessionEvidenceSource
+{
+    FuelV2CurrentSessionEvidenceSnapshot GetCurrentSessionEvidenceSnapshot();
+}
+
+internal sealed record FuelV2CurrentSessionEvidenceSnapshot(
+    long Revision,
+    FuelV2CurrentSessionEvidence? Evidence);
+
+internal sealed record FuelV2CurrentSessionEvidence(
+    FuelV2CaptureSessionIdentity SessionIdentity,
+    FuelV2SessionScopeSample Scope,
+    DateTimeOffset UpdatedAtUtc,
+    IReadOnlyList<PitServiceStationaryServiceObservation> StationaryServiceObservations,
+    IReadOnlyList<PitServiceRouteObservation> PitRouteObservations);
+
+// A bounded shadow record for the unpromoted race-burn selector. `ShadowOnly`
+// is intentionally redundant on both the summary and every transition so a
+// future consumer cannot mistake it for an approved live strategy plan.
+internal sealed record FuelV2RaceBurnSelectorShadowEvidence(
+    bool ShadowOnly,
+    int FramesEvaluated,
+    IReadOnlyDictionary<string, int> StateCounts,
+    IReadOnlyDictionary<string, int> SelectedBucketCounts,
+    IReadOnlyDictionary<string, int> CandidateBucketCounts,
+    IReadOnlyDictionary<string, int> ConflictCounts,
+    IReadOnlyDictionary<string, int> HistoricalStatusCounts,
+    FuelV2RaceBurnSelectorShadowTransition? Latest,
+    IReadOnlyList<FuelV2RaceBurnSelectorShadowTransition> Transitions);
+
+internal sealed record FuelV2RaceBurnSelectorShadowTransition(
+    DateTimeOffset CapturedAtUtc,
+    string State,
+    string? SelectedBucket,
+    double? SelectedFuelPerLapLiters,
+    string? CandidateBucket,
+    double? CandidateFuelPerLapLiters,
+    string HistoricalStatus,
+    double? HistoricalFuelPerLapLiters,
+    string Conflict,
+    IReadOnlyList<string> Flags,
+    string Reason,
+    bool ShadowOnly,
+    bool WouldSeedPlanIfPromoted,
+    bool WouldDriveAdviceIfPromoted);
+
+// Session lineage is written with a format-v2 artifact and copied into the
+// durable summary. It is deliberately independent of Fuel/BOP/race-length
+// values: those remain live-session context, not history family keys.
+internal sealed record FuelV2CaptureSessionLineage(
+    string? ConnectionSourceId,
+    int SegmentOrdinal,
+    string StartedByBoundaryKind,
+    string EndedByBoundaryKind,
+    string SessionFamily,
+    string SessionOccurrenceKey,
+    bool SessionOccurrenceVerified,
+    string CarKey,
+    string CarIdentitySource,
+    string TrackLayoutKey,
+    string TrackLayoutIdentitySource,
+    bool ExactTrackLayoutVerified,
+    bool ExactCarVerified);
+
+internal sealed record FuelV2CaptureSessionIdentity(
+    FuelV2HistoryCarIdentityKey CarIdentity,
+    FuelV2HistoryLayoutIdentity TrackLayout,
+    string SessionFamily,
+    int? CurrentSessionNum,
+    int? SessionNum,
+    int? SessionId,
+    int? SubSessionId)
+{
+    public string CarKey => CarIdentity.Key;
+
+    public bool ExactCarVerified => CarIdentity.IsExact;
+
+    public bool HasVerifiedSessionOccurrence => CurrentSessionNum is not null || SessionNum is not null;
+
+    public bool IsReadyToRecord => ExactCarVerified
+        && TrackLayout.IsExact
+        && IsKnownSessionFamily(SessionFamily)
+        && HasVerifiedSessionOccurrence;
+
+    public static FuelV2CaptureSessionIdentity From(
+        LiveTelemetrySnapshot snapshot,
+        LiveSessionModel session)
+    {
+        var context = snapshot.Context;
+        var trackLayout = FuelV2HistoryIdentity.TrackLayout(
+            context.Track.TrackId,
+            context.Track.TrackName,
+            FirstNonEmpty(context.Track.TrackDisplayName, session.TrackDisplayName),
+            context.Track.TrackConfigName);
+        return new FuelV2CaptureSessionIdentity(
+            CarIdentity: FuelV2HistoryIdentity.Car(context.Car.CarId, context.Car.CarPath),
+            TrackLayout: trackLayout,
+            SessionFamily: FuelV2HistoryIdentity.SessionFamily(
+                FirstNonEmpty(session.SessionType, context.Session.SessionType),
+                FirstNonEmpty(session.SessionName, context.Session.SessionName),
+                FirstNonEmpty(session.EventType, context.Session.EventType)),
+            CurrentSessionNum: context.Session.CurrentSessionNum,
+            SessionNum: context.Session.SessionNum,
+            SessionId: context.Session.SessionId,
+            SubSessionId: context.Session.SubSessionId);
+    }
+
+    public bool Contradicts(FuelV2CaptureSessionIdentity next)
+    {
+        return (ExactCarVerified && next.ExactCarVerified
+                && !string.Equals(CarKey, next.CarKey, StringComparison.OrdinalIgnoreCase))
+            || (TrackLayout.IsExact && next.TrackLayout.IsExact
+                && !string.Equals(TrackLayout.Key, next.TrackLayout.Key, StringComparison.OrdinalIgnoreCase))
+            || (IsKnownSessionFamily(SessionFamily) && IsKnownSessionFamily(next.SessionFamily)
+                && !string.Equals(SessionFamily, next.SessionFamily, StringComparison.OrdinalIgnoreCase))
+            || KnownDistinct(CurrentSessionNum, next.CurrentSessionNum)
+            || KnownDistinct(SessionNum, next.SessionNum)
+            || KnownDistinct(SessionId, next.SessionId)
+            || KnownDistinct(SubSessionId, next.SubSessionId);
+    }
+
+    public bool CanConfirm(FuelV2CaptureSessionIdentity active)
+    {
+        return IsReadyToRecord
+            && active.IsReadyToRecord
+            && string.Equals(CarKey, active.CarKey, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(TrackLayout.Key, active.TrackLayout.Key, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(SessionFamily, active.SessionFamily, StringComparison.OrdinalIgnoreCase)
+            && !KnownDistinct(CurrentSessionNum, active.CurrentSessionNum)
+            && !KnownDistinct(SessionNum, active.SessionNum)
+            && !KnownDistinct(SessionId, active.SessionId)
+            && !KnownDistinct(SubSessionId, active.SubSessionId);
+    }
+
+    public FuelV2CaptureSessionIdentity Merge(FuelV2CaptureSessionIdentity next)
+    {
+        return new FuelV2CaptureSessionIdentity(
+            CarIdentity: next.ExactCarVerified ? next.CarIdentity : CarIdentity,
+            TrackLayout: next.TrackLayout.IsExact ? next.TrackLayout : TrackLayout,
+            SessionFamily: IsKnownSessionFamily(next.SessionFamily) ? next.SessionFamily : SessionFamily,
+            CurrentSessionNum: next.CurrentSessionNum ?? CurrentSessionNum,
+            SessionNum: next.SessionNum ?? SessionNum,
+            SessionId: next.SessionId ?? SessionId,
+            SubSessionId: next.SubSessionId ?? SubSessionId);
+    }
+
+    public static string SourceId(string connectionSourceId, int segmentOrdinal, string sessionFamily)
+    {
+        return $"{connectionSourceId}-fuel-v2-s{segmentOrdinal:D3}-{sessionFamily}";
+    }
+
+    public FuelV2CaptureSessionLineage ToLineage(
+        string? connectionSourceId,
+        int segmentOrdinal,
+        string startedByBoundaryKind,
+        string endedByBoundaryKind)
+    {
+        var occurrenceParts = new[]
+        {
+            CurrentSessionNum is { } currentSessionNum ? $"current-session:{currentSessionNum}" : null,
+            SessionNum is { } sessionNum ? $"session:{sessionNum}" : null,
+            SessionId is { } sessionId ? $"session-id:{sessionId}" : null,
+            SubSessionId is { } subSessionId ? $"sub-session-id:{subSessionId}" : null
+        }
+        .Where(value => value is not null)
+        .ToArray();
+        var sessionOccurrenceVerified = CurrentSessionNum is not null || SessionNum is not null;
+        return new FuelV2CaptureSessionLineage(
+            ConnectionSourceId: connectionSourceId,
+            SegmentOrdinal: segmentOrdinal,
+            StartedByBoundaryKind: startedByBoundaryKind,
+            EndedByBoundaryKind: endedByBoundaryKind,
+            SessionFamily: SessionFamily,
+            SessionOccurrenceKey: occurrenceParts.Length > 0
+                ? string.Join("|", occurrenceParts)
+                : "unverified",
+            SessionOccurrenceVerified: sessionOccurrenceVerified,
+            CarKey: CarKey,
+            CarIdentitySource: CarIdentity.Source,
+            TrackLayoutKey: TrackLayout.Key,
+            TrackLayoutIdentitySource: TrackLayout.Source,
+            ExactTrackLayoutVerified: TrackLayout.IsExact,
+            ExactCarVerified: ExactCarVerified);
+    }
+
+    private static bool KnownDistinct(int? left, int? right)
+    {
+        return left is not null && right is not null && left != right;
+    }
+
+    private static bool IsKnownSessionFamily(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+            && !string.Equals(value, "unknown", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
+}
 
 internal sealed record FuelV2CaptureDataVersions(
     int HistoricalSummaryVersion,
@@ -1603,7 +2572,12 @@ internal sealed record FuelV2SessionScopeSample(
     FuelV2FuelCapacityScope FuelCapacity,
     IReadOnlyList<FuelV2TrackSectorScope> TrackSectors);
 
-internal sealed record FuelV2ComboScope(string CarKey, string TrackKey, string SessionKey);
+internal sealed record FuelV2ComboScope(
+    string CarKey,
+    string TrackKey,
+    string SessionKey,
+    string? TrackLayoutKey = null,
+    string TrackLayoutIdentitySource = "legacy-track-key");
 
 internal sealed record FuelV2CarScope(
     int? CarId,
@@ -1636,7 +2610,9 @@ internal sealed record FuelV2SessionIdentityScope(
     int? SeasonId,
     int? SessionId,
     int? SubSessionId,
-    string? BuildVersion);
+    string? BuildVersion,
+    string? DCRuleSet = null,
+    string? SessionTimeText = null);
 
 internal sealed record FuelV2FuelCapacityScope(
     double? PhysicalTankCapacityLiters,
@@ -1657,7 +2633,10 @@ internal sealed record FuelV2CaptureArtifactOptions(
     int MaxRejectedLapWindows,
     int MaxSectorBurnSamples,
     int MaxPitWindows,
-    int MaxTeamStints);
+    int MaxTeamStints,
+    int MaxStationaryServiceObservations = 80,
+    int MaxPitRouteObservations = 80,
+    double MaximumPitRouteFrameGapSeconds = 2d);
 
 internal sealed record FuelV2CaptureTotals(
     int FrameCount,
@@ -1694,11 +2673,24 @@ internal sealed record FuelV2SectorBurnEvidenceSummary(
 internal sealed record FuelV2PitServiceEvidenceSummary(
     int PitWindowCount,
     int PitWindowsWithFuelIncrease,
-    IReadOnlyDictionary<string, int> RequestCounts);
+    IReadOnlyDictionary<string, int> RequestCounts,
+    int StationaryServiceObservationCount = 0,
+    int RetainedStationaryServiceObservationCount = 0,
+    int DroppedStationaryServiceObservationCount = 0,
+    int PitRouteObservationCount = 0,
+    int RetainedPitRouteObservationCount = 0,
+    int DroppedPitRouteObservationCount = 0);
 
 internal sealed record FuelV2TeamEvidenceSummary(
     int TeamStintCount,
-    int DriverChangeEventCount);
+    int DriverChangeEventCount,
+    int? InitialDriversSoFar = null,
+    int? FinalDriversSoFar = null,
+    int? InitialDriverChangeLapStatus = null,
+    int? FinalDriverChangeLapStatus = null,
+    int ConfirmedDriverSwapCount = 0,
+    int UnconfirmedDriverChangeEventCount = 0,
+    int DriverChangeLapStatusChangeCount = 0);
 
 internal sealed record FuelV2RaceControlEvidenceSummary(IReadOnlyDictionary<string, int> StateCounts);
 
@@ -1947,7 +2939,13 @@ internal sealed record FuelV2TeamStintSample(
     double? FuelUsedLiters,
     double? FuelPerLapLiters,
     string DriverRole,
-    IReadOnlyList<string> ConfidenceFlags);
+    IReadOnlyList<string> ConfidenceFlags,
+    int? DriversSoFarAtStart = null,
+    int? DriversSoFarAtEnd = null,
+    int? DriverChangeLapStatusAtStart = null,
+    int? DriverChangeLapStatusAtEnd = null,
+    bool StartsAfterConfirmedDriverSwap = false,
+    bool EndsAtConfirmedDriverSwap = false);
 
 internal sealed record FuelV2EventSample(
     string Kind,

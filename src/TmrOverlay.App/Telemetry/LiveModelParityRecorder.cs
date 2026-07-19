@@ -314,6 +314,46 @@ internal sealed class LiveModelParityRecorder
         }
     }
 
+    // This deliberately excludes post-session evaluation and promotion. The
+    // snapshot is a frozen support view of an active collection, not evidence
+    // that a model is ready to promote.
+    public LiveModelParitySupportSnapshot? CreateSupportSnapshot(DateTimeOffset capturedAtUtc)
+    {
+        if (!_options.Enabled)
+        {
+            return null;
+        }
+
+        lock (_sync)
+        {
+            if (_sourceId is null || _startedAtUtc is null)
+            {
+                return null;
+            }
+
+            return new LiveModelParitySupportSnapshot(
+                IsFinalized: false,
+                CapturedAtUtc: capturedAtUtc,
+                SourceId: _sourceId,
+                StartedAtUtc: _startedAtUtc.Value,
+                Totals: new LiveModelParityTotals(
+                    FrameCount: _frameCount,
+                    SampledFrameCount: _sampledFrameCount,
+                    MismatchFrameCount: _mismatchFrameCount,
+                    ObservationCount: _observationCount,
+                    DroppedFrameSampleCount: _droppedFrameSampleCount,
+                    DroppedObservationSummaryCount: _droppedObservationSummaryCount),
+                Coverage: BuildCoverageSummary().ToArray(),
+                ObservationSummaries: _observationSummaries.Values
+                    .OrderByDescending(summary => summary.Count)
+                    .ThenBy(summary => summary.Family, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(summary => summary.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(summary => summary.Build())
+                    .ToArray(),
+                SampleFrames: _sampleFrames.ToArray());
+        }
+    }
+
     private bool ShouldSample(LiveModelParityFrame frame)
     {
         if (frame.HasMismatch)
@@ -917,6 +957,16 @@ internal sealed record LiveModelParityArtifact(
     IReadOnlyList<LiveModelParityFrameSample> SampleFrames,
     LiveModelPromotionReadiness PromotionReadiness,
     LiveModelPostSessionEvaluation PostSessionEvaluation);
+
+internal sealed record LiveModelParitySupportSnapshot(
+    bool IsFinalized,
+    DateTimeOffset CapturedAtUtc,
+    string SourceId,
+    DateTimeOffset StartedAtUtc,
+    LiveModelParityTotals Totals,
+    IReadOnlyList<LiveModelParityCoverageSummary> Coverage,
+    IReadOnlyList<LiveModelParityObservationSummary> ObservationSummaries,
+    IReadOnlyList<LiveModelParityFrameSample> SampleFrames);
 
 internal sealed record LiveModelParityArtifactOptions(
     double MinimumFrameSpacingSeconds,

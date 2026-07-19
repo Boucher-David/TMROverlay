@@ -33,6 +33,47 @@ For V1, the visible overlay deliberately stops there. Rhythm optimization and ti
 
 It uses model-v2 live telemetry first, then exact user history for the same car/track/session combo, then optional baseline history only when baseline lookup is enabled.
 
+## Gated Fuel V2 Presenter
+
+`FuelV2Overlay:Enabled` is a developer/replay gate, not a persisted user
+choice. When enabled it replaces only that renderer instance with the shared
+factual V2 presenter on Windows native, localhost, and production-model replay;
+it does not change V1's default behavior. The V2 top half shows capacity/lap
+context plus aligned `Last / 5L / 10L / History / Max / Min / Quali` fuel and
+range cells. `History` may use only exact classified race, practice, or
+quality-gated Offline Testing (`test`) Fuel V2 history; `test` remains visibly
+separate provenance and is selected only after the matching race/practice
+family. It cannot select a plan, produce fuel-to-add/pit advice, or expose
+lower-half Stint rows. See
+`docs/fuel-calculator-v2.md` for the stricter replay-history cutoff and V2
+promotion rules.
+
+In verified local Test/Practice only, the same V2 presenter can append the
+settings-controlled **Model Readiness** section. It reads immutable exact
+car/layout `test` then `practice` summaries and reports factual local pit-route,
+small/large stationary-refuel, and counter-confirmed tire-service collection.
+It includes an optional no-stall pit-lane pass as travel calibration, but that
+sample does not block collection completion. It does not duplicate the top
+Fuel/Lap usage row, use team pit state, infer a pit-stall number, render raw
+requests or `DCRuleSet` as readiness, treat that raw provenance as a
+service-order rule, or permit strategy. The section disappears for that combo
+after its explicit collection goals are complete; it never appears in race,
+qualifying, or the V2 camera fallback.
+
+V1 continues to require the normal local player/focus context. V2 alone may
+display the factual `Fuel State` in Test, Practice, Qualifying, or Race when
+fresh telemetry proves the non-spectator session `DriverCarIdx` is exactly the
+raw camera car and the only missing focus condition is that camera's
+progress/timing row. The V2 eligibility gate also requires a current frame,
+current session info, and usable current fuel before any surface may show the
+overlay; this prevents the native manager from showing a transient shell that
+the 250ms presenter would immediately hide. The fallback is display-only: it
+never shows burn, range, history, lap, plan, target, add, or stint information,
+and it rejects stale, garage, invalid-camera, conflicting identity, or
+spectator data. The persisted Fuel Calculator **Visible** setting remains the
+outermost gate: the developer V2 flag and factual fallback can never render an
+overlay the user disabled.
+
 ## Refresh Loop
 
 The Windows fuel overlay refreshes once per second.

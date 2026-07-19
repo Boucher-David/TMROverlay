@@ -3,6 +3,7 @@
     const gapGraphGeometry = geometry?.gapGraph || {};
     const metricRowsGeometry = geometry?.metricRows || {};
     const streamChatGeometry = geometry?.streamChat || {};
+    const overlaySizesGeometry = geometry?.overlaySizes || {};
     const overlayEl = document.querySelector('.overlay');
     const headerEl = document.querySelector('.header');
     const statusEl = document.getElementById('status');
@@ -288,8 +289,12 @@
       const hasSegments = segments.length > 0;
       const hasDirectionalSegment = segments.some((segment) => Number.isFinite(Number(segment?.rotationDegrees)));
       const rowColor = metricColorStyle(row?.rowColorHex || row?.carClassColorHex);
+      const requestedSegmentCount = Number(row?.segmentColumnCount);
+      const segmentColumnCount = Number.isInteger(requestedSegmentCount) && requestedSegmentCount >= segments.length
+        ? requestedSegmentCount
+        : segments.length;
       const valueHtml = hasSegments
-        ? `<div class="value value-segments" style="--tmr-segment-count: ${Math.min(segments.length, 6)};">${segments.map(metricSegment).join('')}</div>`
+        ? `<div class="value value-segments" style="--tmr-segment-count: ${Math.min(segmentColumnCount, metricGeometryNumber('maximumMetricSegmentColumns', 7))};">${segments.map(metricSegment).join('')}</div>`
         : `<div class="value">${escapeHtml(row?.value || '--')}</div>`;
       return `
         <div class="metric ${tone}${highlight}${hasSegments ? ' segmented' : ''}${hasDirectionalSegment ? ' directional' : ''}${rowColor ? ' class-colored' : ''}"${rowColor}>
@@ -346,25 +351,32 @@
     }
 
     function gridSection(section) {
-      const headers = Array.isArray(section?.headers) && section.headers.length
+      const headers = Array.isArray(section?.headers)
         ? section.headers
         : ['Info', 'FL', 'FR', 'RL', 'RR'];
+      const hasHeaders = headers.length > 0;
       const rows = Array.isArray(section?.rows) ? section.rows : [];
       if (!rows.length) return '';
       const columns = `repeat(${Math.max(1, headers.length)}, minmax(${metricGeometryNumber('metricGridCellMinimumWidth', 42)}px, 1fr))`;
-      const headerHtml = headers
+      const headerHtml = hasHeaders ? headers
         .map((header, index) => {
           const text = index === 0 ? (section?.title || header || '') : (header || '');
           const classes = index === 0 ? 'tire-grid-header metric-section-title tire-grid-section-title' : 'tire-grid-header';
           return `<div class="${classes}">${escapeHtml(text)}</div>`;
         })
-        .join('');
+        .join('') : '';
+      const titleHtml = !hasHeaders && section?.title
+        ? `<div class="metric-section-title tire-grid-summary-title">${escapeHtml(section.title)}</div>`
+        : '';
       const rowHtml = rows.map((row) => {
         const rowTone = toneClass(row?.tone);
+        if (row?.summary) {
+          return `<div class="tire-grid-summary ${rowTone}">${escapeHtml(row.summary)}</div>`;
+        }
         const cells = Array.isArray(row?.cells) ? row.cells : [];
         const cellHtml = cells
           .slice(0, Math.max(0, headers.length - 1))
-          .map((cell) => `<div class="tire-grid-cell ${toneClass(cell?.tone)}">${escapeHtml(cell?.value || '--')}</div>`)
+          .map((cell) => `<div class="${gridCellClass(cell)}">${escapeHtml(cell?.value || '--')}</div>`)
           .join('');
         return `
           <div class="tire-grid-row ${rowTone}">
@@ -374,11 +386,162 @@
       }).join('');
       return `
         <section class="metric-section">
+          ${titleHtml}
           <div class="tire-grid" style="--tmr-grid-columns: ${escapeHtml(columns)};">
-            <div class="tire-grid-head">${headerHtml}</div>
+            ${hasHeaders ? `<div class="tire-grid-head">${headerHtml}</div>` : ''}
             ${rowHtml}
           </div>
         </section>`;
+    }
+
+    function gridCellClass(cell) {
+      return [
+        'tire-grid-cell',
+        toneClass(cell?.tone),
+        cell?.pitContext === true ? 'pit-context' : ''
+      ].filter(Boolean).join(' ');
+    }
+
+    function chartSection(section) {
+      const series = Array.isArray(section?.series) ? section.series : [];
+      const notes = Array.isArray(section?.notes) ? section.notes : [];
+      if (!series.length && !notes.length) return '';
+
+      const viewWidth = 920;
+      const viewHeight = 250;
+      const plot = { left: 48, top: 16, width: 838, height: 174 };
+      const yMin = Number.isFinite(Number(section?.yMin)) ? Number(section.yMin) : 0;
+      const yMax = Number.isFinite(Number(section?.yMax)) && Number(section.yMax) > yMin ? Number(section.yMax) : 1;
+      const yTicks = Array.isArray(section?.yTicks) && section.yTicks.length
+        ? section.yTicks
+        : [
+            { value: yMax, label: formatNumber(yMax, 1) },
+            { value: (yMin + yMax) / 2, label: formatNumber((yMin + yMax) / 2, 1) },
+            { value: yMin, label: formatNumber(yMin, 1) }
+          ];
+      const gridLines = [0, 0.25, 0.5, 0.75, 1]
+        .map((value) => {
+          const x = plot.left + value * plot.width;
+          const y = plot.top + (1 - value) * plot.height;
+          return `
+            <line class="sector-chart-grid" x1="${x.toFixed(1)}" y1="${plot.top}" x2="${x.toFixed(1)}" y2="${plot.top + plot.height}" />
+            <line class="sector-chart-grid" x1="${plot.left}" y1="${y.toFixed(1)}" x2="${plot.left + plot.width}" y2="${y.toFixed(1)}" />`;
+        })
+        .join('');
+      const paths = series
+        .map((item, index) => {
+          const path = sectorChartPath(item?.points, plot, yMin, yMax);
+          if (!path) return '';
+          const classes = [
+            'sector-chart-line',
+            `series-${index % 12}`,
+            item?.degraded ? 'degraded' : '',
+            toneClass(item?.tone)
+          ].filter(Boolean).join(' ');
+          return `<path class="${classes}" d="${path}" />`;
+        })
+        .join('');
+      const trafficPaths = series
+        .map((item, index) => sectorChartTrafficPaths(item?.points, item?.trafficIndexes, plot, yMin, yMax)
+          .map((path) => `<path class="sector-chart-traffic-line series-${index % 12}" d="${path}" />`)
+          .join(''))
+        .join('');
+      const trafficMarkers = series
+        .map((item, index) => sectorChartTrafficMarkers(item?.points, item?.trafficIndexes, plot, yMin, yMax)
+          .map((point) => `<circle class="sector-chart-traffic-marker series-${index % 12}" cx="${point.x}" cy="${point.y}" r="3.2"><title>traffic within 1s</title></circle>`)
+          .join(''))
+        .join('');
+      const legend = series.length
+        ? `<div class="sector-chart-legend">${series.map((item, index) => `
+            <span class="sector-chart-legend-item">
+              <span class="sector-chart-swatch series-${index % 12} ${item?.degraded ? 'degraded' : ''}"></span>
+              <span>${escapeHtml(item?.label || `Lap ${index + 1}`)}</span>
+            </span>`).join('')}</div>`
+        : '';
+      const noteHtml = notes.length
+        ? `<div class="sector-chart-note">${escapeHtml(notes.join(' | '))}</div>`
+        : '';
+      const yTickHtml = yTicks
+        .map((tick) => {
+          const y = plot.top + (1 - sectorChartNormalizeY(tick?.value, yMin, yMax)) * plot.height;
+          return `<text class="sector-chart-tick" x="8" y="${(y + 4).toFixed(1)}">${escapeHtml(tick?.label || formatNumber(Number(tick?.value), 1))}</text>`;
+        })
+        .join('');
+
+      return `
+        <section class="metric-section sector-chart-section">
+          <div class="metric-section-title">${escapeHtml(section?.title || 'Sector shape')}</div>
+          <div class="sector-chart-panel">
+            <svg class="sector-chart-svg" viewBox="0 0 ${viewWidth} ${viewHeight}" role="img" aria-label="${escapeAttribute(section?.title || 'Sector shape chart')}">
+              <text class="sector-chart-axis-label" x="${plot.left}" y="10">${escapeHtml(section?.yAxisLabel || 'projected L/lap')}</text>
+              <text class="sector-chart-axis-label" x="${plot.left}" y="${viewHeight - 8}">lap distance</text>
+              ${yTickHtml}
+              <text class="sector-chart-tick" x="${plot.left}" y="${plot.top + plot.height + 16}">start</text>
+              <text class="sector-chart-tick" x="${plot.left + plot.width - 30}" y="${plot.top + plot.height + 16}">finish</text>
+              ${gridLines}
+              <rect class="sector-chart-frame" x="${plot.left}" y="${plot.top}" width="${plot.width}" height="${plot.height}" />
+              ${paths}
+              ${trafficPaths}
+              ${trafficMarkers}
+            </svg>
+            ${legend}
+            ${noteHtml}
+          </div>
+        </section>`;
+    }
+
+    function sectorChartPath(points, plot, yMin, yMax) {
+      const items = Array.isArray(points) ? points : [];
+      const commands = items.map((point, index) => {
+        const svgPoint = sectorChartSvgPoint(point, plot, yMin, yMax);
+        return `${index === 0 ? 'M' : 'L'} ${svgPoint.x} ${svgPoint.y}`;
+      });
+      return commands.length >= 2 ? commands.join(' ') : '';
+    }
+
+    function sectorChartTrafficPaths(points, trafficIndexes, plot, yMin, yMax) {
+      const items = Array.isArray(points) ? points : [];
+      const traffic = sectorChartIndexSet(trafficIndexes);
+      const segments = [];
+      for (let index = 1; index < items.length; index += 1) {
+        const sectorIndex = Number(items[index]?.sectorIndex);
+        if (!Number.isFinite(sectorIndex) || !traffic.has(sectorIndex)) continue;
+        const start = sectorChartSvgPoint(items[index - 1], plot, yMin, yMax);
+        const end = sectorChartSvgPoint(items[index], plot, yMin, yMax);
+        segments.push(`M ${start.x} ${start.y} L ${end.x} ${end.y}`);
+      }
+      return segments;
+    }
+
+    function sectorChartTrafficMarkers(points, trafficIndexes, plot, yMin, yMax) {
+      const items = Array.isArray(points) ? points : [];
+      const traffic = sectorChartIndexSet(trafficIndexes);
+      return items
+        .filter((point) => traffic.has(Number(point?.sectorIndex)))
+        .map((point) => sectorChartSvgPoint(point, plot, yMin, yMax));
+    }
+
+    function sectorChartIndexSet(indexes) {
+      return new Set((Array.isArray(indexes) ? indexes : [])
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value)));
+    }
+
+    function sectorChartSvgPoint(point, plot, yMin, yMax) {
+      const x = plot.left + clampUnit(point?.x) * plot.width;
+      const y = plot.top + (1 - sectorChartNormalizeY(point?.y, yMin, yMax)) * plot.height;
+      return { x: x.toFixed(1), y: y.toFixed(1) };
+    }
+
+    function sectorChartNormalizeY(value, yMin, yMax) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || yMax <= yMin) return 0;
+      return clampUnit((numeric - yMin) / (yMax - yMin));
+    }
+
+    function clampUnit(value) {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : 0;
     }
 
     async function fetchOverlayModel(overlayId) {
@@ -451,9 +614,11 @@
       const metrics = Array.isArray(model.metrics) ? model.metrics : [];
       const metricSections = Array.isArray(model.metricSections) ? model.metricSections : [];
       const gridSections = Array.isArray(model.gridSections) ? model.gridSections : [];
+      const chartSections = Array.isArray(model.chartSections) ? model.chartSections : [];
       const rows = Array.isArray(model.rows) ? model.rows : [];
       const metricSectionHtml = metricSections.map(metricSection).join('');
       const sectionHtml = gridSections.map(gridSection).join('');
+      const chartHtml = chartSections.map(chartSection).join('');
       contentEl.hidden = false;
       if (model.bodyKind === 'summary-table') {
         const summary = metrics.length
@@ -471,8 +636,12 @@
         const metricsHtml = metrics.length && !metricSectionHtml
           ? `<div class="metric-list">${metrics.map(metricRow).join('')}</div>`
           : '';
-        contentEl.innerHTML = metricsHtml || metricSectionHtml || sectionHtml
-          ? `${metricsHtml}${metricSectionHtml}${sectionHtml}`
+        const primaryHtml = `${metricsHtml}${metricSectionHtml}${sectionHtml}`;
+        const bodyHtml = primaryHtml && chartHtml
+          ? `<div class="fuel-workbench-layout"><div class="fuel-workbench-table">${primaryHtml}</div><div class="fuel-workbench-charts">${chartHtml}</div></div>`
+          : `${primaryHtml}${chartHtml}`;
+        contentEl.innerHTML = bodyHtml
+          ? bodyHtml
           : '';
       } else {
         const headers = displayModelHeaders(model);
@@ -491,6 +660,8 @@
     function updateOverlayRuntimeClasses(model) {
       if (!overlayEl) return;
       overlayEl.classList.toggle('fuel-non-race', isFuelNonRaceModel(model));
+      overlayEl.classList.toggle('laps-workbench', isFuelLapsWorkbenchModel(model));
+      overlayEl.classList.toggle('fuel-v2-comparison', isFuelV2ComparisonModel(model));
       if (model?.overlayId === 'fuel-calculator') {
         overlayEl.style.setProperty('--fuel-content-height', `${fuelContentHeightForModel(model)}px`);
       } else {
@@ -609,12 +780,32 @@
     }
 
     function fuelContentHeightForModel(model) {
-      const sections = Array.isArray(model?.metricSections)
+      const metricSections = Array.isArray(model?.metricSections)
         ? model.metricSections.filter((section) => Array.isArray(section?.rows) && section.rows.length > 0)
         : [];
-      const rowCount = sections.reduce((total, section) => total + section.rows.length, 0);
-      const sectionCount = sections.length;
-      let height = fuelContentHeight(rowCount, sectionCount);
+      const gridSections = Array.isArray(model?.gridSections)
+        ? model.gridSections.filter((section) => Array.isArray(section?.rows) && section.rows.length > 0)
+        : [];
+      const chartSections = Array.isArray(model?.chartSections)
+        ? model.chartSections.filter((section) => Array.isArray(section?.series) && section.series.length > 0)
+        : [];
+      const metricRowCount = metricSections.reduce((total, section) => total + section.rows.length, 0);
+      const gridRowCount = gridSections.reduce((total, section) => total + section.rows.length + 1, 0);
+      const rowCount = metricRowCount + gridRowCount;
+      const sectionCount = metricSections.length + gridSections.length;
+      let height = fuelContentHeight(rowCount, sectionCount, {
+        clampToDefault: !isFuelLapsWorkbenchModel(model)
+      });
+      if (chartSections.length > 0) {
+        height += chartSections.reduce((total, section) => total + fuelChartSectionHeight(section), 0)
+          + chartSections.length * 10;
+        if (rowCount > 0) {
+          const chartStackHeight = fuelChartStackHeight(chartSections);
+          height = Math.max(
+            fuelContentHeight(rowCount, sectionCount, { clampToDefault: !isFuelLapsWorkbenchModel(model) }),
+            chartStackHeight);
+        }
+      }
       const hasHeader = Array.isArray(model?.headerItems)
         && model.headerItems.some((item) => String(item?.value || '').trim());
       if (!hasHeader) {
@@ -623,7 +814,51 @@
           height - metricGeometryNumber('headerChromeHeight', 38));
       }
 
-      return height;
+      return isFuelLapsWorkbenchModel(model)
+        ? Math.max(height, 540)
+        : height;
+    }
+
+    function fuelChartSectionHeight(section) {
+      const height = Number(section?.height);
+      return Number.isFinite(height) && height > 0 ? Math.round(height) : 310;
+    }
+
+    function fuelChartStackHeight(sections) {
+      return metricGeometryNumber('headerChromeHeight', 38)
+        + metricGeometryNumber('fuelContentVerticalPadding', 26)
+        + sections.reduce((total, section) => total + fuelChartSectionHeight(section), 0)
+        + Math.max(0, sections.length - 1) * 10
+        + metricGeometryNumber('collapsedFooterReserveHeight', 8);
+    }
+
+    function isFuelLapsWorkbenchModel(model) {
+      if (model?.overlayId !== 'fuel-calculator') {
+        return false;
+      }
+
+      const status = String(model?.status || '').trim().toLowerCase();
+      return status === 'laps workbench'
+        || status === 'fuel/lap workbench'
+        || status === 'fuel/range workbench'
+        || status === 'fuel/target usage workbench'
+        || status === 'fuel/plan workbench'
+        || status === 'fuel/stint targets workbench'
+        || status === 'fuel/stint sequence workbench'
+        || status === 'fuel/model readiness workbench'
+        || status === 'fuel/pit request workbench'
+        || status === 'fuel/sector burn workbench';
+    }
+
+    function isFuelV2ComparisonModel(model) {
+      if (model?.overlayId !== 'fuel-calculator') return false;
+      const metricSections = Array.isArray(model?.metricSections) ? model.metricSections : [];
+      const hasV2ComparisonColumns = metricSections.some((section) =>
+        Array.isArray(section?.rows)
+        && section.rows.some((row) => Array.isArray(row?.segments) && row.segments.length >= 7));
+      return hasV2ComparisonColumns
+        || ['fuel/stint sequence workbench', 'fuel/model readiness workbench']
+          .includes(String(model?.status || '').trim().toLowerCase());
     }
 
     function gapPanelSizeForModel(model) {
@@ -633,19 +868,25 @@
       return { width: 620, height: 275 };
     }
 
-    function fuelContentHeight(rowCount, sectionCount) {
+    function fuelContentHeight(rowCount, sectionCount, options = {}) {
       const minimumHeight = metricGeometryNumber('minimumFuelCalculatorHeight', 126);
       if (rowCount <= 0 || sectionCount <= 0) return minimumHeight;
       const rowGaps = Math.max(0, rowCount - sectionCount) * metricGeometryNumber('rowGap', 5);
       const sectionGaps = Math.max(0, sectionCount - 1) * metricGeometryNumber('sectionGap', 8);
+      const segmentedRowHeight = options?.clampToDefault === false
+        ? 43
+        : metricGeometryNumber('segmentedRowHeight', 35);
       const height = metricGeometryNumber('headerChromeHeight', 38)
         + metricGeometryNumber('fuelContentVerticalPadding', 26)
         + sectionCount * metricGeometryNumber('fuelSectionTitleReserveHeight', 14)
-        + rowCount * metricGeometryNumber('segmentedRowHeight', 35)
+        + rowCount * segmentedRowHeight
         + rowGaps
         + sectionGaps
         + metricGeometryNumber('collapsedFooterReserveHeight', 8);
-      return Math.max(minimumHeight, Math.min(315, height));
+      const maximumHeight = numberOr(overlaySizesGeometry?.fuelCalculatorHeight, 315);
+      return Math.max(
+        minimumHeight,
+        options?.clampToDefault === false ? height : Math.min(maximumHeight, height));
     }
 
     function renderHeaderItems(model, fallbackStatus) {

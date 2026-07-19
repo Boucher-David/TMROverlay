@@ -1,11 +1,15 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using TmrOverlay.App.History;
 using TmrOverlay.App.Storage;
 using TmrOverlay.App.Telemetry;
 using TmrOverlay.Core.AppInfo;
 using TmrOverlay.Core.Fuel.V2;
+using TmrOverlay.Core.History;
+using TmrOverlay.Core.PitService;
+using TmrOverlay.Core.Telemetry.Live;
 using Xunit;
 
 namespace TmrOverlay.App.Tests.History;
@@ -35,27 +39,9 @@ public sealed class FuelV2HistoryImporterTests
             Assert.Equal("capture-fuel-v2", result.SourceId);
             Assert.False(Directory.Exists(Path.Combine(storage.UserHistoryRoot, "cars")));
 
-            var summaryPath = Path.Combine(
-                storage.UserHistoryRoot,
-                "fuel-v2",
-                "cars",
-                "car-1-test-car",
-                "tracks",
-                "track-2-test-track",
-                "sessions",
-                "race",
-                "summaries",
-                "capture-fuel-v2.json");
-            var aggregatePath = Path.Combine(
-                storage.UserHistoryRoot,
-                "fuel-v2",
-                "cars",
-                "car-1-test-car",
-                "tracks",
-                "track-2-test-track",
-                "sessions",
-                "race",
-                "aggregate.json");
+            var sessionDirectory = SessionDirectory(storage);
+            var summaryPath = Assert.Single(Directory.EnumerateFiles(Path.Combine(sessionDirectory, "summaries"), "*.json"));
+            var aggregatePath = Path.Combine(sessionDirectory, "aggregate.json");
             var manifestPath = Path.Combine(storage.UserHistoryRoot, "fuel-v2", "manifest.json");
 
             Assert.True(File.Exists(summaryPath));
@@ -66,21 +52,33 @@ public sealed class FuelV2HistoryImporterTests
             Assert.NotNull(summary);
             Assert.Equal(FuelV2HistoryDataVersions.SummaryVersion, summary.SummaryVersion);
             Assert.Equal("capture-fuel-v2", summary.SourceId);
-            Assert.Equal("car-1-test-car", summary.Scope.Combo.CarKey);
+            Assert.StartsWith("sha256-", summary.SummaryId);
+            Assert.Equal("car-id-1", summary.Scope.Combo.CarKey);
+            Assert.Equal("track-id-2-config-46756C6C", summary.Scope.Combo.TrackLayoutKey);
+            Assert.True(summary.SessionIntegrity.IsClassifiedForHistory);
             Assert.NotEmpty(summary.SourceArtifact.Sha256);
-            Assert.Equal("not_available_in_current_models", summary.FuelCapacity.EffectiveSessionCapacitySource);
+            Assert.Equal(56d, summary.FuelCapacity.EffectiveSessionCapacityLiters);
+            Assert.Equal("matching_driver_and_class_caps", summary.FuelCapacity.EffectiveSessionCapacitySource);
+            Assert.Equal(0.8d, summary.FuelCapacity.DriverCarMaxFuelPercent);
+            Assert.Equal(0.8d, summary.FuelCapacity.CarClassMaxFuelPercent);
+            Assert.Equal(string.Empty, summary.FuelCapacity.Limitation);
             Assert.Single(summary.AcceptedLapBurnWindows);
             Assert.Single(summary.RejectedLapBurnWindowExamples);
             Assert.Equal(1, summary.RejectedLapBurnWindowReasonCounts["caution-or-yellow"]);
             Assert.Single(summary.SectorBurnWindows);
             Assert.Single(summary.PitWindows);
+            Assert.Empty(summary.StationaryServiceObservations);
             Assert.Single(summary.TeamStints);
+            Assert.Equal(5, summary.SourceVersions.CaptureFormatVersion);
             Assert.Equal(1, summary.LapBudget.EstimatedFinishLap.SampleCount);
 
             var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(File.ReadAllText(aggregatePath), JsonOptions);
             Assert.NotNull(aggregate);
             Assert.Equal(FuelV2HistoryDataVersions.AggregateVersion, aggregate.AggregateVersion);
             Assert.Equal(1, aggregate.SummaryCount);
+            Assert.Equal(1, aggregate.ClassifiedSessionCount);
+            Assert.Equal(0, aggregate.LegacyUnclassifiedSessionCount);
+            Assert.Equal(0, aggregate.UnclassifiedV2SessionCount);
             Assert.Equal(1, aggregate.LearningEligibleSessionCount);
             Assert.Equal(3.1d, aggregate.AcceptedLapFuelPerLapLiters.Mean);
             Assert.Equal(0.7d, aggregate.AcceptedSectorProjectionLitersPerLap.Mean);
@@ -92,6 +90,554 @@ public sealed class FuelV2HistoryImporterTests
             Assert.False(manifest.UseForStrategy);
             Assert.Equal(1, manifest.SummaryCount);
             Assert.Equal(1, manifest.AggregateCount);
+            Assert.Equal(1, manifest.ClassifiedSummaryCount);
+            Assert.Equal(0, manifest.LegacyUnclassifiedSummaryCount);
+            Assert.Equal(0, manifest.UnclassifiedV2SummaryCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_ClassifiedThirteenPointFiveHistoryFeedsTypedWorkbenchSeedWithoutStrategyPromotion()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var baseArtifact = CreateArtifact();
+            var artifact = baseArtifact with
+            {
+                AcceptedLapBurnWindows =
+                [
+                    baseArtifact.AcceptedLapBurnWindows[0] with
+                    {
+                        FuelUsedLiters = 13.5d,
+                        FuelPerLapLiters = 13.5d,
+                        FuelStartLiters = 70d,
+                        FuelEndLiters = 56.5d
+                    }
+                ]
+            };
+            var options = CreateOptions(storage);
+            var store = new FuelV2HistoryStore(options);
+            var importer = new FuelV2HistoryImporter(
+                options,
+                store,
+                NullLogger<FuelV2HistoryImporter>.Instance);
+
+            var imported = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+            var selection = new FuelV2HistoryNormalBurnQueryService(options, store).Lookup(CreateHistoricalRaceContext());
+
+            Assert.True(imported.Imported);
+            Assert.True(selection.IsAvailable);
+            Assert.True(selection.CanSeedPlan);
+            Assert.False(selection.CanDriveAdvice);
+            Assert.Equal("race", selection.SelectedSessionFamily);
+            Assert.Equal(13.5d, selection.Burn?.Value);
+            Assert.Equal(FuelV2BurnBucketId.HistoricalNormal, selection.Burn?.BurnBucketId);
+            Assert.Equal(FuelV2BurnSource.HistoricalNormal, selection.Burn?.BurnSource);
+            Assert.False(selection.Burn?.StrategyEligible ?? true);
+
+            var windows = FuelV2FuelPerLapCalculator.FromAcceptedLaps(
+                [],
+                new FuelV2FuelPerLapWindowOptions(HistoricalNormalSeed: selection.Burn));
+            Assert.Equal(13.5d, windows.Bucket(FuelV2BurnBucketId.HistoricalNormal)?.Value);
+            Assert.Null(windows.Bucket(FuelV2BurnBucketId.FiveLapAverage));
+
+            var blockedStrategyLookup = new FuelV2HistoryNormalBurnQueryService(options, store).Lookup(
+                CreateHistoricalRaceContext(),
+                FuelV2HistoryLookupPurpose.Strategy);
+            Assert.Equal(FuelV2HistoryNormalBurnSelectionStatus.StrategyPromotionDisabled, blockedStrategyLookup.Status);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_CleanOfflineTestingRemainsTestProvenanceAndSeedsRaceOnlyAfterPractice()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var baseScope = CreateSessionScope();
+            var artifact = CreateArtifact() with
+            {
+                SessionScope = baseScope with
+                {
+                    Combo = baseScope.Combo with { SessionKey = "test" },
+                    Session = baseScope.Session with
+                    {
+                        SessionType = "Offline Testing",
+                        SessionName = "Offline Testing",
+                        EventType = "Test"
+                    }
+                },
+                SessionLineage = ClassifiedLineage() with { SessionFamily = "test" }
+            };
+            var options = CreateOptions(storage);
+            var store = new FuelV2HistoryStore(options);
+            var importer = new FuelV2HistoryImporter(
+                options,
+                store,
+                NullLogger<FuelV2HistoryImporter>.Instance);
+
+            var imported = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+            var summaryPath = Assert.Single(Directory.EnumerateFiles(
+                Path.Combine(SessionDirectory(storage, family: "test"), "summaries"),
+                "*.json"));
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(File.ReadAllText(summaryPath), JsonOptions);
+            var selection = new FuelV2HistoryNormalBurnQueryService(options, store).Lookup(CreateHistoricalRaceContext());
+
+            Assert.True(imported.Imported);
+            Assert.NotNull(summary);
+            Assert.Equal("test", summary.Scope.Combo.SessionKey);
+            Assert.Equal("test", summary.SessionIntegrity.SessionFamily);
+            Assert.True(summary.SessionIntegrity.IsClassifiedForHistory);
+            Assert.True(summary.Quality.ContributesToLearning);
+            Assert.True(selection.IsAvailable);
+            Assert.Equal("test", selection.SelectedSessionFamily);
+            Assert.Equal(3.1d, selection.Burn?.Value);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_FormatFourRetainsExactTireCounterEvidenceWithoutCreatingTimingAdvice()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact(formatVersion: 4);
+            var observation = CreateStationaryServiceObservation(artifact.StartedAtUtc.AddMinutes(12));
+            artifact = artifact with
+            {
+                PitService = artifact.PitService with
+                {
+                    StationaryServiceObservationCount = 1,
+                    RetainedStationaryServiceObservationCount = 1
+                },
+                StationaryServiceObservations = [observation]
+            };
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+
+            Assert.True(result.Imported);
+            var summaryPath = Assert.Single(Directory.EnumerateFiles(
+                Path.Combine(SessionDirectory(storage), "summaries"),
+                "*.json"));
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(
+                File.ReadAllText(summaryPath),
+                JsonOptions);
+            Assert.NotNull(summary);
+            var retained = Assert.Single(summary.StationaryServiceObservations);
+            Assert.Equal(5d, retained.DurationSeconds);
+            Assert.Equal(5d, retained.PositiveFuelAddedLiters);
+            Assert.True(retained.EntryRequest.Fuel);
+            Assert.Equal(4, retained.LastRequest.RequestedTireCount);
+            Assert.Contains("request-changed-during-service", retained.QualificationFlags);
+            Assert.NotNull(retained.EntryTireCounters);
+            Assert.NotNull(retained.ExitTireCounters);
+            Assert.NotNull(retained.TireCounterDelta);
+            Assert.Equal(10, retained.EntryTireCounters.LeftFrontTiresUsed);
+            Assert.Equal(11, retained.ExitTireCounters.LeftFrontTiresUsed);
+            Assert.Equal(1, retained.TireCounterDelta.LeftFrontTiresUsed);
+
+            var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(SessionDirectory(storage), "aggregate.json")),
+                JsonOptions);
+            Assert.NotNull(aggregate);
+            Assert.Equal(1, aggregate.PitWindowSeconds.SampleCount);
+            Assert.Equal(1, aggregate.PitFuelAddedLiters.SampleCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_ExposesExactTireHistoryOnlyForTheMatchingPublicRuleSet()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var scope = CreateSessionScope();
+            var request = LivePitServiceRequest.Empty with
+            {
+                LeftFrontTire = true,
+                RightFrontTire = true,
+                LeftRearTire = true,
+                RightRearTire = true,
+                Fuel = true,
+                FuelLiters = 12.5d
+            };
+            var exactRequest = new PitServiceRequestShape(
+                request.LeftFrontTire,
+                request.RightFrontTire,
+                request.LeftRearTire,
+                request.RightRearTire,
+                request.Fuel,
+                request.Tearoff,
+                request.FastRepair,
+                request.FuelLiters,
+                request.RequestedTireCompoundIndex);
+            var baseArtifact = CreateArtifact();
+            var artifact = baseArtifact with
+            {
+                SessionScope = scope with
+                {
+                    Session = scope.Session with { DCRuleSet = "IMSA" }
+                },
+                PitService = baseArtifact.PitService with
+                {
+                    StationaryServiceObservationCount = 1,
+                    RetainedStationaryServiceObservationCount = 1
+                },
+                StationaryServiceObservations =
+                [
+                    CreateStationaryServiceObservation(DateTimeOffset.Parse("2026-05-10T12:12:00Z")) with
+                    {
+                        EntryRequest = exactRequest,
+                        LastRequest = exactRequest,
+                        RequestChangedDuringService = false,
+                        QualificationFlags = []
+                    }
+                ]
+            };
+            var options = CreateOptions(storage);
+            var store = new FuelV2HistoryStore(options);
+            var importer = new FuelV2HistoryImporter(options, store, NullLogger<FuelV2HistoryImporter>.Instance);
+
+            var imported = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+            var query = new FuelV2PitServiceTireHistoryQueryService(options, store);
+            var selected = query.Lookup(CreateHistoricalRaceContext("IMSA"), request);
+            var mismatchedRuleSet = query.Lookup(CreateHistoricalRaceContext("None"), request);
+
+            Assert.True(imported.Imported);
+            Assert.Equal(FuelV2TireServiceHistorySelectionStatus.Selected, selected.Status);
+            Assert.Equal("4 tires", selected.RequestedShape?.DisplayLabel);
+            Assert.Equal(PitServiceExecutionMode.Unknown, selected.RuleScope.ExecutionMode);
+            Assert.Equal(1, selected.Profile?.ConfirmedOutcomeCount);
+            Assert.Equal(1, selected.Profile?.CleanConfirmedOutcomeCount);
+            Assert.Equal(
+                PitServiceTireHistoryTimingEligibility.BlockedRulesUnverified,
+                selected.Profile?.TimingEligibility);
+            Assert.False(selected.Profile?.CanCalibrateServiceTime ?? true);
+            Assert.Equal(FuelV2TireServiceHistorySelectionStatus.RuleScopeMismatch, mismatchedRuleSet.Status);
+
+            var unknownRuleArtifact = artifact with
+            {
+                SourceId = "capture-fuel-v2-unknown-rules",
+                FinishedAtUtc = artifact.FinishedAtUtc.AddMinutes(1),
+                SessionScope = artifact.SessionScope with
+                {
+                    Session = artifact.SessionScope.Session with { DCRuleSet = "DriveFairShare_AllMustDrive" }
+                }
+            };
+            Assert.True((await importer.ImportAsync(
+                WriteArtifact(root, unknownRuleArtifact, "unknown-rules.json"),
+                CancellationToken.None)).Imported);
+
+            var unknownRuleSet = query.Lookup(
+                CreateHistoricalRaceContext("DriveFairShare_AllMustDrive"),
+                request);
+
+            Assert.Equal(FuelV2TireServiceHistorySelectionStatus.Selected, unknownRuleSet.Status);
+            Assert.Equal(PitServiceExecutionMode.Unknown, unknownRuleSet.RuleScope.ExecutionMode);
+            Assert.Equal(
+                PitServiceTireHistoryTimingEligibility.BlockedRulesUnverified,
+                unknownRuleSet.Profile?.TimingEligibility);
+            Assert.False(unknownRuleSet.Profile?.CanCalibrateServiceTime ?? true);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_ReconnectTireEvidenceUsesExactOutcomeButCarriesContaminationForward()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var options = CreateOptions(storage);
+            var store = new FuelV2HistoryStore(options);
+            var importer = new FuelV2HistoryImporter(options, store, NullLogger<FuelV2HistoryImporter>.Instance);
+            var request = LivePitServiceRequest.Empty with
+            {
+                LeftFrontTire = true,
+                RightFrontTire = true,
+                LeftRearTire = true,
+                RightRearTire = true
+            };
+            var exactRequest = new PitServiceRequestShape(
+                request.LeftFrontTire,
+                request.RightFrontTire,
+                request.LeftRearTire,
+                request.RightRearTire,
+                Fuel: false,
+                Tearoff: false,
+                FastRepair: false,
+                FuelLiters: null,
+                RequestedTireCompoundIndex: null);
+            var scope = CreateSessionScope();
+            var baseArtifact = CreateArtifact() with
+            {
+                SessionScope = scope with
+                {
+                    Session = scope.Session with { DCRuleSet = "IMSA" }
+                }
+            };
+            var baseObservation = CreateStationaryServiceObservation(
+                DateTimeOffset.Parse("2026-05-10T12:12:00Z")) with
+            {
+                EntryRequest = exactRequest,
+                LastRequest = exactRequest,
+                RequestChangedDuringService = false,
+                QualificationFlags = []
+            };
+            var partial = baseArtifact with
+            {
+                SourceId = "capture-reconnect-partial",
+                PitService = baseArtifact.PitService with
+                {
+                    StationaryServiceObservationCount = 1,
+                    RetainedStationaryServiceObservationCount = 1
+                },
+                StationaryServiceObservations =
+                [
+                    baseObservation with
+                    {
+                        EntryTireCounters = null,
+                        ExitTireCounters = null,
+                        TireCounterDelta = null
+                    }
+                ]
+            };
+            var confirmed = baseArtifact with
+            {
+                SourceId = "capture-reconnect-confirmed",
+                FinishedAtUtc = baseArtifact.FinishedAtUtc.AddMinutes(1),
+                PitService = partial.PitService,
+                StationaryServiceObservations = [baseObservation]
+            };
+            var contaminated = baseArtifact with
+            {
+                SourceId = "capture-reconnect-repair",
+                FinishedAtUtc = baseArtifact.FinishedAtUtc.AddMinutes(2),
+                PitService = partial.PitService,
+                StationaryServiceObservations =
+                [baseObservation with { SawRepair = true, QualificationFlags = ["repair-active"] }]
+            };
+
+            Assert.True((await importer.ImportAsync(WriteArtifact(root, partial, "partial.json"), CancellationToken.None)).Imported);
+            Assert.True((await importer.ImportAsync(WriteArtifact(root, confirmed, "confirmed.json"), CancellationToken.None)).Imported);
+            Assert.True((await importer.ImportAsync(WriteArtifact(root, contaminated, "contaminated.json"), CancellationToken.None)).Imported);
+
+            var selected = new FuelV2PitServiceTireHistoryQueryService(options, store)
+                .Lookup(CreateHistoricalRaceContext("IMSA"), request);
+
+            Assert.Equal(FuelV2TireServiceHistorySelectionStatus.Selected, selected.Status);
+            Assert.Equal(1, selected.Profile?.MatchingObservationCount);
+            Assert.Equal(1, selected.Profile?.ConfirmedOutcomeCount);
+            Assert.Equal(0, selected.Profile?.CleanConfirmedOutcomeCount);
+            Assert.Contains("repair-active", selected.Profile?.QualificationFlags ?? []);
+            Assert.Equal(2, selected.IgnoredDuplicateObservationCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_FormatThreeStationaryEvidenceRemainsReadableWithoutExactCornerCounters()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact(formatVersion: 3);
+            var observation = CreateStationaryServiceObservation(artifact.StartedAtUtc.AddMinutes(12)) with
+            {
+                EntryRequest = new PitServiceRequestShape(
+                    LeftFrontTire: true,
+                    RightFrontTire: false,
+                    LeftRearTire: false,
+                    RightRearTire: false,
+                    Fuel: false,
+                    Tearoff: false,
+                    FastRepair: false,
+                    FuelLiters: null,
+                    RequestedTireCompoundIndex: 1),
+                LastRequest = new PitServiceRequestShape(
+                    LeftFrontTire: true,
+                    RightFrontTire: false,
+                    LeftRearTire: false,
+                    RightRearTire: false,
+                    Fuel: false,
+                    Tearoff: false,
+                    FastRepair: false,
+                    FuelLiters: null,
+                    RequestedTireCompoundIndex: 1),
+                RequestChangedDuringService = false,
+                EntryTireCounters = null,
+                ExitTireCounters = null,
+                TireCounterDelta = null,
+                QualificationFlags = []
+            };
+            artifact = artifact with
+            {
+                PitService = artifact.PitService with
+                {
+                    StationaryServiceObservationCount = 1,
+                    RetainedStationaryServiceObservationCount = 1
+                },
+                StationaryServiceObservations = [observation]
+            };
+
+            var artifactPath = WriteArtifact(root, artifact);
+            using (var document = JsonDocument.Parse(File.ReadAllText(artifactPath)))
+            {
+                var frozenObservation = document.RootElement
+                    .GetProperty("stationaryServiceObservations")
+                    .EnumerateArray()
+                    .Single();
+                Assert.False(frozenObservation.TryGetProperty("entryTireCounters", out _));
+                Assert.False(frozenObservation.TryGetProperty("exitTireCounters", out _));
+                Assert.False(frozenObservation.TryGetProperty("tireCounterDelta", out _));
+            }
+
+            var importer = CreateImporter(storage);
+            var result = await importer.ImportAsync(artifactPath, CancellationToken.None);
+
+            Assert.True(result.Imported);
+            var summaryPath = Assert.Single(Directory.EnumerateFiles(
+                Path.Combine(SessionDirectory(storage), "summaries"),
+                "*.json"));
+            var summary = Assert.IsType<FuelV2HistorySummary>(
+                JsonSerializer.Deserialize<FuelV2HistorySummary>(File.ReadAllText(summaryPath), JsonOptions));
+            var retained = Assert.Single(summary.StationaryServiceObservations);
+            Assert.Equal(3, summary.SourceVersions.CaptureFormatVersion);
+            Assert.Null(retained.EntryTireCounters);
+            Assert.Null(retained.ExitTireCounters);
+            Assert.Null(retained.TireCounterDelta);
+            Assert.Equal(
+                PitServiceTireExecutionState.RequestedOnly,
+                PitServiceTireChangeClassifier.Classify(retained).ExecutionState);
+            Assert.Contains(
+                "exact-corner-counters-unavailable",
+                PitServiceTireChangeClassifier.Classify(retained).QualificationFlags);
+
+            var requestedShape = LivePitServiceRequest.Empty with { LeftFrontTire = true };
+            var selected = new FuelV2PitServiceTireHistoryQueryService(
+                CreateOptions(storage),
+                new FuelV2HistoryStore(CreateOptions(storage)))
+                .Lookup(CreateHistoricalRaceContext(), requestedShape);
+            Assert.Equal(FuelV2TireServiceHistorySelectionStatus.RequestedOnly, selected.Status);
+            Assert.Equal("LF", selected.RequestedShape?.DisplayLabel);
+
+            await importer.MaintainAsync(CancellationToken.None);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_RetainsFormatOneEvidenceAsLegacyWithoutReinterpretationOrLearning()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact(formatVersion: 1) with { SessionScope = CreateLegacyPlaceholderSessionScope() };
+            var artifactPath = WriteArtifact(root, artifact);
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(artifactPath, CancellationToken.None);
+
+            Assert.True(result.Imported);
+            var sessionDirectory = SessionDirectory(storage);
+            var summaryPath = Assert.Single(Directory.EnumerateFiles(Path.Combine(sessionDirectory, "summaries"), "*.json"));
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(File.ReadAllText(summaryPath), JsonOptions);
+            Assert.NotNull(summary);
+            Assert.False(summary.SessionIntegrity.IsClassifiedForHistory);
+            Assert.Equal("legacy-unclassified", summary.SessionIntegrity.SessionFamily);
+            Assert.Null(summary.FuelCapacity.EffectiveSessionCapacityLiters);
+            Assert.Null(summary.FuelCapacity.DriverCarMaxFuelPercent);
+            Assert.Null(summary.FuelCapacity.CarClassMaxFuelPercent);
+            Assert.Equal("not_available_in_current_models", summary.FuelCapacity.EffectiveSessionCapacitySource);
+            Assert.Equal("Effective event fuel-cap parsing is not implemented.", summary.FuelCapacity.Limitation);
+
+            var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(sessionDirectory, "aggregate.json")),
+                JsonOptions);
+            Assert.NotNull(aggregate);
+            Assert.Equal(1, aggregate.SummaryCount);
+            Assert.Equal(0, aggregate.ClassifiedSessionCount);
+            Assert.Equal(1, aggregate.LegacyUnclassifiedSessionCount);
+            Assert.Equal(0, aggregate.UnclassifiedV2SessionCount);
+            Assert.Equal(0, aggregate.AcceptedLapFuelPerLapLiters.SampleCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_ReadsFrozenV123RawSidecarAsLegacyWithoutReinterpretationOrLearning()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifactPath = Path.Combine(root, "frozen-v123-sidecar.json");
+            Directory.CreateDirectory(root);
+            File.Copy(
+                V123FixturePath("capture", "fuel-v2-diagnostics.json"),
+                artifactPath);
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(artifactPath, CancellationToken.None);
+
+            Assert.True(result.Imported);
+            Assert.Equal("frozen-v123-sidecar", result.SourceId);
+            var summaryPath = Assert.Single(Directory.EnumerateFiles(
+                Path.Combine(SessionDirectory(storage), "summaries"),
+                "*.json"));
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(
+                File.ReadAllText(summaryPath),
+                JsonOptions);
+            Assert.NotNull(summary);
+            Assert.Equal(1, summary.SourceVersions.CaptureFormatVersion);
+            Assert.False(summary.SessionIntegrity.IsClassifiedForHistory);
+            Assert.Equal("legacy-unclassified", summary.SessionIntegrity.SessionFamily);
+            Assert.Equal("not_available_in_current_models", summary.FuelCapacity.EffectiveSessionCapacitySource);
+
+            var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(SessionDirectory(storage), "aggregate.json")),
+                JsonOptions);
+            Assert.NotNull(aggregate);
+            Assert.Equal(1, aggregate.LegacyUnclassifiedSessionCount);
+            Assert.Equal(0, aggregate.LearningEligibleSessionCount);
+            Assert.Equal(0, aggregate.AcceptedLapFuelPerLapLiters.SampleCount);
         }
         finally
         {
@@ -112,21 +658,497 @@ public sealed class FuelV2HistoryImporterTests
             await importer.ImportAsync(artifactPath, CancellationToken.None);
             await importer.ImportAsync(artifactPath, CancellationToken.None);
 
-            var aggregatePath = Path.Combine(
-                storage.UserHistoryRoot,
-                "fuel-v2",
-                "cars",
-                "car-1-test-car",
-                "tracks",
-                "track-2-test-track",
-                "sessions",
-                "race",
-                "aggregate.json");
+            var aggregatePath = Path.Combine(SessionDirectory(storage), "aggregate.json");
             var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(File.ReadAllText(aggregatePath), JsonOptions);
 
             Assert.NotNull(aggregate);
             Assert.Equal(1, aggregate.SummaryCount);
             Assert.Equal(1, aggregate.AcceptedLapFuelPerLapLiters.SampleCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_KeepsRaceLengthAndFuelCapAsContextWithinOneExactFamily()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var first = CreateArtifact();
+            var secondScope = CreateSessionScope() with
+            {
+                Session = CreateSessionScope().Session with
+                {
+                    SessionLapsText = "20 laps",
+                    SessionId = 13,
+                    SubSessionId = 14
+                },
+                FuelCapacity = CreateSessionScope().FuelCapacity with
+                {
+                    EffectiveSessionCapacityLiters = 44.8d,
+                    EffectiveSessionCapacitySource = "matching_driver_and_class_caps",
+                    DriverCarMaxFuelPercent = 0.64d,
+                    CarClassMaxFuelPercent = 0.64d
+                }
+            };
+            var second = CreateArtifact() with
+            {
+                FinishedAtUtc = DateTimeOffset.Parse("2026-05-10T12:45:00Z"),
+                SessionScope = secondScope,
+                SessionLineage = ClassifiedLineage() with
+                {
+                    ConnectionSourceId = "capture-fuel-v2-second",
+                    SegmentOrdinal = 2,
+                    SessionOccurrenceKey = "current-session:0|session:0|session-id:13|sub-session-id:14"
+                }
+            };
+            var importer = CreateImporter(storage);
+
+            await importer.ImportAsync(WriteArtifact(root, first, "first.json"), CancellationToken.None);
+            await importer.ImportAsync(WriteArtifact(root, second, "second.json"), CancellationToken.None);
+
+            var sessionDirectory = SessionDirectory(storage);
+            var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(sessionDirectory, "aggregate.json")),
+                JsonOptions);
+            var summaries = Directory.EnumerateFiles(Path.Combine(sessionDirectory, "summaries"), "*.json")
+                .Select(path => JsonSerializer.Deserialize<FuelV2HistorySummary>(File.ReadAllText(path), JsonOptions)!)
+                .ToArray();
+
+            Assert.NotNull(aggregate);
+            Assert.Equal(2, aggregate.SummaryCount);
+            Assert.Equal(2, aggregate.AcceptedLapFuelPerLapLiters.SampleCount);
+            Assert.Equal(2, summaries.Length);
+            Assert.Contains(summaries, summary => summary.RaceLength.DeclaredLapCount == 50
+                && summary.FuelCapacity.EffectiveSessionCapacityLiters == 56d);
+            Assert.Contains(summaries, summary => summary.RaceLength.DeclaredLapCount == 20
+                && summary.FuelCapacity.EffectiveSessionCapacityLiters == 44.8d);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_ExcludesReconnectDuplicateOfTheSameVerifiedOccurrenceFromMetrics()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var first = CreateArtifact();
+            var reconnect = CreateArtifact() with
+            {
+                FinishedAtUtc = DateTimeOffset.Parse("2026-05-10T12:31:00Z")
+            };
+            var importer = CreateImporter(storage);
+
+            await importer.ImportAsync(WriteArtifact(root, first, "first.json"), CancellationToken.None);
+            await importer.ImportAsync(WriteArtifact(root, reconnect, "reconnect.json"), CancellationToken.None);
+
+            var sessionDirectory = SessionDirectory(storage);
+            var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(sessionDirectory, "aggregate.json")),
+                JsonOptions);
+            Assert.NotNull(aggregate);
+            Assert.Equal(1, aggregate.SummaryCount);
+            Assert.Equal(1, aggregate.ExcludedDuplicateOccurrenceSummaryCount);
+            Assert.Equal(1, aggregate.AcceptedLapFuelPerLapLiters.SampleCount);
+            Assert.Equal(2, Directory.EnumerateFiles(Path.Combine(sessionDirectory, "summaries"), "*.json").Count());
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_DoesNotCollapseIndependentSessionsWhenOnlyPhaseNumbersMatch()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var phaseOnlyScope = CreateSessionScope() with
+            {
+                Session = CreateSessionScope().Session with
+                {
+                    SessionId = null,
+                    SubSessionId = null
+                }
+            };
+            var phaseOnlyLineage = ClassifiedLineage() with
+            {
+                SessionOccurrenceKey = "current-session:0|session:0"
+            };
+            var first = CreateArtifact() with
+            {
+                SessionScope = phaseOnlyScope,
+                SessionLineage = phaseOnlyLineage
+            };
+            var second = first with
+            {
+                SourceId = "capture-fuel-v2-second-session",
+                FinishedAtUtc = first.FinishedAtUtc.AddHours(2),
+                SessionLineage = phaseOnlyLineage with
+                {
+                    ConnectionSourceId = "capture-fuel-v2-second-session",
+                    SegmentOrdinal = 2
+                }
+            };
+            var importer = CreateImporter(storage);
+
+            await importer.ImportAsync(WriteArtifact(root, first, "first.json"), CancellationToken.None);
+            await importer.ImportAsync(WriteArtifact(root, second, "second.json"), CancellationToken.None);
+
+            var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(SessionDirectory(storage), "aggregate.json")),
+                JsonOptions);
+            Assert.NotNull(aggregate);
+            Assert.Equal(2, aggregate.SummaryCount);
+            Assert.Equal(0, aggregate.ExcludedDuplicateOccurrenceSummaryCount);
+            Assert.Equal(2, aggregate.AcceptedLapFuelPerLapLiters.SampleCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_NeverCombinesDifferentExactTrackConfigurations()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var secondScope = CreateSessionScope() with
+            {
+                Track = CreateSessionScope().Track with { TrackConfigName = "GP Short" },
+                Session = CreateSessionScope().Session with { SessionId = 13, SubSessionId = 14 }
+            };
+            var second = CreateArtifact() with
+            {
+                FinishedAtUtc = DateTimeOffset.Parse("2026-05-10T12:45:00Z"),
+                SessionScope = secondScope,
+                SessionLineage = ClassifiedLineage() with
+                {
+                    ConnectionSourceId = "capture-fuel-v2-second",
+                    SegmentOrdinal = 2,
+                    SessionOccurrenceKey = "current-session:0|session:0|session-id:13|sub-session-id:14",
+                    TrackLayoutKey = "track-id-2-config-47502053686F7274"
+                }
+            };
+            var importer = CreateImporter(storage);
+
+            await importer.ImportAsync(WriteArtifact(root, CreateArtifact(), "full.json"), CancellationToken.None);
+            await importer.ImportAsync(WriteArtifact(root, second, "short.json"), CancellationToken.None);
+
+            var fullAggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(SessionDirectory(storage), "aggregate.json")),
+                JsonOptions);
+            var shortAggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(
+                    SessionDirectory(storage, "track-id-2-config-47502053686f7274"),
+                    "aggregate.json")),
+                JsonOptions);
+
+            Assert.NotNull(fullAggregate);
+            Assert.NotNull(shortAggregate);
+            Assert.Equal(1, fullAggregate.SummaryCount);
+            Assert.Equal(1, shortAggregate.SummaryCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_DemotesMismatchedV2LineageInsteadOfLearningIt()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact() with
+            {
+                SessionLineage = ClassifiedLineage() with { TrackLayoutKey = "claimed-wrong-layout" }
+            };
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+
+            Assert.True(result.Imported);
+            var sessionDirectory = SessionDirectory(storage);
+            var summaryPath = Assert.Single(Directory.EnumerateFiles(Path.Combine(sessionDirectory, "summaries"), "*.json"));
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(File.ReadAllText(summaryPath), JsonOptions);
+            var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(sessionDirectory, "aggregate.json")),
+                JsonOptions);
+            Assert.NotNull(summary);
+            Assert.NotNull(aggregate);
+            Assert.False(summary.SessionIntegrity.IsClassifiedForHistory);
+            Assert.Equal(0, aggregate.AcceptedLapFuelPerLapLiters.SampleCount);
+            Assert.Equal(0, aggregate.LegacyUnclassifiedSessionCount);
+            Assert.Equal(1, aggregate.UnclassifiedV2SessionCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_DemotesClaimedExactLineageWhenRawLayoutIsIncomplete()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var incompleteLayoutScope = CreateSessionScope() with
+            {
+                Track = CreateSessionScope().Track with { TrackConfigName = null }
+            };
+            var artifact = CreateArtifact() with
+            {
+                SessionScope = incompleteLayoutScope,
+                SessionLineage = ClassifiedLineage() with
+                {
+                    TrackLayoutKey = "track-2-example",
+                    TrackLayoutIdentitySource = "track-id-and-name-fallback",
+                    ExactTrackLayoutVerified = true
+                }
+            };
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+
+            Assert.True(result.Imported);
+            var expectedLayout = FuelV2HistoryIdentity.TrackLayout(
+                incompleteLayoutScope.Track.TrackId,
+                incompleteLayoutScope.Track.TrackName,
+                incompleteLayoutScope.Track.TrackDisplayName,
+                incompleteLayoutScope.Track.TrackConfigName);
+            Assert.Equal("track-2-test-track", expectedLayout.Key);
+            Assert.Equal("track-id-and-name-fallback", expectedLayout.Source);
+            Assert.False(expectedLayout.IsExact);
+            var sessionDirectory = SessionDirectory(storage, expectedLayout.Key);
+            var summaryPath = Assert.Single(Directory.EnumerateFiles(Path.Combine(sessionDirectory, "summaries"), "*.json"));
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(File.ReadAllText(summaryPath), JsonOptions);
+            Assert.NotNull(summary);
+            Assert.Equal(expectedLayout.Key, summary.Scope.Combo.TrackLayoutKey);
+            Assert.Equal(expectedLayout.Source, summary.Scope.Combo.TrackLayoutIdentitySource);
+            Assert.False(summary.SessionIntegrity.IsClassifiedForHistory);
+            Assert.False(summary.SessionIntegrity.ExactTrackLayoutVerified);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_RetainsExistingVersionOneSummaryAsManifestedLegacyEvidence()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var legacySummaries = Path.Combine(
+                storage.UserHistoryRoot,
+                "fuel-v2",
+                "cars",
+                "legacy-car",
+                "tracks",
+                "legacy-track",
+                "sessions",
+                "race",
+                "summaries");
+            Directory.CreateDirectory(legacySummaries);
+            File.Copy(
+                V123FixturePath("history", "fuel-v2", "cars", "legacy-car", "tracks", "legacy-track", "sessions", "race", "summaries", "legacy-v123.json"),
+                Path.Combine(legacySummaries, "legacy-v123.json"));
+            var importer = CreateImporter(storage);
+
+            await importer.ImportAsync(WriteArtifact(root, CreateArtifact()), CancellationToken.None);
+
+            var manifest = JsonSerializer.Deserialize<FuelV2HistoryManifest>(
+                File.ReadAllText(Path.Combine(storage.UserHistoryRoot, "fuel-v2", "manifest.json")),
+                JsonOptions);
+            Assert.NotNull(manifest);
+            Assert.Equal(2, manifest.SummaryCount);
+            Assert.Equal(1, manifest.ClassifiedSummaryCount);
+            Assert.Equal(1, manifest.LegacyUnclassifiedSummaryCount);
+            Assert.Equal(0, manifest.UnclassifiedV2SummaryCount);
+            Assert.Equal(0, manifest.UnreadableSummaryCount);
+            Assert.Equal(0, manifest.MisfiledSummaryCount);
+            Assert.True(File.Exists(Path.Combine(legacySummaries, "legacy-v123.json")));
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_DoesNotDuplicateExistingLegacySummaryWhenItsSidecarIsReplayed()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var legacySummaries = Path.Combine(
+                storage.UserHistoryRoot,
+                "fuel-v2",
+                "cars",
+                "legacy-car",
+                "tracks",
+                "legacy-track",
+                "sessions",
+                "race",
+                "summaries");
+            Directory.CreateDirectory(legacySummaries);
+            File.Copy(
+                V123FixturePath("history", "fuel-v2", "cars", "legacy-car", "tracks", "legacy-track", "sessions", "race", "summaries", "legacy-v123.json"),
+                Path.Combine(legacySummaries, "legacy-v123.json"));
+            var importer = CreateImporter(storage);
+            await importer.MaintainAsync(CancellationToken.None);
+
+            var retainedLegacyArtifact = CreateArtifact(formatVersion: 1) with
+            {
+                SourceId = "legacy-v123",
+                SessionScope = CreateLegacyPlaceholderSessionScope()
+            };
+            var result = await importer.ImportAsync(
+                WriteArtifact(root, retainedLegacyArtifact, "legacy-sidecar.json"),
+                CancellationToken.None);
+
+            Assert.False(result.Imported);
+            Assert.Equal("legacy_source_already_retained", result.Reason);
+            var manifest = JsonSerializer.Deserialize<FuelV2HistoryManifest>(
+                File.ReadAllText(Path.Combine(storage.UserHistoryRoot, "fuel-v2", "manifest.json")),
+                JsonOptions);
+            Assert.NotNull(manifest);
+            Assert.Equal(1, manifest.SummaryCount);
+            Assert.Equal(1, manifest.LegacyUnclassifiedSummaryCount);
+            Assert.Equal(0, manifest.UnreadableSummaryCount);
+            Assert.Single(Directory.EnumerateFiles(legacySummaries, "*.json"));
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_SkipsIncompleteSidecarAndContinuesWithLaterValidEvidence()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var incompletePath = WriteArtifact(root, CreateArtifact(), "incomplete.json");
+            var incomplete = JsonNode.Parse(File.ReadAllText(incompletePath))!.AsObject();
+            incomplete["totals"] = null;
+            File.WriteAllText(incompletePath, incomplete.ToJsonString(JsonOptions));
+            var importer = CreateImporter(storage);
+
+            var incompleteResult = await importer.ImportAsync(incompletePath, CancellationToken.None);
+            var validResult = await importer.ImportAsync(
+                WriteArtifact(root, CreateArtifact() with { SourceId = "capture-after-incomplete" }, "valid.json"),
+                CancellationToken.None);
+
+            Assert.False(incompleteResult.Imported);
+            Assert.Equal("artifact_incomplete", incompleteResult.Reason);
+            Assert.True(validResult.Imported);
+            var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(SessionDirectory(storage), "aggregate.json")),
+                JsonOptions);
+            Assert.NotNull(aggregate);
+            Assert.Equal(1, aggregate.SummaryCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task MaintainAsync_ExcludesRenamedV2SummaryFromAggregateAndMarksItMisfiled()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var importer = CreateImporter(storage);
+            await importer.ImportAsync(WriteArtifact(root, CreateArtifact()), CancellationToken.None);
+
+            var summariesDirectory = Path.Combine(SessionDirectory(storage), "summaries");
+            var canonicalPath = Assert.Single(Directory.EnumerateFiles(summariesDirectory, "*.json"));
+            File.Copy(canonicalPath, Path.Combine(summariesDirectory, "renamed-copy.json"));
+            await importer.MaintainAsync(CancellationToken.None);
+
+            var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(SessionDirectory(storage), "aggregate.json")),
+                JsonOptions);
+            var manifest = JsonSerializer.Deserialize<FuelV2HistoryManifest>(
+                File.ReadAllText(Path.Combine(storage.UserHistoryRoot, "fuel-v2", "manifest.json")),
+                JsonOptions);
+            Assert.NotNull(aggregate);
+            Assert.NotNull(manifest);
+            Assert.Equal(1, aggregate.SummaryCount);
+            Assert.Equal(1, aggregate.AcceptedLapFuelPerLapLiters.SampleCount);
+            Assert.Equal(1, manifest.SummaryCount);
+            Assert.Equal(1, manifest.MisfiledSummaryCount);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_QuarantinesSemanticallyIncompleteStoredSummaryDuringRebuild()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var importer = CreateImporter(storage);
+            await importer.ImportAsync(WriteArtifact(root, CreateArtifact(), "first.json"), CancellationToken.None);
+
+            var summariesDirectory = Path.Combine(SessionDirectory(storage), "summaries");
+            var firstSummaryPath = Assert.Single(Directory.EnumerateFiles(summariesDirectory, "*.json"));
+            var corrupt = JsonNode.Parse(File.ReadAllText(firstSummaryPath))!.AsObject();
+            corrupt["sessionIntegrity"] = null;
+            File.WriteAllText(firstSummaryPath, corrupt.ToJsonString(JsonOptions));
+
+            var second = CreateArtifact() with
+            {
+                SourceId = "capture-fuel-v2-second",
+                FinishedAtUtc = DateTimeOffset.Parse("2026-05-10T12:45:00Z")
+            };
+            var result = await importer.ImportAsync(WriteArtifact(root, second, "second.json"), CancellationToken.None);
+
+            Assert.True(result.Imported);
+            var aggregate = JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(SessionDirectory(storage), "aggregate.json")),
+                JsonOptions);
+            var manifest = JsonSerializer.Deserialize<FuelV2HistoryManifest>(
+                File.ReadAllText(Path.Combine(storage.UserHistoryRoot, "fuel-v2", "manifest.json")),
+                JsonOptions);
+            Assert.NotNull(aggregate);
+            Assert.NotNull(manifest);
+            Assert.Equal(1, aggregate.SummaryCount);
+            Assert.Equal(1, aggregate.AcceptedLapFuelPerLapLiters.SampleCount);
+            Assert.Equal(1, manifest.UnreadableSummaryCount);
+            Assert.Equal(1, manifest.ClassifiedSummaryCount);
         }
         finally
         {
@@ -187,19 +1209,317 @@ public sealed class FuelV2HistoryImporterTests
     }
 
     [Fact]
+    public async Task ImportAsync_FormatSixRetainsQualifiedLocalPitRouteWithoutAddingAnAggregateMetric()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact(formatVersion: 6);
+            var route = CreatePitRouteObservation(artifact.StartedAtUtc.AddMinutes(10));
+            artifact = artifact with
+            {
+                PitService = artifact.PitService with
+                {
+                    PitRouteObservationCount = 1,
+                    RetainedPitRouteObservationCount = 1
+                },
+                PitRouteObservations = [route]
+            };
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+
+            Assert.True(result.Imported);
+            var summary = Assert.IsType<FuelV2HistorySummary>(JsonSerializer.Deserialize<FuelV2HistorySummary>(
+                File.ReadAllText(Assert.Single(Directory.EnumerateFiles(
+                    Path.Combine(SessionDirectory(storage), "summaries"),
+                    "*.json"))),
+                JsonOptions));
+            var retained = Assert.Single(summary.PitRouteObservations);
+            Assert.Equal(FuelV2HistoryDataVersions.SummaryVersion, summary.SummaryVersion);
+            Assert.Equal(FuelV2HistoryDataVersions.ImportModelVersion, summary.ImportModelVersion);
+            Assert.Equal(6, summary.SourceVersions.CaptureFormatVersion);
+            Assert.True(retained.HasCompleteRoute);
+            Assert.Equal("driver-pit-track-percent:0.068197", retained.Assignment.PitBoxIdentity);
+            Assert.Equal(1, summary.Evidence.PitRouteObservationCount);
+
+            var aggregate = Assert.IsType<FuelV2HistoryAggregate>(JsonSerializer.Deserialize<FuelV2HistoryAggregate>(
+                File.ReadAllText(Path.Combine(SessionDirectory(storage), "aggregate.json")),
+                JsonOptions));
+            Assert.Equal(3, aggregate.AggregateVersion);
+            Assert.DoesNotContain("PitRoute", JsonSerializer.Serialize(aggregate, JsonOptions), StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ModelReadinessQuery_HidesOnlyAfterExactTestCollectionGoalsAreComplete()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var scope = CreateSessionScope() with
+            {
+                Combo = CreateSessionScope().Combo with { SessionKey = "test" },
+                Session = CreateSessionScope().Session with
+                {
+                    SessionType = "Offline Testing",
+                    SessionName = "Offline Testing",
+                    EventType = "Test",
+                    DCRuleSet = "IMSA"
+                }
+            };
+            var started = DateTimeOffset.Parse("2026-07-14T12:00:00Z");
+            var tireShapes = new[]
+            {
+                (true, false, false, false),
+                (false, true, false, false),
+                (false, false, true, false),
+                (false, false, false, true),
+                (true, true, false, false),
+                (false, false, true, true),
+                (true, false, true, false),
+                (false, true, false, true),
+                (true, true, true, true)
+            };
+            var stationary = tireShapes
+                .Select((shape, index) => CreateReadinessStationaryObservation(
+                    started.AddMinutes(index),
+                    shape.Item1,
+                    shape.Item2,
+                    shape.Item3,
+                    shape.Item4,
+                    fuelAddedLiters: index == tireShapes.Length - 1 ? 40d : 5d))
+                .Append(CreateReadinessStationaryObservation(
+                    started.AddMinutes(tireShapes.Length),
+                    leftFront: false,
+                    rightFront: false,
+                    leftRear: false,
+                    rightRear: false,
+                    fuelAddedLiters: 5d))
+                .ToArray();
+            var artifact = CreateArtifact(formatVersion: 6) with
+            {
+                SessionScope = scope,
+                SessionLineage = ClassifiedLineage() with { SessionFamily = "test" },
+                PitService = new FuelV2PitServiceEvidenceSummary(
+                    PitWindowCount: 1,
+                    PitWindowsWithFuelIncrease: 1,
+                    RequestCounts: new Dictionary<string, int> { ["fuel"] = stationary.Length },
+                    StationaryServiceObservationCount: stationary.Length,
+                    RetainedStationaryServiceObservationCount: stationary.Length,
+                    PitRouteObservationCount: 1,
+                    RetainedPitRouteObservationCount: 1),
+                StationaryServiceObservations = stationary,
+                PitRouteObservations = [CreatePitRouteObservation(started.AddMinutes(12))]
+            };
+            var options = CreateOptions(storage);
+            var importer = new FuelV2HistoryImporter(
+                options,
+                new FuelV2HistoryStore(options),
+                NullLogger<FuelV2HistoryImporter>.Instance);
+
+            Assert.True((await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None)).Imported);
+
+            var readiness = new FuelV2ModelReadinessQueryService(options, new FuelV2HistoryStore(options))
+                .Lookup(CreateHistoricalTestContext());
+
+            Assert.True(readiness.IsCollectionComplete);
+            Assert.False(readiness.IsVisible);
+            Assert.Equal(new[] { "test" }, readiness.SourceFamilies);
+            Assert.Equal(
+                new[] { "To box", "From box", "Full stop", "Pit box", "Pit lane pass" },
+                readiness.Rows.Single(row => row.Label == "Pit route").Cells.Select(cell => cell.Label));
+            Assert.Equal(
+                new[] { "Small fill", "Large fill", "Fuel flow", "Fuel only", "Fuel + tires" },
+                readiness.Rows.Single(row => row.Label == "Refuel").Cells.Select(cell => cell.Label));
+            Assert.Equal(
+                new[] { "1 tire", "Fronts", "Rears", "Left", "Right", "4 tires" },
+                readiness.Rows.Single(row => row.Label == "Tires").Cells.Select(cell => cell.Label));
+            Assert.All(readiness.Rows.SelectMany(row => row.Cells.Where(cell => cell.IsRequired)), cell =>
+                Assert.Equal(FuelV2ModelReadinessState.Confirmed, cell.State));
+            var pitLanePass = readiness.Rows.Single(row => row.Label == "Pit route")
+                .Cells.Single(cell => cell.Label == "Pit lane pass");
+            Assert.False(pitLanePass.IsRequired);
+            Assert.Equal(FuelV2ModelReadinessState.Missing, pitLanePass.State);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
     public async Task ImportAsync_WhenCaptureFormatIsFutureSkipsWithoutWritingHistory()
     {
         var root = TempRoot();
         try
         {
             var storage = CreateStorage(root);
-            var artifactPath = WriteArtifact(root, CreateArtifact(formatVersion: 2));
+            var artifactPath = WriteArtifact(root, CreateArtifact(formatVersion: 8));
             var importer = CreateImporter(storage);
 
             var result = await importer.ImportAsync(artifactPath, CancellationToken.None);
 
             Assert.False(result.Imported);
             Assert.Equal("unsupported_capture_format", result.Reason);
+            Assert.False(Directory.Exists(Path.Combine(storage.UserHistoryRoot, "fuel-v2")));
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_FormatSevenRequiresExplicitRequestTransitionClassification()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact(formatVersion: 7);
+            artifact = artifact with
+            {
+                PitService = artifact.PitService with
+                {
+                    StationaryServiceObservationCount = 1,
+                    RetainedStationaryServiceObservationCount = 1
+                },
+                // The default is the legacy compatibility value. A genuine
+                // v7 producer must write one of the explicit classifications.
+                StationaryServiceObservations = [CreateStationaryServiceObservation(artifact.StartedAtUtc.AddMinutes(12))]
+            };
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(WriteArtifact(root, artifact), CancellationToken.None);
+
+            Assert.False(result.Imported);
+            Assert.Equal("artifact_incomplete", result.Reason);
+            Assert.False(Directory.Exists(Path.Combine(storage.UserHistoryRoot, "fuel-v2")));
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenFormatFourStationaryEvidenceIsMissingSkipsWithoutWritingHistory()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifactPath = WriteArtifact(root, CreateArtifact() with { StationaryServiceObservations = null });
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(artifactPath, CancellationToken.None);
+
+            Assert.False(result.Imported);
+            Assert.Equal("artifact_incomplete", result.Reason);
+            Assert.False(Directory.Exists(Path.Combine(storage.UserHistoryRoot, "fuel-v2")));
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_FormatTwoClassifiedSidecarRemainsClassifiedWithoutStationaryEvidence()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifactPath = WriteArtifact(
+                root,
+                CreateArtifact(formatVersion: 2) with { StationaryServiceObservations = null });
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(artifactPath, CancellationToken.None);
+
+            Assert.True(result.Imported);
+            var summaryPath = Assert.Single(Directory.EnumerateFiles(Path.Combine(SessionDirectory(storage), "summaries"), "*.json"));
+            var summary = JsonSerializer.Deserialize<FuelV2HistorySummary>(File.ReadAllText(summaryPath), JsonOptions);
+            Assert.NotNull(summary);
+            Assert.Equal(2, summary.SourceVersions.CaptureFormatVersion);
+            Assert.True(summary.SessionIntegrity.IsClassifiedForHistory);
+            Assert.Empty(summary.StationaryServiceObservations);
+
+            var options = CreateOptions(storage);
+            var query = new FuelV2HistoryNormalBurnQueryService(options, new FuelV2HistoryStore(options));
+            var selection = query.Lookup(CreateHistoricalRaceContext());
+            Assert.True(selection.IsAvailable);
+            Assert.Equal(3.1d, selection.Burn?.Value);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenFormatFourStationaryCountsDoNotMatchSkipsWithoutWritingHistory()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact();
+            var invalid = artifact with
+            {
+                PitService = artifact.PitService with
+                {
+                    StationaryServiceObservationCount = 1,
+                    RetainedStationaryServiceObservationCount = 1
+                }
+            };
+            var importer = CreateImporter(storage);
+
+            var result = await importer.ImportAsync(WriteArtifact(root, invalid), CancellationToken.None);
+
+            Assert.False(result.Imported);
+            Assert.Equal("artifact_incomplete", result.Reason);
+        }
+        finally
+        {
+            DeleteIfExists(root);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenStationaryObservationLacksRequestShapeSkipsWithoutWritingHistory()
+    {
+        var root = TempRoot();
+        try
+        {
+            var storage = CreateStorage(root);
+            var artifact = CreateArtifact();
+            artifact = artifact with
+            {
+                PitService = artifact.PitService with
+                {
+                    StationaryServiceObservationCount = 1,
+                    RetainedStationaryServiceObservationCount = 1
+                },
+                StationaryServiceObservations = [CreateStationaryServiceObservation(artifact.StartedAtUtc.AddMinutes(12))]
+            };
+            var artifactPath = WriteArtifact(root, artifact);
+            var rootNode = JsonNode.Parse(File.ReadAllText(artifactPath))!.AsObject();
+            rootNode["stationaryServiceObservations"]!.AsArray()[0]!.AsObject().Remove("entryRequest");
+            File.WriteAllText(artifactPath, rootNode.ToJsonString(JsonOptions));
+
+            var result = await CreateImporter(storage).ImportAsync(artifactPath, CancellationToken.None);
+
+            Assert.False(result.Imported);
+            Assert.Equal("artifact_incomplete", result.Reason);
             Assert.False(Directory.Exists(Path.Combine(storage.UserHistoryRoot, "fuel-v2")));
         }
         finally
@@ -235,27 +1555,78 @@ public sealed class FuelV2HistoryImporterTests
 
     private static FuelV2HistoryImporter CreateImporter(AppStorageOptions storage)
     {
-        var options = new FuelV2HistoryOptions
-        {
-            Enabled = true,
-            UseForStrategy = false,
-            ResolvedHistoryRoot = Path.Combine(storage.UserHistoryRoot, "fuel-v2")
-        };
+        var options = CreateOptions(storage);
         return new FuelV2HistoryImporter(
             options,
             new FuelV2HistoryStore(options),
             NullLogger<FuelV2HistoryImporter>.Instance);
     }
 
-    private static string WriteArtifact(string root, FuelV2CaptureArtifact artifact)
+    private static FuelV2HistoryOptions CreateOptions(AppStorageOptions storage)
     {
-        var path = Path.Combine(root, "fuel-v2-diagnostics.json");
+        return new FuelV2HistoryOptions
+        {
+            Enabled = true,
+            UseForStrategy = false,
+            ResolvedHistoryRoot = Path.Combine(storage.UserHistoryRoot, "fuel-v2")
+        };
+    }
+
+    private static HistoricalSessionContext CreateHistoricalRaceContext(string? dcRuleSet = null)
+    {
+        return new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity { CarId = 1, CarPath = "test-car" },
+            Track = new HistoricalTrackIdentity
+            {
+                TrackId = 2,
+                TrackName = "test-track",
+                TrackDisplayName = "Test Track",
+                TrackConfigName = "Full"
+            },
+            Session = new HistoricalSessionIdentity
+            {
+                SessionType = "Race",
+                SessionName = "Race",
+                EventType = "Race",
+                DCRuleSet = dcRuleSet
+            },
+            Conditions = new HistoricalSessionInfoConditions()
+        };
+    }
+
+    private static HistoricalSessionContext CreateHistoricalTestContext()
+    {
+        return new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity { CarId = 1, CarPath = "test-car" },
+            Track = new HistoricalTrackIdentity
+            {
+                TrackId = 2,
+                TrackName = "test-track",
+                TrackDisplayName = "Test Track",
+                TrackConfigName = "Full"
+            },
+            Session = new HistoricalSessionIdentity
+            {
+                SessionType = "Offline Testing",
+                SessionName = "Offline Testing",
+                EventType = "Test",
+                DCRuleSet = "IMSA"
+            },
+            Conditions = new HistoricalSessionInfoConditions()
+        };
+    }
+
+    private static string WriteArtifact(string root, FuelV2CaptureArtifact artifact, string fileName = "fuel-v2-diagnostics.json")
+    {
+        var path = Path.Combine(root, fileName);
         Directory.CreateDirectory(root);
         File.WriteAllText(path, JsonSerializer.Serialize(artifact, JsonOptions));
         return path;
     }
 
-    private static FuelV2CaptureArtifact CreateArtifact(bool includeSessionScope = true, int formatVersion = 1)
+    private static FuelV2CaptureArtifact CreateArtifact(bool includeSessionScope = true, int formatVersion = 5)
     {
         var started = DateTimeOffset.Parse("2026-05-10T12:00:00Z");
         return new FuelV2CaptureArtifact(
@@ -515,13 +1886,197 @@ public sealed class FuelV2HistoryImporterTests
                     SessionTimeSeconds: 1200d,
                     Sequence: 75,
                     Detail: "DCDriversSoFar changed from 1 to 2")
-            ]);
+            ],
+            SessionLineage: formatVersion >= 2 ? ClassifiedLineage() : null,
+            StationaryServiceObservations: [],
+            PitRouteObservations: formatVersion >= 6 ? [] : null);
+    }
+
+    private static PitServiceStationaryServiceObservation CreateStationaryServiceObservation(
+        DateTimeOffset startedAtUtc)
+    {
+        var entryRequest = new PitServiceRequestShape(
+            LeftFrontTire: false,
+            RightFrontTire: false,
+            LeftRearTire: false,
+            RightRearTire: false,
+            Fuel: true,
+            Tearoff: false,
+            FastRepair: false,
+            FuelLiters: 12.5d,
+            RequestedTireCompoundIndex: 1);
+        var finalRequest = entryRequest with
+        {
+            LeftFrontTire = true,
+            RightFrontTire = true,
+            LeftRearTire = true,
+            RightRearTire = true
+        };
+        return new PitServiceStationaryServiceObservation(
+            StartedAtUtc: startedAtUtc,
+            EndedAtUtc: startedAtUtc.AddSeconds(5),
+            DurationSeconds: 5d,
+            EntryFuelLiters: 20d,
+            ExitFuelLiters: 25d,
+            NetFuelDeltaLiters: 5d,
+            PositiveFuelAddedLiters: 5d,
+            FuelFlowStartedAtUtc: startedAtUtc.AddSeconds(1),
+            FuelFlowEndedAtUtc: startedAtUtc.AddSeconds(4),
+            FuelFlowDurationSeconds: 3d,
+            EntryRequest: entryRequest,
+            LastRequest: finalRequest,
+            RequestChangedDuringService: true,
+            StartSessionTimeSeconds: 720d,
+            EndSessionTimeSeconds: 725d,
+            SampleCount: 6,
+            MaxFrameGapSeconds: 1d,
+            EntryRawStatus: 1,
+            LastRawStatus: 2,
+            EntryRawFlags: 1,
+            LastRawFlags: 31,
+            EntryTireSetsUsed: 2,
+            ExitTireSetsUsed: 3,
+            TireSetsUsedDelta: 1,
+            EntryTireCounters: TireCounters(10, 20, 30, 40),
+            ExitTireCounters: TireCounters(11, 21, 31, 41),
+            TireCounterDelta: new PitServiceTireCounterDelta(
+                TireSetsUsed: 1,
+                TireSetsAvailable: null,
+                LeftTireSetsUsed: null,
+                RightTireSetsUsed: null,
+                FrontTireSetsUsed: null,
+                RearTireSetsUsed: null,
+                LeftTireSetsAvailable: null,
+                RightTireSetsAvailable: null,
+                FrontTireSetsAvailable: null,
+                RearTireSetsAvailable: null,
+                LeftFrontTiresUsed: 1,
+                RightFrontTiresUsed: 1,
+                LeftRearTiresUsed: 1,
+                RightRearTiresUsed: 1,
+                LeftFrontTiresAvailable: null,
+                RightFrontTiresAvailable: null,
+                LeftRearTiresAvailable: null,
+                RightRearTiresAvailable: null),
+            EntryTeamOrLocalFastRepairsUsed: 0,
+            ExitTeamOrLocalFastRepairsUsed: 0,
+            TeamOrLocalFastRepairsUsedDelta: 0,
+            SawPitStall: true,
+            SawServiceActive: true,
+            SawRepair: false,
+            QualificationFlags: ["request-changed-during-service"]);
+    }
+
+    private static PitServiceRouteObservation CreatePitRouteObservation(DateTimeOffset startedAtUtc)
+    {
+        var assignment = new PitServiceRouteAssignment(
+            DriverPitTrackPct: 0.068197d,
+            TrackPitSpeedLimitKph: 80d,
+            TrackNumPitStalls: 39,
+            DCRuleSet: "IMSA");
+        PitServiceRouteCheckpoint Checkpoint(int second, double fuel, bool onPitRoad, bool inStall) => new(
+            CapturedAtUtc: startedAtUtc.AddSeconds(second),
+            ConfirmedAtUtc: startedAtUtc.AddSeconds(second + 1),
+            SessionTimeSeconds: second,
+            SessionTick: second * 60,
+            Sequence: second + 1,
+            FuelLiters: fuel,
+            LapDistPct: 0.8d,
+            OnPitRoad: onPitRoad,
+            PlayerCarInPitStall: inStall,
+            LocalIdentityProvenance: "strict-local");
+
+        return new PitServiceRouteObservation(
+            PitEntry: Checkpoint(0, 40d, onPitRoad: true, inStall: false),
+            BoxEntry: Checkpoint(4, 39.5d, onPitRoad: true, inStall: true),
+            BoxExit: Checkpoint(20, 50d, onPitRoad: true, inStall: false),
+            PitExit: Checkpoint(24, 49.5d, onPitRoad: false, inStall: false),
+            Assignment: assignment,
+            EntryToBoxSeconds: 4d,
+            BoxToExitSeconds: 4d,
+            EntryToBoxFuelUsedLiters: 0.5d,
+            BoxToExitFuelUsedLiters: 0.5d,
+            SampleCount: 10,
+            MaxFrameGapSeconds: 1d,
+            QualificationFlags: []);
+    }
+
+    private static PitServiceStationaryServiceObservation CreateReadinessStationaryObservation(
+        DateTimeOffset startedAtUtc,
+        bool leftFront,
+        bool rightFront,
+        bool leftRear,
+        bool rightRear,
+        double fuelAddedLiters)
+    {
+        var request = new PitServiceRequestShape(
+            LeftFrontTire: leftFront,
+            RightFrontTire: rightFront,
+            LeftRearTire: leftRear,
+            RightRearTire: rightRear,
+            Fuel: true,
+            Tearoff: false,
+            FastRepair: false,
+            FuelLiters: fuelAddedLiters,
+            RequestedTireCompoundIndex: 1);
+        var entry = TireCounters(10, 20, 30, 40);
+        var exit = TireCounters(
+            leftFront ? 11 : 10,
+            rightFront ? 21 : 20,
+            leftRear ? 31 : 30,
+            rightRear ? 41 : 40);
+        return CreateStationaryServiceObservation(startedAtUtc) with
+        {
+            EntryFuelLiters = 10d,
+            ExitFuelLiters = 10d + fuelAddedLiters,
+            NetFuelDeltaLiters = fuelAddedLiters,
+            PositiveFuelAddedLiters = fuelAddedLiters,
+            EntryRequest = request,
+            LastRequest = request,
+            RequestChangedDuringService = false,
+            EntryTireCounters = entry,
+            ExitTireCounters = exit,
+            TireCounterDelta = PitServiceTireCounterDelta.From(entry, exit),
+            QualificationFlags = []
+        };
+    }
+
+    private static PitServiceTireCounterSnapshot TireCounters(
+        int leftFront,
+        int rightFront,
+        int leftRear,
+        int rightRear)
+    {
+        return new PitServiceTireCounterSnapshot(
+            TireSetsUsed: null,
+            TireSetsAvailable: null,
+            LeftTireSetsUsed: null,
+            RightTireSetsUsed: null,
+            FrontTireSetsUsed: null,
+            RearTireSetsUsed: null,
+            LeftTireSetsAvailable: null,
+            RightTireSetsAvailable: null,
+            FrontTireSetsAvailable: null,
+            RearTireSetsAvailable: null,
+            LeftFrontTiresUsed: leftFront,
+            RightFrontTiresUsed: rightFront,
+            LeftRearTiresUsed: leftRear,
+            RightRearTiresUsed: rightRear,
+            LeftFrontTiresAvailable: null,
+            RightFrontTiresAvailable: null,
+            LeftRearTiresAvailable: null,
+            RightRearTiresAvailable: null);
     }
 
     private static FuelV2SessionScopeSample CreateSessionScope()
     {
         return new FuelV2SessionScopeSample(
-            Combo: new FuelV2ComboScope("car-1-test-car", "track-2-test-track", "race"),
+            Combo: new FuelV2ComboScope(
+                "car-1-test-car",
+                "track-2-test-track",
+                "race",
+                TrackLayoutKey: "track-id-2-config-46756C6C",
+                TrackLayoutIdentitySource: "track-id-and-config"),
             Car: new FuelV2CarScope(
                 CarId: 1,
                 CarPath: "test-car",
@@ -555,11 +2110,11 @@ public sealed class FuelV2HistoryImporterTests
             FuelCapacity: new FuelV2FuelCapacityScope(
                 PhysicalTankCapacityLiters: 70d,
                 FuelKgPerLiter: 0.75d,
-                EffectiveSessionCapacityLiters: null,
-                EffectiveSessionCapacitySource: "not_available_in_current_models",
-                DriverCarMaxFuelPercent: null,
-                CarClassMaxFuelPercent: null,
-                Limitation: "Effective event fuel-cap parsing is not implemented."),
+                EffectiveSessionCapacityLiters: 56d,
+                EffectiveSessionCapacitySource: "matching_driver_and_class_caps",
+                DriverCarMaxFuelPercent: 0.8d,
+                CarClassMaxFuelPercent: 0.8d,
+                Limitation: string.Empty),
             TrackSectors:
             [
                 new FuelV2TrackSectorScope(1, 0d),
@@ -568,9 +2123,78 @@ public sealed class FuelV2HistoryImporterTests
             ]);
     }
 
+    private static FuelV2SessionScopeSample CreateLegacyPlaceholderSessionScope()
+    {
+        return CreateSessionScope() with
+        {
+            FuelCapacity = new FuelV2FuelCapacityScope(
+                PhysicalTankCapacityLiters: 70d,
+                FuelKgPerLiter: 0.75d,
+                EffectiveSessionCapacityLiters: null,
+                EffectiveSessionCapacitySource: "not_available_in_current_models",
+                DriverCarMaxFuelPercent: null,
+                CarClassMaxFuelPercent: null,
+                Limitation: "Effective event fuel-cap parsing is not implemented.")
+        };
+    }
+
+    private static FuelV2CaptureSessionLineage ClassifiedLineage()
+    {
+        return new FuelV2CaptureSessionLineage(
+            ConnectionSourceId: "capture-fuel-v2",
+            SegmentOrdinal: 1,
+            StartedByBoundaryKind: "first-observed",
+            EndedByBoundaryKind: "collector-stop",
+            SessionFamily: "race",
+            SessionOccurrenceKey: "current-session:0|session:0|session-id:3|sub-session-id:4",
+            SessionOccurrenceVerified: true,
+            CarKey: "car-id-1",
+            CarIdentitySource: "car-id",
+            TrackLayoutKey: "track-id-2-config-46756C6C",
+            TrackLayoutIdentitySource: "track-id-and-config",
+            ExactTrackLayoutVerified: true,
+            ExactCarVerified: true);
+    }
+
+    private static string SessionDirectory(
+        AppStorageOptions storage,
+        string trackLayoutKey = "track-id-2-config-46756c6c",
+        string family = "race")
+    {
+        return Path.Combine(
+            storage.UserHistoryRoot,
+            "fuel-v2",
+            "cars",
+            "car-id-1",
+            "tracks",
+            trackLayoutKey,
+            "sessions",
+            family);
+    }
+
     private static string TempRoot()
     {
         return Path.Combine(Path.GetTempPath(), "tmr-overlay-fuel-v2-history-test", Guid.NewGuid().ToString("N"));
+    }
+
+    private static string V123FixturePath(params string[] parts)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, "fixtures", "data-contracts", "v1.2.3");
+            if (Directory.Exists(candidate))
+            {
+                var allParts = new string[parts.Length + 1];
+                allParts[0] = candidate;
+                Array.Copy(parts, 0, allParts, 1, parts.Length);
+                return Path.Combine(allParts);
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not find fixtures/data-contracts/v1.2.3.");
     }
 
     private static void DeleteIfExists(string path)

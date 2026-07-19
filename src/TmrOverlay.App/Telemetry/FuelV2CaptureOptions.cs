@@ -23,6 +23,15 @@ internal sealed class FuelV2CaptureOptions
 
     public int MaxPitWindows { get; init; } = 80;
 
+    public int MaxStationaryServiceObservations { get; init; } = 80;
+
+    // Route checkpoints are deliberately collected independently from coarse
+    // pit windows: a long session can retain the latter while the stricter
+    // two-sample route evidence reaches its own bounded limit.
+    public int MaxPitRouteObservations { get; init; } = 80;
+
+    public double MaximumPitRouteFrameGapSeconds { get; init; } = 2d;
+
     public int MaxTeamStints { get; init; } = 80;
 
     public string OutputFileName { get; init; } = "fuel-v2-diagnostics.json";
@@ -44,6 +53,9 @@ internal sealed class FuelV2CaptureOptions
             MaxRejectedLapWindows = ParseInt32(section["MaxRejectedLapWindows"], defaultValue: 120, minimumValue: 10),
             MaxSectorBurnSamples = ParseInt32(section["MaxSectorBurnSamples"], defaultValue: 240, minimumValue: 10),
             MaxPitWindows = ParseInt32(section["MaxPitWindows"], defaultValue: 80, minimumValue: 5),
+            MaxStationaryServiceObservations = ParseInt32(section["MaxStationaryServiceObservations"], defaultValue: 80, minimumValue: 5),
+            MaxPitRouteObservations = ParseInt32(section["MaxPitRouteObservations"], defaultValue: 80, minimumValue: 5),
+            MaximumPitRouteFrameGapSeconds = ParseDouble(section["MaximumPitRouteFrameGapSeconds"], defaultValue: 2d, minimumValue: 0.1d),
             MaxTeamStints = ParseInt32(section["MaxTeamStints"], defaultValue: 80, minimumValue: 5),
             OutputFileName = ParsePathSegment(section["OutputFileName"], defaultValue: "fuel-v2-diagnostics.json"),
             LogDirectoryName = ParsePathSegment(section["LogDirectoryName"], defaultValue: "fuel-v2-capture"),

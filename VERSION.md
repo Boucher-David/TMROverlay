@@ -13,25 +13,33 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.2.4 - Overlay Visibility And Renderer Parity Stability
+### v1.3.0 - Fuel Calculator V2
 
-Status: active implementation on branch `v1.2.4`.
+Status: active implementation on branch `v1.3`.
 
 Suggested squash title:
 
 ```text
-[v1.2.4] Stabilize overlay visibility and renderer parity
+[v1.3.0] Build Fuel Calculator V2
 ```
 
 Suggested squash body:
 
 ```text
-- Centralize the descriptor-owned session visibility rules used by Windows native, localhost/OBS, browser review, and diagnostics, while retaining legacy persisted `ShowIn*` settings as compatible no-op data.
-- Fix browser-review session-content precedence, stale Track Map clearing after an unavailable poll, missing shared geometry variables, and Fuel's blank-header height drift across native and browser surfaces.
-- Preserve browser-visible Standings and Relative row semantics in the native table adapter, including pit rows, pending-grid rows, placeholder slots, and fastest-lap tones.
-- Add focused session-policy, renderer-contract, and native adapter tests; update scenario evidence and settings/Gap logic documentation.
-- User-data compatibility: no durable user-data or raw-capture format changes. Existing settings remain readable without a migration.
+- Complete the Fuel Calculator V2 workbench and live-model contract, including classified Fuel V2 history intake, later strategy selection, and a V2 overlay cutover that preserves V1 until explicitly promoted.
+- User-data compatibility: Fuel V2 history format 3 adds bounded stationary-service source evidence while retaining compatible format-2 classified readers; mixed format-1 connection evidence remains retained but cannot drive a future V2 strategy decision.
 ```
+
+## Next Planned Milestone
+
+### v1.4.0 - Shared Overlay Chrome And Race Context
+
+The next planned branch promotes a small Core-owned header/footer slot
+contract across native, localhost/OBS, and browser review. It will prioritize
+session clock, normalized race phase, safe race-lap budget, and
+analysis-only/degraded evidence instead of a generic telemetry picker. The
+former v1.4 Track Map Expansion and QA scope now follows as v1.5.0; see
+`docs/model-v2-future-branches.md` for the detailed roadmap and non-goals.
 
 ## Merged Mainline Milestones
 

@@ -1,7 +1,7 @@
 {
   "contract": "overlay-scenario-contract/v1",
   "tracker": "v1.2.md",
-  "updated": "2026-05-24",
+  "updated": "2026-07-15",
   "purpose": "Parseable matrix for overlay-specific screenshot, replay, and cross-surface parity scenarios. This is the planning contract for what each overlay must prove across browser review, localhost/OBS, Windows native, compact replay fixtures, and optional full-capture replay.",
   "productDescriptor": {
     "source": "src/TmrOverlay.Core/Overlays/OverlayBehaviorDescriptorCatalog.cs",
@@ -107,6 +107,58 @@
       "description": "Telemetry-rich captures must classify each expected OBS overlay as not-requested, page-loaded-no-model, model-polled-hidden, model-rendered, or browser-source-error."
     }
   ],
+  "executionSuites": [
+    {
+      "id": "minimum-scale-rendered-manifests",
+      "runner": "screenshot-manifest/v1",
+      "cases": [
+        { "scenarioId": "standings-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "table" },
+        { "scenarioId": "relative-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "table" },
+        { "scenarioId": "fuel-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "metrics" },
+        { "scenarioId": "weather-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "metrics" },
+        { "scenarioId": "pit-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "metrics" },
+        { "scenarioId": "inputs-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "inputs" },
+        { "scenarioId": "radar-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "car-radar" },
+        { "scenarioId": "gap-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "graph" },
+        { "scenarioId": "track-map-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "track-map" },
+        { "scenarioId": "flags-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "flags" },
+        { "scenarioId": "garage-cover-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "garage-cover" },
+        { "scenarioId": "stream-chat-minimum-scale", "fixtureVariant": "min-scale", "shouldRender": true, "bodyKind": "stream-chat" }
+      ],
+      "description": "Each case binds a named product scenario to one populated minimum-scale artifact per declared product surface, including its required semantic body family."
+    }
+  ],
+  "runtimeTransitionSuite": {
+    "id": "all-overlay-visible-hidden-visible",
+    "contract": "overlay-runtime-transition/v1",
+    "purpose": "Production localhost semantics and shared browser-renderer stale-DOM behavior are deliberately proved as separate layers. Browser protocol fixtures are never application-model evidence.",
+    "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+    "testFiles": [
+      "tests/browser-overlays/browserOverlayProductionTransition.pw.spec.js",
+      "tests/TmrOverlay.App.Tests/Localhost/LocalhostOverlayHostedServiceTests.cs:EveryLocalhostOverlay_ClearsTheProductionModelWhenDisabledAndBuildsItAgainWhenRestored",
+      "tests/TmrOverlay.App.Tests/Overlays/OverlayAvailabilityEvaluatorTests.cs:NativeOverlayToggle_TransitionsVisibleHiddenVisibleForEverySupportedNativeOverlay"
+    ],
+    "cases": [
+      { "overlayId": "standings", "bodyKind": "table" },
+      { "overlayId": "relative", "bodyKind": "table" },
+      { "overlayId": "fuel-calculator", "bodyKind": "metrics" },
+      { "overlayId": "session-weather", "bodyKind": "metrics" },
+      { "overlayId": "pit-service", "bodyKind": "metrics" },
+      { "overlayId": "input-state", "bodyKind": "inputs" },
+      { "overlayId": "car-radar", "bodyKind": "car-radar" },
+      { "overlayId": "gap-to-leader", "bodyKind": "graph" },
+      { "overlayId": "track-map", "bodyKind": "track-map" },
+      { "overlayId": "flags", "bodyKind": "flags" },
+      { "overlayId": "garage-cover", "bodyKind": "garage-cover" },
+      { "overlayId": "stream-chat", "bodyKind": "stream-chat" }
+    ],
+    "assertions": [
+      "The real localhost route builds a populated product model, returns a fully cleared hidden model when the main overlay toggle is disabled, then builds a populated model after restoration.",
+      "The shared browser asset removes content, header, and opacity when a hidden response arrives and resumes polling to render the restored response.",
+      "The shared native visibility gate transitions every Windows-supported overlay through visible, hidden, and visible decisions; native rendering remains independently covered by the screenshot evidence suite.",
+      "Browser protocol fixtures exercise only renderer behavior; BrowserOverlayModelFactory output remains the application semantic authority."
+    ]
+  },
   "settingsScenarios": [
     {
       "id": "settings-support-diagnostics-actions",
@@ -640,6 +692,16 @@
           "artifacts": ["browser-overlays/fuel-calculator/default.png", "browser-overlays/fuel-calculator/no-data.png", "browser-overlays/fuel-calculator/chrome-off.png"],
           "validatorRules": ["tools/validate_overlay_screenshots.py:validate_hidden_no_render_manifest_contract", "tools/validate_overlay_screenshots.py:validate_hidden_no_render_png_evidence"],
           "assertions": ["metric sections render", "no-data is hidden/no-render", "chrome-off removes header/footer chrome"]
+        },
+        {
+          "id": "fuel-v2-factual-development-gate",
+          "family": "populated",
+          "tier": "tier1-ci-contract-fixtures",
+          "status": "partial",
+          "surfaces": ["browserReview", "localhostObs", "windowsNative"],
+          "testFiles": ["tests/TmrOverlay.App.Tests/Overlays/FuelV2OverlayViewModelTests.cs", "tests/TmrOverlay.App.Tests/Overlays/OverlayAvailabilityEvaluatorTests.cs", "tests/TmrOverlay.App.Tests/Overlays/BrowserOverlayModelFactoryTests.cs", "tests/TmrOverlay.App.Tests/Overlays/OverlayInputTransparencyTests.cs", "tests/TmrOverlay.App.Tests/Telemetry/FuelV2CaptureRecorderTests.cs", "tests/TmrOverlay.App.Tests/Telemetry/LiveTelemetryStoreTests.cs", "tests/TmrOverlay.App.Tests/Replay/FuelV2WhiteRoom24HourScenarioTests.cs", "tools/TmrOverlay.OverlayModelReplay/Program.cs", "tools/TmrOverlay.OverlayModelReplay/WhiteRoomFuelV2ScenarioReplay.cs", "tools/browser-review/render-model-replay-screenshots.mjs"],
+          "assertions": ["the default V1 path is not replaced by the browser-only V2 workbench", "the enabled developer gate renders only factual capacity, aligned seven-bucket fuel/range comparison, and lap-context sections when their evidence exists", "Test, Practice, Qualifying, and Race can render factual Fuel State through their existing content block", "verified Test/Practice can render the exact-history Model Readiness matrix for stopped pit-route, small/large measured refuel, and counter-confirmed tire-service collection; the optional no-stall pit-lane pass never blocks completion, and the matrix disappears when its required factual goals are complete", "a closed, verified exact current-session stationary-service or pit-route observation can update Model Readiness before sidecar finalization/import; active observations, mismatched sessions, and strategy inputs cannot", "a verified session-driver/raw-camera fallback accepts only the observed progress-only focus gap and renders exactly Fuel State, never burn, range, history, lap, plan, target, add, stint, tire, or model-readiness content", "the persisted main Visible toggle always wins over the V2 factual gate; disabled means no native show and no browser/localhost render", "the V2 eligibility gate requires a current frame, current session info, and usable current fuel before any renderer may show the overlay", "exact classified race/practice/test history can populate only the visibly modeled History comparison bucket; test provenance stays explicit and cannot drive advice", "the constructed white-room 24-hour control executes real history/composer/presenter/browser-model code but marks every row non-capture and strategy-disabled", "the gate exposes no target usage, fuel-to-add, plan, or stint rows", "stale, garage, spectator, mismatched-camera, or unavailable local context is hidden/no-render", "the enabled native path uses the DesignV2 sectioned renderer even when legacy renderers are otherwise selected", "production replay stages only prior Fuel V2 sidecars below its output root and rejects future-session evidence"],
+          "gaps": ["a Windows-generated compact populated/hidden V2 fixture plus browser, localhost/OBS, and Windows-native screenshot/manifests are still required before V2 becomes a release parity gate", "the factual gate intentionally has no historical selection for strategy, target, lower-half, or service-scheduler coverage; Model Readiness is collection evidence, not a pit-route strategy consumer"]
         },
         {
           "id": "fuel-content-variants",

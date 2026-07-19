@@ -1,0 +1,439 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Fuel Calculator V2 characterization catalogue. Each named case is a reusable input/expectation contract for Core tests, browser workbench review, and eventual localhost/OBS and Windows-native overlay evidence. It deliberately separates capture-derived facts from constructed policy pressure tests.",
+  "sourcePolicy": {
+    "runtimeAuthority": "Normalized live telemetry remains runtime authority. Compact history and raw capture slices are evidence inputs, not precomputed runtime advice.",
+    "provenanceRule": "A constructed case may exercise a real arithmetic or policy boundary, but it must never be labelled capture-derived. A V1 summary reference is not importable Fuel V2 history.",
+    "privacyRule": "Capture IDs are sanctioned opaque archive locators and may encode a capture time. Only those locators, sanitized session-clock/frame boundaries, and retained quantitative evidence appear here; raw telemetry, local paths, and personal/team identities remain outside the fixture.",
+    "archiveAvailability": "Named raw captures are local archive inputs, not CI fixtures, until a compact redacted semantic slice is checked in. Each raw source states its current availability."
+  },
+  "consumerContract": {
+    "core": "Use inputMode=direct-core cases for deterministic selector, route, checkpoint, scheduler, and lifecycle characterization tests. Raw-replay cases first need a compact semantic export; do not hand-copy raw telemetry into a test.",
+    "workbench": "Render only the normalized inputs plus expected state. Show captured, history-reference, and constructed provenance distinctly.",
+    "finalOverlay": "Turn each eligible case into browser-review, localhost/OBS, and Windows-native evidence only after the real V2 presenter owns the relevant row. Hidden/degraded states are first-class expected results.",
+    "exportKey": "The case id is the stable non-identifying key for a future compact semantic exporter; it must not use the local capture path."
+  },
+  "coverageDefault": {
+    "core": "planned",
+    "workbench": "planned",
+    "browser": "planned",
+    "localhost": "planned",
+    "native": "planned"
+  },
+  "cases": [
+    {
+      "id": "fuel-v2-history-seed-at-race-start",
+      "kind": "capture-history-reference",
+      "stage": "race-start-before-clean-live-burn",
+      "sources": [
+        { "kind": "fuel-v2-history-bridge", "fixture": "fixtures/telemetry-analysis/fuel-v2-history-bridge/dallara-classified-13.50.json", "valueLitersPerLap": 13.5, "strategyEligible": false },
+        { "kind": "local-raw-capture", "captureId": "capture-20260522-194832-318", "availability": "local-archive-available", "sessionTimeRangeSeconds": [23.183, 1126.167] }
+      ],
+      "inputMode": "raw-replay-plus-history-read",
+      "expected": {
+        "history": "HistoricalNormal remains visible factual evidence but cannot enter a strategy selector while history promotion is disabled.",
+        "selector": "Unavailable for strategy; must not silently upgrade a workbench/history read to advice-ready.",
+        "bottomHalf": "Hidden."
+      }
+    },
+    {
+      "id": "fuel-v2-no-history-at-race-start",
+      "kind": "capture-negative-control",
+      "stage": "race-start-before-clean-live-burn",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260522-194832-318", "availability": "local-archive-available", "sessionTimeRangeSeconds": [23.183, 1126.167] },
+        { "kind": "empty-or-mismatched-exact-history", "required": true }
+      ],
+      "inputMode": "raw-replay-plus-history-read",
+      "expected": {
+        "selector": "Unavailable; no car-only, broad-track, or qualifying fallback may leak in.",
+        "bottomHalf": "Hidden."
+      }
+    },
+    {
+      "id": "fuel-v2-practice-context-cannot-replace-race-history",
+      "kind": "capture-contextual-reference",
+      "stage": "pre-race-practice-evidence",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260522-192333-050", "availability": "local-archive-available", "completedValidLaps": 1, "observedFuelPerLapLiters": 14.005155 },
+        { "kind": "exact-history-reference", "valueLitersPerLap": 13.5 }
+      ],
+      "inputMode": "compact-context-fact",
+      "expected": {
+        "history": "Practice is contextual/reinforcement evidence only; it cannot rewrite HistoricalNormal or independently make race advice ready.",
+        "bottomHalf": "Hidden until a promoted race-selection policy exists."
+      }
+    },
+    {
+      "id": "fuel-v2-one-clean-live-lap-lower-than-history",
+      "kind": "composite-real-policy",
+      "stage": "early-race-one-clean-span",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260522-194832-318", "availability": "local-archive-available", "sessionTimeRangeSeconds": [1126.167, 1575.067], "acceptedFuelPerLapLiters": 13.4234 },
+        { "kind": "constructed-promoted-exact-history", "valueLitersPerLap": 13.5, "strategyEligible": true }
+      ],
+      "inputMode": "semantic-replay-plus-direct-policy",
+      "coverage": { "core": "implemented-equivalent" },
+      "expected": {
+        "selector": "HistoricalSeed 13.50 remains selected; Last 13.4234 is retained as the observed candidate.",
+        "safety": "No reduced fuel target, stop deletion, or lower-half advice from one lower live span.",
+        "testRefs": ["tests/TmrOverlay.App.Tests/Fuel/V2/FuelV2RaceBurnEvidenceSelectorTests.cs:Selector_UsesExactHistoryAtRaceStartAndDoesNotLetOneLiveLapReplaceIt"]
+      }
+    },
+    {
+      "id": "fuel-v2-dallara45-fragmented-live-intake-regression",
+      "kind": "capture-intake-regression",
+      "stage": "active-timed-race-with-yellow-fragments",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260522-204847-774", "availability": "local-archive-available", "sessionTimeRangeSeconds": [179.117, 2906.517], "postRaceObservedFuelPerLapLiters": 13.622505, "currentStrictAcceptedSpanCount": 0 },
+        { "kind": "compact-real-data-snapshot", "fixture": "fixtures/telemetry-analysis/overlay-real-data-snapshots/fuel-measured-burn-real-data.json", "sourceRole": "legacy-observation", "policyRelationship": "V2 strict accepted-span policy supersedes the legacy snapshot's should-be-available expectation for this regression." }
+      ],
+      "inputMode": "raw-replay-regression",
+      "expected": {
+        "intake": "Current strict accepted-span policy remains unavailable because yellow-family flags reset anchors; do not mislabel post-race summary evidence as a live 5L/10L window.",
+        "followUp": "Use this case when deciding a degraded/fragmented-lap policy before promoting sustained live selection.",
+        "bottomHalf": "Hidden or history-seeded only; no passing live-selection claim."
+      }
+    },
+    {
+      "id": "fuel-v2-selector-lower-five-held-then-ten-confirmed",
+      "kind": "constructed-policy",
+      "stage": "early-race-to-established-live-evidence",
+      "sources": [
+        { "kind": "constructed-promoted-exact-history", "valueLitersPerLap": 13.5, "strategyEligible": true },
+        { "kind": "constructed-clean-live-spans", "five": [13.0, 13.1, 13.0, 13.1, 13.0], "ten": [13.0, 13.1, 13.0, 13.1, 13.0, 13.0, 13.1, 13.0, 13.1, 13.0] }
+      ],
+      "inputMode": "direct-core",
+      "coverage": { "core": "implemented-equivalent" },
+      "expected": {
+        "selector": "5L lower candidate is HeldConservative on History 13.50; the full 10L average 13.04 becomes LiveConfirmed.",
+        "visual": "Show the held candidate/provenance only in a diagnostic/workbench state, never as a final driving instruction.",
+        "testRefs": ["tests/TmrOverlay.App.Tests/Fuel/V2/FuelV2RaceBurnEvidenceSelectorTests.cs:Selector_HoldsAConservativeHistoryBaselineUntilTenCleanLiveLapsSupportALowerBurn"]
+      }
+    },
+    {
+      "id": "fuel-v2-selector-higher-five-promotes-immediately",
+      "kind": "constructed-policy",
+      "stage": "early-race-conservative-live-change",
+      "sources": [
+        { "kind": "constructed-promoted-exact-history", "valueLitersPerLap": 13.5, "strategyEligible": true },
+        { "kind": "constructed-clean-live-spans", "five": [13.8, 13.9, 13.8, 13.9, 13.8] }
+      ],
+      "inputMode": "direct-core",
+      "coverage": { "core": "implemented-equivalent" },
+      "expected": {
+        "selector": "LiveConfirmed 5L 13.84 immediately replaces History because it raises required fuel.",
+        "testRefs": ["tests/TmrOverlay.App.Tests/Fuel/V2/FuelV2RaceBurnEvidenceSelectorTests.cs:Selector_PromotesAHigherFiveLapLiveBurnImmediatelyBecauseItCannotReduceFuelSafety"]
+      }
+    },
+    {
+      "id": "fuel-v2-selector-no-history-one-lap-provisional",
+      "kind": "constructed-policy",
+      "stage": "race-start-no-history-after-first-clean-span",
+      "sources": [
+        { "kind": "constructed-clean-live-spans", "last": 13.5 }
+      ],
+      "inputMode": "direct-core",
+      "coverage": { "core": "implemented-equivalent" },
+      "expected": {
+        "selector": "LiveProvisional; it can seed a workbench/outlook but cannot drive advice.",
+        "testRefs": ["tests/TmrOverlay.App.Tests/Fuel/V2/FuelV2RaceBurnEvidenceSelectorTests.cs:Selector_UsesALiveLapProvisionallyWhenNoHistoryExistsButDoesNotClaimAdviceReadiness"]
+      }
+    },
+    {
+      "id": "fuel-v2-fixed4-start-authoritative-laps",
+      "kind": "archive-replay-target",
+      "stage": "fixed-lap-race-start",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260523-034827-919", "availability": "local-archive-available", "sessionTimeRangeSeconds": [0, 180], "publishedRaceLaps": 4, "timedMetadataSeconds": 2100 }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "lapBudget": "Authoritative fixed four-lap budget wins over timed metadata.",
+        "safety": "No timed-race extra-lap or excessive multi-stint arithmetic."
+      }
+    },
+    {
+      "id": "fuel-v2-fixed4-small-refuel",
+      "kind": "archive-service-reference",
+      "stage": "short-race-small-refuel",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260523-034827-919", "availability": "local-archive-available", "sessionTimeRangeSeconds": [1590, 1710], "serviceWindowSeconds": [1644.65, 1673.633], "fuelAddedLiters": 3.594 }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "service": "Isolate a local small fuel-only stationary observation; do not restitch it into a long-race baseline.",
+        "lapBudget": "Fixed four-lap authority remains intact."
+      }
+    },
+    {
+      "id": "fuel-v2-dallara45-start-to-green",
+      "kind": "capture-race-stage",
+      "stage": "one-to-green-ready-green",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260522-204847-774", "availability": "local-archive-available", "sessionTimeRangeSeconds": [0, 270], "oneToGreenSeconds": 1.867, "readySeconds": 60.167, "greenSeconds": 204.483 }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "burn": "No clean race burn or stop-deletion claim before green.",
+        "bottomHalf": "Hidden before race evidence exists."
+      }
+    },
+    {
+      "id": "fuel-v2-dallara45-fuel-only-stop",
+      "kind": "capture-service-reference",
+      "stage": "timed-race-fuel-only-stop",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260522-204847-774", "availability": "local-archive-available", "sessionTimeRangeSeconds": [2070, 2210], "serviceWindowSeconds": [2117.217, 2159.767], "fuelAddedLiters": 29.629, "tireChange": false, "fastRepair": false }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "service": "Fuel-only outcome/reference; no tire-time claim and no route segment may be fabricated from the V1 summary.",
+        "fixtureRefs": ["fixtures/telemetry-analysis/fuel-v2-bottom-half-real-history/manifest.json:dallara-nurburgring-timed-forty-five-minute"]
+      }
+    },
+    {
+      "id": "fuel-v2-vln4h-stop1-handoff",
+      "kind": "capture-interruption",
+      "stage": "endurance-pit-handoff",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260426-130334-932", "availability": "local-archive-available", "sessionTimeRangeSeconds": [3560, 3720], "pitWindowsSeconds": [[3626.267, 3640.85], [3643.767, 3689.85]], "interruptionSeconds": 2.917 }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "lifecycle": "Do not blindly merge windows across a focus/driver interruption; continuation requires explicit classification.",
+        "service": "No speculative timing baseline."
+      }
+    },
+    {
+      "id": "fuel-v2-vln4h-final-repair-leader-change",
+      "kind": "capture-interruption",
+      "stage": "endurance-final-stint-repair-and-leader-change",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260426-130334-932", "availability": "local-archive-available", "sessionTimeRangeSeconds": [10940, 11120] }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "lapBudget": "Retain conservative race context across leader change.",
+        "safety": "Repair/contaminated pace blocks fuel-reducing advice."
+      }
+    },
+    {
+      "id": "fuel-v2-24h-rejoin-start",
+      "kind": "capture-rejoin-negative",
+      "stage": "mid-race-rejoin-no-local-fuel",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260502-143722-571", "availability": "local-archive-available", "sessionTimeRangeSeconds": [57009.986, 57150], "localFuel": "zero-or-unavailable" }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "raceContext": "May render long-race context.",
+        "fuel": "No local burn, refuel, stint, or history-promotion advice."
+      }
+    },
+    {
+      "id": "fuel-v2-24h-rejoin-mid-s1",
+      "kind": "capture-rejoin-reference",
+      "stage": "mid-race-rejoin-clean-pace",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260502-143722-571", "availability": "local-archive-available", "sessionTimeRangeSeconds": [58440, 58560], "probeSessionTimeSeconds": 58500.119, "rollingPaceLapBudget": 174 }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "lapBudget": "Useful race-distance evidence may recover, but local fuel remains unavailable."
+      }
+    },
+    {
+      "id": "fuel-v2-24h-rejoin-stop1-contaminated",
+      "kind": "capture-rejoin-contamination",
+      "stage": "mid-race-team-pit-and-slow-leader",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260502-143722-571", "availability": "local-archive-available", "sessionTimeRangeSeconds": [59990, 60120], "teamPitWindowSeconds": [59993.819, 60059.319], "probeSessionTimeSeconds": 60060.153, "unsafeLeaderProjection": 167 }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "lapBudget": "Degrade or hold conservative distance; one contaminated slow leader lap cannot lower Fuel-actionable race distance.",
+        "fuel": "Still no local fuel strategy."
+      }
+    },
+    {
+      "id": "fuel-v2-24h-rejoin-recover",
+      "kind": "capture-rejoin-reference",
+      "stage": "post-contamination-recovery",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260502-143722-571", "availability": "local-archive-available", "sessionTimeRangeSeconds": [60290, 60420], "recoveredLapBudget": 174 }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "lapBudget": "Recovery is gradual and source-labelled; do not oscillate race strategy with each pace sample."
+      }
+    },
+    {
+      "id": "fuel-v2-24h-incomplete-continuation-negative",
+      "kind": "capture-reader-negative",
+      "stage": "truncated-continuation",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260502-155431-647", "availability": "local-archive-available", "sessionTimeRangeSeconds": [61638.386, 61660], "frameCount": 0, "trailingBytes": 5222 }
+      ],
+      "inputMode": "reader-validation",
+      "expected": {
+        "reader": "Reject it; never join, persist, or invent continuation state."
+      }
+    },
+    {
+      "id": "fuel-v2-pit-route-daytona-observed-box-exit",
+      "kind": "capture-route-boundary",
+      "stage": "post-box-to-pit-exit-only",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260525-182213-419", "availability": "local-archive-available", "frameRange": [2587, 2889], "sessionTimeRangeSeconds": [72.033, 77.067], "boxExitFuelLiters": 74.997063, "pitExitFuelLiters": 74.952927, "observedBoxToExitFuelLiters": 0.044136, "driverPitTrkPct": 0.058335 }
+      ],
+      "inputMode": "raw-replay-boundary",
+      "coverage": { "core": "implemented-equivalent" },
+      "expected": {
+        "route": "BoxToPitExit is Observed only; CurrentToPitEntry and PitEntryToBox are unavailable, so route projection stays Partial and cannot drive checkpoints.",
+        "testRefs": ["tests/TmrOverlay.App.Tests/Fuel/V2/FuelV2PitRouteFuelProjectionTests.cs:Projection_DoesNotTreatAMissingBoxSpecificSegmentAsZero"]
+      }
+    },
+    {
+      "id": "fuel-v2-pit-route-daytona-incomplete-reset",
+      "kind": "capture-route-negative",
+      "stage": "pit-stall-capture-end",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260525-182213-419", "availability": "local-archive-available", "frameRange": [95455, 95760], "sessionTimeRangeSeconds": [1619.85, 1624.917], "captureEndsInPitStall": true }
+      ],
+      "inputMode": "raw-replay-boundary",
+      "expected": {
+        "route": "Block route, service-rate, and history learning. This is a context/reset discontinuity, not a fabricated cadence gap."
+      }
+    },
+    {
+      "id": "fuel-v2-pit-route-complete-box-scoped",
+      "kind": "constructed-policy",
+      "stage": "next-stop-complete-route",
+      "sources": [
+        { "kind": "constructed-route-a", "scope": "same car + exact layout + track version + pit speed + rules + box A", "currentToPitEntryLiters": 0.8, "pitEntryToBoxLiters": 0.35, "boxToPitExitLiters": 0.14, "confidence": "corroborated" },
+        { "kind": "constructed-route-b", "scope": "same car + exact layout + track version + pit speed + rules + different box B", "pitEntryToBoxLiters": null, "boxToPitExitLiters": null }
+      ],
+      "inputMode": "direct-core",
+      "coverage": { "core": "implemented-equivalent" },
+      "expected": {
+        "routeA": "Available; CurrentToBox is 1.15 L and BoxToPitExit is 0.14 L, consumed once by the ordered checkpoint chain.",
+        "routeB": "Partial; route A values cannot be reused for another box identity.",
+        "testRefs": ["tests/TmrOverlay.App.Tests/Fuel/V2/FuelV2PitRouteFuelProjectionTests.cs:Projection_KeepsCurrentToEntryEntryToBoxAndBoxToExitDistinctBeforeFeedingCheckpoints", "tests/TmrOverlay.App.Tests/Fuel/V2/FuelV2PitRouteFuelProjectionTests.cs:Projection_RejectsABoxSpecificEstimateFromAnotherAssignedPitBox"]
+      }
+    },
+    {
+      "id": "fuel-v2-service-vln4h-established-fill",
+      "kind": "archive-service-reference",
+      "stage": "endurance-established-service",
+      "sources": [
+        { "kind": "local-raw-capture", "captureId": "capture-20260426-130334-932", "availability": "local-archive-available", "sessionTimeRangeSeconds": [7510, 7700] }
+      ],
+      "inputMode": "raw-replay",
+      "expected": {
+        "service": "A later endurance fill is a separate local observation. It must retain its classification, interruption, tire, repair, and box-scope facts before becoming a timing/rate sample.",
+        "safety": "Do not combine it with the earlier handoff stop merely because both are in one race."
+      }
+    },
+    {
+      "id": "fuel-v2-service-repair-exception",
+      "kind": "archive-service-negative",
+      "stage": "repair-contaminated-stop",
+      "sources": [
+        { "kind": "v1-summary-reference", "captureId": "capture-20260522-194832-318", "fuelAddedLiters": 9.782833, "serviceDurationSeconds": 69.466667, "observedFillRateLitersPerSecond": 0.140828, "pitLaneWindowSeconds": 85.133, "reason": "repair-or-meatball-context" }
+      ],
+      "inputMode": "compact-summary-reference",
+      "expected": {
+        "service": "Exceptional/uncertain. Preserve the quantitative observation for diagnostics but block normal fuel-rate, tire-time, and route learning.",
+        "history": "A V1 summary is not importable Fuel V2 history and cannot make the event ordinary fuel-only service."
+      }
+    },
+    {
+      "id": "fuel-v2-service-charlotte-tire-mixed",
+      "kind": "archive-service-negative",
+      "stage": "tire-and-fuel-mixed-stop",
+      "sources": [
+        { "kind": "v1-summary-reference", "captureId": "capture-20260515-210810-124", "car": "Ford Mustang", "exactLayout": "Charlotte Oval", "fuelAddedLiters": 0.846649, "serviceDurationSeconds": 58.75, "tireSetChanged": true }
+      ],
+      "inputMode": "compact-summary-reference",
+      "expected": {
+        "service": "Tire-plus-fuel service. It is neither a Dallara fuel-only sample nor a fuel-rate baseline; the mixed-stop classification must survive into future tire strategy work.",
+        "scope": "Car and exact layout forbid cross-car/cross-track reuse."
+      }
+    },
+    {
+      "id": "fuel-v2-tire-history-imsa-exact-four",
+      "kind": "constructed-history-reader",
+      "stage": "next-stop-exact-tire-history",
+      "sources": [
+        { "kind": "constructed-format-5-summary", "carLayout": "exact", "sessionFamily": "race", "dcRuleSet": "IMSA", "requestedShape": "LF+RF+LR+RR", "executedShape": "LF+RF+LR+RR", "cleanConfirmedSamples": 1 }
+      ],
+      "inputMode": "direct-core-and-history-reader",
+      "coverage": { "core": "implemented-equivalent" },
+      "expected": {
+        "tireHistory": "Selected exact 4-tire observation; presentation may say '4 tires — observed'.",
+        "timing": "Parallel rule scope is verified, but one clean sample remains insufficient for service-time calibration or advice.",
+        "testRefs": ["tests/TmrOverlay.App.Tests/History/FuelV2HistoryImporterTests.cs:ImportAsync_ExposesExactTireHistoryOnlyForTheMatchingPublicRuleSet"]
+      }
+    },
+    {
+      "id": "fuel-v2-tire-history-unknown-ruleset",
+      "kind": "constructed-history-reader",
+      "stage": "next-stop-unrecognized-service-rules",
+      "sources": [
+        { "kind": "constructed-format-5-summary", "carLayout": "exact", "sessionFamily": "race", "dcRuleSet": "DriveFairShare_AllMustDrive", "requestedShape": "LF+RF+LR+RR", "executedShape": "LF+RF+LR+RR" }
+      ],
+      "inputMode": "direct-core-and-history-reader",
+      "coverage": { "core": "implemented-equivalent" },
+      "expected": {
+        "tireHistory": "Exact observed shape may remain visible against the same raw rule identity.",
+        "timing": "Rules execution mode is Unknown; calibration and all seconds/overlap advice stay blocked.",
+        "testRefs": ["tests/TmrOverlay.App.Tests/History/FuelV2HistoryImporterTests.cs:ImportAsync_ExposesExactTireHistoryOnlyForTheMatchingPublicRuleSet"]
+      }
+    },
+    {
+      "id": "fuel-v2-tire-history-reconnect-conservative-merge",
+      "kind": "constructed-history-reader",
+      "stage": "reconnect-duplicate-stationary-service",
+      "sources": [
+        { "kind": "constructed-format-5-reconnect-summary", "carLayout": "exact", "sessionOccurrence": "same-verified-occurrence", "observations": ["requested-only", "confirmed", "confirmed-with-repair"] }
+      ],
+      "inputMode": "direct-core-and-history-reader",
+      "coverage": { "core": "implemented-equivalent" },
+      "expected": {
+        "tireHistory": "Use the confirmed exact outcome once rather than file order or duplicate count.",
+        "timing": "Carry repair/interruption contamination across reconnect duplicates, so the group cannot become a clean timing sample.",
+        "testRefs": ["tests/TmrOverlay.App.Tests/History/FuelV2HistoryImporterTests.cs:ImportAsync_ReconnectTireEvidenceUsesExactOutcomeButCarriesContaminationForward"]
+      }
+    },
+    {
+      "id": "fuel-v2-tire-history-format3-request-only",
+      "kind": "constructed-history-reader",
+      "stage": "legacy-stationary-service-without-corners",
+      "sources": [
+        { "kind": "constructed-format-3-summary", "carLayout": "exact", "sessionFamily": "race", "requestedShape": "LF", "exactCornerCounters": false }
+      ],
+      "inputMode": "direct-core-and-history-reader",
+      "coverage": { "core": "implemented-equivalent" },
+      "expected": {
+        "tireHistory": "Show 'LF — collect sample', never an observed tire outcome.",
+        "timing": "No exact-corner proof and no timing advice.",
+        "testRefs": ["tests/TmrOverlay.App.Tests/History/FuelV2HistoryImporterTests.cs:ImportAsync_FormatThreeStationaryEvidenceRemainsReadableWithoutExactCornerCounters"]
+      }
+    },
+    {
+      "id": "fuel-v2-no-stop-known-short-race",
+      "kind": "constructed-product-state",
+      "stage": "race-start-confident-no-stop",
+      "sources": [
+        { "kind": "constructed-authoritative-lap-budget", "remainingLaps": 4 },
+        { "kind": "constructed-promoted-history", "fuelPerLapLiters": 13.5, "currentFuelLiters": 60, "effectiveCapacityLiters": 60 }
+      ],
+      "inputMode": "direct-core-and-final-overlay",
+      "expected": {
+        "bottomHalf": "Hide the lower table or show only the agreed one-cell no-stop summary; never fabricate Stint 2.",
+        "safety": "This is a product-state pressure test, not proof that any specific archived four-lap Dallara race skipped refuelling."
+      }
+    }
+  ]
+}

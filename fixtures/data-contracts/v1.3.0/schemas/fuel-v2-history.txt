@@ -1,0 +1,51 @@
+FuelV2History durable model — release v1.3.0
+
+FuelV2HistoryManifest
+  ManifestVersion: 3
+  CurrentSummaryVersion: 5
+  CurrentAggregateVersion: 2
+  CurrentImportModelVersion: 5
+  ClassifiedSummaryCount: int
+  LegacyUnclassifiedSummaryCount: int
+  UnclassifiedV2SummaryCount: int
+  UnreadableSummaryCount: int
+  MisfiledSummaryCount: int
+
+FuelV2HistorySummary
+  SummaryVersion: 5
+  ImportModelVersion: 5
+  SummaryId: string
+  RaceLength: FuelV2HistoryRaceLengthFacts
+  SessionIntegrity: FuelV2HistorySessionIntegrity
+  Scope.Combo.TrackLayoutKey: string
+  Scope.Combo.TrackLayoutIdentitySource: string
+  Scope.Session.DCRuleSet: string? (public iRacing WeekendInfo identity; unknown remains unrecognized)
+  StationaryServiceObservations: IReadOnlyList<PitServiceStationaryServiceObservation>
+
+FuelV2HistorySessionIntegrity
+  CaptureScope: string
+  SessionFamily: string
+  SessionOccurrenceKey: string
+  SessionOccurrenceVerified: bool
+  SessionOccurrenceSupportsReconnectDeduplication: bool
+  ExactCarVerified: bool
+  ExactTrackLayoutVerified: bool
+  IsClassifiedForHistory: derived bool
+
+PitServiceStationaryServiceObservation
+  Request shape, raw status/flags, fuel-flow cadence, total/side/axle/corner tire counters, entry/exit snapshots, deltas, fast-repair counters, and qualification flags
+PitServiceTireCounterSnapshot / PitServiceTireCounterDelta
+  Exact four-corner, side, axle, total-used, and availability values when the SDK exposes them; null is unavailable, never zero/inferred
+  Source evidence only; no learned duration/rate or timing advice
+
+FuelV2HistoryAggregate
+  AggregateVersion: 2
+  ClassifiedSessionCount: int
+  LegacyUnclassifiedSessionCount: int
+  UnclassifiedV2SessionCount: int
+  ExcludedDuplicateOccurrenceSummaryCount: int
+
+Storage layout
+  history/fuel-v2/manifest.json
+  history/fuel-v2/cars/{exactCarKey}/tracks/{exactTrackLayoutKey}/sessions/{family}/summaries/{summaryId}.json
+  history/fuel-v2/cars/{exactCarKey}/tracks/{exactTrackLayoutKey}/sessions/{family}/aggregate.json

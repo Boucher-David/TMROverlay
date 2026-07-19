@@ -160,6 +160,11 @@ jobs:
         continue-on-error: true
         run: python3 tools/validate_overlay_screenshots.py --profile browser-review-ci --root artifacts/browser-review-screenshots
 
+      - name: Execute browser review scenario suite
+        id: execute_browser_review_scenarios
+        continue-on-error: true
+        run: python3 tools/validation/run_overlay_scenarios.py --root artifacts/browser-review-screenshots --surface browserReview --suite minimum-scale-rendered-manifests --report artifacts/browser-review-screenshots/scenario-execution.json
+
       - name: Upload browser review screenshots
         uses: actions/upload-artifact@v7
         if: always()
@@ -171,6 +176,10 @@ jobs:
 
       - name: Fail on browser review screenshot validation
         if: ${{ steps.validate_browser_review.outcome == 'failure' }}
+        run: exit 1
+
+      - name: Fail on browser review scenario execution
+        if: ${{ steps.execute_browser_review_scenarios.outcome == 'failure' }}
         run: exit 1
 
   localhost_screenshots:
@@ -200,6 +209,11 @@ jobs:
         continue-on-error: true
         run: python3 tools/validate_overlay_screenshots.py --profile localhost-ci --root artifacts/localhost-screenshots
 
+      - name: Execute localhost scenario suite
+        id: execute_localhost_scenarios
+        continue-on-error: true
+        run: python3 tools/validation/run_overlay_scenarios.py --root artifacts/localhost-screenshots --surface localhostObs --suite minimum-scale-rendered-manifests --report artifacts/localhost-screenshots/scenario-execution.json
+
       - name: Upload localhost screenshots
         uses: actions/upload-artifact@v7
         if: always()
@@ -211,6 +225,10 @@ jobs:
 
       - name: Fail on localhost screenshot validation
         if: ${{ steps.validate_localhost.outcome == 'failure' }}
+        run: exit 1
+
+      - name: Fail on localhost scenario execution
+        if: ${{ steps.execute_localhost_scenarios.outcome == 'failure' }}
         run: exit 1
 
   windows_static_validation:
@@ -407,6 +425,11 @@ jobs:
         continue-on-error: true
         run: python tools/validate_overlay_screenshots.py --profile windows-ci --root artifacts/windows-overlay-screenshots
 
+      - name: Execute Windows native scenario suite
+        id: execute_windows_overlay_scenarios
+        continue-on-error: true
+        run: python tools/validation/run_overlay_scenarios.py --root artifacts/windows-overlay-screenshots --surface windowsNative --suite minimum-scale-rendered-manifests --report artifacts/windows-overlay-screenshots/scenario-execution.json
+
       - name: Upload Windows overlay screenshots
         uses: actions/upload-artifact@v7
         if: always()
@@ -418,6 +441,10 @@ jobs:
 
       - name: Fail on Windows overlay screenshot validation
         if: ${{ steps.validate_windows_overlay.outcome == 'failure' }}
+        run: exit 1
+
+      - name: Fail on Windows native scenario execution
+        if: ${{ steps.execute_windows_overlay_scenarios.outcome == 'failure' }}
         run: exit 1
 
   windows_installer_screenshots:
@@ -591,6 +618,14 @@ jobs:
           python3 tools/validate_overlay_screenshots.py --profile screenshot-manifest-parity --root artifacts/screenshot-manifest-parity
           validation_status=$?
 
+          python3 tools/validation/compare_overlay_scenario_execution.py \
+            --browser-root artifacts/screenshot-manifest-parity/browser-review \
+            --localhost-root artifacts/screenshot-manifest-parity/localhost \
+            --windows-root artifacts/screenshot-manifest-parity/windows \
+            --suite minimum-scale-rendered-manifests \
+            --report artifacts/screenshot-manifest-parity/scenario-execution-report.md
+          scenario_execution_status=$?
+
           python3 tools/compare_screenshot_manifests.py \
             --browser-root artifacts/screenshot-manifest-parity/browser-review \
             --localhost-root artifacts/screenshot-manifest-parity/localhost \
@@ -599,7 +634,7 @@ jobs:
             --report artifacts/screenshot-manifest-parity/report.md
           detailed_status=$?
 
-          if [ "$validation_status" -ne 0 ] || [ "$detailed_status" -ne 0 ]; then
+          if [ "$validation_status" -ne 0 ] || [ "$scenario_execution_status" -ne 0 ] || [ "$detailed_status" -ne 0 ]; then
             exit 1
           fi
 
@@ -608,7 +643,9 @@ jobs:
         if: always()
         with:
           name: screenshot-manifest-parity-report
-          path: artifacts/screenshot-manifest-parity/report.md
+          path: |
+            artifacts/screenshot-manifest-parity/report.md
+            artifacts/screenshot-manifest-parity/scenario-execution-report.md
           if-no-files-found: ignore
           retention-days: 14
 
@@ -655,6 +692,8 @@ jobs:
           "manifest_path=$manifestPath" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "informational_version=$informationalVersion" >> $env:GITHUB_OUTPUT
+          $shortSha = "${{ github.sha }}".Substring(0, 7)
+          "short_sha=$shortSha" >> $env:GITHUB_OUTPUT
 
       - name: Audit dry-run publish output
         shell: pwsh
@@ -706,6 +745,26 @@ jobs:
               Get-ChildItem $velopackPath | Format-Table Name, Length
               throw "Velopack dry run output is missing the MSI package, full package, or releases.win-x64.json."
           }
+
+      - name: Upload portable Windows PR test build
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tmroverlay-pr-${{ github.event.pull_request.number }}-windows-x64
+          path: |
+            artifacts/pr-publish-check/**
+            artifacts/pr-publish-check-manifest.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows PR test installer
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tmroverlay-pr-${{ github.event.pull_request.number }}-v${{ steps.publish_dry_run.outputs.version }}-r${{ github.run_number }}-a${{ github.run_attempt }}-${{ steps.publish_dry_run.outputs.short_sha }}-installer
+          path: artifacts/pr-velopack-check/*.msi
+          if-no-files-found: error
+          retention-days: 14
 
   windows_release_package:
     name: Windows release package

@@ -61,6 +61,7 @@ HistoricalSessionIdentity
   BuildVersion: string
   Category: string
   CurrentSessionNum: int?
+  DCRuleSet: string
   EventType: string
   Official: bool?
   SeasonId: int?

@@ -855,6 +855,10 @@ internal sealed class DesignV2SettingsSurface : Control
                 break;
             case "car-radar":
                 break;
+            case "garage-cover":
+                // Garage Cover has image/preview controls in its General
+                // region. It has no independently renderable content cells.
+                break;
             case "flags":
                 var flagRows = new ContentMatrixRow[]
                 {
@@ -1476,6 +1480,10 @@ internal sealed class DesignV2SettingsSurface : Control
                 DrawBlockToggleGrid(graphics, settings, "Pit Service Cells", pitRows, ContentBlockGridPanelBounds(pitRows.Count, columns: 2), columns: 2, rowHeight: BlockGridRowHeight, rowGap: BlockGridRowGap, useSessionColumns: UseContentSessionColumns(definition));
                 break;
             case "car-radar":
+                break;
+            case "garage-cover":
+                // Keep the preview-only surface free of an inert generic
+                // Content toggle. Its actionable controls live in General.
                 break;
             case "flags":
                 var flagRows = new ContentMatrixRow[]

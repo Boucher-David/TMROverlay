@@ -70,6 +70,17 @@ internal sealed class HistoricalSessionAccumulator
         }
     }
 
+    public HistoricalSessionRadarCalibrationSnapshot SnapshotRadarCalibration()
+    {
+        lock (_sync)
+        {
+            return new HistoricalSessionRadarCalibrationSnapshot(
+                HistoricalComboIdentity.From(_context),
+                _context.Car,
+                BuildRadarCalibration());
+        }
+    }
+
     public HistoricalSessionSummary BuildSummary(
         string sourceCaptureId,
         DateTimeOffset startedAtUtc,
@@ -461,7 +472,7 @@ internal sealed class HistoricalSessionAccumulator
             && !sample.PlayerCarInPitStall
             && sample.TeamOnPitRoad != true
             && sample.SpeedMetersPerSecond > 5d
-            && sample.PlayerCarIdx is >= 0 and < 64
+            && sample.PlayerCarIdx is >= 0
             && (sample.FocusCarIdx is null || sample.FocusCarIdx == sample.PlayerCarIdx);
     }
 
@@ -502,7 +513,7 @@ internal sealed class HistoricalSessionAccumulator
 
     private static bool IsRadarSideCandidate(HistoricalCarProximity car)
     {
-        return car.CarIdx is >= 0 and < 64
+        return car.CarIdx >= 0
             && car.LapCompleted >= 0
             && !double.IsNaN(car.LapDistPct)
             && !double.IsInfinity(car.LapDistPct)

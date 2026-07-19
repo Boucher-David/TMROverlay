@@ -70,7 +70,13 @@
     "metricGridCellInset": 4,
     "metricGridCellGap": 3,
     "metricGridCellMinimumWidth": 42,
-    "metricGridCellHeight": 21
+    "metricGridCellHeight": 21,
+    "maximumMetricSegmentColumns": 7,
+    "fuelV2ComparisonSegmentCount": 7,
+    "fuelV2WorkbenchWidth": 1120,
+    "fuelV2WorkbenchLabelColumnWidth": 158,
+    "fuelV2WorkbenchSegmentedRowHeight": 38,
+    "fuelV2WorkbenchValueSegmentMinimumHeight": 26
   },
   "streamChat": {
     "overlayWidth": 380,

@@ -461,7 +461,13 @@ internal sealed record MetricRowsGeometryContract(
     float MetricGridCellInset,
     float MetricGridCellGap,
     float MetricGridCellMinimumWidth,
-    float MetricGridCellHeight);
+    float MetricGridCellHeight,
+    int MaximumMetricSegmentColumns,
+    int FuelV2ComparisonSegmentCount,
+    int FuelV2WorkbenchWidth,
+    int FuelV2WorkbenchLabelColumnWidth,
+    int FuelV2WorkbenchSegmentedRowHeight,
+    int FuelV2WorkbenchValueSegmentMinimumHeight);
 
 internal sealed record StreamChatGeometryContract(
     float OverlayWidth,

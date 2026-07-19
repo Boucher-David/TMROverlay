@@ -190,6 +190,23 @@
       min-width: 0;
     }
 
+    body.fuel-calculator-page .overlay.laps-workbench {
+      --tmr-metric-label-column-width: 220px;
+      --tmr-metric-row-segmented-height: 43px;
+      width: min(1500px, calc(100vw - 16px));
+      height: var(--fuel-content-height, 540px);
+    }
+
+    /* The V2 composition is intended to become the product overlay. Its
+       seven-column width is explicit, but it intentionally retains the
+       shared metric label and row geometry used by the native renderer.
+       That keeps this production-shaped review surface from drifting into a
+       browser-only workbench layout. */
+    body.fuel-calculator-page .overlay.fuel-v2-comparison {
+      width: min(var(--tmr-metric-fuel-v2-workbench-width), calc(100vw - 16px));
+      height: auto;
+    }
+
     body.fuel-calculator-page .overlay.fuel-non-race {
       height: min(var(--fuel-content-height, var(--tmr-metric-fuel-non-race-height)), calc(100vh - 16px));
     }
@@ -707,6 +724,26 @@
       gap: 4px;
     }
 
+    body.fuel-calculator-page .overlay.laps-workbench .value-segments {
+      min-height: 32px;
+    }
+
+    body.fuel-calculator-page .overlay.laps-workbench .value-segment {
+      min-height: 30px;
+      padding-top: 4px;
+      padding-bottom: 4px;
+    }
+
+    /* Match the Pit Service grid: only the decisive stint cell carries a
+       semantic tint.  The row label stays a stable scan anchor. */
+    body.fuel-calculator-page .overlay.fuel-v2-comparison .tire-grid-row.info .tire-grid-label,
+    body.fuel-calculator-page .overlay.fuel-v2-comparison .tire-grid-row.success .tire-grid-label,
+    body.fuel-calculator-page .overlay.fuel-v2-comparison .tire-grid-row.warning .tire-grid-label,
+    body.fuel-calculator-page .overlay.fuel-v2-comparison .tire-grid-row.error .tire-grid-label {
+      background: transparent;
+      color: var(--tmr-text-secondary);
+    }
+
     .wind-arrow {
       display: inline-block;
       position: relative;
@@ -802,6 +839,23 @@
       overflow: hidden;
     }
 
+    .tire-grid-summary {
+      display: flex;
+      align-items: center;
+      min-height: var(--tmr-metric-grid-row-height);
+      border-radius: var(--tmr-metric-row-radius);
+      padding: 4px 8px;
+      overflow: hidden;
+      background: rgba(var(--tmr-text-muted-rgb), 0.08);
+      box-shadow: inset 0 0 0 1px var(--tmr-border-muted);
+      color: var(--tmr-text);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .tire-grid-header,
     .tire-grid-label,
     .tire-grid-cell {
@@ -855,27 +909,195 @@
     }
 
     .tire-grid-cell.info,
+    .tire-grid-summary.info,
     .tire-grid-row.info .tire-grid-label {
       background: rgba(var(--tmr-cyan-rgb), 0.13);
       color: var(--tmr-cyan);
     }
 
     .tire-grid-cell.success,
+    .tire-grid-summary.success,
     .tire-grid-row.success .tire-grid-label {
       background: rgba(var(--tmr-green-rgb), 0.13);
       color: var(--tmr-green);
     }
 
     .tire-grid-cell.warning,
+    .tire-grid-summary.warning,
     .tire-grid-row.warning .tire-grid-label {
       background: rgba(var(--tmr-amber-rgb), 0.15);
       color: var(--tmr-amber);
     }
 
     .tire-grid-cell.error,
+    .tire-grid-summary.error,
     .tire-grid-row.error .tire-grid-label {
       background: rgba(var(--tmr-error-rgb), 0.14);
       color: var(--tmr-error);
+    }
+
+    .tire-grid-cell.pit-context {
+      box-shadow:
+        inset 0 0 0 2px rgba(var(--tmr-green-rgb), 0.78),
+        0 0 0 1px rgba(var(--tmr-green-rgb), 0.2);
+    }
+
+    .fuel-workbench-layout {
+      display: grid;
+      grid-template-columns: minmax(520px, 0.86fr) minmax(620px, 1.14fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .fuel-workbench-table,
+    .fuel-workbench-charts {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    @media (max-width: 1180px) {
+      .fuel-workbench-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sector-chart-section {
+      min-width: 0;
+    }
+
+    .sector-chart-panel {
+      border: 1px solid var(--tmr-border-muted);
+      border-radius: 5px;
+      background: var(--tmr-surface-inset);
+      padding: 8px 10px 9px;
+      overflow: hidden;
+    }
+
+    .sector-chart-svg {
+      display: block;
+      width: 100%;
+      height: 250px;
+    }
+
+    .sector-chart-grid {
+      stroke: rgba(var(--tmr-text-muted-rgb), 0.16);
+      stroke-width: 1;
+    }
+
+    .sector-chart-frame {
+      fill: transparent;
+      stroke: rgba(var(--tmr-text-muted-rgb), 0.38);
+      stroke-width: 1.2;
+    }
+
+    .sector-chart-axis-label,
+    .sector-chart-tick {
+      fill: var(--tmr-text-muted);
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .sector-chart-line {
+      fill: none;
+      stroke: var(--tmr-cyan);
+      stroke-width: 2.1;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .sector-chart-line.degraded {
+      stroke-dasharray: 5 4;
+      opacity: 0.62;
+    }
+
+    .sector-chart-line.warning {
+      opacity: 0.78;
+    }
+
+    .sector-chart-line.error {
+      stroke-dasharray: 2 5;
+      opacity: 0.45;
+    }
+
+    .sector-chart-traffic-line {
+      fill: none;
+      stroke: #ffb703;
+      stroke-width: 4.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.9;
+      filter: drop-shadow(0 0 4px rgba(255, 183, 3, 0.32));
+    }
+
+    .sector-chart-traffic-marker {
+      fill: #ffb703;
+      stroke: var(--tmr-surface);
+      stroke-width: 1.4;
+      opacity: 0.95;
+    }
+
+    .sector-chart-line.series-0,
+    .sector-chart-swatch.series-0 { color: #4cc9f0; stroke: #4cc9f0; background: #4cc9f0; }
+    .sector-chart-line.series-1,
+    .sector-chart-swatch.series-1 { color: #80ed99; stroke: #80ed99; background: #80ed99; }
+    .sector-chart-line.series-2,
+    .sector-chart-swatch.series-2 { color: var(--tmr-amber); stroke: var(--tmr-amber); background: var(--tmr-amber); }
+    .sector-chart-line.series-3,
+    .sector-chart-swatch.series-3 { color: #ff6b6b; stroke: #ff6b6b; background: #ff6b6b; }
+    .sector-chart-line.series-4,
+    .sector-chart-swatch.series-4 { color: #b8f2e6; stroke: #b8f2e6; background: #b8f2e6; }
+    .sector-chart-line.series-5,
+    .sector-chart-swatch.series-5 { color: #f7aef8; stroke: #f7aef8; background: #f7aef8; }
+    .sector-chart-line.series-6,
+    .sector-chart-swatch.series-6 { color: #f4a261; stroke: #f4a261; background: #f4a261; }
+    .sector-chart-line.series-7,
+    .sector-chart-swatch.series-7 { color: #90dbf4; stroke: #90dbf4; background: #90dbf4; }
+    .sector-chart-line.series-8,
+    .sector-chart-swatch.series-8 { color: #caffbf; stroke: #caffbf; background: #caffbf; }
+    .sector-chart-line.series-9,
+    .sector-chart-swatch.series-9 { color: #ffadad; stroke: #ffadad; background: #ffadad; }
+    .sector-chart-line.series-10,
+    .sector-chart-swatch.series-10 { color: #a0c4ff; stroke: #a0c4ff; background: #a0c4ff; }
+    .sector-chart-line.series-11,
+    .sector-chart-swatch.series-11 { color: #fdffb6; stroke: #fdffb6; background: #fdffb6; }
+
+    .sector-chart-swatch.degraded {
+      opacity: 0.62;
+    }
+
+    .sector-chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 10px;
+      margin-top: 7px;
+      color: var(--tmr-text-muted);
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 12px;
+    }
+
+    .sector-chart-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .sector-chart-swatch {
+      width: 12px;
+      height: 3px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+    }
+
+    .sector-chart-note {
+      margin-top: 6px;
+      color: var(--tmr-text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 13px;
     }
 
     .graph-metrics {

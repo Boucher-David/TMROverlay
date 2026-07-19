@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TmrOverlay.App.Diagnostics;
 using TmrOverlay.App.Events;
 using TmrOverlay.App.Storage;
+using TmrOverlay.App.Telemetry;
 using Xunit;
 
 namespace TmrOverlay.App.Tests.Diagnostics;
@@ -29,6 +30,10 @@ public sealed class OverlayForensicsPackageServiceTests
             }
             """);
         File.WriteAllBytes(Path.Combine(captureDirectory, "telemetry.bin"), [1, 2, 3]);
+        var fuelV2Directory = Path.Combine(captureDirectory, "fuel-v2-capture");
+        Directory.CreateDirectory(fuelV2Directory);
+        File.WriteAllText(Path.Combine(fuelV2Directory, "capture-example-fuel-v2-s001-practice-fuel-v2-diagnostics.json"), "{}");
+        File.WriteAllText(Path.Combine(fuelV2Directory, "capture-example-fuel-v2-s002-race-fuel-v2-diagnostics.json"), "{}");
         var diagnosticsBundle = Path.Combine(storage.DiagnosticsRoot, "session-finalization.zip");
         File.WriteAllText(diagnosticsBundle, "diagnostics");
         var originalCaptureFiles = TopLevelFileNames(captureDirectory);
@@ -58,6 +63,9 @@ public sealed class OverlayForensicsPackageServiceTests
         Assert.Equal(output, rootElement.GetProperty("outputDirectory").GetString());
         Assert.Equal(diagnosticsBundle, rootElement.GetProperty("inputInventory").GetProperty("diagnosticsBundle").GetProperty("path").GetString());
         Assert.Equal(captureDirectory, rootElement.GetProperty("inputInventory").GetProperty("capture").GetProperty("directory").GetString());
+        Assert.Equal(
+            2,
+            rootElement.GetProperty("inputInventory").GetProperty("capture").GetProperty("fuelV2Captures").GetArrayLength());
         Assert.Equal("initial", rootElement.GetProperty("packageStatus").GetProperty("enrichmentStatus").GetString());
     }
 
@@ -127,6 +135,41 @@ public sealed class OverlayForensicsPackageServiceTests
                 gap.GetProperty("kind").GetString(),
                 "obs-process-present-no-telemetry-overlay-routes",
                 StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CreateInitialPackage_UsesConfiguredFuelV2CapturePath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-forensics-service-test", Guid.NewGuid().ToString("N"));
+        var storage = CreateStorage(root);
+        var captureOptions = new FuelV2CaptureOptions
+        {
+            CaptureDirectoryName = "custom-fuel-v2",
+            OutputFileName = "custom-fuel.json"
+        };
+        var service = CreateService(storage, captureOptions);
+        var captureDirectory = Path.Combine(storage.CaptureRoot, "capture-custom-fuel-v2");
+        var fuelDirectory = Path.Combine(captureDirectory, captureOptions.CaptureDirectoryName);
+        Directory.CreateDirectory(fuelDirectory);
+        foreach (var index in Enumerable.Range(0, 21))
+        {
+            File.WriteAllText(Path.Combine(fuelDirectory, $"segment-{index:D2}-custom-fuel.json"), "{}");
+        }
+
+        var output = service.CreateInitialPackage(captureDirectory, null, null, "unit-test");
+
+        using var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "overlay-forensics.json")));
+        var captures = report.RootElement
+            .GetProperty("inputInventory")
+            .GetProperty("capture")
+            .GetProperty("fuelV2Captures");
+        Assert.Equal(20, captures.GetArrayLength());
+        var capture = report.RootElement
+            .GetProperty("inputInventory")
+            .GetProperty("capture");
+        Assert.Equal(21, capture.GetProperty("fuelV2CaptureTotalCount").GetInt32());
+        Assert.Equal(20, capture.GetProperty("fuelV2CaptureIncludedCount").GetInt32());
+        Assert.True(capture.GetProperty("fuelV2CaptureTruncated").GetBoolean());
     }
 
     [Fact]
@@ -344,12 +387,15 @@ public sealed class OverlayForensicsPackageServiceTests
         Assert.False(File.Exists(Path.Combine(outputDirectory, "storage-boundary.json")));
     }
 
-    private static OverlayForensicsPackageService CreateService(AppStorageOptions storage)
+    private static OverlayForensicsPackageService CreateService(
+        AppStorageOptions storage,
+        FuelV2CaptureOptions? fuelV2CaptureOptions = null)
     {
         return new OverlayForensicsPackageService(
             storage,
             new AppEventRecorder(storage),
-            NullLogger<OverlayForensicsPackageService>.Instance);
+            NullLogger<OverlayForensicsPackageService>.Instance,
+            fuelV2CaptureOptions);
     }
 
     private static AppStorageOptions CreateStorage(string root)

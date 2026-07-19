@@ -529,6 +529,22 @@ def analyze_raw_capture(capture_dir: Path, max_sample_frames: int) -> dict[str, 
             car_on_pit = arrays.get("CarIdxOnPitRoad") or []
             car_last_lap = arrays.get("CarIdxLastLapTime") or []
             car_best_lap = arrays.get("CarIdxBestLapTime") or []
+            car_idx_slot_count = max(
+                len(values)
+                for values in (
+                    car_laps,
+                    car_pct,
+                    car_pos,
+                    car_class_pos,
+                    car_class,
+                    car_f2,
+                    car_est,
+                    car_surface,
+                    car_on_pit,
+                    car_last_lap,
+                    car_best_lap,
+                )
+            )
 
             def car_has_track_surface_evidence(idx: int) -> bool:
                 return idx >= len(car_surface) or not isinstance(car_surface[idx], int) or car_surface[idx] > 0
@@ -551,7 +567,7 @@ def analyze_raw_capture(capture_dir: Path, max_sample_frames: int) -> dict[str, 
                 )
 
             def car_progress(idx: int, require_progress: bool = False) -> dict[str, Any] | None:
-                if idx < 0 or idx >= 64:
+                if idx < 0 or idx >= car_idx_slot_count:
                     return None
                 has_progress = car_has_progress(idx)
                 if require_progress and not has_progress:
@@ -574,14 +590,14 @@ def analyze_raw_capture(capture_dir: Path, max_sample_frames: int) -> dict[str, 
                 }
 
             focus_idx = player_idx
-            if cam_idx is not None and 0 <= cam_idx < 64 and car_progress(cam_idx) is not None:
+            if cam_idx is not None and 0 <= cam_idx < car_idx_slot_count and car_progress(cam_idx) is not None:
                 focus_idx = cam_idx
             focus = car_progress(focus_idx)
             team = car_progress(player_idx)
             focus_counts[str(focus_idx)] += 1
             focus_segments.observe(f"{focus_idx}", session_time)
 
-            active_indices = [idx for idx in range(64) if car_has_progress(idx) or car_has_standing_or_timing(idx)]
+            active_indices = [idx for idx in range(car_idx_slot_count) if car_has_progress(idx) or car_has_standing_or_timing(idx)]
             active_car_counts.append(len(active_indices))
             reference_class = focus.get("class") if focus else (team.get("class") if team else None)
             same_class = [idx for idx in active_indices if reference_class is None or (idx < len(car_class) and car_class[idx] == reference_class)]

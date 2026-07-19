@@ -1,0 +1,169 @@
+{
+  "scenarioSetVersion": 1,
+  "purpose": "Sanitized observed V1 history reference scenarios for Fuel Calculator V2 bottom-half workbench development. These are comparison/acceptance evidence only; they are not Fuel V2 format-2 sidecars and must never be imported as classified learned history.",
+  "sourcePolicy": {
+    "origin": "local real historical-session summaries",
+    "sanitization": "Driver/team identity, capture paths, session identifiers, and wall-clock timestamps are omitted. Observed quantitative session, fuel, pit, and stint facts are retained.",
+    "runtimeAuthority": "Live telemetry remains the runtime authority. These scenarios establish review expectations and degraded-state guardrails only."
+  },
+  "scenarios": [
+    {
+      "id": "dallara-nurburgring-fixed-four-lap",
+      "kind": "real-history-reference",
+      "classification": {
+        "sourceHistoryFormat": "V1 historical session summary",
+        "fuelV2HistoryIntake": "reference-only-not-importable",
+        "confidence": "high",
+        "sessionFamily": "race",
+        "evidenceNotes": []
+      },
+      "session": {
+        "carLabel": "Dallara P217 LMP2",
+        "trackLabel": "Nürburgring Combined Long",
+        "raceDurationSeconds": 2100,
+        "declaredLaps": 4,
+        "completedValidLaps": 4,
+        "observedDistanceLaps": 4.493628
+      },
+      "fuel": {
+        "startFuelLiters": 52.500004,
+        "firstCleanStintStartFuelLiters": 49.676647,
+        "minimumObservedFuelLiters": 2.111858,
+        "observedFuelPerLapLiters": 12.758962,
+        "firstCleanStintFuelPerLapLiters": 12.625031,
+        "historicalReferenceFuelPerLapLiters": 13.5
+      },
+      "observedService": {
+        "fuelOnlyStopCount": 1,
+        "fuelBeforeLiters": 11.833488,
+        "fuelAfterLiters": 15.427217,
+        "fuelAddedLiters": 3.593728,
+        "fuelFillRateLitersPerSecond": 1.083536,
+        "serviceActiveSeconds": 3.316667
+      },
+      "observedStints": [
+        {
+          "distanceLaps": 2.997463,
+          "fuelUsedLiters": 37.84306,
+          "fuelPerLapLiters": 12.625031
+        },
+        {
+          "distanceLaps": 0.700385,
+          "fuelUsedLiters": 9.532058,
+          "fuelPerLapLiters": 13.609743
+        }
+      ],
+      "bottomHalfAssertions": [
+        "At the start, a four-lap no-stop candidate must remain a visible saving/stretch comparison, not unconditional advice.",
+        "A normal plan must retain a feasible stop path; the real session contained a fuel-service stop.",
+        "The workbench must distinguish the historical conservative burn from the first-stint observed burn rather than silently averaging them."
+      ]
+    },
+    {
+      "id": "dallara-nurburgring-timed-forty-five-minute",
+      "kind": "real-history-reference",
+      "classification": {
+        "sourceHistoryFormat": "V1 historical session summary",
+        "fuelV2HistoryIntake": "reference-only-not-importable",
+        "confidence": "high",
+        "sessionFamily": "race",
+        "evidenceNotes": [
+          "Timed race with unlimited declared laps; final-lap planning must use a live lap budget rather than infer a fixed lap count from this record."
+        ]
+      },
+      "session": {
+        "carLabel": "Dallara P217 LMP2",
+        "trackLabel": "Nürburgring Combined Long",
+        "raceDurationSeconds": 2700,
+        "declaredLaps": null,
+        "completedValidLaps": 6,
+        "observedDistanceLaps": 6.322687
+      },
+      "fuel": {
+        "startFuelLiters": 60,
+        "firstCleanStintStartFuelLiters": 58.418102,
+        "minimumObservedFuelLiters": 3.618554,
+        "observedFuelPerLapLiters": 13.622505,
+        "firstCleanStintFuelPerLapLiters": 13.670528
+      },
+      "observedService": {
+        "fuelOnlyStopCount": 1,
+        "fuelBeforeLiters": 3.822414,
+        "fuelAfterLiters": 33.451084,
+        "fuelAddedLiters": 29.62867,
+        "fuelFillRateLitersPerSecond": 1.697918,
+        "serviceActiveSeconds": 17.45
+      },
+      "observedStints": [
+        {
+          "distanceLaps": 3.993661,
+          "fuelUsedLiters": 54.595449,
+          "fuelPerLapLiters": 13.670528
+        },
+        {
+          "distanceLaps": 1.533315,
+          "fuelUsedLiters": 21.244962,
+          "fuelPerLapLiters": 13.855579
+        }
+      ],
+      "bottomHalfAssertions": [
+        "The bottom half must accept a timed-race lap budget as a separate live input; this history supplies burn and service reference, not a final lap target.",
+        "A fuel-only service can provide a credible fill-rate reference only when the service-active/fuel-delta evidence is present.",
+        "The model must retain the known service stop rather than interpret a low post-stint fuel value as evidence of a no-stop plan."
+      ]
+    },
+    {
+      "id": "ford-charlotte-oval-tire-service-degraded",
+      "kind": "real-history-reference",
+      "classification": {
+        "sourceHistoryFormat": "V1 historical session summary",
+        "fuelV2HistoryIntake": "reference-only-not-importable",
+        "confidence": "medium",
+        "sessionFamily": "race",
+        "evidenceNotes": [
+          "Only 4.07 of a declared 50 laps were observed.",
+          "The material service included a tire change, so its elapsed time and apparent fill rate cannot be promoted as fuel-only service authority."
+        ]
+      },
+      "session": {
+        "carLabel": "NASCAR Ford Mustang 2022",
+        "trackLabel": "Charlotte Motor Speedway 2025 Oval",
+        "raceDurationSeconds": 86400,
+        "declaredLaps": 50,
+        "completedValidLaps": 2,
+        "observedDistanceLaps": 4.074385
+      },
+      "fuel": {
+        "startFuelLiters": 75.672005,
+        "firstCleanStintStartFuelLiters": 75.61982,
+        "minimumObservedFuelLiters": 72.080078,
+        "observedFuelPerLapLiters": 1.073033,
+        "firstCleanStintFuelPerLapLiters": 1.140694
+      },
+      "observedService": {
+        "fuelOnlyStopCount": 0,
+        "tireServiceStopCount": 1,
+        "fuelAddedLiters": 0.846649,
+        "apparentFuelFillRateLitersPerSecond": 0.014411,
+        "serviceActiveSeconds": 58.75
+      },
+      "observedStints": [
+        {
+          "distanceLaps": 0.809989,
+          "fuelUsedLiters": 0.92395,
+          "fuelPerLapLiters": 1.140694
+        },
+        {
+          "distanceLaps": 3.266293,
+          "fuelUsedLiters": 3.462433,
+          "fuelPerLapLiters": 1.06005
+        }
+      ],
+      "bottomHalfAssertions": [
+        "The model must enter a degraded/insufficient-history state for any whole-race 50-lap stop count; it cannot extrapolate a final plan from four observed laps.",
+        "The tire-service elapsed time and apparent fill rate must not be used as a fuel-only service rate.",
+        "The observed burn may be displayed as a provisional live/history reference with its medium-confidence context, never as an unconditional race plan."
+      ]
+    }
+  ]
+}

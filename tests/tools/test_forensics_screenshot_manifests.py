@@ -90,6 +90,7 @@ def write_not_rendered_manifest(package: Path, overlay_id: str, manifest_overlay
             {
                 "schemaVersion": 1,
                 "overlayId": manifest_overlay_id or overlay_id,
+                "contractProvenance": contract_provenance(),
                 "status": "not-rendered",
                 "screenshots": [],
                 "gaps": [
@@ -169,6 +170,7 @@ def write_produced_manifest(
                 "schemaVersion": 1,
                 "overlayId": overlay_id,
                 "renderer": renderer,
+                "contractProvenance": contract_provenance(),
                 "status": "produced",
                 "screenshotCount": 1,
                 "screenshots": [
@@ -190,6 +192,30 @@ def write_produced_manifest(
         ),
         encoding="utf-8",
     )
+
+
+def contract_provenance() -> dict[str, object]:
+    return {
+        "schemaVersion": 1,
+        "shared": {
+            "loaded": True,
+            "sourceAsset": "shared/tmr-overlay-contract.json",
+            "sourceJsonSha256": "a" * 64,
+            "resolvedContractSha256": "b" * 64,
+            "contractVersion": 1,
+            "settingsVersion": 11,
+            "loadError": None,
+        },
+        "geometry": {
+            "sourceAsset": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/contracts/overlay-geometry.json",
+            "runtimeContractSha256": "b" * 64,
+            "sourceJsonSha256": "c" * 64,
+            "sourceError": None,
+        },
+        "browserModel": {
+            "version": "browser-overlay-display-model/v1",
+        },
+    }
 
 
 def is_absolute_like(value: str) -> bool:

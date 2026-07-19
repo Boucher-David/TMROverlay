@@ -1,0 +1,37 @@
+FuelV2History durable model — release v1.2.3
+
+FuelV2HistoryManifest
+  ManifestVersion: 1
+  CurrentSummaryVersion: 1
+  CurrentAggregateVersion: 1
+  CurrentImportModelVersion: 1
+  UpdatedAtUtc: DateTimeOffset
+  UseForStrategy: bool
+  SummaryCount: int
+  AggregateCount: int
+  LastImportedSourceId: string?
+
+FuelV2HistorySummary
+  SummaryVersion: 1
+  ImportModelVersion: 1
+  SourceId: string
+  StartedAtUtc: DateTimeOffset
+  FinishedAtUtc: DateTimeOffset
+  ImportedAtUtc: DateTimeOffset
+  SourceArtifact: FuelV2HistorySourceArtifact
+  SourceVersions: FuelV2HistorySourceVersions
+  Scope: FuelV2HistorySessionScope
+  Quality: FuelV2HistoryQuality
+  Evidence: FuelV2HistoryEvidenceTotals
+  FuelCapacity: FuelV2HistoryFuelCapacityFacts
+  LapBudget: FuelV2HistoryLapBudgetFacts
+
+FuelV2HistoryAggregate
+  AggregateVersion: 1
+  Scope: FuelV2HistorySessionScope?
+  SummaryCount: int
+
+Storage layout
+  history/fuel-v2/manifest.json
+  history/fuel-v2/cars/{carKey}/tracks/{trackKey}/sessions/{sessionKey}/summaries/{sourceId}.json
+  history/fuel-v2/cars/{carKey}/tracks/{trackKey}/sessions/{sessionKey}/aggregate.json

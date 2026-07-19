@@ -1,0 +1,140 @@
+{
+  "formatVersion": 1,
+  "sourceId": "frozen-v123-sidecar",
+  "startedAtUtc": "2026-06-30T12:00:00+00:00",
+  "finishedAtUtc": "2026-06-30T12:30:00+00:00",
+  "appVersion": {
+    "productName": "Tech Mates Racing Overlay",
+    "version": "1.2.3.0",
+    "informationalVersion": "1.2.3",
+    "runtimeVersion": ".NET 8",
+    "operatingSystem": "Windows",
+    "processArchitecture": "X64"
+  },
+  "dataVersions": {
+    "historicalSummaryVersion": 1,
+    "historicalCollectionModelVersion": 1,
+    "historicalAggregateVersion": 3,
+    "liveModelContractVersion": 1
+  },
+  "output": {
+    "mode": "raw-capture-sidecar",
+    "captureDirectoryAttached": true,
+    "captureDirectoryName": "fuel-v2-capture",
+    "outputFileName": "fuel-v2-diagnostics.json",
+    "rawTelemetryExcluded": true,
+    "durableHistoryMutated": false
+  },
+  "sessionScope": {
+    "combo": {
+      "carKey": "car-1-test-car",
+      "trackKey": "track-2-test-track",
+      "sessionKey": "race"
+    },
+    "car": {
+      "carId": 1,
+      "carPath": "test-car",
+      "carScreenName": "Test Car",
+      "carClassId": 10,
+      "carClassShortName": "GT3",
+      "driverCarVersion": "2026.05",
+      "driverSetupName": "race",
+      "driverSetupIsModified": false
+    },
+    "track": {
+      "trackId": 2,
+      "trackName": "test-track",
+      "trackDisplayName": "Test Track",
+      "trackConfigName": "Full",
+      "trackLengthKm": 5,
+      "trackVersion": "2026.05"
+    },
+    "session": {
+      "currentSessionNum": 0,
+      "sessionNum": 0,
+      "sessionType": "Race",
+      "sessionName": "Race",
+      "eventType": "Race",
+      "sessionLapsText": "50 laps",
+      "official": true,
+      "teamRacing": true,
+      "seriesId": 1,
+      "seasonId": 2,
+      "sessionId": 3,
+      "subSessionId": 4,
+      "buildVersion": "2026.05",
+      "sessionTimeText": "60 min"
+    },
+    "fuelCapacity": {
+      "physicalTankCapacityLiters": 70,
+      "fuelKgPerLiter": 0.75,
+      "effectiveSessionCapacitySource": "not_available_in_current_models",
+      "limitation": "Effective event fuel-cap parsing is not implemented."
+    },
+    "trackSectors": []
+  },
+  "options": {
+    "minimumFrameSpacingSeconds": 1,
+    "maxSampleFramesPerSession": 600,
+    "maxEventExamplesPerSession": 200,
+    "maxAcceptedLapWindows": 120,
+    "maxRejectedLapWindows": 120,
+    "maxSectorBurnSamples": 240,
+    "maxPitWindows": 80,
+    "maxTeamStints": 80
+  },
+  "totals": {
+    "frameCount": 100,
+    "sampledFrameCount": 10,
+    "droppedFrameSampleCount": 0,
+    "droppedEventSampleCount": 0,
+    "sessionFrameCounts": { "Race": 100 },
+    "contextFlagCounts": { "clean-race": 80 }
+  },
+  "fuel": {
+    "framesWithLocalFuel": 90,
+    "framesWithTeamProgress": 95,
+    "framesWithTeamProgressWithoutLocalFuel": 5,
+    "framesWithInstantaneousBurn": 60,
+    "framesWithMeasuredBurn": 50,
+    "framesBaselineEligible": 80,
+    "minFuelLiters": 10,
+    "maxFuelLiters": 70,
+    "maxObservedFuelIncreaseLiters": 12.5,
+    "maxObservedFuelDecreaseLiters": 0.8,
+    "fuelEvidenceCounts": { "live:usable": 90 }
+  },
+  "lapBudget": {
+    "framesWithLapBudget": 75,
+    "framesWithRaceProjection": 70,
+    "sourceCounts": { "projection:fixed-laps": 70 },
+    "missingSignalCounts": { "session:SessionTimeRemain": 2 }
+  },
+  "sectorBurn": {
+    "framesWithSectorMetadata": 100,
+    "acceptedSectorWindows": 0,
+    "rejectedSectorWindows": 0
+  },
+  "pitService": {
+    "pitWindowCount": 0,
+    "pitWindowsWithFuelIncrease": 0,
+    "requestCounts": {}
+  },
+  "team": {
+    "teamStintCount": 0,
+    "driverChangeEventCount": 0
+  },
+  "raceControl": { "stateCounts": { "state:4": 100 } },
+  "weather": { "scopeCounts": { "declared-dry": 100 } },
+  "syntheticReplaySuitability": {
+    "suitable": false,
+    "reasons": ["frozen-v1-sidecar"]
+  },
+  "sampleFrames": [],
+  "acceptedLapBurnWindows": [],
+  "rejectedLapBurnWindows": [],
+  "sectorBurnSamples": [],
+  "pitWindows": [],
+  "teamStints": [],
+  "eventSamples": []
+}

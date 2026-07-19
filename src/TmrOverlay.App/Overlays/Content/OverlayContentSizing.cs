@@ -158,7 +158,7 @@ internal static class OverlayContentSizing
         return definition.Blocks?.Count(block => block.DefaultEnabled) ?? 0;
     }
 
-    public static int FuelCalculatorHeightForContent(int rowCount, int sectionCount)
+    public static int FuelCalculatorHeightForContent(int rowCount, int sectionCount, bool clampToDefaultHeight = true)
     {
         if (rowCount <= 0 || sectionCount <= 0)
         {
@@ -174,7 +174,9 @@ internal static class OverlayContentSizing
             + rowGaps
             + sectionGaps
             + MetricGeometry.CollapsedFooterReserveHeight;
-        return Math.Clamp(height, MetricGeometry.MinimumFuelCalculatorHeight, FuelCalculatorOverlayDefinition.Definition.DefaultHeight);
+        return clampToDefaultHeight
+            ? Math.Clamp(height, MetricGeometry.MinimumFuelCalculatorHeight, FuelCalculatorOverlayDefinition.Definition.DefaultHeight)
+            : Math.Max(MetricGeometry.MinimumFuelCalculatorHeight, height);
     }
 
     public static Size FuelCalculatorSizeForMetricSections(
@@ -182,6 +184,8 @@ internal static class OverlayContentSizing
         OverlaySettings settings,
         OverlaySessionKind? sessionKind,
         IReadOnlyList<SimpleTelemetryMetricSectionViewModel> metricSections,
+        bool clampToDefaultHeight = true,
+        int? contentWidth = null,
         bool? hasRenderedHeader = null)
     {
         var visibleSections = metricSections
@@ -194,8 +198,8 @@ internal static class OverlayContentSizing
 
         var rowCount = visibleSections.Sum(section => section.Rows.Count);
         var baseSize = new Size(
-            definition.DefaultWidth,
-            FuelCalculatorHeightForContent(rowCount, visibleSections.Length));
+            contentWidth is > 0 ? contentWidth.Value : definition.DefaultWidth,
+            FuelCalculatorHeightForContent(rowCount, visibleSections.Length, clampToDefaultHeight));
         return ApplyChromeHeight(definition, settings, sessionKind, baseSize, hasRenderedHeader);
     }
 

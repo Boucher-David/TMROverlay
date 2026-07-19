@@ -1,0 +1,32 @@
+{
+  "aggregateVersion": 1,
+  "scope": {
+    "combo": {
+      "carKey": "legacy-car",
+      "trackKey": "legacy-track",
+      "sessionKey": "race"
+    },
+    "car": {
+      "carPath": "legacy-car"
+    },
+    "track": {
+      "trackId": 2,
+      "trackConfigName": "Full"
+    },
+    "session": {
+      "sessionType": "Race"
+    },
+    "trackSectors": []
+  },
+  "updatedAtUtc": "2026-06-30T12:31:00+00:00",
+  "summaryCount": 1,
+  "learningEligibleSessionCount": 0,
+  "syntheticReplaySuitableSessionCount": 0,
+  "recentSources": [
+    {
+      "sourceId": "legacy-v123",
+      "importedAtUtc": "2026-06-30T12:31:00+00:00",
+      "sourceArtifactSha256": "legacy-v123-example-sha256"
+    }
+  ]
+}

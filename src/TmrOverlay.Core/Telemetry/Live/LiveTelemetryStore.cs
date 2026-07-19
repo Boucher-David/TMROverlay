@@ -17,6 +17,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
     private readonly LiveRaceProjectionTracker _raceProjectionTracker = new();
     private readonly LiveIncidentPressureTracker _incidentPressureTracker = new();
     private readonly FuelBurnLapTracker _fuelBurnLapTracker = new();
+    private readonly LiveFuelPerLapWindowEstimator _fuelPerLapWindowEstimator = new();
     private HistoricalSessionContext _context = HistoricalSessionContext.Empty;
     private LiveTelemetrySnapshot _snapshot = LiveTelemetrySnapshot.Empty;
     private LiveTelemetrySnapshot? _lastActiveSnapshot;
@@ -57,12 +58,14 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
     {
         lock (_sync)
         {
-            if (!string.Equals(_snapshot.SourceId, sourceId, StringComparison.Ordinal))
+            var sourceChanged = !string.Equals(_snapshot.SourceId, sourceId, StringComparison.Ordinal);
+            if (sourceChanged)
             {
                 _trackMapSectorTracker.Reset();
                 _raceProjectionTracker.Reset();
                 _incidentPressureTracker.Reset();
                 _fuelBurnLapTracker.Reset();
+                _fuelPerLapWindowEstimator.Reset();
                 ResetGriddingTracker();
             }
 
@@ -73,7 +76,16 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
                 SourceId = sourceId,
                 StartedAtUtc = startedAtUtc,
                 LastUpdatedAtUtc = startedAtUtc,
-                Sequence = ++_sequence
+                Sequence = ++_sequence,
+                HasFrameForCurrentContext = sourceChanged
+                    ? false
+                    : _snapshot.HasFrameForCurrentContext,
+                HasSessionInfoForCurrentCollection = sourceChanged
+                    ? false
+                    : _snapshot.HasSessionInfoForCurrentCollection,
+                FuelPerLapWindow = sourceChanged
+                    ? LiveFuelPerLapWindow.Empty
+                    : _snapshot.FuelPerLapWindow
             };
         }
     }
@@ -88,6 +100,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             _raceProjectionTracker.Reset();
             _incidentPressureTracker.Reset();
             _fuelBurnLapTracker.Reset();
+            _fuelPerLapWindowEstimator.Reset();
             ResetGriddingTracker();
             _lastProximityReferenceCarIdx = null;
             _snapshot = LiveTelemetrySnapshot.Empty with
@@ -118,6 +131,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             if (!sameFuelBurnSession)
             {
                 _fuelBurnLapTracker.Reset();
+                _fuelPerLapWindowEstimator.Reset();
             }
 
             _snapshot = _snapshot with
@@ -125,7 +139,14 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
                 Context = context,
                 Combo = HistoricalComboIdentity.From(context),
                 LastUpdatedAtUtc = DateTimeOffset.UtcNow,
-                Sequence = ++_sequence
+                Sequence = ++_sequence,
+                HasFrameForCurrentContext = sameFuelBurnSession
+                    ? _snapshot.HasFrameForCurrentContext
+                    : false,
+                HasSessionInfoForCurrentCollection = true,
+                FuelPerLapWindow = sameFuelBurnSession
+                    ? _snapshot.FuelPerLapWindow
+                    : LiveFuelPerLapWindow.Empty
             };
         }
     }
@@ -138,7 +159,24 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
             && string.Equals(previousCombo.TrackKey, nextCombo.TrackKey, StringComparison.Ordinal)
             && string.Equals(previousCombo.SessionKey, nextCombo.SessionKey, StringComparison.Ordinal)
             && previous.Session.CurrentSessionNum == next.Session.CurrentSessionNum
-            && previous.Session.SessionNum == next.Session.SessionNum;
+            && previous.Session.SessionNum == next.Session.SessionNum
+            && !KnownDistinct(previous.Track.TrackConfigName, next.Track.TrackConfigName)
+            && !KnownDistinct(previous.Session.SessionId, next.Session.SessionId)
+            && !KnownDistinct(previous.Session.SubSessionId, next.Session.SubSessionId);
+    }
+
+    private static bool KnownDistinct(string? previous, string? next)
+    {
+        return !string.IsNullOrWhiteSpace(previous)
+            && !string.IsNullOrWhiteSpace(next)
+            && !string.Equals(previous, next, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool KnownDistinct(int? previous, int? next)
+    {
+        return previous is { } previousValue
+            && next is { } nextValue
+            && previousValue != nextValue;
     }
 
     public void RecordFrame(HistoricalTelemetrySample sample)
@@ -147,6 +185,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
         {
             var fuel = LiveFuelSnapshot.From(_context, sample);
             fuel = _fuelBurnLapTracker.Update(sample, fuel);
+            var fuelPerLapWindow = _fuelPerLapWindowEstimator.Update(sample);
             var proximity = LiveProximitySnapshot.From(_context, sample);
             ResetProximityHistoryIfReferenceChanged(sample);
             var multiclassApproaches = BuildMulticlassApproaches(sample, proximity);
@@ -184,7 +223,10 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
                 Proximity: proximity,
                 LeaderGap: leaderGap)
             {
-                Models = models
+                Models = models,
+                HasFrameForCurrentContext = true,
+                HasSessionInfoForCurrentCollection = _snapshot.HasSessionInfoForCurrentCollection,
+                FuelPerLapWindow = fuelPerLapWindow
             };
             _lastActiveSnapshot = _snapshot;
         }

@@ -2,12 +2,116 @@ using TmrOverlay.Core.History;
 using TmrOverlay.Core.Overlays;
 using TmrOverlay.Core.Settings;
 using TmrOverlay.Core.Telemetry.Live;
+using TmrOverlay.App.Overlays;
 using Xunit;
 
 namespace TmrOverlay.App.Tests.Overlays;
 
 public sealed class OverlayAvailabilityEvaluatorTests
 {
+    public static IEnumerable<object[]> ManagedOverlayVisibilityTruthTable()
+    {
+        var values = new[] { false, true };
+        foreach (var enabled in values)
+        {
+            foreach (var sessionAllowed in values)
+            {
+                foreach (var contextAllowed in values)
+                {
+                    foreach (var contentAllowed in values)
+                    {
+                        foreach (var settingsPreview in values)
+                        {
+                            yield return [enabled, sessionAllowed, contextAllowed, contentAllowed, settingsPreview];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ManagedOverlayVisibilityTruthTable))]
+    public void ManagedOverlayVisibilityPolicy_ExhaustivelyHonorsTheUserToggle(
+        bool enabled,
+        bool sessionAllowed,
+        bool contextAllowed,
+        bool contentAllowed,
+        bool settingsPreview)
+    {
+        var actual = OverlayVisibilityPolicy.ShouldShowManagedOverlay(
+            enabled,
+            sessionAllowed,
+            contextAllowed,
+            contentAllowed,
+            settingsPreview);
+
+        var expected = enabled
+            && (settingsPreview || (sessionAllowed && contextAllowed && contentAllowed));
+
+        Assert.Equal(expected, actual);
+        if (!enabled)
+        {
+            Assert.False(actual);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ManagedOverlayVisibilityTruthTable))]
+    public void OverlayManager_UsesTheSharedVisibilityDecisionForEveryNativeOverlayPath(
+        bool enabled,
+        bool sessionAllowed,
+        bool contextAllowed,
+        bool contentAllowed,
+        bool settingsPreview)
+    {
+        foreach (var descriptor in OverlayBehaviorDescriptorCatalog.All.Where(
+                     descriptor => descriptor.WindowsNative == OverlaySurfaceSupport.Supported))
+        {
+            var actual = OverlayManager.ShouldShowManagedOverlay(
+                enabled,
+                sessionAllowed,
+                contextAllowed,
+                contentAllowed,
+                settingsPreview);
+            var expected = enabled
+                && (settingsPreview || (sessionAllowed && contextAllowed && contentAllowed));
+
+            Assert.Equal(expected, actual);
+            if (!enabled)
+            {
+                Assert.False(actual);
+            }
+        }
+    }
+
+    [Fact]
+    public void NativeOverlayToggle_TransitionsVisibleHiddenVisibleForEverySupportedNativeOverlay()
+    {
+        foreach (var descriptor in OverlayBehaviorDescriptorCatalog.All.Where(
+                     descriptor => descriptor.WindowsNative == OverlaySurfaceSupport.Supported))
+        {
+            Assert.True(OverlayManager.ShouldShowManagedOverlay(
+                isUserEnabled: true,
+                isSessionAllowed: true,
+                hasRequiredContext: true,
+                hasEnabledContent: true,
+                isSettingsPreview: false), descriptor.Id);
+            Assert.False(OverlayManager.ShouldShowManagedOverlay(
+                isUserEnabled: false,
+                isSessionAllowed: true,
+                hasRequiredContext: true,
+                hasEnabledContent: true,
+                isSettingsPreview: false), descriptor.Id);
+            Assert.True(OverlayManager.ShouldShowManagedOverlay(
+                isUserEnabled: true,
+                isSessionAllowed: true,
+                hasRequiredContext: true,
+                hasEnabledContent: true,
+                isSettingsPreview: false), descriptor.Id);
+        }
+    }
+
     [Fact]
     public void FromSnapshot_ReturnsDisconnectedWhenIRacingIsUnavailable()
     {
@@ -160,6 +264,19 @@ public sealed class OverlayAvailabilityEvaluatorTests
     }
 
     [Fact]
+    public void LiveLocalStrategyContext_AcceptsSchemaExpandedCarIdx()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = LocalStrategySnapshot(now, playerCarIdx: 64, focusCarIdx: 64);
+
+        var fuel = LiveLocalStrategyContext.ForFuelCalculator(snapshot, now);
+        var pitService = LiveLocalStrategyContext.ForPitService(snapshot, now);
+
+        Assert.True(fuel.IsAvailable);
+        Assert.True(pitService.IsAvailable);
+    }
+
+    [Fact]
     public void LiveLocalStrategyContext_AllowsLocalPitRoadContext()
     {
         var now = DateTimeOffset.UtcNow;
@@ -272,6 +389,270 @@ public sealed class OverlayAvailabilityEvaluatorTests
         Assert.Equal("available", context.Reason);
     }
 
+    [Fact]
+    public void FuelV2FactualDisplay_AllowsVerifiedSessionDriverCameraFallbackWithoutPromotingStrategy()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sample = LocalTelemetrySample(now, playerCarIdx: -1, focusCarIdx: null) with
+        {
+            RawCamCarIdx = 0,
+            FocusUnavailableReason = "cam_car_progress_unavailable",
+            SpeedMetersPerSecond = 0d,
+            LapCompleted = -1,
+            LapDistPct = -1d
+        };
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Context = new HistoricalSessionContext
+            {
+                Car = new HistoricalCarIdentity(),
+                Track = new HistoricalTrackIdentity(),
+                Session = new HistoricalSessionIdentity { SessionType = "Offline Testing" },
+                Conditions = new HistoricalSessionInfoConditions(),
+                DriverCarIdx = 0,
+                Drivers = [new HistoricalSessionDriver { CarIdx = 0, IsSpectator = false }]
+            },
+            LatestSample = sample,
+            Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = true, FuelLevelLiters = 25d },
+            HasFrameForCurrentContext = true,
+            HasSessionInfoForCurrentCollection = true
+        };
+
+        var strategy = LiveLocalStrategyContext.ForFuelCalculator(snapshot, now);
+        var factual = LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now);
+
+        Assert.False(strategy.IsAvailable);
+        Assert.Equal("player_car_unavailable", strategy.Reason);
+        Assert.True(factual.IsAvailable);
+        Assert.Equal("session_driver_camera_identity_fallback", factual.Reason);
+    }
+
+    [Fact]
+    public void FuelV2FactualDisplay_AcceptsTheCapturedPlayerCameraProgressGapOnlyForFactualFuel()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sample = LocalTelemetrySample(now, playerCarIdx: 0, focusCarIdx: null) with
+        {
+            RawCamCarIdx = 0,
+            FocusUnavailableReason = "cam_car_progress_unavailable",
+            SpeedMetersPerSecond = 0d,
+            LapCompleted = -1,
+            LapDistPct = -1d,
+            FocusLapDistPct = null
+        };
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Context = new HistoricalSessionContext
+            {
+                Car = new HistoricalCarIdentity(),
+                Track = new HistoricalTrackIdentity(),
+                Session = new HistoricalSessionIdentity { SessionType = "Offline Testing" },
+                Conditions = new HistoricalSessionInfoConditions(),
+                DriverCarIdx = 0,
+                Drivers = [new HistoricalSessionDriver { CarIdx = 0, IsSpectator = false }]
+            },
+            LatestSample = sample,
+            Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = true, FuelLevelLiters = 25d },
+            HasFrameForCurrentContext = true,
+            HasSessionInfoForCurrentCollection = true
+        };
+
+        var normalFuel = LiveLocalStrategyContext.ForFuelCalculator(snapshot, now);
+        var factualFuel = LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now);
+
+        Assert.False(normalFuel.IsAvailable);
+        Assert.Equal("focus_unavailable", normalFuel.Reason);
+        Assert.True(factualFuel.IsAvailable);
+        Assert.Equal("session_driver_camera_identity_fallback", factualFuel.Reason);
+
+        // The verified identity fallback is deliberately not a generic local
+        // context. It must not promote the other focus/spatial consumers.
+        Assert.False(LiveLocalStrategyContext.ForPitService(snapshot, now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForRequirement(
+            snapshot,
+            now,
+            OverlayContextRequirement.LocalPlayerInCar).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForRequirement(
+            snapshot,
+            now,
+            OverlayContextRequirement.LocalPlayerInCarOrPit).IsAvailable);
+    }
+
+    [Fact]
+    public void FuelV2FactualDisplay_RejectsSpectatorOrConflictingCameraIdentity()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sample = LocalTelemetrySample(now, playerCarIdx: -1, focusCarIdx: null) with
+        {
+            RawCamCarIdx = 0,
+            FocusUnavailableReason = "cam_car_progress_unavailable"
+        };
+        var context = new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity(),
+            Track = new HistoricalTrackIdentity(),
+            Session = new HistoricalSessionIdentity(),
+            Conditions = new HistoricalSessionInfoConditions(),
+            DriverCarIdx = 0,
+            Drivers = [new HistoricalSessionDriver { CarIdx = 0, IsSpectator = true }]
+        };
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Context = context,
+            LatestSample = sample,
+            Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = true, FuelLevelLiters = 25d },
+            HasFrameForCurrentContext = true,
+            HasSessionInfoForCurrentCollection = true
+        };
+
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now).IsAvailable);
+
+        var mismatchedCamera = snapshot with { LatestSample = sample with { RawCamCarIdx = 1 } };
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(mismatchedCamera, now).IsAvailable);
+    }
+
+    [Fact]
+    public void FuelV2FactualDisplay_FailsClosedForStaleGarageFuelAndExplicitFocusConflicts()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sample = LocalTelemetrySample(now, playerCarIdx: -1, focusCarIdx: null) with
+        {
+            RawCamCarIdx = 0,
+            FocusUnavailableReason = "cam_car_progress_unavailable"
+        };
+        var context = new HistoricalSessionContext
+        {
+            Car = new HistoricalCarIdentity(),
+            Track = new HistoricalTrackIdentity(),
+            Session = new HistoricalSessionIdentity(),
+            Conditions = new HistoricalSessionInfoConditions(),
+            DriverCarIdx = 0,
+            Drivers = [new HistoricalSessionDriver { CarIdx = 0, IsSpectator = false }]
+        };
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Context = context,
+            LatestSample = sample,
+            Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = true, FuelLevelLiters = 25d },
+            HasFrameForCurrentContext = true,
+            HasSessionInfoForCurrentCollection = true
+        };
+
+        Assert.True(LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { LastUpdatedAtUtc = now.AddSeconds(-2) }, now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { LatestSample = sample with { IsInGarage = true, IsOnTrack = false } }, now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            SnapshotWithoutAnyCurrentFuel(snapshot, sample), now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { LatestSample = sample with { FocusCarIdx = 1 } }, now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { LatestSample = sample with { FocusUnavailableReason = "cam_car_idx_invalid" } }, now).IsAvailable);
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { LatestSample = sample with { PlayerCarIdx = 1 } }, now).IsAvailable);
+    }
+
+    [Fact]
+    public void FuelV2FactualDisplay_RequiresCurrentFrameSessionInfoAndFuelBeforeAnyNativeShowDecision()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sample = LocalTelemetrySample(now, playerCarIdx: 0, focusCarIdx: null) with
+        {
+            RawCamCarIdx = 0,
+            FocusUnavailableReason = "cam_car_progress_unavailable"
+        };
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Context = new HistoricalSessionContext
+            {
+                Car = new HistoricalCarIdentity(),
+                Track = new HistoricalTrackIdentity(),
+                Session = new HistoricalSessionIdentity(),
+                Conditions = new HistoricalSessionInfoConditions(),
+                DriverCarIdx = 0,
+                Drivers = [new HistoricalSessionDriver { CarIdx = 0, IsSpectator = false }]
+            },
+            LatestSample = sample,
+            Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = true, FuelLevelLiters = 25d },
+            HasFrameForCurrentContext = true,
+            HasSessionInfoForCurrentCollection = true
+        };
+
+        Assert.True(LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now).IsAvailable);
+
+        var missingFrame = LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { HasFrameForCurrentContext = false }, now);
+        Assert.False(missingFrame.IsAvailable);
+        Assert.Equal("current_fuel_telemetry_unavailable", missingFrame.Reason);
+        Assert.True(LiveLocalStrategyContext.ForFuelV2FactualLocalContext(
+            snapshot with { HasFrameForCurrentContext = false }, now).IsAvailable);
+
+        var missingSessionInfo = LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+            snapshot with { HasSessionInfoForCurrentCollection = false }, now);
+        Assert.False(missingSessionInfo.IsAvailable);
+        Assert.Equal("current_fuel_telemetry_unavailable", missingSessionInfo.Reason);
+
+        var missingFuelSnapshot = SnapshotWithoutAnyCurrentFuel(snapshot, sample);
+        var missingFuel = LiveLocalStrategyContext.ForFuelV2FactualDisplay(missingFuelSnapshot, now);
+        Assert.False(missingFuel.IsAvailable);
+        Assert.Equal("fuel_level_unavailable", missingFuel.Reason);
+        Assert.True(LiveLocalStrategyContext.ForFuelV2FactualLocalContext(
+            missingFuelSnapshot, now).IsAvailable);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("cam_car_idx_missing")]
+    [InlineData("cam_car_idx_invalid")]
+    [InlineData("replay_focus_override_progress_unavailable")]
+    [InlineData("some_other_focus_failure")]
+    public void FuelV2FactualDisplay_RejectsEveryFocusGapOtherThanTheObservedProgressOnlyShape(string? focusUnavailableReason)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sample = LocalTelemetrySample(now, playerCarIdx: 0, focusCarIdx: null) with
+        {
+            RawCamCarIdx = 0,
+            FocusUnavailableReason = focusUnavailableReason
+        };
+        var snapshot = LiveTelemetrySnapshot.Empty with
+        {
+            IsConnected = true,
+            IsCollecting = true,
+            LastUpdatedAtUtc = now,
+            Context = new HistoricalSessionContext
+            {
+                Car = new HistoricalCarIdentity(),
+                Track = new HistoricalTrackIdentity(),
+                Session = new HistoricalSessionIdentity(),
+                Conditions = new HistoricalSessionInfoConditions(),
+                DriverCarIdx = 0,
+                Drivers = [new HistoricalSessionDriver { CarIdx = 0, IsSpectator = false }]
+            },
+            LatestSample = sample,
+            Fuel = LiveFuelSnapshot.Unavailable with { HasValidFuel = true, FuelLevelLiters = 25d },
+            HasFrameForCurrentContext = true,
+            HasSessionInfoForCurrentCollection = true
+        };
+
+        Assert.False(LiveLocalStrategyContext.ForFuelV2FactualDisplay(snapshot, now).IsAvailable);
+    }
+
     private static LiveTelemetrySnapshot SnapshotForSession(string sessionType)
     {
         return LiveTelemetrySnapshot.Empty with
@@ -283,6 +664,26 @@ public sealed class OverlayAvailabilityEvaluatorTests
                     HasData = true,
                     SessionType = sessionType
                 }
+            }
+        };
+    }
+
+    private static LiveTelemetrySnapshot SnapshotWithoutAnyCurrentFuel(
+        LiveTelemetrySnapshot snapshot,
+        HistoricalTelemetrySample sample)
+    {
+        // CompleteModels intentionally derives normalized FuelPit.Fuel from
+        // the current raw scalar when the legacy Fuel snapshot is unavailable.
+        // HistoricalTelemetrySample uses non-nullable scalar fields, so NaN is
+        // its established unavailable sentinel and must be applied to the raw
+        // representation as well as the normalized one.
+        return snapshot with
+        {
+            Fuel = LiveFuelSnapshot.Unavailable,
+            LatestSample = sample with
+            {
+                FuelLevelLiters = double.NaN,
+                FuelLevelPercent = double.NaN
             }
         };
     }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using TmrOverlay.Core.AppInfo;
 
 namespace TmrOverlay.Core.History;
@@ -9,7 +10,8 @@ internal sealed class HistoricalSessionContext
         Car = new HistoricalCarIdentity(),
         Track = new HistoricalTrackIdentity(),
         Session = new HistoricalSessionIdentity(),
-        Conditions = new HistoricalSessionInfoConditions()
+        Conditions = new HistoricalSessionInfoConditions(),
+        PitRouteAssignment = new HistoricalPitRouteAssignment()
     };
 
     public required HistoricalCarIdentity Car { get; init; }
@@ -20,6 +22,18 @@ internal sealed class HistoricalSessionContext
 
     public required HistoricalSessionInfoConditions Conditions { get; init; }
 
+    public HistoricalFuelCapacityRules FuelCapacityRules { get; init; } = new();
+
+    // Session-scoped static pit assignment from session YAML. It describes
+    // this driver's currently assigned stall location and pit-lane rules; it
+    // is deliberately not a car/layout history key.
+    public HistoricalPitRouteAssignment PitRouteAssignment { get; init; } = new();
+
+    // DriverInfo.DriverCarIdx is the session-declared local entry. It is kept
+    // apart from transient PlayerCarIdx/CamCarIdx telemetry so a narrow
+    // display-only local identity proof can handle SDK focus gaps safely.
+    public int? DriverCarIdx { get; init; }
+
     public IReadOnlyList<HistoricalSessionDriver> Drivers { get; init; } = [];
 
     public IReadOnlyList<HistoricalSessionTireCompound> TireCompounds { get; init; } = [];
@@ -29,6 +43,31 @@ internal sealed class HistoricalSessionContext
     public IReadOnlyList<HistoricalSessionResultPosition> ResultPositions { get; init; } = [];
 
     public IReadOnlyList<HistoricalSessionResultPosition> StartingGridPositions { get; init; } = [];
+}
+
+internal sealed class HistoricalFuelCapacityRules
+{
+    public double? DriverCarMaxFuelPercent { get; init; }
+
+    public double? CarClassMaxFuelPercent { get; init; }
+}
+
+internal sealed class HistoricalPitRouteAssignment
+{
+    // iRacing DriverInfo.DriverPitTrkPct. This is the driver's declared pit
+    // track coordinate, not an inferred ordinal stall number.
+    public double? DriverPitTrackPct { get; init; }
+
+    public double? TrackPitSpeedLimitKph { get; init; }
+
+    public int? TrackNumPitStalls { get; init; }
+
+    public string? PitBoxIdentity => DriverPitTrackPct is { } pct
+        && double.IsFinite(pct)
+        && pct >= 0d
+        && pct < 1d
+            ? $"driver-pit-track-percent:{pct.ToString("0.000000", CultureInfo.InvariantCulture)}"
+            : null;
 }
 
 internal sealed class HistoricalSessionSummary
@@ -169,6 +208,11 @@ internal sealed class HistoricalSessionIdentity
     public string? EventType { get; init; }
 
     public string? Category { get; init; }
+
+    // Public iRacing WeekendInfo value. It identifies the active
+    // series-specific regulations (for example None, IMSA, NEC, or DTM), not
+    // a mutable user preference or an inferred pit-stop duration.
+    public string? DCRuleSet { get; init; }
 
     public bool? Official { get; init; }
 
@@ -431,6 +475,15 @@ internal sealed class HistoricalRadarCalibrationSummary
 
     public string[] ConfidenceFlags { get; init; } = [];
 }
+
+// An in-process view of only completed radar side windows. It is intentionally
+// separate from HistoricalSessionSummary: callers may use it while a session
+// is still collecting, but it is never a persistence request or a substitute
+// for the finalized session summary.
+internal sealed record HistoricalSessionRadarCalibrationSnapshot(
+    HistoricalComboIdentity Combo,
+    HistoricalCarIdentity Car,
+    HistoricalRadarCalibrationSummary? RadarCalibration);
 
 internal sealed class HistoricalRadarCalibrationMetric
 {

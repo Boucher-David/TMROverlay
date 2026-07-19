@@ -449,6 +449,10 @@ function geometryCssVariables() {
     '--tmr-metric-grid-cell-gap': px(metricRows.metricGridCellGap),
     '--tmr-metric-grid-cell-min-width': px(metricRows.metricGridCellMinimumWidth),
     '--tmr-metric-grid-cell-height': px(metricRows.metricGridCellHeight),
+    '--tmr-metric-fuel-v2-workbench-width': px(metricRows.fuelV2WorkbenchWidth),
+    '--tmr-metric-fuel-v2-workbench-label-column-width': px(metricRows.fuelV2WorkbenchLabelColumnWidth),
+    '--tmr-metric-fuel-v2-workbench-segmented-row-height': px(metricRows.fuelV2WorkbenchSegmentedRowHeight),
+    '--tmr-metric-fuel-v2-workbench-value-segment-minimum-height': px(metricRows.fuelV2WorkbenchValueSegmentMinimumHeight),
     '--tmr-stream-chat-overlay-width': px(streamChat.overlayWidth),
     '--tmr-stream-chat-overlay-height': px(streamChat.overlayHeight),
     '--tmr-stream-chat-header-height': px(streamChat.headerHeight),
@@ -1165,7 +1169,8 @@ function settingsContentRows(id, overlayState = {}) {
         enabled('Fuel', true, { key: 'fuel-calculator.race.fuel.enabled' }),
         enabled('Stint targets', true, { key: 'fuel-calculator.race.stint-targets.enabled' }),
         enabled('Fuel range', true, { key: 'fuel-calculator.range.fuel.enabled' }),
-        enabled('Fuel usage', true, { key: 'fuel-calculator.usage.enabled' })
+        enabled('Fuel usage', true, { key: 'fuel-calculator.usage.enabled' }),
+        enabled('Model readiness', true, { key: 'fuel-calculator.model-readiness.enabled' })
       ];
     case 'track-map':
       return [
@@ -1196,6 +1201,11 @@ function settingsContentRows(id, overlayState = {}) {
         enabled('Speed')
       ];
     case 'car-radar':
+      return [];
+    case 'garage-cover':
+      // Garage Cover's image/preview controls are general browser-source
+      // controls, not a renderable content matrix. Do not surface a fake
+      // toggle that cannot alter the model.
       return [];
     case 'flags':
       return [
@@ -1306,7 +1316,8 @@ function settingsContentOptionKey(id, label) {
       Fuel: 'fuel-calculator.race.fuel.enabled',
       'Stint targets': 'fuel-calculator.race.stint-targets.enabled',
       'Fuel range': 'fuel-calculator.range.fuel.enabled',
-      'Fuel usage': 'fuel-calculator.usage.enabled'
+      'Fuel usage': 'fuel-calculator.usage.enabled',
+      'Model readiness': 'fuel-calculator.model-readiness.enabled'
     },
     'track-map': {
       'Sector boundaries': 'track-map.sector-boundaries.enabled',
@@ -1620,7 +1631,9 @@ function fuelLocalContext(live) {
 }
 
 function validCarIdx(value) {
-  return Number.isInteger(value) && value >= 0 && value < 64 ? value : null;
+  // The normalized native model has already checked the session's dynamic
+  // CarIdx schema bound. Browser review must not reapply the legacy 64 limit.
+  return Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 function isPitRoadTrackSurface(value) {

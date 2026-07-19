@@ -26,6 +26,7 @@ Start here when continuing work in this repo.
 - `skills/tmr-overlay-hot-start/SKILL.md`
 - `skills/tmr-overlay-validation/SKILL.md`
 - `docs/model-v2-future-branches.md`
+- `docs/iracing-2026-release-note-audit.md`
 - `skills/tmr-overlay-context/references/current-state.md`
 - `skills/tmr-overlay-context/references/fuel-overlay-context.md`
 - `skills/tmr-overlay-context/references/overlay-research.md`
@@ -40,6 +41,7 @@ Start here when continuing work in this repo.
 
 - Preserve the collector-first architecture unless there is a strong reason to change it.
 - Keep Windows as the production/iRacing runtime, browser review as the primary local development surface, and localhost as the OBS route surface.
+- Before developing iRacing telemetry, session-info, pit-service, race-control, ruleset, replay, or schema behavior, review the current [iRacing Release Notes](https://support.iracing.com/support/solutions/31000076778). Identify any relevant SDK/API or session-data change, compare it with the tracked SDK availability corpus and raw-capture schema, and record either the required contract work or an explicit no-impact finding. Do not assume a previously known SDK field/ruleset remains current.
 - The mac harness under `local-mac/TmrOverlayMac/` is tracked source but deprecated secondary scaffolding. Keep it buildable when touched, but do not treat it as a product parity target or screenshot authority.
 - If you change the raw capture format, update `docs/capture-format.md` and `README.md` in the same pass.
 - Prefer shared Core models/read services, descriptor-driven overlay options, and `OverlayTheme` tokens over one-off UI contracts.

@@ -11,10 +11,14 @@ internal sealed class SessionHistoryQueryService
     };
 
     private readonly SessionHistoryOptions _options;
+    private readonly CurrentSessionCarRadarCalibrationStore? _currentSessionCarRadarCalibration;
 
-    public SessionHistoryQueryService(SessionHistoryOptions options)
+    public SessionHistoryQueryService(
+        SessionHistoryOptions options,
+        CurrentSessionCarRadarCalibrationStore? currentSessionCarRadarCalibration = null)
     {
         _options = options;
+        _currentSessionCarRadarCalibration = currentSessionCarRadarCalibration;
     }
 
     public SessionHistoryLookupResult Lookup(HistoricalComboIdentity combo)
@@ -42,7 +46,12 @@ internal sealed class SessionHistoryQueryService
         var baselineAggregate = _options.UseBaselineHistory
             ? ReadCarRadarCalibrationAggregate(_options.ResolvedBaselineHistoryRoot, combo.CarKey)
             : null;
-        return new CarRadarCalibrationLookupResult(combo, userAggregate, baselineAggregate);
+        var currentSessionAggregate = _currentSessionCarRadarCalibration?.Lookup(combo);
+        return new CarRadarCalibrationLookupResult(
+            combo,
+            userAggregate,
+            baselineAggregate,
+            currentSessionAggregate);
     }
 
     private static HistoricalSessionAggregate? ReadAggregate(string root, HistoricalComboIdentity combo)

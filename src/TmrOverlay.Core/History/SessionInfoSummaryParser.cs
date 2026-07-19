@@ -15,6 +15,7 @@ internal static class SessionInfoSummaryParser
         var selectedSession = SelectSession(parsed);
         var session = selectedSession?.Values ?? EmptyDictionary;
         var driver = SelectDriver(parsed);
+        var exactDriver = SelectExactDriver(parsed);
 
         return new HistoricalSessionContext
         {
@@ -58,6 +59,7 @@ internal static class SessionInfoSummaryParser
                 SessionLaps = ReadString(session, "SessionLaps"),
                 EventType = ReadString(parsed.WeekendInfo, "EventType"),
                 Category = ReadString(parsed.WeekendInfo, "Category"),
+                DCRuleSet = ReadString(parsed.WeekendInfo, "DCRuleSet"),
                 Official = ReadBool(parsed.WeekendInfo, "Official"),
                 TeamRacing = ReadBool(parsed.WeekendInfo, "TeamRacing"),
                 SeriesId = ReadInt(parsed.WeekendInfo, "SeriesID"),
@@ -73,6 +75,20 @@ internal static class SessionInfoSummaryParser
                 TrackPrecipitationPercent = ReadDouble(parsed.WeekendInfo, "TrackPrecipitation"),
                 SessionTrackRubberState = ReadString(session, "SessionTrackRubberState")
             },
+            FuelCapacityRules = new HistoricalFuelCapacityRules
+            {
+                DriverCarMaxFuelPercent = ReadDouble(parsed.DriverInfo, "DriverCarMaxFuelPct"),
+                CarClassMaxFuelPercent = exactDriver is null
+                    ? null
+                    : ReadDouble(exactDriver, "CarClassMaxFuelPct")
+            },
+            PitRouteAssignment = new HistoricalPitRouteAssignment
+            {
+                DriverPitTrackPct = ReadDouble(parsed.DriverInfo, "DriverPitTrkPct"),
+                TrackPitSpeedLimitKph = ReadDouble(parsed.WeekendInfo, "TrackPitSpeedLimit"),
+                TrackNumPitStalls = ReadInt(parsed.WeekendInfo, "TrackNumPitStalls")
+            },
+            DriverCarIdx = ReadInt(parsed.DriverInfo, "DriverCarIdx"),
             Drivers = parsed.Drivers
                 .Select(ToDriver)
                 .Where(driver => driver.CarIdx is not null)
@@ -426,17 +442,17 @@ internal static class SessionInfoSummaryParser
 
     private static IReadOnlyDictionary<string, string> SelectDriver(ParsedSessionInfo parsed)
     {
-        var driverCarIdx = ReadInt(parsed.DriverInfo, "DriverCarIdx");
-        if (driverCarIdx is not null)
-        {
-            var driver = parsed.Drivers.FirstOrDefault(candidate => ReadInt(candidate, "CarIdx") == driverCarIdx);
-            if (driver is not null)
-            {
-                return driver;
-            }
-        }
+        return SelectExactDriver(parsed)
+            ?? parsed.Drivers.FirstOrDefault()
+            ?? EmptyDictionary;
+    }
 
-        return parsed.Drivers.FirstOrDefault() ?? EmptyDictionary;
+    private static IReadOnlyDictionary<string, string>? SelectExactDriver(ParsedSessionInfo parsed)
+    {
+        var driverCarIdx = ReadInt(parsed.DriverInfo, "DriverCarIdx");
+        return driverCarIdx is null
+            ? null
+            : parsed.Drivers.FirstOrDefault(candidate => ReadInt(candidate, "CarIdx") == driverCarIdx);
     }
 
     private static HistoricalSessionDriver ToDriver(IReadOnlyDictionary<string, string> values)

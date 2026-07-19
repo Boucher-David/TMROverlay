@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startReviewServer } from './reviewServerTestHost.js';
@@ -18,6 +19,100 @@ afterAll(async () => {
 });
 
 describe('browser review server validation contracts', () => {
+  it('keeps the actual current V1 Fuel overlay available as a workbench tab beside V2', async () => {
+    const v1 = await reviewServer.getText('/review/workbenches/fuel-stint-n?tab=v1');
+    const v2 = await reviewServer.getText('/review/workbenches/fuel-stint-n?tab=v2&scenario=short-finish');
+
+    expect(v1).toContain('Current V1 overlay - Dallara 35-minute race start');
+    expect(v1).toContain('fixture=fuel-dallara-35m-v1');
+    expect(v1).toContain('class="workbench-tab active"');
+    expect(v1).not.toContain('fuel-v2-bottom-half-dallara-four-lap');
+    expect(v2).toContain('fixture=fuel-v2-bottom-half-dallara-four-lap');
+    expect(v2).toContain('V2 workbench - Dallara fixed four-lap start');
+  });
+
+  it('aligns the V2 burn-comparison rows on one explicit shared bucket grid', async () => {
+    const model = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-v2-composite-dallara-35m'
+    )).model;
+    const rows = ['Fuel/Lap', 'Laps In Tank', 'Fuel To Add']
+      .map((label) => metricRow(model, 'Top Half - Approved Cell Baseline', label));
+    const expectedLabels = ['Last', '5L', '10L', 'History', 'Max', 'Min', 'Quali'];
+
+    for (const row of rows) {
+      expect.soft(row?.segmentColumnCount).toBe(7);
+      expect.soft(row?.segments.map((segment) => segment.label)).toEqual(expectedLabels);
+    }
+  });
+
+  it('replays an externally generated production model response without Node fixture rewriting', async () => {
+    const replayRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tmr-overlay-production-model-replay-'));
+    const rowsDirectory = path.join(replayRoot, 'overlays', 'fuel-calculator');
+    fs.mkdirSync(rowsDirectory, { recursive: true });
+    const response = {
+      generatedAtUtc: '2026-07-14T12:00:00Z',
+      model: {
+        overlayId: 'fuel-calculator',
+        title: 'Fuel Calculator',
+        status: 'factual V2 source',
+        source: 'source: production C# replay',
+        bodyKind: 'metrics',
+        columns: [],
+        rows: [],
+        metrics: [],
+        points: [],
+        headerItems: [],
+        gridSections: [],
+        metricSections: [
+          {
+            title: 'Fuel Usage',
+            rows: [
+              {
+                label: 'Fuel/Lap',
+                value: '13.6 L/lap',
+                tone: 'info',
+                segments: [
+                  { label: 'Last', value: '13.6 L/lap', tone: 'info' },
+                  { label: '5L', value: '--', tone: 'waiting' }
+                ]
+              }
+            ]
+          }
+        ],
+        shouldRender: true,
+        rootOpacity: 1,
+        effectiveSettings: null,
+        fuelStrategyEvidence: {
+          additionalFuelNeedState: 'unavailable',
+          successCopyRequiresMeasuredNeed: true
+        }
+      }
+    };
+    fs.writeFileSync(
+      path.join(rowsDirectory, 'models.jsonl'),
+      `${JSON.stringify({ overlayId: 'fuel-calculator', frameIndex: 42, response })}\n`,
+      'utf8');
+
+    const replayServer = await startReviewServer({
+      environment: { TMR_BROWSER_REVIEW_MODEL_REPLAY_ROOT: replayRoot }
+    });
+    try {
+      const payload = await replayServer.getJson(
+        '/api/overlay-model/fuel-calculator?fixture=production-model-replay&frame=42');
+
+      expect(payload).toEqual(response);
+      expect(allMetricText(payload.model)).not.toMatch(/workbench|V1 Ref|Stint Targets/i);
+
+      const missingFrame = await fetch(
+        `${replayServer.baseUrl}/api/overlay-model/fuel-calculator?fixture=production-model-replay&frame=999`);
+      expect(missingFrame.status).toBe(404);
+      expect(await missingFrame.text()).toMatch(/frame 999 was not found/i);
+    } finally {
+      await replayServer.stop();
+      fs.rmSync(replayRoot, { recursive: true, force: true });
+    }
+  });
+
   it('exposes effective settings evidence beside model output', async () => {
     await reviewServer.postReviewPatch({
       kind: 'number',
@@ -170,6 +265,715 @@ describe('browser review server validation contracts', () => {
     expect.soft(fuelRenderedRowCount(raceInfoOff)).toBe(3);
     expect.soft(raceInfoOff.effectiveSettings.rendered.browserSource.baseHeight).toBe(expectedFuelContentHeight(3, 1));
     expect.soft(raceInfoOff.effectiveSettings.rendered.browserSource.height).toBe(expectedFuelContentHeight(3, 1));
+  });
+
+  it('retains the Fuel/Lap V2 cell as isolated populated, degraded, and unavailable workbench states', async () => {
+    const populated = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-fuel'
+    )).model;
+    expect.soft(populated.status).toBe('fuel/lap workbench');
+    expect.soft(metricSectionTitles(populated)).toEqual(['Fuel/Lap Workbench']);
+    expect.soft(metricRowLabels(populated, 'Fuel/Lap Workbench')).toEqual(['Fuel/Lap']);
+    expect.soft(metricSegmentDisplay(populated.metricSections[0].rows[0].segments)).toEqual([
+      { label: 'Last', value: '13.52 L/lap', tone: 'info' },
+      { label: '5L', value: '13.50 L/lap', tone: 'info' },
+      { label: '10L', value: '13.36 L/lap', tone: 'info' },
+      { label: 'History', value: '--', tone: 'waiting' },
+      { label: 'Max', value: '13.65 L/lap', tone: 'info' }
+    ]);
+    expect.soft(allMetricText(populated)).not.toMatch(/V1 Ref|Fuel Range Workbench|Target Usage|Fuel To Add|Plan V2|Stint Targets V2/);
+
+    const degraded = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-fuel-degraded'
+    )).model;
+    expect.soft(degraded.status).toBe('fuel/lap workbench');
+    expect.soft(metricSectionTitles(degraded)).toEqual(['Fuel/Lap Workbench']);
+    expect.soft(metricSegmentDisplay(degraded.metricSections[0].rows[0].segments)).toEqual([
+      { label: 'Last', value: '13.54 L/lap', tone: 'info' },
+      { label: '5L', value: '--', tone: 'waiting' },
+      { label: '10L', value: '--', tone: 'waiting' },
+      { label: 'History', value: '--', tone: 'waiting' },
+      { label: 'Max', value: '13.54 L/lap', tone: 'info' }
+    ]);
+
+    const noData = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-fuel-no-data'
+    )).model;
+    expect.soft(noData.status).toBe('fuel/lap workbench');
+    expect.soft(noData.shouldRender).toBe(true);
+    expect.soft(metricSectionTitles(noData)).toEqual(['Fuel/Lap Workbench']);
+    expect.soft(metricRowLabels(noData, 'Fuel/Lap Workbench')).toEqual(['Fuel/Lap']);
+    expect.soft(metricSegmentDisplay(noData.metricSections[0].rows[0].segments)).toEqual([
+      { label: 'Last', value: '--', tone: 'waiting' },
+      { label: '5L', value: '--', tone: 'waiting' },
+      { label: '10L', value: '--', tone: 'waiting' },
+      { label: 'History', value: '--', tone: 'waiting' },
+      { label: 'Max', value: '--', tone: 'waiting' }
+    ]);
+
+    const productionNoData = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-no-data'
+    )).model;
+    expect.soft(productionNoData.shouldRender).toBe(false);
+    expect.soft(metricSectionTitles(productionNoData)).toEqual([]);
+
+    const retainedSibling = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-range'
+    )).model;
+    expect.soft(retainedSibling.status).toBe('fuel/range workbench');
+    expect.soft(metricSectionTitles(retainedSibling)).toEqual(['Fuel Range Workbench']);
+    expect.soft(metricSectionTitles(retainedSibling)).not.toContain('Fuel/Lap Workbench');
+  });
+
+  it('keeps corrected Fuel V2 boundary behavior visible in the workbench mirrors', async () => {
+    const laps = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-laps'
+    )).model;
+    expect.soft(metricRow(laps, 'Laps Workbench', 'Dallara 45m / V2')?.segments)
+      .toContainEqual({ label: 'Mid S1', value: '6.04', tone: 'success' });
+    expect.soft(metricRow(laps, 'Laps Workbench', '24h rejoin / V2')?.segments)
+      .toContainEqual({ label: 'Stop 1', value: '166.01 held degraded', tone: 'warning' });
+
+    const range = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-range'
+    )).model;
+    expect.soft(metricSegmentDisplay(metricRow(range, 'Fuel Range Workbench', 'Stress / Known zero fuel')?.segments)).toEqual([
+      { label: 'Fuel', value: '0.0 L', tone: 'info' },
+      { label: 'V1 Ref', value: '--', tone: 'waiting' },
+      { label: 'Last', value: '0.00', tone: 'info' },
+      { label: '5L', value: '0.00', tone: 'info' },
+      { label: '10L', value: '0.00', tone: 'info' },
+      { label: 'Max', value: '0.00', tone: 'warning' }
+    ]);
+    expect.soft(metricRow(range, 'Fuel Range Workbench', 'Stress / Explicit null fuel')?.segments
+      .map((segment) => segment.value)).toEqual(['--', '--', '--', '--', '--', '--']);
+
+    const target = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-target'
+    )).model;
+    expect.soft(metricSegmentDisplay(metricRow(target, 'Target Usage - Current Edges', 'Stress / Round-centered candidates')?.segments)).toEqual([
+      { label: 'Fuel', value: '44.0 L', tone: 'info' },
+      { label: 'Last', value: '10.00 L', tone: 'info' },
+      { label: '3 laps', value: '14.67 L', tone: 'success' },
+      { label: '4 laps', value: '11.00 L', tone: 'success' },
+      { label: '5 laps', value: '8.80 L', tone: 'error' }
+    ]);
+    expect.soft(metricSegmentDisplay(metricRow(target, 'Target Usage - Current Edges', 'Stress / Missing reference')?.segments)).toEqual([
+      { label: 'Fuel', value: '44.0 L', tone: 'info' },
+      { label: 'Last', value: '--', tone: 'waiting' },
+      { label: '3 laps', value: '14.67 L', tone: 'info' },
+      { label: '4 laps', value: '11.00 L', tone: 'info' },
+      { label: '5 laps', value: '8.80 L', tone: 'info' }
+    ]);
+
+    const plan = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-plan'
+    )).model;
+    expect.soft(plan.status).toBe('fuel/plan workbench');
+    expect.soft(gridRow(plan, 'Stress / Sub-lap full budget')).toMatchObject({
+      tone: 'waiting',
+      cells: [
+        { value: '2 laps' },
+        { value: '0 laps' },
+        { value: '--' },
+        { value: '--' },
+        { value: '--' }
+      ]
+    });
+    expect.soft(gridRow(plan, 'Stress / Sub-lap future budget')).toMatchObject({
+      tone: 'waiting',
+      cells: [
+        { value: '2 laps' },
+        { value: '2' },
+        { value: '1.0 / 0 laps' },
+        { value: '1.0 now + --' },
+        { value: '--' },
+        { value: '--' }
+      ]
+    });
+    expect.soft(gridRow(plan, 'Stress / Known zero full budget')).toMatchObject({
+      tone: 'waiting',
+      cells: [
+        { value: '2 laps' },
+        { value: '0 laps' },
+        { value: '--' },
+        { value: '--' },
+        { value: '--' }
+      ]
+    });
+    expect.soft(gridRow(plan, 'Stress / Explicit null full budget')?.cells.map((cell) => cell.value))
+      .toEqual(['2 laps', '--', '--', '--', '--']);
+    expect.soft(gridRow(plan, 'Stress / Known zero checkpoint fuel')).toMatchObject({
+      tone: 'waiting',
+      cells: [
+        { value: '2 laps' },
+        { value: '2' },
+        { value: '0 laps' },
+        { value: '0 now + --' },
+        { value: '--' },
+        { value: '--' }
+      ]
+    });
+    expect.soft(gridRow(plan, 'Stress / Explicit null checkpoint fuel')?.cells.map((cell) => cell.value))
+      .toEqual(['2 laps', '2', '--', '--', '--', '--']);
+
+    const stint = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-stint'
+    )).model;
+    const zeroFuel = gridRow(stint, 'Stress / Known zero fuel');
+    expect.soft(zeroFuel.cells[1]).toMatchObject({ value: '0.00 laps', tone: 'info' });
+    expect.soft(zeroFuel.cells[3]).toMatchObject({ value: '2: hide unrealistic', tone: 'error' });
+    expect.soft(zeroFuel.cells[7]).toMatchObject({ value: 'zero is factual; not tracking', tone: 'error' });
+    expect.soft(gridRow(stint, 'Stress / Race finished')).toMatchObject({
+      tone: 'info',
+      cells: [
+        { value: '0' },
+        { value: '5.00 laps' },
+        { value: '--' },
+        { value: '--' },
+        { value: '--' },
+        { value: '--' },
+        { value: '10.00 L/lap' },
+        { value: 'finished', tone: 'info' }
+      ]
+    });
+    expect.soft(gridRow(stint, 'Stress / Save threshold 92')).toMatchObject({
+      tone: 'warning',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '1: 9.20 save 0.80', tone: 'warning' }),
+        expect.objectContaining({ value: 'boundary; save 0.80 L/lap', tone: 'warning' })
+      ])
+    });
+    expect.soft(gridRow(stint, 'Stress / Save threshold below 92')).toMatchObject({
+      tone: 'warning',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '1: 9.19 big save', tone: 'warning' }),
+        expect.objectContaining({ value: 'worse boundary; large save', tone: 'warning' })
+      ])
+    });
+    expect.soft(gridRow(stint, 'Stress / Held tracking')?.cells[3])
+      .toMatchObject({ value: '1: 10.00 ok', tone: 'warning' });
+    expect.soft(gridRow(stint, 'Stress / Held tracking')?.cells[7])
+      .toMatchObject({ value: 'held context; tracking', tone: 'warning' });
+    expect.soft(gridRow(stint, 'Stress / Explicit null telemetry')).toMatchObject({
+      tone: 'warning',
+      cells: [
+        { value: '--' },
+        { value: '--' },
+        { value: '1: --' },
+        { value: '2: --' },
+        { value: '3: --' },
+        { value: '4: --' },
+        { value: '10.00 L/lap' },
+        { value: 'null stays unavailable; learning', tone: 'warning' }
+      ]
+    });
+    expect.soft(gridRow(stint, 'Stress / Stretch costs more than stop')?.cells[4])
+      .toMatchObject({ value: '4: not worth +13s', tone: 'warning' });
+
+    const pit = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-pit'
+    )).model;
+    const invalidReserve = metricRow(pit, 'Fuel To Add Workbench', 'Stress / Invalid negative reserve');
+    expect.soft(invalidReserve.segments.map((segment) => segment.value)).toEqual([
+      '--', '--', '--', '--', '--', '--'
+    ]);
+    const invalidCapacity = metricRow(pit, 'Fuel To Add Workbench', 'Stress / Invalid zero capacity');
+    expect.soft(invalidCapacity.segments.map((segment) => segment.value)).toEqual([
+      '--', '--', '--', '--', '--', '--'
+    ]);
+    const zeroPitFuel = metricRow(pit, 'Fuel To Add Workbench', 'Dallara quali seed / 4-lap target');
+    expect.soft(zeroPitFuel.segments[3]).toMatchObject({ value: '51.0 L cap quali', tone: 'error' });
+    expect.soft(zeroPitFuel.segments[5]).toMatchObject({ value: '51.0 L cap quali', tone: 'error' });
+  });
+
+  it('retains stable burn-bucket identity and provenance without synthesizing extrema', async () => {
+    const fuel = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-fuel'
+    )).model;
+    expect.soft(fuel.metricSections[0].rows[0].segments).toMatchObject([
+      { burnBucketId: 'Last', burnSource: 'LiveLastLap', sampleCount: 1, displayEligible: true, strategyEligible: true },
+      { burnBucketId: 'FiveLapAverage', burnSource: 'LiveFiveLapAverage', sampleCount: 5, displayEligible: true, strategyEligible: true },
+      { burnBucketId: 'TenLapAverage', burnSource: 'LiveTenLapAverage', sampleCount: 10, displayEligible: true, strategyEligible: true },
+      { burnBucketId: 'HistoricalNormal', burnSource: 'Unavailable', sampleCount: null, displayEligible: false, strategyEligible: false },
+      { burnBucketId: 'Maximum', burnSource: 'LiveMaximum', sampleCount: 10, displayEligible: true, strategyEligible: true }
+    ]);
+
+    const trustedSeed = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-fuel-trusted-seed'
+    )).model;
+    expect.soft(trustedSeed.metricSections[0].rows[0].segments[4]).toMatchObject({
+      label: 'Max',
+      value: '14.20 L/lap',
+      burnBucketId: 'Maximum',
+      burnSource: 'HistoricalSeed',
+      sampleCount: 12,
+      confidence: 'Seeded',
+      displayEligible: true,
+      cleanBaselineEligible: false,
+      strategyEligible: true
+    });
+
+    const range = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-range'
+    )).model;
+    const partialRange = metricRow(range, 'Fuel Range Workbench', 'Dallara 45m / Mid S1')?.segments[3];
+    expect.soft(partialRange).toMatchObject({
+      label: '5L',
+      value: '2.29 3/5',
+      burnBucketId: 'FiveLapAverage',
+      burnSource: 'LiveFiveLapAverage',
+      sampleCount: 3,
+      displayEligible: true,
+      strategyEligible: false
+    });
+    expect.soft(partialRange?.provenance).toContain('range from 5L');
+
+    const target = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-target'
+    )).model;
+    const qualifyingTarget = metricRow(target, 'Target Usage - Green Start', 'Dallara quali seed / Green est');
+    expect.soft(qualifyingTarget?.segments[1]).toMatchObject({
+      label: 'Quali',
+      burnBucketId: 'Qualifying',
+      burnSource: 'QualifyingSeed',
+      sampleCount: 1,
+      strategyEligible: false
+    });
+    expect.soft(qualifyingTarget?.segments[2]).toMatchObject({
+      referenceBurnBucketId: 'Qualifying',
+      referenceBurnSource: 'QualifyingSeed',
+      referenceSampleCount: 1,
+      referenceConfidence: 'Seeded',
+      referenceCleanBaselineEligible: false,
+      referenceStrategyEligible: false
+    });
+    const missingIdentity = metricRow(target, 'Target Usage - Current Edges', 'Stress / Missing reference identity');
+    expect.soft(missingIdentity?.segments[1]).toMatchObject({
+      label: 'Reference',
+      value: '--',
+      burnBucketId: null,
+      burnSource: 'Unavailable',
+      displayEligible: false,
+      strategyEligible: false
+    });
+    expect.soft(missingIdentity?.segments[2]).toMatchObject({
+      referenceBurnBucketId: null,
+      referenceBurnSource: 'Unavailable',
+      referenceStrategyEligible: false
+    });
+
+    const pit = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-pit'
+    )).model;
+    const qualifyingPit = metricRow(pit, 'Fuel To Add Workbench', 'Dallara quali seed / 4-lap target');
+    expect.soft(qualifyingPit?.segments.map((segment) => segment.burnBucketId)).toEqual([
+      'Last', 'FiveLapAverage', 'TenLapAverage', 'Maximum', 'Minimum', 'Qualifying'
+    ]);
+    expect.soft(qualifyingPit?.segments[3]).toMatchObject({
+      burnBucketId: 'Maximum',
+      burnSource: 'QualifyingSeed',
+      sampleCount: 1,
+      strategyEligible: false
+    });
+    expect.soft(qualifyingPit?.segments[5]).toMatchObject({
+      burnBucketId: 'Qualifying',
+      burnSource: 'QualifyingSeed',
+      sampleCount: 1,
+      strategyEligible: false
+    });
+
+    const noExtrema = metricRow(pit, 'Fuel To Add Workbench', 'Stress / No explicit extrema');
+    expect.soft(noExtrema?.segments.map((segment) => segment.value)).toEqual([
+      '+10.0 L', '+9.0 L', '+8.0 L', '--', '--', '--'
+    ]);
+    expect.soft(noExtrema?.segments.slice(3).map((segment) => ({
+      id: segment.burnBucketId,
+      source: segment.burnSource
+    }))).toEqual([
+      { id: 'Maximum', source: 'Unavailable' },
+      { id: 'Minimum', source: 'Unavailable' },
+      { id: 'Qualifying', source: 'Unavailable' }
+    ]);
+  });
+
+  it('keeps effective capacity and ordered fuel checkpoints typed and distinct', async () => {
+    const capacity = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-capacity'
+    )).model;
+    expect.soft(capacity.status).toBe('fuel/effective capacity workbench');
+    expect.soft(gridRow(capacity, 'Dallara 45m / 80% event cap')).toMatchObject({
+      tone: 'info',
+      cells: [
+        { value: '75.00 L' },
+        { value: '80.0%' },
+        { value: '80.0%' },
+        { value: '58.99 L' },
+        { value: '60.00 L' },
+        { value: 'driver + class' },
+        { value: 'limited; authoritative' }
+      ]
+    });
+    expect.soft(gridRow(capacity, 'Dallara 4L / 68% event cap')?.cells[4])
+      .toMatchObject({ value: '51.00 L', tone: 'info' });
+    expect.soft(gridRow(capacity, 'Stress / Driver cap only')).toMatchObject({
+      tone: 'info',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '51.00 L' }),
+        expect.objectContaining({ value: 'driver cap' }),
+        expect.objectContaining({ value: 'limited; high' })
+      ])
+    });
+    expect.soft(gridRow(capacity, 'Stress / Missing cap evidence')).toMatchObject({
+      tone: 'warning',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '--' }),
+        expect.objectContaining({ value: 'physical only' }),
+        expect.objectContaining({ value: 'missing cap; no advice' })
+      ])
+    });
+    expect.soft(gridRow(capacity, 'Stress / Conflicting caps')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '51.00 L' }),
+        expect.objectContaining({ value: 'min reported' }),
+        expect.objectContaining({ value: 'cap conflict; no advice' })
+      ])
+    });
+    expect.soft(gridRow(capacity, 'Stress / Observed above cap')?.cells[6])
+      .toMatchObject({ value: 'observed above cap; conflict', tone: 'error' });
+    expect.soft(gridRow(capacity, 'Stress / Invalid driver cap')?.cells[6])
+      .toMatchObject({ value: 'invalid evidence; no advice', tone: 'error' });
+    expect.soft(gridRow(capacity, 'Stress / Missing physical tank')?.cells[6])
+      .toMatchObject({ value: 'missing physical; no advice', tone: 'warning' });
+
+    const checkpoints = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-checkpoints'
+    )).model;
+    expect.soft(checkpoints.status).toBe('fuel/checkpoint flow workbench');
+    expect.soft(gridRow(checkpoints, 'Dallara 45m / Measured green')).toMatchObject({
+      tone: 'info',
+      cells: [
+        { value: '60.00 L resolved' },
+        { value: '58.99 L measured' },
+        { value: '58.99 L measured' },
+        { value: '--' },
+        { value: '--' },
+        { value: '--' },
+        { value: 'service complete' },
+        { value: 'ordered facts' }
+      ]
+    });
+    expect.soft(gridRow(checkpoints, 'Dallara 4L / Estimated green')?.cells[1])
+      .toMatchObject({ value: '50.10 L est', tone: 'warning' });
+    expect.soft(gridRow(checkpoints, 'Stress / Single-cap confidence')?.cells[0])
+      .toMatchObject({ value: '60.00 L high', tone: 'info' });
+    expect.soft(gridRow(checkpoints, 'Stress / Formation exceeds cap')?.cells[1])
+      .toMatchObject({ value: '0.00 L est floor', tone: 'warning' });
+    expect.soft(gridRow(checkpoints, 'Dallara 45m / Projected pit cycle')).toMatchObject({
+      tone: 'info',
+      cells: [
+        { value: '60.00 L resolved' },
+        { value: '--' },
+        { value: '33.29 L measured' },
+        { value: '32.29 L est' },
+        { value: '52.29 L est' },
+        { value: '52.15 L est' },
+        { value: 'service complete' },
+        { value: 'ordered facts' }
+      ]
+    });
+    expect.soft(gridRow(checkpoints, 'Stress / Measured overrides projections')?.cells.slice(3, 6))
+      .toEqual([
+        { value: '20.00 L measured', tone: 'info' },
+        { value: '50.00 L measured', tone: 'info' },
+        { value: '49.80 L measured', tone: 'info' }
+      ]);
+    expect.soft(gridRow(checkpoints, 'Stress / Known zero flow')?.cells.slice(2, 6).map((cell) => cell.value))
+      .toEqual(['0.00 L measured', '0.00 L measured', '0.00 L est', '0.00 L est']);
+    expect.soft(gridRow(checkpoints, 'Stress / Missing current telemetry')?.cells.slice(2, 6).map((cell) => cell.value))
+      .toEqual(['--', '--', '--', '--']);
+    expect.soft(gridRow(checkpoints, 'Stress / Above capacity is not clamped')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '60.00 L conflict', tone: 'error' }),
+        expect.objectContaining({ value: '59.50 L conflict', tone: 'error' }),
+        expect.objectContaining({ value: 'above cap; not clamped', tone: 'error' })
+      ])
+    });
+    expect.soft(gridRow(checkpoints, 'Stress / Invalid transition input')?.cells[7])
+      .toMatchObject({ value: 'invalid transition input', tone: 'error' });
+    expect.soft(gridRow(checkpoints, 'Stress / Cannot reach box')).toMatchObject({
+      tone: 'error',
+      cells: [
+        { value: '60.00 L resolved', tone: 'info' },
+        { value: '--', tone: 'waiting' },
+        { value: '1.00 L measured', tone: 'info' },
+        { value: '0.00 L conflict floor', tone: 'error' },
+        { value: '--', tone: 'waiting' },
+        { value: '--', tone: 'waiting' },
+        { value: 'service complete', tone: 'info' },
+        { value: 'projection below zero; chain stopped', tone: 'error' }
+      ]
+    });
+  });
+
+  it('keeps exact boundary and service feasibility math separate and full precision', async () => {
+    const boundary = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-boundary'
+    )).model;
+    expect.soft(boundary.status).toBe('fuel/boundary feasibility workbench');
+    expect.soft(boundary.gridSections[0].headers).toEqual([
+      'Scenario', 'Bucket', 'Range', 'Safe', 'Next lap', 'Desired / add', 'Room / clamp', 'Shortfall', 'Max', 'State'
+    ]);
+    expect.soft(gridRow(boundary, 'Stress / Exact 3-lap edge')).toMatchObject({
+      tone: 'info',
+      cells: [
+        { value: 'Last' },
+        { value: '3.000000 laps' },
+        { value: '3' },
+        { value: '10.00000 L' },
+        { value: '50.00 L / 40.00 L' },
+        { value: '50.00 L / 40.00 L' },
+        { value: '0.00000 L' },
+        { value: '6' },
+        { value: 'range: available; target: feasible; exact-lap-boundary' }
+      ]
+    });
+    expect.soft(gridRow(boundary, 'Stress / Below displayed 3.00')?.cells.slice(1, 4))
+      .toEqual([
+        { value: '2.999999 laps', tone: 'info' },
+        { value: '2', tone: 'info' },
+        { value: '0.00001 L', tone: 'info' }
+      ]);
+    expect.soft(gridRow(boundary, 'Stress / Above displayed 3.00')?.cells.slice(1, 4))
+      .toEqual([
+        { value: '3.000001 laps', tone: 'info' },
+        { value: '3', tone: 'info' },
+        { value: '9.99999 L', tone: 'info' }
+      ]);
+    expect.soft(gridRow(boundary, 'Stress / Known zero facts')).toMatchObject({
+      tone: 'info',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '0.000000 laps' }),
+        expect.objectContaining({ value: '0' }),
+        expect.objectContaining({ value: '10.00000 L' }),
+        expect.objectContaining({ value: 'range: known-zero; target: feasible; exact-lap-boundary, known-zero-range, known-zero-service' })
+      ])
+    });
+    expect.soft(gridRow(boundary, 'Stress / Tank-limited target')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '60.00 L / 50.00 L' }),
+        expect.objectContaining({ value: '40.00 L / 40.00 L' }),
+        expect.objectContaining({ value: '10.00000 L' }),
+        expect.objectContaining({ value: '5' }),
+        expect.objectContaining({ value: 'range: available; target: unachievable; exact-lap-boundary, tank-limited' })
+      ])
+    });
+    expect.soft(gridRow(boundary, 'Stress / Margin flips feasibility')?.cells.slice(6, 9))
+      .toEqual([
+        { value: '0.00010 L', tone: 'error' },
+        { value: '4', tone: 'error' },
+        { value: 'range: available; target: unachievable; exact-lap-boundary, tank-limited', tone: 'error' }
+      ]);
+    expect.soft(gridRow(boundary, 'Stress / Missing current only')?.cells[8])
+      .toMatchObject({ value: 'range: unavailable; target: feasible', tone: 'warning' });
+    expect.soft(gridRow(boundary, 'Stress / Missing at-box only')?.cells.slice(4, 9).map((cell) => cell.value))
+      .toEqual(['20.00 L / --', '-- / --', '--', '6', 'range: available; target: unavailable; exact-lap-boundary']);
+    expect.soft(gridRow(boundary, 'Stress / Missing capacity')?.cells.slice(4, 9).map((cell) => cell.value))
+      .toEqual(['20.00 L / 10.00 L', '-- / --', '--', '--', 'range: available; target: unavailable; exact-lap-boundary']);
+    expect.soft(gridRow(boundary, 'Stress / Conflicting capacity')?.cells[8])
+      .toMatchObject({ value: 'range: available; target: capacity-conflicted; exact-lap-boundary', tone: 'error' });
+    expect.soft(gridRow(boundary, 'Stress / Invalid reserve')?.cells[8])
+      .toMatchObject({ value: 'range: available; target: invalid; exact-lap-boundary', tone: 'error' });
+    expect.soft(gridRow(boundary, 'Stress / Invalid current telemetry')?.cells[8])
+      .toMatchObject({ value: 'range: invalid; target: feasible', tone: 'error' });
+    expect.soft(gridRow(boundary, 'Stress / Invalid at-box telemetry')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '2.000000 laps' }),
+        expect.objectContaining({ value: '20.00 L / --' }),
+        expect.objectContaining({ value: 'range: available; target: invalid; exact-lap-boundary' })
+      ])
+    });
+    expect.soft(gridRow(boundary, 'Stress / Invalid capacity evidence')?.cells[8])
+      .toMatchObject({ value: 'range: available; target: invalid; exact-lap-boundary', tone: 'error' });
+    expect.soft(gridRow(boundary, 'Stress / Incomplete burn evidence')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: 'Last', tone: 'error' }),
+        expect.objectContaining({ value: 'range: invalid; target: invalid' })
+      ])
+    });
+    expect.soft(gridRow(boundary, 'Stress / Finite overflow edge')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '--', tone: 'error' }),
+        expect.objectContaining({ value: 'range: invalid; target: unavailable' })
+      ])
+    });
+    expect.soft(gridRow(boundary, 'Stress / Seed-only evidence')).toMatchObject({
+      tone: 'info',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: 'Quali seeded', tone: 'warning' }),
+        expect.objectContaining({ value: '2.000000 laps' }),
+        expect.objectContaining({ value: 'range: available; target: feasible; exact-lap-boundary' })
+      ])
+    });
+  });
+
+  it('composes the shared fuel snapshot only from explicitly named owners', async () => {
+    const snapshot = (await reviewServer.getJson(
+      '/api/overlay-model/fuel-calculator?preview=race&fixture=fuel-laps-workbench-snapshot'
+    )).model;
+    expect.soft(snapshot.status).toBe('fuel/shared snapshot workbench');
+    expect.soft(snapshot.gridSections[0].headers).toEqual([
+      'Scenario', 'Lap budget', 'Capacity', 'Current / box', 'Range', 'Fuel to add', 'Target usage', 'Plan', 'Contract'
+    ]);
+    expect.soft(gridRow(snapshot, 'Live control / explicit owners')).toMatchObject({
+      tone: 'info',
+      cells: [
+        { value: '12 / 11.50', tone: 'info' },
+        { value: '60.00 L', tone: 'info' },
+        { value: '40.00 L / 10.00 L', tone: 'info' },
+        { value: '4.000000 laps', tone: 'info' },
+        { value: '11.50 L', tone: 'info' },
+        { value: '58.00 L / 11.60 L @5', tone: 'success' },
+        { value: '4 now + 5 x1 + 3 / 2 stops', tone: 'info' },
+        { value: 'current→range; at-box→service; first-green/5L target; explicit current+future plan', tone: 'info' }
+      ]
+    });
+
+    expect.soft(gridRow(snapshot, 'Replay control / VLN 4h Mid S1')).toMatchObject({
+      tone: 'warning',
+      cells: [
+        { value: '31 / 30.96', tone: 'info' },
+        { value: '104.94 L', tone: 'info' },
+        { value: '61.64 L / --', tone: 'info' },
+        { value: '4.559172 laps', tone: 'info' },
+        { value: '--', tone: 'waiting' },
+        { value: '102.85 L / 14.69 L @7', tone: 'success' },
+        { value: '7 x4 + 3 / 4 stops', tone: 'info' },
+        { value: 'Replay-backed accepted spans support full Last/5L/10L/Max; absent at-box evidence does not invent a pit request', tone: 'warning' }
+      ]
+    });
+
+    expect.soft(gridRow(snapshot, 'Degraded / no implicit fallback')).toMatchObject({
+      tone: 'warning',
+      cells: [
+        { value: '12 / 11.50' },
+        { value: '60.00 L' },
+        { value: '40.00 L / --' },
+        { value: '4.000000 laps' },
+        { value: '--' },
+        { value: '-- / -- @4 [unavailable]' },
+        { value: '-- / -- stops' },
+        { value: 'Current and Last stay visible; missing FirstGreen, 5L, target, and Plan inputs stay missing' }
+      ]
+    });
+
+    expect.soft(gridRow(snapshot, 'Unavailable / owner shells only')).toMatchObject({
+      tone: 'waiting',
+      cells: [
+        { value: '-- / --' },
+        { value: '--' },
+        { value: '-- / --' },
+        { value: '--' },
+        { value: '--' },
+        { value: '-- / -- @1 [unavailable]' },
+        { value: '--' },
+        { value: 'Typed unavailable facts; no fabricated capacity, checkpoint, bucket, request, target, or plan' }
+      ]
+    });
+    expect.soft(gridRow(snapshot, 'Missing capacity / diagnostic request only')).toMatchObject({
+      tone: 'warning',
+      cells: [
+        { value: '2 / 2.00', tone: 'info' },
+        { value: '--', tone: 'warning' },
+        { value: '20.00 L / 10.00 L', tone: 'info' },
+        { value: '2.000000 laps', tone: 'info' },
+        { value: '10.00 L', tone: 'waiting' },
+        { value: '20.00 L / 10.00 L @2', tone: 'success' },
+        { value: '--', tone: 'waiting' },
+        { value: 'Range and desired add remain factual; missing capacity cannot claim clamp or feasibility', tone: 'warning' }
+      ]
+    });
+    expect.soft(gridRow(snapshot, 'Unrequested projections / invalid upstreams stay unavailable')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '-- / -- @4 [unavailable]', tone: 'waiting' }),
+        expect.objectContaining({ value: '-- / -- stops [unavailable]', tone: 'waiting' }),
+        expect.objectContaining({ value: 'No formation or current-to-box input: FirstGreen and AtBox remain Unavailable' })
+      ])
+    });
+    expect.soft(gridRow(snapshot, 'Invalid capacity / diagnostic boundary only')).toMatchObject({
+      tone: 'error',
+      cells: expect.arrayContaining([
+        expect.objectContaining({ value: '2.000000 laps' }),
+        expect.objectContaining({ value: '--', tone: 'error' }),
+        expect.objectContaining({ value: 'Boundary retains invalid diagnostic math; Fuel To Add projection is suppressed like Core' })
+      ])
+    });
+    expect.soft(gridRow(snapshot, 'Conflicted cap / blocked selected budget')?.cells.slice(1, 7))
+      .toEqual([
+        { value: '51.00 L', tone: 'error' },
+        { value: '20.00 L / 10.00 L', tone: 'info' },
+        { value: '2.000000 laps', tone: 'info' },
+        { value: '10.00 L', tone: 'error' },
+        { value: '-- / -- @4 [conflicted]', tone: 'waiting' },
+        { value: '-- / -- stops [conflicted]', tone: 'waiting' }
+      ]);
+    expect.soft(gridRow(snapshot, 'Invalid at-box / projected fallback blocked')?.cells.slice(2, 7))
+      .toEqual([
+        { value: '20.00 L / 19.00 L', tone: 'info' },
+        { value: '2.000000 laps', tone: 'info' },
+        { value: '--', tone: 'error' },
+        { value: '-- / -- @2 [invalid]', tone: 'waiting' },
+        { value: '2 now + -- / -- stops [future invalid]', tone: 'waiting' }
+      ]);
+    expect.soft(gridRow(snapshot, 'Invalid descendant chain / provided projections blocked')).toMatchObject({
+      tone: 'error',
+      cells: [
+        { value: '12 / 11.50', tone: 'info' },
+        { value: '60.00 L', tone: 'info' },
+        { value: '-- / --', tone: 'waiting' },
+        { value: '--', tone: 'error' },
+        { value: '--', tone: 'error' },
+        { value: '-- / -- @2 [invalid]', tone: 'waiting' },
+        { value: '-- / -- stops [invalid]', tone: 'waiting' },
+        { value: 'Provided service and pit-exit projections retain the upstream Invalid state', tone: 'error' }
+      ]
+    });
+    expect.soft(gridRow(snapshot, 'Clamped projection / conflicted zero')?.cells.slice(2, 7))
+      .toEqual([
+        { value: '1.00 L / 0.00 L', tone: 'info' },
+        { value: '0.100000 laps', tone: 'info' },
+        { value: '20.00 L', tone: 'error' },
+        { value: '-- / -- @2 [conflicted]', tone: 'waiting' },
+        { value: '-- / -- stops [conflicted]', tone: 'waiting' }
+      ]);
+    expect.soft(gridRow(snapshot, 'Known zero / factual selection')?.cells.slice(2, 7))
+      .toEqual([
+        { value: '0.00 L / 0.00 L', tone: 'info' },
+        { value: '0.000000 laps', tone: 'info' },
+        { value: '20.00 L', tone: 'info' },
+        { value: '-- / -- @2', tone: 'waiting' },
+        { value: '-- / -- stops', tone: 'waiting' }
+      ]);
+    expect.soft(gridRow(snapshot, 'Seed-only / retained without implicit plan')).toMatchObject({
+      tone: 'warning',
+      cells: [
+        { value: '5 / 5.00', tone: 'info' },
+        { value: '60.00 L', tone: 'info' },
+        { value: '24.00 L / 12.00 L', tone: 'info' },
+        { value: '--', tone: 'waiting' },
+        { value: '--', tone: 'waiting' },
+        { value: '60.00 L / 12.00 L @5', tone: 'success' },
+        { value: '--', tone: 'waiting' },
+        { value: 'Quali remains typed contextual evidence; no Last bucket or Plan selection is invented', tone: 'warning' }
+      ]
+    });
   });
 
   it('proves v1.0.2 non-race display contracts in practice and qualifying previews', async () => {
@@ -857,6 +1661,22 @@ function metricRowLabels(model, sectionTitle) {
     .filter((section) => section.title === sectionTitle)
     .flatMap((section) => section.rows || [])
     .map((row) => row.label);
+}
+
+function metricRow(model, sectionTitle, rowLabel) {
+  return (model.metricSections || [])
+    .find((section) => section.title === sectionTitle)
+    ?.rows?.find((row) => row.label === rowLabel);
+}
+
+function metricSegmentDisplay(segments = []) {
+  return segments.map(({ label, value, tone }) => ({ label, value, tone }));
+}
+
+function gridRow(model, rowLabel) {
+  return (model.gridSections || [])
+    .flatMap((section) => section.rows || [])
+    .find((row) => row.label === rowLabel);
 }
 
 function fuelRenderedRowCount(model) {

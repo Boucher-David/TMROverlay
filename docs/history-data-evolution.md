@@ -171,6 +171,75 @@ The current implementation is intentionally narrow:
   evidence, lap-budget outcome metrics, pit/service windows, and team stint
   shape while excluding raw frame streams. `FuelV2History:UseForStrategy=false`
   keeps V1 fuel strategy from reading these records.
+- Fuel V2 format 2 hardens this intake into immutable session segments. New
+  records are classified only when exact car, exact `TrackId + TrackConfigName`
+  layout, normalized Race/Practice/Qualifying/Offline-Testing family, and a current/session
+  occurrence number agree throughout the accepted frames. The reusable family
+  is car + layout; race length and fuel-cap/BoP remain explicit summary context
+  for later ranking/live adjustment rather than path keys. Version-1 Fuel V2
+  records are retained as `legacy-unclassified`, counted separately from
+  retained-but-unclassified v2 records in the Fuel V2 manifest, and excluded
+  from learned metrics rather than being guessed into a session family. Startup
+  recovery replays every eligible retained compact sidecar idempotently after
+  an interrupted import. A v1-only upgrade rebuilds the manifest/aggregate in
+  current format without rewriting the v1 summaries, and a surviving v1 sidecar
+  whose legacy source was already retained is skipped rather than duplicated.
+  Reconnect duplicates of one verified occurrence are retained but only the
+  strongest segment contributes to aggregate metrics; the aggregate reports
+  excluded duplicate occurrences rather than silently double-weighting them.
+
+- Fuel V2 format 3 adds bounded stationary-service observations to each
+  immutable sidecar and imported summary. These are separate from pit-lane
+  windows and retain request shape, raw service flags, counters, fuel-flow
+  cadence, and qualification failures. Summary/import versions are `3`; the
+  manifest and fuel-burn aggregate remain `2` because no service duration/rate
+  is aggregated or used for advice. Format-2 classified summaries remain
+  readable and eligible for learned burn history, but have no service evidence
+  and therefore cannot yield service-time advice.
+- Fuel V2 format 4 retains the same bounded stationary-service observations and
+  adds raw entry/exit plus delta snapshots for total, side, axle, availability,
+  and exact four-corner tire counters when the live SDK exposes them. The shared
+  Pit Service classifier can therefore retain exact one-corner, front/rear,
+  left/right, four-tire, and unusual-shape evidence without converting a
+  requested selection into a claimed result. Request changes, repair, and
+  interrupted telemetry make a window unsuitable for later tire-timing
+  learning. Summary/import versions are `4`, manifest is `3`, and the fuel-burn
+  aggregate remains `2`; format-3 summaries remain readable but cannot prove
+  exact executed tire shapes.
+- Fuel V2 format 5 preserves raw `WeekendInfo.DCRuleSet` in the classified
+  session scope so immutable exact tire observations can be selected only
+  against the same live iRacing rules identity. A versioned catalog maps only
+  documented rule IDs to sequential or parallel service; absent, fair-share,
+  and unfamiliar values stay unknown. The first read-time tire profile may
+  report an exact observed shape or ask to collect a sample, but it emits no
+  seconds or “free tires” claim. Summary/import versions are `5`; manifest is
+  still `3` and the fuel-burn aggregate is still `2`; older formats remain
+  readable under their original evidence limits.
+- Fuel V2 history format 6 is a summary/import schema step.
+  It promotes clean `Offline Testing` sidecars into a distinct `test` family
+  using the existing Practice-equivalent accepted-lap quality gates and retains
+  new format-6 direct local pit-route observations beside immutable exact
+  summaries. Each route carries two-sample-confirmed pit-entry/stall/exit
+  checkpoints plus `DriverPitTrkPct`, pit-speed, pit-stall-count, and raw rules
+  provenance; continuous no-stall routes are retained as optional pit-lane-pass
+  calibration. Route evidence remains out of the fuel aggregate and strategy until a later
+  route learner explicitly promotes it. Normal history selection remains exact car + layout and keeps
+  provenance explicit: Race reads `race`, then `practice`, then `test`;
+  Practice reads `practice`, then `test`; Test reads `test`, then `practice`.
+  Test evidence is never silently relabeled as Race or Practice. Summary/import
+  versions are `6`, manifest is `4`, and rebuilt aggregates are `3`; compatible
+  format-5 summaries remain readable (with an empty route list) and their aggregates rebuild without
+  rewriting the immutable summaries.
+- Fuel V2 history format 7 gives stationary-service request transitions an
+  explicit classification. A material request mutation remains ineligible for
+  later refuel/tire timing learning, while a request that iRacing clears only
+  after the final observed fuel-flow frame is recorded as `completion-clear`
+  and does not discard an otherwise clean observed refuel. Its pit-window
+  refuel detector also shares the diagnostics cumulative entry/low-water rule,
+  so gradual fills no longer depend on a single large frame delta. Summary and
+  import versions are `7`, manifest is `5`, and the fuel-burn aggregate remains
+  `3`; format-6 summaries remain readable with legacy request transitions
+  handled conservatively.
 - `HistorySchemaCompatibilityTests` snapshots durable summary, aggregate, and analysis model shapes so schema changes force a compatibility review during test validation
 
 Radar calibration history is car-scoped, not track/session-scoped. Summaries may store clean `CarLeftRight` side-window durations, identity-backed body-length estimates, and confidence flags. The car-level aggregate stops accepting new learned samples once the body-length metric is trusted. Live radar uses exact bundled car specifications first, trusted user calibration second, low-confidence bundled estimates third, and the hard-coded default only when none of those are available.

@@ -3,7 +3,7 @@ import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { repoRoot } from './browserOverlayAssets.js';
 
-export async function startReviewServer() {
+export async function startReviewServer({ environment = {} } = {}) {
   const port = await reservePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   let output = '';
@@ -11,7 +11,8 @@ export async function startReviewServer() {
     cwd: repoRoot,
     env: {
       ...process.env,
-      TMR_BROWSER_REVIEW_PORT: String(port)
+      TMR_BROWSER_REVIEW_PORT: String(port),
+      ...environment
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });

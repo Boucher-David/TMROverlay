@@ -78,7 +78,13 @@ internal static class OverlayGeometryContractValues
             MetricGridCellInset: MetricRows.MetricGridCellInset,
             MetricGridCellGap: MetricRows.MetricGridCellGap,
             MetricGridCellMinimumWidth: MetricRows.MetricGridCellMinimumWidth,
-            MetricGridCellHeight: MetricRows.MetricGridCellHeight),
+            MetricGridCellHeight: MetricRows.MetricGridCellHeight,
+            MaximumMetricSegmentColumns: MetricRows.MaximumMetricSegmentColumns,
+            FuelV2ComparisonSegmentCount: MetricRows.FuelV2ComparisonSegmentCount,
+            FuelV2WorkbenchWidth: MetricRows.FuelV2WorkbenchWidth,
+            FuelV2WorkbenchLabelColumnWidth: MetricRows.FuelV2WorkbenchLabelColumnWidth,
+            FuelV2WorkbenchSegmentedRowHeight: MetricRows.FuelV2WorkbenchSegmentedRowHeight,
+            FuelV2WorkbenchValueSegmentMinimumHeight: MetricRows.FuelV2WorkbenchValueSegmentMinimumHeight),
         StreamChat: new StreamChatGeometryContract(
             OverlayWidth: StreamChat.OverlayWidth,
             OverlayHeight: StreamChat.OverlayHeight,
@@ -607,6 +613,12 @@ internal static class OverlayGeometryContractValues
         internal const int MetricGridCellGap = 3;
         internal const int MetricGridCellMinimumWidth = 42;
         internal const int MetricGridCellHeight = 21;
+        internal const int MaximumMetricSegmentColumns = 7;
+        internal const int FuelV2ComparisonSegmentCount = 7;
+        internal const int FuelV2WorkbenchWidth = 1120;
+        internal const int FuelV2WorkbenchLabelColumnWidth = 158;
+        internal const int FuelV2WorkbenchSegmentedRowHeight = 38;
+        internal const int FuelV2WorkbenchValueSegmentMinimumHeight = 26;
     }
 
     internal static class StreamChat

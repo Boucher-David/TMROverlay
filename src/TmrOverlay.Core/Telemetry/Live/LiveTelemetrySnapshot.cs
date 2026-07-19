@@ -20,6 +20,25 @@ internal sealed record LiveTelemetrySnapshot(
 
     public LiveRaceModels Models { get; init; } = LiveRaceModels.Empty;
 
+    // This is the V2-qualified completed-lap evidence. Keep it beside the
+    // normalized live snapshot rather than teaching a renderer to recreate it
+    // from the V1 aggregate fuel fields.
+    public LiveFuelPerLapWindow FuelPerLapWindow { get; init; } = LiveFuelPerLapWindow.Empty;
+
+    // Session information and collection sources can change before the next
+    // telemetry frame arrives. Until that frame does arrive, LatestSample and
+    // the legacy derived models still describe the prior context. Consumers
+    // that combine session context with telemetry facts must gate on this
+    // rather than presenting the prior frame as a fresh fact for the new
+    // session/source.
+    public bool HasFrameForCurrentContext { get; init; }
+
+    // A changed collector must also reacquire session metadata before V2
+    // combines a frame with car, layout, fuel-cap, or race-budget facts.
+    // This stays distinct from HasFrameForCurrentContext because a new source
+    // can yield telemetry before it publishes fresh session YAML.
+    public bool HasSessionInfoForCurrentCollection { get; init; }
+
     public LiveRaceModels CompleteModels()
     {
         if (Models.IsLiveSampleModel || LatestSample is not { } sample)

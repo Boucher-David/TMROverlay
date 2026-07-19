@@ -56,6 +56,10 @@ internal sealed class OverlayManager : IDisposable
     private readonly StreamChatOverlaySource _streamChatSource;
     private readonly ILiveTelemetrySource _liveTelemetrySource;
     private readonly SessionHistoryQueryService _historyQueryService;
+    private readonly FuelV2OverlayOptions _fuelV2OverlayOptions;
+    private readonly FuelV2PitServiceTireHistoryQueryService? _fuelV2TireHistoryQueryService;
+    private readonly FuelV2HistoryNormalBurnQueryService? _fuelV2NormalHistoryQueryService;
+    private readonly FuelV2ModelReadinessQueryService? _fuelV2ModelReadinessQueryService;
     private readonly AppEventRecorder _events;
     private readonly ILogger<CarRadarForm> _carRadarLogger;
     private readonly ILogger<GapToLeaderForm> _gapToLeaderLogger;
@@ -110,7 +114,11 @@ internal sealed class OverlayManager : IDisposable
         ILogger<StandingsForm> standingsLogger,
         ILogger<TrackMapForm> trackMapLogger,
         ILogger<StreamChatForm> streamChatLogger,
-        ILogger<SimpleTelemetryOverlayForm> simpleTelemetryLogger)
+        ILogger<SimpleTelemetryOverlayForm> simpleTelemetryLogger,
+        FuelV2OverlayOptions? fuelV2OverlayOptions = null,
+        FuelV2PitServiceTireHistoryQueryService? fuelV2TireHistoryQueryService = null,
+        FuelV2HistoryNormalBurnQueryService? fuelV2NormalHistoryQueryService = null,
+        FuelV2ModelReadinessQueryService? fuelV2ModelReadinessQueryService = null)
     {
         _settingsStore = settingsStore;
         _storageOptions = storageOptions;
@@ -130,6 +138,10 @@ internal sealed class OverlayManager : IDisposable
         _streamChatSource = streamChatSource;
         _liveTelemetrySource = liveTelemetrySource;
         _historyQueryService = historyQueryService;
+        _fuelV2OverlayOptions = fuelV2OverlayOptions ?? FuelV2OverlayOptions.Disabled;
+        _fuelV2TireHistoryQueryService = fuelV2TireHistoryQueryService;
+        _fuelV2NormalHistoryQueryService = fuelV2NormalHistoryQueryService;
+        _fuelV2ModelReadinessQueryService = fuelV2ModelReadinessQueryService;
         _events = events;
         _carRadarLogger = carRadarLogger;
         _gapToLeaderLogger = gapToLeaderLogger;
@@ -537,7 +549,10 @@ internal sealed class OverlayManager : IDisposable
         ILogger logger,
         Func<Form> createLegacyForm)
     {
-        if (!UseDesignV2LiveOverlays)
+        if (!ShouldUseDesignV2Renderer(
+                UseDesignV2LiveOverlays,
+                kind,
+                _fuelV2OverlayOptions.Enabled))
         {
             return createLegacyForm();
         }
@@ -554,7 +569,11 @@ internal sealed class OverlayManager : IDisposable
             settings,
             SelectedFontFamily,
             SelectedUnitSystem,
-            SaveSettings);
+            SaveSettings,
+            _fuelV2OverlayOptions,
+            _fuelV2TireHistoryQueryService,
+            _fuelV2NormalHistoryQueryService,
+            _fuelV2ModelReadinessQueryService);
     }
 
     private static bool UseDesignV2LiveOverlays
@@ -742,8 +761,17 @@ internal sealed class OverlayManager : IDisposable
                 var overlayLiveTelemetryAvailable = liveTelemetryAvailable || settingsPreview;
                 var contextAvailability = EvaluateOverlayContext(registration.Definition, liveSnapshot);
                 var contextAllowed = settingsPreview || contextAvailability.IsAvailable;
-                var contentAllowed = HasEnabledOverlayContent(registration.Definition, settings, currentSession);
-                var shouldShow = settingsPreview || (settings.Enabled && sessionAllowed && contextAllowed && contentAllowed);
+                var contentAllowed = HasEnabledOverlayContent(
+                    registration.Definition,
+                    settings,
+                    currentSession,
+                    contextAvailability);
+                var shouldShow = ShouldShowManagedOverlay(
+                    settings.Enabled,
+                    sessionAllowed,
+                    contextAllowed,
+                    contentAllowed,
+                    settingsPreview);
 
                 if (string.Equals(registration.Definition.Id, FlagsOverlayDefinition.Definition.Id, StringComparison.Ordinal))
                 {
@@ -928,6 +956,24 @@ internal sealed class OverlayManager : IDisposable
             && string.Equals(selectedSettingsOverlayTabId, CarRadarOverlayDefinition.Definition.Id, StringComparison.Ordinal);
     }
 
+    // Kept as the explicit native-manager seam so the shared visibility
+    // invariant is regression-tested with the same decision that reaches the
+    // special Flags registration and every ordinary managed form.
+    internal static bool ShouldShowManagedOverlay(
+        bool isUserEnabled,
+        bool isSessionAllowed,
+        bool hasRequiredContext,
+        bool hasEnabledContent,
+        bool isSettingsPreview)
+    {
+        return OverlayVisibilityPolicy.ShouldShowManagedOverlay(
+            isUserEnabled,
+            isSessionAllowed,
+            hasRequiredContext,
+            hasEnabledContent,
+            isSettingsPreview);
+    }
+
     private static void ApplyRadarSettingsPreview(Form form, bool previewVisible)
     {
         if (form is CarRadarForm radar)
@@ -1003,8 +1049,32 @@ internal sealed class OverlayManager : IDisposable
         var now = DateTimeOffset.UtcNow;
         if (string.Equals(definition.Id, FuelCalculatorOverlayDefinition.Definition.Id, StringComparison.Ordinal))
         {
+            if (_fuelV2OverlayOptions.Enabled)
+            {
+                var tireHistory = _fuelV2TireHistoryQueryService?.Lookup(
+                    snapshot.Context,
+                    snapshot.Models.PitService.Request);
+                var normalHistory = _fuelV2NormalHistoryQueryService?.Lookup(snapshot.Context);
+                var modelReadiness = _fuelV2ModelReadinessQueryService?.Lookup(snapshot.Context);
+                var v2ViewModel = FuelV2OverlayViewModel.From(
+                    snapshot,
+                    SelectedUnitSystem,
+                    now,
+                    settings,
+                    tireHistory,
+                    normalHistory,
+                    modelReadiness);
+                return OverlayContentSizing.FuelCalculatorSizeForMetricSections(
+                    definition,
+                    settings,
+                    sessionKind,
+                    v2ViewModel.Overlay.MetricSections,
+                    contentWidth: OverlayGeometryContracts.MetricRows.FuelV2WorkbenchWidth,
+                    hasRenderedHeader: HasRenderedHeaderTimeRemaining(settings, snapshot));
+            }
+
             var strategyModel = LiveFuelStrategyModel.From(snapshot, now, LookupFuelSizingHistory);
-            if (!strategyModel.IsAvailable)
+            if (!strategyModel.IsAvailable && !FuelLapsWorkbenchViewModel.Enabled)
             {
                 return null;
             }
@@ -1020,6 +1090,7 @@ internal sealed class OverlayManager : IDisposable
                 settings,
                 sessionKind,
                 viewModel.MetricSections,
+                clampToDefaultHeight: !FuelLapsWorkbenchViewModel.Enabled,
                 hasRenderedHeader: HasRenderedHeaderTimeRemaining(settings, snapshot));
         }
 
@@ -1258,10 +1329,21 @@ internal sealed class OverlayManager : IDisposable
         return OverlayAvailabilityEvaluator.FromSnapshot(snapshot, DateTimeOffset.UtcNow).IsAvailable;
     }
 
-    private static LiveLocalStrategyContextSnapshot EvaluateOverlayContext(
+    private LiveLocalStrategyContextSnapshot EvaluateOverlayContext(
         OverlayDefinition definition,
         LiveTelemetrySnapshot snapshot)
     {
+        if (_fuelV2OverlayOptions.Enabled
+            && string.Equals(
+                definition.Id,
+                FuelCalculatorOverlayDefinition.Definition.Id,
+                StringComparison.Ordinal))
+        {
+            return LiveLocalStrategyContext.ForFuelV2FactualDisplay(
+                snapshot,
+                DateTimeOffset.UtcNow);
+        }
+
         return LiveLocalStrategyContext.ForRequirement(
             snapshot,
             DateTimeOffset.UtcNow,
@@ -1420,11 +1502,26 @@ internal sealed class OverlayManager : IDisposable
             ScaleDimension(baseSize.Height, settings.Scale));
     }
 
-    private static bool HasEnabledOverlayContent(
+    private bool HasEnabledOverlayContent(
         OverlayDefinition definition,
         OverlaySettings settings,
-        OverlaySessionKind? sessionKind = null)
+        OverlaySessionKind? sessionKind,
+        LiveLocalStrategyContextSnapshot contextAvailability)
     {
+        if (_fuelV2OverlayOptions.Enabled
+            && string.Equals(
+                definition.Id,
+                FuelCalculatorOverlayDefinition.Definition.Id,
+                StringComparison.Ordinal))
+        {
+            return FuelContentPolicy.From(settings, sessionKind).HasV2RenderableContent(
+                sessionKind,
+                factualStateOnly: string.Equals(
+                    contextAvailability.Reason,
+                    "session_driver_camera_identity_fallback",
+                    StringComparison.Ordinal));
+        }
+
         return (OverlayContentSizing.HasRenderableContent(definition, settings, sessionKind)
                 || CanRenderChromeWithoutBodyData(definition, settings, sessionKind))
             && GapWindowEnabled(definition, settings);
@@ -1708,6 +1805,20 @@ internal sealed class OverlayManager : IDisposable
             FlagDisplayCategory.Finish => settings.GetBooleanOption(OverlayOptionKeys.FlagsShowFinish, defaultValue: true),
             _ => true
         };
+    }
+
+    // Fuel V2 is a sectioned/segmented metric contract. Its developer gate
+    // therefore uses the same DesignV2 native body as browser/localhost even
+    // when a developer has otherwise selected legacy renderers. The old
+    // simple table flattens those sections and cannot honor Fuel's no-data
+    // hidden policy.
+    internal static bool ShouldUseDesignV2Renderer(
+        bool useDesignV2LiveOverlays,
+        DesignV2LiveOverlayKind kind,
+        bool fuelV2OverlayEnabled)
+    {
+        return useDesignV2LiveOverlays
+            || (kind == DesignV2LiveOverlayKind.FuelCalculator && fuelV2OverlayEnabled);
     }
 
     private void ReconcileSettingsOverlayActiveWithVisibility()

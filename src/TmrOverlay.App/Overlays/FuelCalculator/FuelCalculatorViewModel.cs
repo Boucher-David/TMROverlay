@@ -34,6 +34,11 @@ internal sealed record FuelCalculatorViewModel(
         int maximumRows,
         OverlaySettings? contentSettings = null)
     {
+        if (FuelLapsWorkbenchViewModel.Enabled)
+        {
+            return FuelLapsWorkbenchViewModel.Create();
+        }
+
         var content = FuelContentPolicy.From(contentSettings, strategy.SessionKind);
         return new FuelCalculatorViewModel(
             Status: DisplayStatus(strategy),
@@ -50,6 +55,11 @@ internal sealed record FuelCalculatorViewModel(
         int maximumRows,
         OverlaySettings? contentSettings = null)
     {
+        if (FuelLapsWorkbenchViewModel.Enabled)
+        {
+            return FuelLapsWorkbenchViewModel.Create();
+        }
+
         return model.Strategy is { } strategy
             ? From(strategy, model.History, showAdvice, unitSystem, maximumRows, contentSettings)
             : Waiting(model.Status);
@@ -817,8 +827,27 @@ internal sealed record FuelContentPolicy(
     bool ShowRaceFuel,
     bool ShowStintTargets,
     bool ShowFuelRange,
-    bool ShowFuelUsage)
+    bool ShowFuelUsage,
+    bool ShowModelReadiness)
 {
+    // Fuel State is a factual capacity/current-fuel readout. It deliberately
+    // reuses the existing persisted Fuel block in Race and Fuel Range block in
+    // Test/Practice/Qualifying, so V2 does not invent another user setting.
+    public bool ShowFuelState(OverlaySessionKind? sessionKind)
+    {
+        return OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) == OverlaySessionKind.Race
+            ? ShowRaceFuel
+            : ShowFuelRange;
+    }
+
+    public bool HasV2RenderableContent(
+        OverlaySessionKind? sessionKind,
+        bool factualStateOnly)
+    {
+        return ShowFuelState(sessionKind)
+            || (!factualStateOnly && (ShowFuelUsage || ShowFuelRange || (IsTestOrPractice(sessionKind) && ShowModelReadiness)));
+    }
+
     public static FuelContentPolicy From(OverlaySettings? settings, OverlaySessionKind? sessionKind)
     {
         if (settings is null
@@ -841,7 +870,8 @@ internal sealed record FuelContentPolicy(
             ShowRaceFuel: Enabled(OverlayContentColumnSettings.FuelCalculatorRaceFuelBlockId),
             ShowStintTargets: Enabled(OverlayContentColumnSettings.FuelCalculatorStintTargetsBlockId),
             ShowFuelRange: Enabled(OverlayContentColumnSettings.FuelCalculatorRangeBlockId),
-            ShowFuelUsage: Enabled(OverlayContentColumnSettings.FuelCalculatorUsageBlockId));
+            ShowFuelUsage: Enabled(OverlayContentColumnSettings.FuelCalculatorUsageBlockId),
+            ShowModelReadiness: Enabled(OverlayContentColumnSettings.FuelCalculatorModelReadinessBlockId));
     }
 
     private static FuelContentPolicy AllEnabled { get; } = new(
@@ -849,7 +879,13 @@ internal sealed record FuelContentPolicy(
         ShowRaceFuel: true,
         ShowStintTargets: true,
         ShowFuelRange: true,
-        ShowFuelUsage: true);
+        ShowFuelUsage: true,
+        ShowModelReadiness: true);
+
+    private static bool IsTestOrPractice(OverlaySessionKind? sessionKind)
+    {
+        return OverlayAvailabilityEvaluator.NormalizeSessionKind(sessionKind) == OverlaySessionKind.Practice;
+    }
 }
 
 internal sealed record FuelDisplayRow(string Label, string Value, string Advice);

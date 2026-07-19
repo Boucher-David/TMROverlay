@@ -1,0 +1,23 @@
+{
+  "contractSnapshotVersion": 1,
+  "release": "v1.3.0",
+  "productVersion": "1.3.0",
+  "snapshotPurpose": "Fuel V2 classified session-history format-5 contract with exact tire-service counter evidence and public iRacing ruleset identity.",
+  "durableContracts": {
+    "fuelV2History": {
+      "manifestVersion": 3,
+      "summaryVersion": 5,
+      "aggregateVersion": 2,
+      "importModelVersion": 5,
+      "captureFormatVersion": 5,
+      "sampleRoot": "history/fuel-v2",
+      "currentReader": "FuelV2HistoryImporter and FuelV2HistoryStore",
+      "migrationRule": "Format-5 sidecars add the public WeekendInfo.DCRuleSet identity to the classified session scope. Format 4 already adds entry/exit exact tire-counter snapshots and deltas to stationary-service observations while retaining pit-lane windows. Formats 2 through 4 remain readable: only format 4+ can prove exact executed tire shapes when iRacing exposes the corner counters, and only a recognized DCRuleSet may qualify later timing calibration. The v1.2.3 snapshot proves the separate format-1 reader: legacy summaries remain readable as legacy-unclassified diagnostics and never contribute to classified aggregates.",
+      "sampleFiles": [
+        "manifest.json",
+        "cars/car-id-1/tracks/track-id-2-config-46756c6c/sessions/race/summaries/sha256-v130-example.json",
+        "cars/car-id-1/tracks/track-id-2-config-46756c6c/sessions/race/aggregate.json"
+      ]
+    }
+  }
+}

@@ -16,6 +16,7 @@ using TmrOverlay.App.TrackMaps;
 using TmrOverlay.App.Updates;
 using TmrOverlay.Core.History;
 using TmrOverlay.Core.Settings;
+using TmrOverlay.Core.Telemetry.EdgeCases;
 using TmrOverlay.Core.Telemetry.Live;
 using Xunit;
 
@@ -23,6 +24,61 @@ namespace TmrOverlay.App.Tests.Diagnostics;
 
 public sealed class DiagnosticsBundleServiceTests
 {
+    [Fact]
+    public void CreateBundle_IncludesProvisionalActiveTelemetryObserverSnapshots()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-overlay-diagnostics-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var storage = CreateStorage(root);
+            var events = new AppEventRecorder(storage);
+            var startedAtUtc = DateTimeOffset.Parse("2026-07-15T18:00:00Z");
+            var edgeCases = new TelemetryEdgeCaseRecorder(
+                new TelemetryEdgeCaseOptions { Enabled = true },
+                storage,
+                events,
+                NullLogger<TelemetryEdgeCaseRecorder>.Instance);
+            var modelParity = new LiveModelParityRecorder(
+                new LiveModelParityOptions { Enabled = true },
+                storage,
+                events,
+                NullLogger<LiveModelParityRecorder>.Instance);
+            var overlayDiagnostics = new LiveOverlayDiagnosticsRecorder(
+                new LiveOverlayDiagnosticsOptions { Enabled = true },
+                storage,
+                events,
+                NullLogger<LiveOverlayDiagnosticsRecorder>.Instance);
+            edgeCases.StartCollection("active-source", startedAtUtc, RawTelemetrySchemaSnapshot.Empty);
+            modelParity.StartCollection("active-source", startedAtUtc);
+            overlayDiagnostics.StartCollection("active-source", startedAtUtc);
+
+            var state = new TelemetryCaptureState();
+            var liveTelemetry = new TestLiveTelemetrySource(LiveTelemetrySnapshot.Empty);
+            var (service, _) = CreateDiagnosticsBundleService(
+                root,
+                storage,
+                state,
+                liveTelemetry,
+                edgeCases,
+                modelParity,
+                overlayDiagnostics);
+
+            var bundlePath = service.CreateBundle();
+
+            using var archive = ZipFile.OpenRead(bundlePath);
+            Assert.False(((bool?)ReadJsonEntry(archive, "metadata/current-edge-cases.json")?["isFinalized"]) ?? true);
+            Assert.False(((bool?)ReadJsonEntry(archive, "metadata/current-model-parity.json")?["isFinalized"]) ?? true);
+            Assert.False(((bool?)ReadJsonEntry(archive, "metadata/current-overlay-diagnostics.json")?["isFinalized"]) ?? true);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     [Fact]
     public void UpdateFailureSummary_ClassifiesRecoveredTransientFailures()
     {
@@ -319,7 +375,7 @@ public sealed class DiagnosticsBundleServiceTests
             });
 
         Assert.Equal(3, ((int?)json?["rowCount"]) ?? -1);
-        Assert.Equal(1, ((int?)json?["sdkCarIdxSlotRowCount"]) ?? -1);
+        Assert.Equal(2, ((int?)json?["sdkCarIdxSlotRowCount"]) ?? -1);
         Assert.Equal(2, ((int?)json?["carClassValidCount"]) ?? -1);
     }
 
@@ -463,6 +519,27 @@ public sealed class DiagnosticsBundleServiceTests
                   "rejectedLapBurnWindows": []
                 }
                 """);
+            File.WriteAllText(
+                Path.Combine(fuelV2CaptureDirectory, "capture-semantic-fuel-v2-s002-race-fuel-v2-diagnostics.json"),
+                """
+                {
+                  "formatVersion": 2,
+                  "totals": { "frameCount": 9, "sampledFrameCount": 2 },
+                  "acceptedLapBurnWindows": [],
+                  "rejectedLapBurnWindows": [],
+                  "pitService": { "pitWindowCount": 0 },
+                  "team": { "teamStintCount": 0 },
+                  "syntheticReplaySuitability": { "suitable": false, "reasons": ["fixture"] }
+                }
+                """);
+            for (var segment = 3; segment <= 11; segment++)
+            {
+                var path = Path.Combine(
+                    fuelV2CaptureDirectory,
+                    $"capture-semantic-fuel-v2-s{segment:000}-race-fuel-v2-diagnostics.json");
+                File.WriteAllText(path, """{"formatVersion":2}""");
+                File.SetLastWriteTimeUtc(path, now.AddDays(-segment).UtcDateTime);
+            }
             File.WriteAllText(Path.Combine(captureDirectory, "telemetry.bin"), "raw telemetry must stay out");
             var ibtAnalysisDirectory = Path.Combine(captureDirectory, "ibt-analysis");
             Directory.CreateDirectory(ibtAnalysisDirectory);
@@ -523,6 +600,7 @@ public sealed class DiagnosticsBundleServiceTests
             Assert.Contains("latest-capture/live-model-parity.json", entryNames);
             Assert.Contains("latest-capture/live-overlay-diagnostics.json", entryNames);
             Assert.Contains("latest-capture/fuel-v2-capture/fuel-v2-diagnostics.json", entryNames);
+            Assert.Contains("latest-capture/fuel-v2-capture/capture-semantic-fuel-v2-s002-race-fuel-v2-diagnostics.json", entryNames);
             Assert.Contains("latest-capture/ibt-analysis/status.json", entryNames);
             Assert.DoesNotContain("latest-capture/telemetry.bin", entryNames);
             Assert.DoesNotContain("latest-capture/ibt-analysis/source.ibt", entryNames);
@@ -559,8 +637,9 @@ public sealed class DiagnosticsBundleServiceTests
             Assert.True(((bool?)latestCaptureJson?["exists"]) == true);
             Assert.Equal(12, ((int?)latestCaptureJson?["manifest"]?["frameCount"]) ?? -1);
             Assert.True(((bool?)latestCaptureJson?["fuelV2Capture"]?["exists"]) == true);
-            Assert.Equal(12, ((int?)latestCaptureJson?["fuelV2Capture"]?["frameCount"]) ?? -1);
-            Assert.Equal(1, ((int?)latestCaptureJson?["fuelV2Capture"]?["acceptedLapBurnWindowCount"]) ?? -1);
+            Assert.Equal(11, ((int?)latestCaptureJson?["fuelV2Capture"]?["segmentCount"]) ?? -1);
+            Assert.Equal(10, ((int?)latestCaptureJson?["fuelV2Capture"]?["includedSegmentCount"]) ?? -1);
+            Assert.Equal(10, ((JsonArray?)latestCaptureJson?["fuelV2Capture"]?["segments"])?.Count ?? -1);
 
             var evidenceQualityJson = ReadJsonEntry(archive, "metadata/evidence-quality.json");
             Assert.True(((bool?)evidenceQualityJson?["liveTelemetry"]?["currentConnected"]) == true);
@@ -2197,7 +2276,10 @@ public sealed class DiagnosticsBundleServiceTests
         string root,
         AppStorageOptions storage,
         TelemetryCaptureState state,
-        ILiveTelemetrySource liveTelemetry)
+        ILiveTelemetrySource liveTelemetry,
+        TelemetryEdgeCaseRecorder? edgeCaseRecorder = null,
+        LiveModelParityRecorder? liveModelParityRecorder = null,
+        LiveOverlayDiagnosticsRecorder? liveOverlayDiagnosticsRecorder = null)
     {
         var localhostState = new LocalhostOverlayState(new LocalhostOverlayOptions());
         var performance = new AppPerformanceState();
@@ -2237,7 +2319,10 @@ public sealed class DiagnosticsBundleServiceTests
             new ForegroundWindowTracker(),
             releaseUpdates,
             streamChatSource,
-            NullLogger<DiagnosticsBundleService>.Instance);
+            NullLogger<DiagnosticsBundleService>.Instance,
+            edgeCaseRecorder: edgeCaseRecorder,
+            liveModelParityRecorder: liveModelParityRecorder,
+            liveOverlayDiagnosticsRecorder: liveOverlayDiagnosticsRecorder);
 
         return (service, streamChatSource);
     }

@@ -12,6 +12,11 @@ Each released app-data contract gets one version directory, for example
 - `captures/`: tiny raw-capture metadata/schema samples for diagnostic format compatibility. Do not include raw `telemetry.bin` payloads.
 - `runtime-state.json`: a minimal diagnostic runtime-state sample, treated as readable but disposable.
 
+A release snapshot may also contain a narrowly scoped `compatibility/` input
+for an intermediate durable format. These inputs are frozen reader fixtures,
+not a claim that the containing release wrote that later format; tests must
+prove they load without rewriting the immutable source file.
+
 Branch-complete validation should exercise the previous released snapshot against
 the current code, including snapshot-to-browser, snapshot-to-localhost, and
 snapshot-to-native mapping tests. Future durable schema changes should add the

@@ -326,6 +326,28 @@ function validateFuelEvidence(contract, failures) {
     && !['measured', 'not-needed'].includes(strategy.additionalFuelNeedState)) {
     failures.push(failure(contract.overlayId, 'fuel-contract', 'renders Covered without measured additional-fuel-need evidence'));
   }
+
+  const readiness = strategy.modelReadiness;
+  if (readiness == null) {
+    return;
+  }
+
+  if (!Array.isArray(readiness.evidenceSources)) {
+    failures.push(failure(contract.overlayId, 'fuel-contract', 'modelReadiness missing evidenceSources'));
+    return;
+  }
+
+  const hasCurrentSessionEvidence = readiness.evidenceSources.includes('current-session');
+  if (hasCurrentSessionEvidence && typeof readiness.currentSessionEvidenceUpdatedAtUtc !== 'string') {
+    failures.push(failure(contract.overlayId, 'fuel-contract', 'current-session modelReadiness evidence missing completion timestamp'));
+  }
+  if (!hasCurrentSessionEvidence && readiness.currentSessionEvidenceUpdatedAtUtc != null) {
+    failures.push(failure(contract.overlayId, 'fuel-contract', 'durable-only modelReadiness evidence carries a current-session timestamp'));
+  }
+  if (hasCurrentSessionEvidence
+    && readiness.evidenceSources.some((source) => !['current-session', 'durable-history'].includes(source))) {
+    failures.push(failure(contract.overlayId, 'fuel-contract', 'modelReadiness has an unknown evidence source'));
+  }
 }
 
 function validateMetricDensityEvidence(contract, failures) {

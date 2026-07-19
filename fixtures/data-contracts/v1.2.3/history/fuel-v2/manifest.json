@@ -1,0 +1,11 @@
+{
+  "manifestVersion": 1,
+  "currentSummaryVersion": 1,
+  "currentAggregateVersion": 1,
+  "currentImportModelVersion": 1,
+  "updatedAtUtc": "2026-06-30T12:31:00+00:00",
+  "useForStrategy": false,
+  "summaryCount": 1,
+  "aggregateCount": 1,
+  "lastImportedSourceId": "legacy-v123"
+}

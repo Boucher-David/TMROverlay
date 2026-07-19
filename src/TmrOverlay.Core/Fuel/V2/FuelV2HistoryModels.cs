@@ -1,13 +1,32 @@
+using System.Text;
 using TmrOverlay.Core.AppInfo;
+using TmrOverlay.Core.History;
+using TmrOverlay.Core.PitService;
 
 namespace TmrOverlay.Core.Fuel.V2;
 
 internal static class FuelV2HistoryDataVersions
 {
-    public const int ManifestVersion = 1;
-    public const int SummaryVersion = 1;
-    public const int AggregateVersion = 1;
-    public const int ImportModelVersion = 1;
+    // Version 7 records whether a service-request transition was a material
+    // mid-service mutation or iRacing's normal post-refuel selection clear.
+    // Version 6 keeps Offline Testing as distinct practice-like evidence and
+    // adds direct, two-sample-confirmed local pit-route checkpoints. Earlier
+    // summaries remain readable with their later fields defaulting safely.
+    public const int ManifestVersion = 5;
+    public const int SummaryVersion = 7;
+    public const int AggregateVersion = 3;
+    public const int ImportModelVersion = 7;
+
+    public static bool IsReadableSummary(int summaryVersion, int importModelVersion)
+    {
+        return (summaryVersion == 1 && importModelVersion == 1)
+            || (summaryVersion == 2 && importModelVersion == 2)
+            || (summaryVersion == 3 && importModelVersion == 3)
+            || (summaryVersion == 4 && importModelVersion == 4)
+            || (summaryVersion == 5 && importModelVersion == 5)
+            || (summaryVersion == 6 && importModelVersion == 6)
+            || (summaryVersion == SummaryVersion && importModelVersion == ImportModelVersion);
+    }
 }
 
 internal sealed class FuelV2HistoryManifest
@@ -28,6 +47,16 @@ internal sealed class FuelV2HistoryManifest
 
     public int AggregateCount { get; init; }
 
+    public int ClassifiedSummaryCount { get; init; }
+
+    public int LegacyUnclassifiedSummaryCount { get; init; }
+
+    public int UnclassifiedV2SummaryCount { get; init; }
+
+    public int UnreadableSummaryCount { get; init; }
+
+    public int MisfiledSummaryCount { get; init; }
+
     public string? LastImportedSourceId { get; init; }
 }
 
@@ -38,6 +67,10 @@ internal sealed class FuelV2HistorySummary
     public int ImportModelVersion { get; init; } = FuelV2HistoryDataVersions.ImportModelVersion;
 
     public required string SourceId { get; init; }
+
+    // SummaryId is content-stable for v2 imports. SourceId remains a readable
+    // capture label, not a durable deduplication key.
+    public string? SummaryId { get; init; }
 
     public required DateTimeOffset StartedAtUtc { get; init; }
 
@@ -53,6 +86,9 @@ internal sealed class FuelV2HistorySummary
 
     public required FuelV2HistorySessionScope Scope { get; init; }
 
+    public FuelV2HistorySessionIntegrity SessionIntegrity { get; init; } =
+        FuelV2HistorySessionIntegrity.LegacyUnclassified();
+
     public required FuelV2HistoryQuality Quality { get; init; }
 
     public required FuelV2HistoryEvidenceTotals Evidence { get; init; }
@@ -60,6 +96,11 @@ internal sealed class FuelV2HistorySummary
     public required FuelV2HistoryFuelCapacityFacts FuelCapacity { get; init; }
 
     public required FuelV2HistoryLapBudgetFacts LapBudget { get; init; }
+
+    // Race length is selector/ranking context, never part of the car/layout
+    // family directory. Preserve raw declarations and normalized live values
+    // so a later selector can compare a 20-minute race with a 60-minute race.
+    public FuelV2HistoryRaceLengthFacts RaceLength { get; init; } = new();
 
     public IReadOnlyList<FuelV2HistoryLapBurnWindow> AcceptedLapBurnWindows { get; init; } = [];
 
@@ -71,6 +112,16 @@ internal sealed class FuelV2HistorySummary
     public IReadOnlyList<FuelV2HistorySectorBurnWindow> SectorBurnWindows { get; init; } = [];
 
     public IReadOnlyList<FuelV2HistoryPitWindow> PitWindows { get; init; } = [];
+
+    // Format-5 source evidence. These are intentionally raw classified
+    // observations, including exact tire-counter snapshots where the SDK
+    // exposes them, not cross-session timing aggregates or strategy advice.
+    public IReadOnlyList<PitServiceStationaryServiceObservation> StationaryServiceObservations { get; init; } = [];
+
+    // Format-6 source evidence. A complete route has a locally confirmed
+    // pit-entry, box-entry, box-exit, and pit-exit checkpoint. It remains raw
+    // per-stop provenance; aggregates and strategy advice do not consume it.
+    public IReadOnlyList<PitServiceRouteObservation> PitRouteObservations { get; init; } = [];
 
     public IReadOnlyList<FuelV2HistoryTeamStint> TeamStints { get; init; } = [];
 }
@@ -118,7 +169,179 @@ internal sealed class FuelV2HistoryComboIdentity
 
     public required string TrackKey { get; init; }
 
+    // TrackKey is retained for diagnostics and v1 compatibility. TrackLayoutKey
+    // is the Fuel V2 history-family key and must represent one exact layout
+    // before a future selector can treat the evidence as strategy-grade.
+    public string? TrackLayoutKey { get; init; }
+
+    public string TrackLayoutIdentitySource { get; init; } = "legacy-track-key";
+
     public required string SessionKey { get; init; }
+}
+
+internal static class FuelV2HistoryIdentity
+{
+    public static FuelV2HistoryCarIdentityKey Car(int? carId, string? carPath)
+    {
+        if (carId is not null)
+        {
+            return new FuelV2HistoryCarIdentityKey(
+                $"car-id-{carId.Value}",
+                "car-id",
+                IsExact: true);
+        }
+
+        var path = TrimToNull(carPath);
+        if (path is not null)
+        {
+            return new FuelV2HistoryCarIdentityKey(
+                $"car-path-{PathSafeExactValue(path)}",
+                "car-path",
+                IsExact: true);
+        }
+
+        return new FuelV2HistoryCarIdentityKey(
+            "unknown-car",
+            "unknown-car",
+            IsExact: false);
+    }
+
+    public static FuelV2HistoryLayoutIdentity TrackLayout(
+        int? trackId,
+        string? trackName,
+        string? trackDisplayName,
+        string? trackConfigName)
+    {
+        var config = TrimToNull(trackConfigName);
+        var name = TrimToNull(trackName) ?? TrimToNull(trackDisplayName);
+        if (trackId is not null && config is not null)
+        {
+            return new FuelV2HistoryLayoutIdentity(
+                $"track-id-{trackId.Value}-config-{PathSafeExactValue(config)}",
+                "track-id-and-config",
+                IsExact: true);
+        }
+
+        if (trackId is not null && name is not null)
+        {
+            return new FuelV2HistoryLayoutIdentity(
+                SessionHistoryPath.Slug($"track-{trackId}-{name}"),
+                "track-id-and-name-fallback",
+                IsExact: false);
+        }
+
+        if (config is not null)
+        {
+            return new FuelV2HistoryLayoutIdentity(
+                SessionHistoryPath.Slug($"track-config-{config}"),
+                "config-only-fallback",
+                IsExact: false);
+        }
+
+        return new FuelV2HistoryLayoutIdentity(
+            "unknown-layout",
+            "unknown-layout",
+            IsExact: false);
+    }
+
+    public static string SessionFamily(string? sessionType, string? sessionName, string? eventType)
+    {
+        var value = string.Join(' ', new[] { sessionType, sessionName, eventType }
+            .Where(item => !string.IsNullOrWhiteSpace(item)));
+        if (value.Contains("qual", StringComparison.OrdinalIgnoreCase))
+        {
+            return "qualifying";
+        }
+
+        if (value.Contains("practice", StringComparison.OrdinalIgnoreCase))
+        {
+            return "practice";
+        }
+
+        // iRacing's Offline Testing is useful clean local evidence, but it is
+        // not a race or ordinary hosted practice session. Keep provenance
+        // explicit and let the selector opt into it as practice-like evidence.
+        if (value.Contains("offline testing", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("offline test", StringComparison.OrdinalIgnoreCase))
+        {
+            return "test";
+        }
+
+        if (value.Contains("warmup", StringComparison.OrdinalIgnoreCase))
+        {
+            return "warmup";
+        }
+
+        if (value.Contains("race", StringComparison.OrdinalIgnoreCase))
+        {
+            return "race";
+        }
+
+        return string.IsNullOrWhiteSpace(value) ? "unknown" : "other";
+    }
+
+    private static string? TrimToNull(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    // Hex UTF-8 is path-safe and injective for the trimmed identity value.
+    // Slugs remain fine for legacy/fallback display paths, but cannot prove
+    // that two punctuation-distinct layouts or car paths are the same.
+    private static string PathSafeExactValue(string value)
+    {
+        return Convert.ToHexString(Encoding.UTF8.GetBytes(value));
+    }
+}
+
+internal sealed record FuelV2HistoryCarIdentityKey(
+    string Key,
+    string Source,
+    bool IsExact);
+
+internal sealed record FuelV2HistoryLayoutIdentity(
+    string Key,
+    string Source,
+    bool IsExact);
+
+internal sealed class FuelV2HistorySessionIntegrity
+{
+    public string CaptureScope { get; init; } = "legacy-connection";
+
+    public string? ConnectionSourceId { get; init; }
+
+    public int? SegmentOrdinal { get; init; }
+
+    public string BoundaryKind { get; init; } = "legacy-import";
+
+    public string SessionFamily { get; init; } = "legacy-unclassified";
+
+    public string SessionOccurrenceKey { get; init; } = "legacy-unclassified";
+
+    public bool SessionOccurrenceVerified { get; init; }
+
+    // Session-number fields establish a usable segment classification, but a
+    // stable event/session identifier is required before reconnect sidecars
+    // may be collapsed. Current/session numbers repeat across independent
+    // race weekends and must never suppress a later real session.
+    public bool SessionOccurrenceSupportsReconnectDeduplication { get; init; }
+
+    public bool ExactTrackLayoutVerified { get; init; }
+
+    // A history family is only reusable when the originating car is known as
+    // well as the layout. CarKey alone may be the legacy "car-unknown" value.
+    public bool ExactCarVerified { get; init; }
+
+    public bool IsClassifiedForHistory => CaptureScope == "session-segment"
+        && SessionOccurrenceVerified
+        && ExactTrackLayoutVerified
+        && ExactCarVerified
+        && SessionFamily is "race" or "practice" or "test" or "qualifying";
+
+    public static FuelV2HistorySessionIntegrity LegacyUnclassified()
+    {
+        return new FuelV2HistorySessionIntegrity();
+    }
 }
 
 internal sealed class FuelV2HistoryCarIdentity
@@ -167,6 +390,8 @@ internal sealed class FuelV2HistorySessionIdentity
 
     public string? EventType { get; init; }
 
+    public string? DCRuleSet { get; init; }
+
     public string? SessionLapsText { get; init; }
 
     public bool? Official { get; init; }
@@ -182,6 +407,23 @@ internal sealed class FuelV2HistorySessionIdentity
     public int? SubSessionId { get; init; }
 
     public string? BuildVersion { get; init; }
+
+    public string? SessionTimeText { get; init; }
+}
+
+internal sealed class FuelV2HistoryRaceLengthFacts
+{
+    public string? DeclaredSessionLapsText { get; init; }
+
+    public string? DeclaredSessionTimeText { get; init; }
+
+    public int? DeclaredLapCount { get; init; }
+
+    public int? ObservedSessionLapsTotal { get; init; }
+
+    public int? ObservedRaceLaps { get; init; }
+
+    public double? ObservedSessionTimeTotalSeconds { get; init; }
 }
 
 internal sealed class FuelV2HistoryTrackSector
@@ -220,9 +462,38 @@ internal sealed class FuelV2HistoryEvidenceTotals
 
     public int PitWindowsWithFuelIncrease { get; init; }
 
+    public int StationaryServiceObservationCount { get; init; }
+
+    public int RetainedStationaryServiceObservationCount { get; init; }
+
+    public int DroppedStationaryServiceObservationCount { get; init; }
+
+    public int PitRouteObservationCount { get; init; }
+
+    public int RetainedPitRouteObservationCount { get; init; }
+
+    public int DroppedPitRouteObservationCount { get; init; }
+
     public int TeamStintCount { get; init; }
 
     public int DriverChangeEventCount { get; init; }
+
+    // First-observed DC values are provenance for late joins, not evidence
+    // that a change happened during this captured segment. Only the confirmed
+    // count below represents a two-frame, single-step team-racing transition.
+    public int? InitialDriversSoFar { get; init; }
+
+    public int? FinalDriversSoFar { get; init; }
+
+    public int? InitialDriverChangeLapStatus { get; init; }
+
+    public int? FinalDriverChangeLapStatus { get; init; }
+
+    public int ConfirmedDriverSwapCount { get; init; }
+
+    public int UnconfirmedDriverChangeEventCount { get; init; }
+
+    public int DriverChangeLapStatusChangeCount { get; init; }
 
     public int FramesWithLocalFuel { get; init; }
 
@@ -373,6 +644,18 @@ internal sealed class FuelV2HistoryTeamStint
     public required string DriverRole { get; init; }
 
     public IReadOnlyList<string> ConfidenceFlags { get; init; } = [];
+
+    public int? DriversSoFarAtStart { get; init; }
+
+    public int? DriversSoFarAtEnd { get; init; }
+
+    public int? DriverChangeLapStatusAtStart { get; init; }
+
+    public int? DriverChangeLapStatusAtEnd { get; init; }
+
+    public bool StartsAfterConfirmedDriverSwap { get; init; }
+
+    public bool EndsAtConfirmedDriverSwap { get; init; }
 }
 
 internal sealed class FuelV2HistoryAggregate
@@ -384,6 +667,20 @@ internal sealed class FuelV2HistoryAggregate
     public DateTimeOffset UpdatedAtUtc { get; set; }
 
     public int SummaryCount { get; set; }
+
+    public int ClassifiedSessionCount { get; set; }
+
+    public int LegacyUnclassifiedSessionCount { get; set; }
+
+    // A format-2 segment can be retained but unclassified when its lineage
+    // does not cross-check against raw scope. Keep that distinct from genuine
+    // format-1 legacy evidence in support diagnostics.
+    public int UnclassifiedV2SessionCount { get; set; }
+
+    // Reconnects can yield several partial sidecars for the same immutable
+    // occurrence. Keep their summaries for diagnostics, but count only the
+    // strongest one in learned metrics until a later evidence-merger exists.
+    public int ExcludedDuplicateOccurrenceSummaryCount { get; set; }
 
     public int LearningEligibleSessionCount { get; set; }
 
@@ -458,9 +755,42 @@ internal sealed class FuelV2HistoryAggregate
 
     public void Add(FuelV2HistorySummary summary, DateTimeOffset updatedAtUtc)
     {
-        Scope ??= summary.Scope;
         UpdatedAtUtc = updatedAtUtc;
         SummaryCount++;
+
+        RecentSources = RecentSources
+            .Concat(new[]
+            {
+                new FuelV2HistorySourceReference
+                {
+                    SummaryId = summary.SummaryId,
+                    SourceId = summary.SourceId,
+                    ImportedAtUtc = summary.ImportedAtUtc,
+                    SourceArtifactSha256 = summary.SourceArtifact?.Sha256 ?? string.Empty
+                }
+            })
+            .GroupBy(source => source.SummaryId ?? source.SourceId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(source => source.ImportedAtUtc).First())
+            .OrderByDescending(source => source.ImportedAtUtc)
+            .Take(20)
+            .ToArray();
+
+        if (!summary.SessionIntegrity.IsClassifiedForHistory)
+        {
+            if (IsLegacyUnclassified(summary))
+            {
+                LegacyUnclassifiedSessionCount++;
+            }
+            else
+            {
+                UnclassifiedV2SessionCount++;
+            }
+
+            return;
+        }
+
+        Scope ??= summary.Scope;
+        ClassifiedSessionCount++;
         if (summary.Quality.ContributesToLearning)
         {
             LearningEligibleSessionCount++;
@@ -532,21 +862,11 @@ internal sealed class FuelV2HistoryAggregate
         MergeCounts(RaceControlCounts, summary.Evidence.RaceControlCounts);
         MergeCounts(WeatherCounts, summary.Evidence.WeatherCounts);
 
-        RecentSources = RecentSources
-            .Concat(new[]
-            {
-                new FuelV2HistorySourceReference
-                {
-                    SourceId = summary.SourceId,
-                    ImportedAtUtc = summary.ImportedAtUtc,
-                    SourceArtifactSha256 = summary.SourceArtifact.Sha256
-                }
-            })
-            .GroupBy(source => source.SourceId, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderByDescending(source => source.ImportedAtUtc).First())
-            .OrderByDescending(source => source.ImportedAtUtc)
-            .Take(20)
-            .ToArray();
+    }
+
+    private static bool IsLegacyUnclassified(FuelV2HistorySummary summary)
+    {
+        return (summary.SourceVersions?.CaptureFormatVersion ?? 0) < 2;
     }
 
     private static void MergeCounts(Dictionary<string, int> target, IReadOnlyDictionary<string, int> source)
@@ -562,6 +882,8 @@ internal sealed class FuelV2HistoryAggregate
 
 internal sealed class FuelV2HistorySourceReference
 {
+    public string? SummaryId { get; init; }
+
     public required string SourceId { get; init; }
 
     public required DateTimeOffset ImportedAtUtc { get; init; }

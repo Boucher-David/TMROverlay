@@ -13,4 +13,15 @@
     <ProjectReference Include="..\..\src\TmrOverlay.App\TmrOverlay.App.csproj" />
     <ProjectReference Include="..\..\src\TmrOverlay.Core\TmrOverlay.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\shared\tmr-overlay-contract.json" Link="shared\tmr-overlay-contract.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\..\shared\tmr-overlay-contract.schema.json" Link="shared\tmr-overlay-contract.schema.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

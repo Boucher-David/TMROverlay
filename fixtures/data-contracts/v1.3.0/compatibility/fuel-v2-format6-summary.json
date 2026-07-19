@@ -1,0 +1,200 @@
+{
+  "summaryVersion": 6,
+  "importModelVersion": 6,
+  "sourceId": "capture-example-fuel-v2-s001-race-format6",
+  "summaryId": "sha256-v130-format6-example",
+  "startedAtUtc": "2026-07-14T12:00:00+00:00",
+  "finishedAtUtc": "2026-07-14T12:30:00+00:00",
+  "importedAtUtc": "2026-07-14T12:31:00+00:00",
+  "sourceArtifact": {
+    "path": "capture-example/fuel-v2-capture/capture-example-fuel-v2-s001-race-format6-fuel-v2-diagnostics.json",
+    "sha256": "v130-format6-example",
+    "byteLength": 2304,
+    "lastWriteTimeUtc": "2026-07-14T12:30:01+00:00"
+  },
+  "sourceVersions": {
+    "captureFormatVersion": 6,
+    "historicalSummaryVersion": 1,
+    "historicalCollectionModelVersion": 1,
+    "historicalAggregateVersion": 3,
+    "liveModelContractVersion": 1
+  },
+  "scope": {
+    "combo": {
+      "carKey": "car-id-1",
+      "trackKey": "track-2-example",
+      "trackLayoutKey": "track-id-2-config-46756C6C",
+      "trackLayoutIdentitySource": "track-id-and-config",
+      "sessionKey": "race"
+    },
+    "car": {
+      "carId": 1,
+      "carPath": "example-car"
+    },
+    "track": {
+      "trackId": 2,
+      "trackConfigName": "Full"
+    },
+    "session": {
+      "currentSessionNum": 2,
+      "sessionNum": 2,
+      "sessionType": "Race",
+      "sessionName": "Race",
+      "eventType": "Race",
+      "dcRuleSet": "IMSA",
+      "sessionLapsText": "50 laps",
+      "sessionId": 20,
+      "subSessionId": 21
+    },
+    "trackSectors": []
+  },
+  "sessionIntegrity": {
+    "captureScope": "session-segment",
+    "connectionSourceId": "capture-example",
+    "segmentOrdinal": 1,
+    "boundaryKind": "first-observed->collector-stop",
+    "sessionFamily": "race",
+    "sessionOccurrenceKey": "current-session:2|session:2|session-id:20|sub-session-id:21",
+    "sessionOccurrenceVerified": true,
+    "sessionOccurrenceSupportsReconnectDeduplication": true,
+    "exactTrackLayoutVerified": true,
+    "exactCarVerified": true
+  },
+  "quality": {
+    "confidence": "medium",
+    "contributesToLearning": true,
+    "syntheticReplaySuitable": true,
+    "reasons": []
+  },
+  "evidence": {
+    "frameCount": 100,
+    "sampledFrameCount": 10,
+    "acceptedLapBurnWindowCount": 1,
+    "rejectedLapBurnWindowCount": 0,
+    "acceptedSectorWindowCount": 0,
+    "rejectedSectorWindowCount": 0,
+    "pitWindowCount": 0,
+    "pitWindowsWithFuelIncrease": 0,
+    "stationaryServiceObservationCount": 0,
+    "retainedStationaryServiceObservationCount": 0,
+    "droppedStationaryServiceObservationCount": 0,
+    "pitRouteObservationCount": 1,
+    "retainedPitRouteObservationCount": 1,
+    "droppedPitRouteObservationCount": 0,
+    "teamStintCount": 0,
+    "driverChangeEventCount": 0,
+    "framesWithLocalFuel": 100,
+    "framesWithTeamProgress": 100,
+    "framesWithTeamProgressWithoutLocalFuel": 0,
+    "contextFlagCounts": {},
+    "fuelEvidenceCounts": {},
+    "raceControlCounts": {},
+    "weatherCounts": {}
+  },
+  "fuelCapacity": {
+    "physicalTankCapacityLiters": 70,
+    "effectiveSessionCapacityLiters": 56,
+    "effectiveSessionCapacitySource": "matching_driver_and_class_caps"
+  },
+  "lapBudget": {
+    "framesWithLapBudget": 1,
+    "framesWithRaceProjection": 1,
+    "sourceCounts": {},
+    "missingSignalCounts": {},
+    "estimatedFinishLap": {
+      "sampleCount": 1,
+      "mean": 50,
+      "minimum": 50,
+      "maximum": 50
+    },
+    "estimatedTeamLapsRemaining": {},
+    "raceLapsRemaining": {}
+  },
+  "raceLength": {
+    "declaredSessionLapsText": "50 laps",
+    "declaredLapCount": 50,
+    "observedRaceLaps": 50
+  },
+  "acceptedLapBurnWindows": [
+    {
+      "startedAtUtc": "2026-07-14T12:01:00+00:00",
+      "completedAtUtc": "2026-07-14T12:03:00+00:00",
+      "progressDeltaLaps": 1,
+      "fuelUsedLiters": 3.1,
+      "fuelPerLapLiters": 3.1,
+      "acceptedForBaseline": true,
+      "contextFlags": []
+    }
+  ],
+  "rejectedLapBurnWindowReasonCounts": {},
+  "rejectedLapBurnWindowExamples": [],
+  "sectorBurnWindows": [],
+  "pitWindows": [],
+  "stationaryServiceObservations": [],
+  "pitRouteObservations": [
+    {
+      "pitEntry": {
+        "capturedAtUtc": "2026-07-14T12:12:00+00:00",
+        "confirmedAtUtc": "2026-07-14T12:12:01+00:00",
+        "sessionTimeSeconds": 720,
+        "sessionTick": 43200,
+        "sequence": 100,
+        "fuelLiters": 40,
+        "lapDistPct": 0.8,
+        "onPitRoad": true,
+        "playerCarInPitStall": false,
+        "localIdentityProvenance": "strict-local"
+      },
+      "boxEntry": {
+        "capturedAtUtc": "2026-07-14T12:12:04+00:00",
+        "confirmedAtUtc": "2026-07-14T12:12:05+00:00",
+        "sessionTimeSeconds": 724,
+        "sessionTick": 43440,
+        "sequence": 104,
+        "fuelLiters": 39.5,
+        "lapDistPct": 0.82,
+        "onPitRoad": true,
+        "playerCarInPitStall": true,
+        "localIdentityProvenance": "strict-local"
+      },
+      "boxExit": {
+        "capturedAtUtc": "2026-07-14T12:12:20+00:00",
+        "confirmedAtUtc": "2026-07-14T12:12:21+00:00",
+        "sessionTimeSeconds": 740,
+        "sessionTick": 44400,
+        "sequence": 120,
+        "fuelLiters": 50,
+        "lapDistPct": 0.82,
+        "onPitRoad": true,
+        "playerCarInPitStall": false,
+        "localIdentityProvenance": "strict-local"
+      },
+      "pitExit": {
+        "capturedAtUtc": "2026-07-14T12:12:24+00:00",
+        "confirmedAtUtc": "2026-07-14T12:12:25+00:00",
+        "sessionTimeSeconds": 744,
+        "sessionTick": 44640,
+        "sequence": 124,
+        "fuelLiters": 49.5,
+        "lapDistPct": 0.84,
+        "onPitRoad": false,
+        "playerCarInPitStall": false,
+        "localIdentityProvenance": "strict-local"
+      },
+      "assignment": {
+        "driverPitTrackPct": 0.068197,
+        "trackPitSpeedLimitKph": 80,
+        "trackNumPitStalls": 39,
+        "dcRuleSet": "IMSA"
+      },
+      "entryToBoxSeconds": 4,
+      "boxToExitSeconds": 4,
+      "entryToBoxFuelUsedLiters": 0.5,
+      "boxToExitFuelUsedLiters": 0.5,
+      "sampleCount": 10,
+      "maxFrameGapSeconds": 1,
+      "qualificationFlags": []
+    }
+  ],
+  "teamStints": []
+}

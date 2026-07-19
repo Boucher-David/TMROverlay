@@ -25,6 +25,11 @@ Current evidence/tooling shape:
 
 ## Active Hot Start Notes
 
+- 2026-07-14: Fuel V2 visibility hardening keeps `FocusCarIdx` null when timing/spatial progress is absent; raw camera identity is never promoted into reference, Radar, Pit Service, Inputs, or strategy context. The factual Fuel V2 exception now accepts only the observed `cam_car_progress_unavailable` identity shape and requires a current collection frame, current session info, and usable current fuel before native, localhost, or browser review may render. The persisted Visible setting is explicit outermost authority across the managed-overlay policy matrix. A Windows capture made from the older `0c1aac` installer predates this behavior and must be retested using a fresh current-SHA installer.
+- 2026-07-14: Fuel-history family decision is implemented: exact car + exact track-layout scope gives clean `Offline Testing` laps their own explicitly labeled `test`/practice-like evidence family under the same accepted-lap quality gates as Practice. The normal-history selector is `race → practice → test`, `practice → test`, and `test → practice`; the selected family remains explicit and is never relabeled as race. Legacy `other` records remain diagnostic-only.
+- 2026-07-14: Fuel V2 now has a thin, renderer-neutral live ingress from normalized `LiveTelemetrySnapshot` into `FuelV2ComposedSnapshot`. It consumes a published qualified completed-lap span rather than V1 aggregate fuel. The ingress deliberately chooses no target/plan/pit request or history policy. It refuses composition until both a frame and session YAML have arrived for the current collection source; known changes to exact layout, SessionID, or SubSessionID reset accepted live burn. This is a safety/observability bridge, not a V1 strategy cutover.
+- 2026-07-14: Fuel production-cutover audit: Design V2 styling is already the default native shell, but Fuel V1 calculation still owns live history selection and advice. The unconditional static Fuel V2 laps-workbench interception is now disabled in product paths; a branch-only `FuelV2Overlay:Enabled=true` evidence gate presents only fresh factual capacity, accepted burn-window, range output, and explicitly modeled exact normal-history comparison through localhost/OBS and the sectioned Windows-native renderer. It may use a verified non-spectator session-driver/raw-camera match to show Fuel State while progress focus is absent, but that fallback has no other rows. It exposes no target, fuel-add, plan, or stint schedule. Restore the gate to `false` before merging and do not cut over V1 strategy until V2 owns evidence selection/hysteresis, box-to-service-to-exit route facts, lifecycle/interruption policy, a real stint scheduler, geometry/settings/evidence parity, deterministic browser-review presenter replay, and Windows validation.
+- 2026-07-14: Fuel V2 now has Core-only burn-selection and pit-route foundations. Exact strategy-eligible history starts the normal-race baseline; a single live lap is only provisional without history, higher clean live windows promote immediately, and lower fuel burn remains held until a full ten clean live laps confirm it. Route fuel is three explicit segments—current-to-entry, entry-to-assigned-box, and box-to-exit—and partial/observed/invalid route evidence cannot produce checkpoint arithmetic. These contracts are not yet connected to live history selection, route collection, an overlay plan, or V1; next add lifecycle/interruption/condition boundaries and compact archive slices before scheduling or advice.
 - 2026-05-11: Added `skills/tmr-overlay-hot-start/SKILL.md` so future sessions read this file and `VERSION.md` before implementation instead of relying on chat memory.
 - 2026-05-11: Current telemetry investigation uses two uploaded v0.18.8 captures: AI multi-session Practice/Lone Qualify/Race at Oran Park and open player Practice at Spa, plus local four-hour and 24-hour endurance captures. Raw captures/zips stay local; compact redacted fixture corpus belongs under `fixtures/telemetry-analysis/`.
 - 2026-05-11: Source-selection pass landed from the compact corpus: Standings keeps race starting grid until meaningful official race coverage appears, practice/qualifying/test still wait for valid laps, Relative only applies local garage/off-track suppression when the reference is local, and Gap/Relative timing require positive F2/estimated-time evidence instead of all-zero placeholders. The current settings UI rolls Test visibility into the Practice column even though the model can still distinguish the session kind.
@@ -40,6 +45,7 @@ Current evidence/tooling shape:
 - 2026-05-14: Fuel Calculator first-pass parity should keep shared/Core fuel work to the low-risk `LiveFuelStrategyModel` contract that centralizes local-context gating, history lookup, and existing `FuelStrategyCalculator` output for native and localhost consumers. Neutral fuel facts such as Race, Remain, Laps, Target, Tank, Stints, and Stops should use data-presentation tones, not magenta/modelled warning-looking tones. Rolling measured green-lap burn can drive V1 strategy only after completed valid green-lap fuel deltas; pit-service refuel recommendations, rhythm optimization, tire-service advice, and team-stint intelligence remain Fuel Calculator V2 work.
 - 2026-05-14: Stream Chat first-pass parity should keep the practical V1 enhancements only: Design V2 shell, fixed-height chat history, wrapping rows, author color, visible badges, inline Twitch emotes, native/localhost parity, and browser review replay coverage. The richer Twitch IRC/EventSub and Streamlabs API/widget analysis is parked in `docs/stream-v2.md` as a dedicated V1.x Stream Chat V2 branch/tag candidate, not as required V1 branch-complete scope.
 - 2026-05-15: `fixtures/data-contracts/v0.19.0/` is now the first release snapshot for durable user-data validation. Future durable schema branches should keep the previous release snapshot loading through current code, add a new snapshot when the persisted contract changes, and update `docs/data-contracts.md` plus history/settings compatibility tests in the same pass.
+- 2026-07-14: Branch-only Windows evidence pass: `src/TmrOverlay.App/appsettings.json` sets `TelemetryCapture:RawCaptureEnabled=true` so enhanced capture produces raw plus Fuel V2 sidecars during V1.3 testing, and `FuelV2Overlay:Enabled=true` so the factual V2 Fuel surface is visible without a local override. These are intentionally not product-default decisions. **Restore both settings to `false` before merging any PR from this branch.**
 - 2026-05-15: The model-completeness branch makes completed `LiveTelemetrySnapshot.Models` the active overlay runtime contract for native, localhost, and browser surfaces. `LatestSample` remains collector/diagnostic/compatibility evidence, and `LiveTelemetrySnapshot.CompleteModels()` is the bridge for older or partial live snapshots before model builders/renderers run.
 - 2026-05-17: v0.20.1 is tagged as the Windows/native, browser review, and localhost parity baseline. The `v1.0.0-fuel-and-release-handoff` branch became the private-team V1 candidate: keep the parity baseline stable, narrow Fuel Calculator behavior to trustworthy V1 evidence, add teammate release handoff docs, and avoid durable schema changes unless a Windows-tested compatibility issue requires them.
 - 2026-05-17: Version hygiene should stay explicit. `VERSION.md` owns current branch target and branch-complete release text, `Directory.Build.props` version metadata moves only when a branch is deliberately promoted as the next product build, and annotated tags should be created only after the release commit is on `main` or explicitly designated as the release point.
@@ -51,6 +57,16 @@ Current evidence/tooling shape:
 - 2026-05-24: The `v1.2.1-replay-foundation-improvement` branch expands raw-capture replay from linear playback into controllable frame/session-time windows, session-type filtering, optional focus-car override, manifest/header/schema import inspection, production model replay provenance, and a standalone compact import/sample export tool. This is still raw-capture replay foundation work, not Fuel Calculator V2 product logic.
 - 2026-05-24: The teammate GR86 Road Atlanta support bundle timestamped 2026-05-24 19:29:23 UTC did not contain raw replay input, but diagnostics showed update apply/restart limbo rather than a telemetry freeze or TMR overlay input interception: Settings was visible, performance timers were still ticking, `release-updates.json` was `Applying`, and `runtime-state.json` had no clean stop. v1.2.1 moves update handoff to the post-UI shutdown path, adds update-apply shutdown breadcrumbs, and adds `metadata/evidence-quality.json` `updateFlow.applyShutdown` classification so future bundles can report `update_apply_shutdown_incomplete` directly.
 - 2026-05-25: The `v1.2.2-small-fixes` branch is a focused overlay-regression pass from Dallara/team feedback. It filters zero/default timing placeholders before Standings can render, makes Pit Service and Session / Weather size to rendered sections, keeps Relative fixed empty slots visibly dimmed, and refines Flags so practice/test one-to-green/start/global-yellow noise is suppressed while race-start and local actionable flag evidence still displays. It also reduces the default Flags footprint and makes native/browser/localhost flag sizing count-driven. No durable raw-capture or user-data schema change is intended.
+- 2026-05-24: v1.3 Fuel Calculator V2 planning should start with the race-lap-budget quality gate. Initial raw-capture probes show finite `SessionLapsRemainEx`/`SessionLapsTotal` must beat timed metadata for fixed-lap races, timed Dallara projections can be safely one lap high until pit/slow-lap pace evidence settles, and post-checkered positive `SessionTimeRemain` must be ignored. Capture these as compact replay-window fixtures before enabling more aggressive fuel advice.
+- 2026-05-26: Fuel V2 laps workbench findings from the May 2 24h rejoin capture are recorded in `docs/fuel-calculator-v2.md`. The key rule is that leader progress remains the timed-race finish authority, but a single slow leader last lap must not sharply lower Fuel-actionable race distance unless clean leader/front-pack context corroborates it. P2/P3/P4 pace can degrade or quarantine contaminated leader pace; it must not replace the leader as race-distance truth. The visible V2 Lap cell should show the projected finish-lap/race-distance value to two decimals, such as `6.04`, while Fuel math keeps using the conservative/actionable lap budget and confidence gate.
+- 2026-07-13: Fuel V2 foundation completion now follows six reviewed gates before the full bottom-half `Stint N` calculation: correct accepted top-half/Core drift; add typed effective capacity and fuel checkpoints; normalize burn-bucket identity/provenance; centralize factual boundary/feasibility math; compose one immutable renderer-neutral V2 snapshot; and prove equality/isolation/boundary/live-replay behavior. The main thread completes one gate at a time, then independent review threads audit it and confirmed findings are fixed before advancing. Spreadsheet examples remain numeric controls; normalized live telemetry remains runtime authority.
+- 2026-07-13: Gate 2 now has a typed effective-capacity resolver and ordered fuel-checkpoint contract. Session info retains `DriverCarMaxFuelPct` and exact-local-driver `CarClassMaxFuelPct`; matching or single-source valid caps can resolve physical tank capacity, while missing/invalid/conflicting/same-scope-observed-above-cap evidence stays explicit and blocks advice. Observed maxima reset when car, session, or capacity-rule scope changes, so unrestricted warmup fuel cannot conflict a restricted race. Checkpoints keep first-green, current, expected-at-box, service-complete, and expected-pit-exit fuel distinct, with the pit request defined against service-complete fuel and box-to-exit burn applied once afterward. Impossible subtraction stops the dependent chain and conflicted checkpoint provenance remains typed. The released v1.2.3 format-1 sidecars/history remain readable as legacy evidence; v1.3 introduces the format-2 classified-session successor without reinterpreting old null/placeholder artifacts.
+- 2026-07-13: Gate 3 is complete. Last/5L/10L/Max/Min/Quali have stable typed IDs, and typed burn source, sample count, confidence/context, display eligibility, clean-baseline eligibility, and separate strategy eligibility survive the existing scalar and downstream cells. Range/Fuel To Add retain operation/source chains; Target Usage, Plan fuel-budget paths, and the current Stint Targets experiment reject untyped burns. The browser mirror uses explicit IDs, fails missing Target identity closed, and no longer infers Quali from copy or synthesizes local Max/Min extrema. Three independent reviews approved the corrected contract before Gate 4.
+- 2026-07-13: Gate 4 is complete. One typed per-bucket Core owner now separates current-range boundaries from expected-at-box/service-complete feasibility and calculates fractional range, safe whole laps, the next complete-lap edge, desired/add/room/clamp/shortfall, and maximum feasible laps without display rounding. Missing, invalid, conflicted, known-zero, feasible, and unachievable evidence remain distinct; field-specific invalid checkpoint dependencies and invalid capacity fail closed. Existing Range and Pit projections consume the owner, the legacy Pit adapter retains explicit Current provenance, and an isolated browser workbench covers exact/near boundaries, missing/conflicting/invalid facts, seed-only evidence, and overflow. Three independent reviews approved after two correction passes. After Gate 6, a separate preservation audit will compare every retained top-half cell/row against its pre-gate commits before the V2 naming decision.
+- 2026-07-14: Fuel V2 history format 4 retains bounded, qualified stationary-service observations separately from pit-lane windows. It records local request shape, raw service state, fuel-flow cadence, evidence failures, and raw entry/exit/delta snapshots for total, side, axle, availability, and exact four-corner tire counters where the SDK exposes them. A shared classifier preserves confirmed, request-only, mismatched, and ambiguous outcomes, so one-corner, front/rear, left/right, four-tire, and unusual selections are not collapsed into a generic tire-set change. Repair, request-changing, or interrupted windows remain unsuitable for tire timing. It does not infer fuel/tire overlap rules or aggregate any service duration/rate into advice. Format-3 classified summaries remain readable but cannot prove executed tire shape; format-2 remains selectable for burn history; format-1 remains legacy-unclassified. The next strategy phase must first prove service-rule and request-shape comparability before surfacing time or tire recommendations.
+- 2026-07-14: Format 5 now preserves public `WeekendInfo.DCRuleSet` in Fuel V2's raw session scope and immutable summaries. The Pit Service history reader selects confirmed exact tire outcomes only for the active exact car/layout, Race→Practice family, requested corner shape, and same raw rule identity. `DCRuleSet` remains raw provenance, not proof of sequential/parallel execution, so it cannot unlock timing eligibility. The V2 presentation bridge can state `4 tires — observed` or `Front tires — collect sample`, but emits no seconds, overlap, “free tires,” or strategy instruction. Clean sample count alone is not a timing model.
+- 2026-07-14: A double-stint/tire-payback model is feasible only as a new local tire-run and completed-lap pace evidence slice. A confirmed tire change starts a tire run, while a fuel-only stop continues it; mid-run capture gives only a lower-bound tire age. Match clean pace by driver, conditions, fuel, tire age, and warmup, then compare projected degradation recovery against a rule-qualified incremental tire-service loss. Competitor telemetry can corroborate class pit cycles and later pace trends, but cannot prove tire changes, tire age, local service shape, or fuel/tire timing. Begin in the workbench/post-race view and omit driving advice until both degradation and service loss are corroborated.
+- 2026-07-14: `fixtures/telemetry-analysis/fuel-v2-strategy-stress/manifest.json` is the Fuel V2 cross-layer stress catalogue. It names compact archive targets, direct-Core policy cases, and future visual-evidence expectations while retaining provenance. It is not a claim that every archive has already been exported as a replayable fixture: raw-replay entries remain export targets, and constructed safety cases must stay visibly constructed.
 
 ## Current V1.2 Branch Focus
 
@@ -440,7 +456,68 @@ Likely scope:
 - Keep source/evidence UI available because these products derive meaning from telemetry rather than simply displaying direct values.
 - Use replay and live diagnostics to validate edge cases before making advice prominent.
 
-### v1.4 - Track Map Expansion And QA
+### v1.4 - Shared Overlay Chrome And Race Context
+
+Goal: replace the current single time-remaining header and intentionally empty
+footer with a small, typed, cross-surface chrome contract. It should make an
+overlay easier to read in context, not turn every overlay into a configurable
+dashboard.
+
+Current state and product decision:
+
+- `HeaderItems` already carries the browser/localhost shape, but native reduces
+  chrome to one text string. `ShowHeaderStatus` and `ShowFooterSource` are
+  deliberately dormant, so the old status/source controls must not be revived
+  as generic telemetry pickers.
+- iOverlay demonstrates that header/footer slots are valuable, while RaceLab
+  demonstrates compact decision-specific blocks and team-fuel context. TMR
+  should take the slot idea, not copy either product's broad arbitrary-field
+  configuration.
+- Normal telemetry overlays stay quiet: source, confidence, and freshness stay
+  diagnostic/manifest evidence unless the value is unavailable or derived.
+  Fuel, Gap, and future strategy analysis may use a compact exceptional footer
+  when it changes the meaning or safety of advice.
+
+Likely scope:
+
+- Add a Core-owned `OverlayChromeContext`/composer that maps one completed
+  `LiveTelemetrySnapshot` plus resolved settings into typed, ordered chrome
+  items for native, localhost/OBS, and browser review. Renderers must not
+  independently choose their own facts or fit rules.
+- Start with a constrained catalogue: session clock, normalized race phase,
+  and a safe race-lap-budget item. The budget must promote the existing
+  `LiveRaceLapBudget` source/confidence contract rather than display a bare
+  estimated number. Do not expose raw `SessionState` values as product copy.
+- Permit only descriptor-approved slots, normally at most two compact header
+  items. Use analysis-only footer items for an actionable basis/degraded state,
+  such as live versus qualified historical fuel evidence; do not show a
+  permanent generic "source" footer on ordinary telemetry overlays.
+- Replace dormant header-status/footer-source setting rows with additive,
+  session-scoped keyed options for the approved slots. Preserve existing user
+  settings and remove obsolete keys through the migrator; this is a settings
+  contract change only if the persisted shape itself changes.
+- Make rendered chrome presence, not merely an enabled option, drive native,
+  localhost, and OBS recommended height. Put slot counts, lanes, fitting, and
+  footer reserve geometry in the shared geometry contract.
+- Add deterministic fixtures for pre-green/countdown, active timed race,
+  fixed-lap race, checkered/degraded clock, and analysis-source fallback. Each
+  must prove visible text and absent stale/misleading chrome across the three
+  product surfaces.
+- Keep `SessionTimeRemain`, finite `SessionLapsRemainEx`/`SessionLapsTotal`,
+  race progress/projection, local fuel/pit state, timing, and weather as the
+  initial data sources: they are already captured and represented in Core.
+  Capture multi-pace-start and post-checkered windows before promoting any new
+  phase mapping. No new iRacing SDK field is required for this first pass.
+
+Explicit non-goals:
+
+- No generic 32-field picker, expression language, user-authored layout
+  builder, Overlay Bridge, or automatic session-layout switching.
+- No permanent confidence/source chrome on straightforward telemetry windows.
+- No service-overlap or pit-duration claim from `DCRuleSet` alone; it remains
+  provenance until observed timing evidence proves the model.
+
+### v1.5 - Track Map Expansion And QA
 
 Goal: improve the v0.11 Track Map implementation with better assets, status reporting, and map-quality workflows after the basic local generation path has real usage.
 
@@ -452,7 +529,7 @@ Likely scope:
 - Improve pit-lane-aware marker placement when live telemetry exposes a reliable pit-lane progress signal.
 - Use iRacing/Data API or other official/reference map sources only as QA references unless licensing and product rules justify bundled assets.
 
-### v1.5 - Overlay Bridge And External Clients
+### v1.6 - Overlay Bridge And External Clients
 
 Goal: turn future teammate-to-teammate data sharing into a documented developer/platform boundary after the core contracts have proven themselves. Local OBS/localhost overlays are a separate feature.
 
@@ -464,7 +541,7 @@ Likely scope:
 - Add deterministic bridge fixture tests and sample payloads so external clients can be developed without iRacing running.
 - Explore peer/missed-history context exchange as derived session context only: provenance, session identity, observation window, roster/timing coverage, schema version, and trust labels.
 
-### v1.6 - Streaming And Broadcast Overlays
+### v1.7 - Streaming And Broadcast Overlays
 
 Goal: let the app support broadcast-style surfaces without coupling chat or web/widget rendering to the Windows collector.
 
@@ -475,7 +552,7 @@ Likely scope:
 - Keep localhost stream overlays on the local `LocalhostOverlays` path unless they intentionally need peer data.
 - Add deterministic offline preview states for chat-only and mixed telemetry/chat overlays.
 
-### v1.7 - Overlay Builder And Designer Tooling
+### v1.8 - Overlay Builder And Designer Tooling
 
 Goal: move toward configurable layouts only after the primitives and bridge contracts are stable.
 

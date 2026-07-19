@@ -81,6 +81,17 @@ app-style storage paths, rebuild stale derived history, read supported generated
 maps, parse diagnostic metadata, and map the release settings into browser,
 localhost, and native overlay consumers.
 
+`fixtures/data-contracts/v1.2.3/` is the released Fuel V2 format-1
+connection-history baseline. `fixtures/data-contracts/v1.3.0/` is the released
+format-5 classified, exact-car/exact-layout session-history contract, including
+a confirmed front-tire stationary-service counter example. The current reader loads the v1.2.3
+fixture's frozen raw sidecar and summary as `legacy-unclassified` without
+rewriting either one, then rebuilds the v1.3 aggregate separately. This makes
+the migration boundary explicit rather than pretending legacy connection
+evidence is newly classified history. Its separate `compatibility/` fixture is
+a frozen format-6 classified summary with direct pit-route evidence; it is a
+reader regression input, not a claim that the v1.3.0 release wrote format 6.
+
 ## Snapshot Workflow
 
 Each durable contract release should get one directory:
@@ -154,6 +165,85 @@ is stored under `history/user/fuel-v2/`. It is not read by V1 strategy while
 `FuelV2History:UseForStrategy=false`; changes to its manifest, summary,
 aggregate, or import semantics should bump the narrow Fuel V2 version constant
 instead of the V1 `HistoricalDataVersions` constants.
+
+The gated factual Fuel V2 presenter may read an exact classified normal-burn
+aggregate only to populate its explicitly labeled `History` comparison bucket.
+That display-only reader cannot select a strategy, emit fuel-to-add/pit advice,
+or alter V1. `TmrOverlay.OverlayModelReplay` may stage supplied prior sidecars
+under its explicit output directory for the same display/replay path; this is
+ephemeral replay evidence, never a write to `history/user/fuel-v2/`, and it
+rejects sidecars that finish after the earliest replayed frame.
+
+Fuel V2 format-7 capture writes independent session segments, bounded
+stationary-service observations, and direct local pit-route checkpoints. A
+route is retained only after two fresh local samples confirm each observed
+transition; complete stopped-route evidence requires pit entry, box entry, box
+exit, and pit exit with valid checkpoint fuel. A continuous entry-to-exit route
+with no observed stall is separately recognized as optional pit-lane-pass
+calibration rather than a failed stopped route. Each route preserves the
+session-declared `DriverPitTrkPct` coordinate, pit-speed limit, pit-stall count,
+and raw `DCRuleSet`. Those are per-session provenance, not history keys: the
+reader never invents a stall ordinal or uses team-wide pit state. The importer
+classifies one for learned history only when it has an injective exact-car
+identity, exact `TrackId + TrackConfigName` layout identity,
+race/practice/qualifying/test family, and verified occurrence that cross-check
+against the raw scope. Planned lap/time race length, fuel BoP/effective
+capacity, setup, weather, and special-session effects are summary context—not
+storage partitions. Format-4 observations add raw entry/exit and delta snapshots
+for total, side, axle, and exact four-corner tire counters when available, which
+lets a later Core reader distinguish requested `LF`, `Front`, `Left`, or `4 tires`
+from an executed result. It also preserves raw `WeekendInfo.DCRuleSet` in the
+session identity. Pit-window refuel detection uses the same cumulative
+entry/low-water rule as live diagnostics, so a gradual fill remains observed
+without a one-frame jump. Stationary service records whether a request change
+was a material mutation or iRacing's normal post-completion clear; only the
+former remains a learning disqualifier. Capture version is now `7`; this branch
+keeps its Fuel V2 summary/import version at `7`, manifest at `5`, and rebuilt
+fuel-burn aggregates at `3` so clean Offline Testing can be retained as its
+separate `test` family while route evidence stays raw summary-level provenance.
+`DCRuleSet` is retained as raw
+provenance only; it cannot classify sequential/parallel service execution or
+unlock service timing. Counter evidence remains source evidence only: it
+cannot infer service overlap/order or timing advice.
+
+Format-6 Fuel V2 sidecars and summaries remain compatible classified history
+with direct local pit-route evidence but no explicit request-transition
+classification; their legacy request-change state stays conservative.
+Format-5 Fuel V2 sidecars and summaries remain compatible classified history
+with stationary-service evidence but no direct pit-route checkpoints. Format-4 Fuel V2 sidecars and summaries remain compatible classified history
+with exact tire-counter snapshots but no persisted service-rule identity.
+Format-3 Fuel V2 sidecars and summaries remain compatible classified history with
+stationary-service observations but no exact tire-counter snapshots. Format-2
+sidecars and summaries remain compatible classified fuel history when their
+lineage validates, but have no stationary-service observations. Neither can
+prove an executed tire shape or produce service timing. Format-1 Fuel V2 sidecars and summaries are retained through compatible readers
+as `legacy-unclassified`; they are not inferred into Race/Practice/Qualifying
+and cannot contribute to the classified aggregate or a future strategy reader.
+They remain at their existing legacy paths so the release does not delete or
+rewrite mixed connection evidence. The manifest reports classified, legacy-v1,
+retained-but-unclassified-v2, unreadable, and misfiled summary counts. Current v7 writes use content-hash
+summary IDs, which makes duplicate import idempotent without treating readable
+source labels as unique keys.
+
+On a v1-only upgrade, Fuel V2 startup maintenance writes current-format derived
+manifest/aggregate files but leaves every v1 summary byte-for-byte intact. If a
+surviving v1 sidecar is later recovered, its existing legacy `sourceId` is
+recognized and skipped rather than creating a second v2-hash summary for the
+same evidence.
+
+If a reconnect produces multiple classified sidecars for the same verified
+occurrence, all summaries remain durable diagnostics but the rebuilt aggregate
+uses only the strongest one and reports the excluded duplicate count. This
+prevents a reconnect from double-weighting learned fuel evidence before a
+future explicit evidence-merging policy exists.
+
+Fuel V2 format-version-1 capture and summary models already contain physical
+tank capacity, driver/class fuel-cap percentages, effective session capacity,
+source, and limitation fields. Populating those existing nullable/placeholder
+fields from live session info does not change the persisted shape or reinterpret
+older values, so it does not by itself bump a Fuel V2 version. Readers must
+continue to accept older artifacts whose effective capacity is null or whose
+source records that the value was unavailable.
 
 When a setting default changes without changing the persisted setting shape, do
 not bump the settings schema by default. Prefer migrator logic that only applies

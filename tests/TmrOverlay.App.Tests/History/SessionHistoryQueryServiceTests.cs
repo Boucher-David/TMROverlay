@@ -204,6 +204,76 @@ public sealed class SessionHistoryQueryServiceTests
         }
     }
 
+    [Fact]
+    public void LookupCarRadarCalibration_PrefersActiveCurrentSessionEvidenceThenReturnsToDurableHistory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmr-history-query-test", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var combo = new HistoricalComboIdentity
+            {
+                CarKey = "car-test",
+                TrackKey = "road-atlanta",
+                SessionKey = "practice"
+            };
+            var userAggregate = new HistoricalCarRadarCalibrationAggregate
+            {
+                CarKey = combo.CarKey,
+                SessionCount = 1
+            };
+            userAggregate.RadarCalibration.EstimatedBodyLengthMeters.Add(4.7d);
+            WriteCarRadarCalibration(Path.Combine(root, "user"), combo, userAggregate);
+
+            var currentCalibration = new HistoricalRadarCalibrationSummary();
+            currentCalibration.EstimatedBodyLengthMeters.Add(4.9d);
+            var currentSession = new CurrentSessionCarRadarCalibrationStore();
+            currentSession.StartCollection("active-source");
+            currentSession.Publish(
+                "stale-source",
+                new HistoricalSessionRadarCalibrationSnapshot(
+                    combo,
+                    new HistoricalCarIdentity { CarId = 1 },
+                    currentCalibration));
+            currentSession.Publish(
+                "active-source",
+                new HistoricalSessionRadarCalibrationSnapshot(
+                    combo,
+                    new HistoricalCarIdentity { CarId = 1 },
+                    currentCalibration));
+
+            var service = new SessionHistoryQueryService(
+                new SessionHistoryOptions
+                {
+                    Enabled = true,
+                    ResolvedUserHistoryRoot = Path.Combine(root, "user"),
+                    ResolvedBaselineHistoryRoot = Path.Combine(root, "baseline")
+                },
+                currentSession);
+
+            var active = service.LookupCarRadarCalibration(combo);
+
+            Assert.NotNull(active.CurrentSessionAggregate);
+            Assert.Same(active.CurrentSessionAggregate, active.PreferredAggregate);
+            Assert.Equal("current-session", active.PreferredAggregateSource);
+            Assert.Equal(4.9d, active.PreferredAggregate!.RadarCalibration.EstimatedBodyLengthMeters.Mean);
+
+            currentSession.CompleteCollection("active-source");
+            var completed = service.LookupCarRadarCalibration(combo);
+
+            Assert.Null(completed.CurrentSessionAggregate);
+            Assert.Same(completed.UserAggregate, completed.PreferredAggregate);
+            Assert.Equal("user", completed.PreferredAggregateSource);
+            Assert.Equal(4.7d, completed.PreferredAggregate!.RadarCalibration.EstimatedBodyLengthMeters.Mean);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static void WriteAggregate(
         string root,
         HistoricalComboIdentity combo,

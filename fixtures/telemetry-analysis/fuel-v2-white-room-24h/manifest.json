@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "fuel-v2-white-room-24h",
+  "purpose": "Constructed, non-capture endurance scenarios for deterministic Fuel V2 composition/presenter evidence. These rows are normalized inputs, not iRacing telemetry, not saved user history, and not strategy advice.",
+  "provenance": {
+    "sourceKind": "constructed-white-room",
+    "captureSpecific": false,
+    "rawTelemetry": false,
+    "historyPolicy": "The emitter creates output-owned synthetic classified history solely to exercise the exact history reader. It never writes history/user and keeps strategy promotion disabled."
+  },
+  "identity": {
+    "carId": 9001,
+    "carPath": "white-room-endurance-prototype",
+    "carDisplayName": "White-room Endurance Prototype",
+    "trackId": 9002,
+    "trackName": "white_room_endurance",
+    "trackDisplayName": "White-room Endurance",
+    "trackConfigName": "Full",
+    "trackLengthKm": 24.15,
+    "physicalTankCapacityLiters": 110.0,
+    "effectiveCapacityLiters": 104.94
+  },
+  "race": {
+    "startedAtUtc": "2026-07-14T12:00:00Z",
+    "durationSeconds": 86400,
+    "paceSeconds": 490
+  },
+  "history": {
+    "finishedAtUtc": "2026-07-13T12:00:00Z",
+    "fuelPerLapLiters": 14.21,
+    "sampleCount": 20
+  },
+  "checkpoints": [
+    {
+      "id": "pre-race-history-only",
+      "capturedAtUtc": "2026-07-14T12:00:30Z",
+      "sessionTimeSeconds": 30,
+      "currentFuelLiters": 104.94,
+      "strategyCarProgressLaps": 0.02,
+      "overallLeaderProgressLaps": 0.04,
+      "acceptedFuelPerLapLiters": [],
+      "expected": {
+        "shouldBuild": true,
+        "shouldRender": true,
+        "requiredMetricSections": ["Fuel State", "Fuel Usage", "Fuel Range"],
+        "prohibitedMetricSections": ["Stint Targets"],
+        "requiredSegments": [
+          { "section": "Fuel Usage", "label": "History", "value": "14.2 L/lap" },
+          { "section": "Fuel Range", "label": "History", "value": "7.38 laps" }
+        ]
+      },
+      "futureStrategy": {
+        "lowerHalf": "Hidden. History is display-only until strategy-history promotion is a separately approved contract.",
+        "raceOverview": "Do not infer N stints or a no-stop recommendation at pre-race from this fixture alone."
+      }
+    },
+    {
+      "id": "first-stint-live-agrees",
+      "capturedAtUtc": "2026-07-14T12:49:00Z",
+      "sessionTimeSeconds": 2940,
+      "currentFuelLiters": 62.31,
+      "strategyCarProgressLaps": 5.98,
+      "overallLeaderProgressLaps": 6.04,
+      "acceptedFuelPerLapLiters": [14.21, 14.20, 14.22, 14.21, 14.20, 14.22, 14.21, 14.20, 14.22, 14.21],
+      "expected": {
+        "shouldBuild": true,
+        "shouldRender": true,
+        "requiredMetricSections": ["Fuel State", "Fuel Usage", "Fuel Range"],
+        "prohibitedMetricSections": ["Stint Targets"],
+        "requiredSegments": [
+          { "section": "Fuel Usage", "label": "Last", "value": "14.2 L/lap" },
+          { "section": "Fuel Usage", "label": "5L", "value": "14.2 L/lap" },
+          { "section": "Fuel Usage", "label": "10L", "value": "14.2 L/lap" },
+          { "section": "Fuel Usage", "label": "History", "value": "14.2 L/lap" }
+        ]
+      },
+      "futureStrategy": {
+        "lowerHalf": "Future selector may treat agreement as reinforcement; no current overlay plan row may claim that conclusion.",
+        "raceOverview": "The synthetic race remains a long timed race; no hard-coded finite-lap stop count belongs in this factual pass."
+      }
+    },
+    {
+      "id": "first-stint-live-higher",
+      "capturedAtUtc": "2026-07-14T14:27:00Z",
+      "sessionTimeSeconds": 8820,
+      "currentFuelLiters": 89.0,
+      "strategyCarProgressLaps": 17.96,
+      "overallLeaderProgressLaps": 18.03,
+      "acceptedFuelPerLapLiters": [14.8, 14.8, 14.8, 14.8, 14.8, 14.8, 14.8, 14.8, 14.8, 14.8],
+      "expected": {
+        "shouldBuild": true,
+        "shouldRender": true,
+        "requiredMetricSections": ["Fuel State", "Fuel Usage", "Fuel Range"],
+        "prohibitedMetricSections": ["Stint Targets"],
+        "requiredSegments": [
+          { "section": "Fuel Usage", "label": "5L", "value": "14.8 L/lap" },
+          { "section": "Fuel Usage", "label": "10L", "value": "14.8 L/lap" },
+          { "section": "Fuel Usage", "label": "History", "value": "14.2 L/lap" },
+          { "section": "Fuel Range", "label": "5L", "value": "6.01 laps" }
+        ]
+      },
+      "futureStrategy": {
+        "selector": "Use this same normalized input to prove that a higher five-lap candidate promotes conservatively in the Core selector.",
+        "lowerHalf": "Once the final strategy section exists, it must recompute remaining stint targets from the higher observed burn rather than retain a historical lower-burn plan."
+      }
+    },
+    {
+      "id": "mid-first-stint-pit-interruption",
+      "capturedAtUtc": "2026-07-14T12:30:00Z",
+      "sessionTimeSeconds": 1800,
+      "currentFuelLiters": 100.0,
+      "strategyCarProgressLaps": 3.65,
+      "overallLeaderProgressLaps": 3.72,
+      "acceptedFuelPerLapLiters": [],
+      "interruption": {
+        "kind": "pit-service",
+        "reason": "condition-change",
+        "fuelChangeLiters": 47.0
+      },
+      "expected": {
+        "shouldBuild": true,
+        "shouldRender": true,
+        "requiredMetricSections": ["Fuel State", "Fuel Usage", "Fuel Range"],
+        "prohibitedMetricSections": ["Stint Targets"],
+        "requiredSegments": [
+          { "section": "Fuel Usage", "label": "History", "value": "14.2 L/lap" },
+          { "section": "Fuel Usage", "label": "5L", "value": "--" },
+          { "section": "Fuel Range", "label": "History", "value": "7.04 laps" }
+        ]
+      },
+      "futureStrategy": {
+        "lifecycle": "The explicit pit interruption invalidates any clean rolling window from the preceding run. Only post-reset qualified samples may contribute to the next-stint projection.",
+        "lowerHalf": "A final Stint N implementation must recompute remaining race/stint outlook after the service rather than carry a stale current-stint value across the refuel."
+      }
+    }
+  ]
+}

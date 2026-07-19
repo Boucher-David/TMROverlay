@@ -23,12 +23,12 @@ public sealed class TelemetryCaptureOptionsTests
     }
 
     [Fact]
-    public void AppSettingsJson_KeepsRawCaptureOptIn()
+    public void AppSettingsJson_EnablesRawCaptureForV13BranchEvidence()
     {
         var path = FindRepoRootFile("src/TmrOverlay.App/appsettings.json");
         var json = JsonNode.Parse(File.ReadAllText(path));
 
-        Assert.False(((bool?)json?["TelemetryCapture"]?["RawCaptureEnabled"]) ?? true);
+        Assert.True(((bool?)json?["TelemetryCapture"]?["RawCaptureEnabled"]) == true);
         Assert.False(((bool?)json?["TelemetryEdgeCases"]?["Enabled"]) ?? true);
         Assert.False(((bool?)json?["LiveModelParity"]?["Enabled"]) ?? true);
         Assert.True(((bool?)json?["LiveOverlayDiagnostics"]?["Enabled"]) == true);

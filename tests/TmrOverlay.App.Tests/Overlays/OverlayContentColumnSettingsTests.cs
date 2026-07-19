@@ -970,6 +970,7 @@ public sealed class OverlayContentColumnSettingsTests
         Assert.Contains(blocks, block => block.Id == OverlayContentColumnSettings.FuelCalculatorStintTargetsBlockId);
         Assert.Contains(blocks, block => block.Id == OverlayContentColumnSettings.FuelCalculatorRangeBlockId);
         Assert.Contains(blocks, block => block.Id == OverlayContentColumnSettings.FuelCalculatorUsageBlockId);
+        Assert.Contains(blocks, block => block.Id == OverlayContentColumnSettings.FuelCalculatorModelReadinessBlockId);
     }
 
     private static OverlayContentColumnDefinition Column(string id)

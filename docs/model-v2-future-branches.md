@@ -51,7 +51,7 @@ Current evidence/tooling shape:
 - 2026-05-24: The `v1.2.1-replay-foundation-improvement` branch expands raw-capture replay from linear playback into controllable frame/session-time windows, session-type filtering, optional focus-car override, manifest/header/schema import inspection, production model replay provenance, and a standalone compact import/sample export tool. This is still raw-capture replay foundation work, not Fuel Calculator V2 product logic.
 - 2026-05-24: The teammate GR86 Road Atlanta support bundle timestamped 2026-05-24 19:29:23 UTC did not contain raw replay input, but diagnostics showed update apply/restart limbo rather than a telemetry freeze or TMR overlay input interception: Settings was visible, performance timers were still ticking, `release-updates.json` was `Applying`, and `runtime-state.json` had no clean stop. v1.2.1 moves update handoff to the post-UI shutdown path, adds update-apply shutdown breadcrumbs, and adds `metadata/evidence-quality.json` `updateFlow.applyShutdown` classification so future bundles can report `update_apply_shutdown_incomplete` directly.
 - 2026-05-25: The `v1.2.2-small-fixes` branch is a focused overlay-regression pass from Dallara/team feedback. It filters zero/default timing placeholders before Standings can render, makes Pit Service and Session / Weather size to rendered sections, keeps Relative fixed empty slots visibly dimmed, and refines Flags so practice/test one-to-green/start/global-yellow noise is suppressed while race-start and local actionable flag evidence still displays. It also reduces the default Flags footprint and makes native/browser/localhost flag sizing count-driven. No durable raw-capture or user-data schema change is intended.
-- 2026-07-18: The next V1.x milestone is reset to `v1.3-overlay-bridge`: an opt-in Overlay Bridge developer foundation for a Windows publisher and a separately running live monitor/client. It stays separate from localhost/OBS and begins read-only, versioned, and fixture-driven. Fuel Calculator V2 moves intact to the following `v1.4` milestone; no Fuel V2 work should be folded into the bridge branch merely because both consume live model data.
+- 2026-07-18: The next V1.x milestone is reset to `v1.3-overlay-bridge`: an opt-in, read-only team-data foundation. It is a remote capability source for existing overlays, not an OBS route or a new driving overlay. One active in-car publisher fans canonical redacted snapshots to many approved teammate devices; each receiver composes those remote capability groups with its own local iRacing state. The detailed proposal, including the pending relay trust decision, is recorded in the V1.3 section below. Fuel Calculator V2 moves intact to the following `v1.4` milestone; no Fuel V2 work should be folded into the bridge branch merely because both consume live model data.
 
 ## Current V1.2 Branch Focus
 
@@ -422,21 +422,130 @@ Success criteria:
 - Large raw captures are not committed to git; durable CI fixtures are redacted/minimized capture slices or explicit normalized replay windows.
 - Replay evidence does not replace real Windows/OBS validation, but it makes the next live validation targeted instead of exploratory.
 
-### v1.3 - Overlay Bridge And External Clients
+### v1.3 - Overlay Bridge: Team Data Source Proposal
 
-Goal: establish an opt-in, read-only Windows publisher to developer/client
-boundary so live Windows data can drive a separately running monitor without
-exposing localhost/OBS routes or requiring the client to talk to iRacing.
+Status: product direction agreed on 2026-07-18. The only material decision still open is whether the managed remote relay must be payload-blind end-to-end in the first shipping transport or may temporarily terminate authenticated encrypted traffic without persistence. The recommended answer is payload-blind end-to-end from the first real bridge release.
 
-Likely scope:
+#### Product intent
 
-- Preserve short-lived portable and MSI PR build artifacts so Windows testers can validate the branch continuously.
-- Define versioned JSON contracts for redacted live telemetry models, app health, overlay metadata, selected display settings, peer/session context, and schema capabilities.
-- Keep the bridge disabled by default with explicit settings/support visibility for enabled state, allowed clients, connection count, last error, and schema version.
-- Use normalized `LiveTelemetrySnapshot.Models` instead of exporting overlay-local temporary calculations, `LatestSample`, raw captures, private settings, or local history.
-- Add deterministic bridge fixture tests and sample payloads so external clients can be developed without iRacing running.
-- Start with latest-state, read-only monitor updates and explicit freshness/session/provenance evidence; defer simulator commands, raw telemetry synchronization, and peer-history promotion.
-- Explore peer/missed-history context exchange only as derived context: provenance, session identity, observation window, roster/timing coverage, schema version, and trust labels.
+Overlay Bridge is an opt-in remote telemetry source that lets a team fill iRacing's off-car information gaps in the receiver's existing application overlays. It is not a new driving overlay, an OBS/localhost route, a raw telemetry synchronization system, or a way for a client to talk directly to iRacing.
+
+The primary use case is an endurance/team room:
+
+```text
+Windows in-car publisher
+  -> explicit redacted Bridge projection
+  -> approved remote room transport
+  -> many teammate receivers
+  -> capability-group composition with each receiver's local iRacing state
+  -> existing TmrOverlay views
+```
+
+The publisher is normally the active driver. A receiver can still have useful local session and field state while iRacing withholds active-car fuel, burn, pit, or driver-stint data because that receiver is garage-side, spectating, or a teammate outside the car. Bridge fills only those named remote capability groups; it must not silently replace or contaminate canonical local telemetry/history.
+
+#### Room, stream, and trust model
+
+- A room has one owner/admin and many individually approved devices.
+- A room may have many viewers, but exactly one active publisher for a given team-car stream at a time. Protocol naming uses `room + stream` now so a later multi-car team can add separate streams without redesigning the envelope.
+- The active publisher fans one canonical snapshot sequence to every approved viewer. “Same packet” means the same snapshot identity, session epoch, sequence, capability set, and semantic payload. A payload-blind transport may use a recipient-specific protected envelope for each viewer rather than one shared encrypted byte sequence.
+- Roles are Owner/Admin, Viewer, Publisher Candidate, and Active Publisher. A pairing request grants Viewer only; publisher promotion and driver handoff are explicit owner actions.
+- The admin approves/revokes device identities and controls room membership. The admin does not distribute a reusable room password or a single shared TLS session; every device has its own protected identity and authenticated connection.
+- The transport is one-way for V1.3 telemetry: viewers do not issue simulator commands, change publisher settings, request raw data, or write into the publisher's local history.
+- No mesh, peer relaying, UPnP, router port forwarding, public localhost listener, roster discovery, or automatic trust is allowed.
+
+#### Pairing experience and device lifecycle
+
+Remote pairing uses a shareable link, not QR as the primary flow. QR remains an optional convenient rendering of the same one-time invitation for in-person use.
+
+1. The admin selects **Create viewer invite**. The app creates a high-entropy, opaque, single-use invitation bound to one prospective device and a short expiry (for example, ten minutes).
+2. The admin copies the link to the intended teammate through their normal team channel. The link is an invitation capability, not a durable credential, room password, or data decryption key.
+3. The receiving app opens the link, creates its own device key locally, and presents a pending pairing request. A friendly device name is convenience metadata, not identity.
+4. The admin UI shows a unique short voice-confirmation code for that invitation, formatted for clear voice relay such as `482 917`. The teammate receives it over a second channel and enters it in the app. The code is rate-limited, expires with the invitation, is never placed in the URL, and cannot be reused.
+5. The admin reviews the pending device, its platform/device label, role, and a short fingerprint/safety phrase, then explicitly approves it as a Viewer. For remote pairing, the safety phrase should be compared through an independent channel when practical; in-person scanning can use direct visual confirmation.
+6. The invitation and voice code are destroyed. The approved device reconnects using its own protected identity until revoked.
+
+Do not use a permanent room PIN, a multi-use team link, shared client certificates, exported private keys, copied `.pfx` files, certificate-warning bypasses, auto-accepted devices, or an invitation that grants publisher privileges. The application should offer immediate per-device revoke and a deliberate later admin-transfer flow with fresh confirmation.
+
+Private device material must use platform-protected storage (Windows protected key storage / macOS Keychain when supported). It must never be persisted in the ordinary app settings file, captured in diagnostics, written to raw capture/history, included in a shareable link, or printed in logs.
+
+#### Transport and relay posture
+
+Remote teammates need an outbound relay path so joining the room does not require router changes. Every client makes an outbound authenticated encrypted connection; there is no inbound public listener on the publisher machine.
+
+- Use modern TLS with strict certificate/hostname validation, prefer TLS 1.3, never allow plaintext fallback or obsolete protocol versions, and do not use 0-RTT application payloads because Bridge messages are stateful and replay-sensitive.
+- TLS protects each client-to-service channel; pairing and per-device authorization still define who may receive a room stream. Use proven platform/standard cryptographic libraries rather than custom TLS or cipher construction.
+- The recommended endpoint is a payload-blind relay: it routes room envelopes and minimal membership/connection metadata but cannot read, mutate, or retain team telemetry payloads. Sender authenticity and recipient payload validation remain end-to-end responsibilities.
+- If the first transport temporarily terminates payload TLS at the relay, that limitation must be explicit in product copy, diagnostics, privacy documentation, and threat-model review. It must not be described as end-to-end encrypted or payload-blind merely because the client-to-relay links use TLS.
+- Membership/revocation must be checked at connection time and enforced by the publisher when selecting recipients. A revoked device must stop receiving new snapshots without requiring other teammates to rotate a shared room secret.
+
+TLS supplies authenticated, confidential, integrity-protected channels; it does not itself define room authorization or payload semantics. Current guidance encourages TLS 1.3 and strict modern configurations; retain an explicit compatibility decision if supported Windows versions require a carefully configured TLS 1.2 fallback. See [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446.html), [RFC 9325](https://www.rfc-editor.org/rfc/rfc9325.html), and [NIST SP 800-52r2](https://csrc.nist.gov/pubs/sp/800/52/r2/final).
+
+#### Local/remote capability composition
+
+Remote data is a separate receiver-side read model, never a deserialized `LiveTelemetrySnapshot`, a call to `ILiveTelemetrySink`, raw-capture input, local user-history record, or ordinary local settings value. Existing overlays may consume a composed read model with per-group provenance, freshness, and availability.
+
+Composition rules:
+
+1. Fresh, session-matched local capability data wins where iRacing provides it.
+2. Bridge fills only explicitly named local gaps. The primary V1.3 gap is active-team-car direct telemetry while a receiver is not the active driver.
+3. When the receiver becomes the active driver, their local direct-car capability groups immediately win.
+4. A mismatched session/track/car stream, stale Bridge envelope, unsupported capability, driver handoff, garage/spectator transition, or source error removes the affected remote group; the receiver must never retain or estimate stale values.
+5. Do not arbitrarily blend individual scalars from different sources. Resolve coherent capability groups, and expose source/age status where a normal overlay could otherwise be mistaken for local in-car telemetry.
+
+Initial V1.3 groups:
+
+| Capability group | Initial content | Source and safety rule |
+| --- | --- | --- |
+| Race context | Session phase, flags, clock, track/session conditions, whole-field class/position/progress/timing, pit state, relative coverage, and track coordinates | Share a redacted, bounded field snapshot when fresh and session-matched. This makes standings, relative, gap, traffic, and map context useful to off-car teammates. |
+| Active team car | Active-driver identity state, stint/driver-change state, pit readiness/state, local fuel level, burn confidence, and strategy-relevant direct facts | Published only while the source is genuinely active/in-car. Tombstone immediately on driver change, garage/spectator transition, session change, or staleness. Never infer teammate fuel. |
+| Environment | Weather, track state, session rules, and relevant sector/session context | Lower-risk shared session facts, still session-scoped and freshness-bounded. |
+| Identity labels | Optional driver/car display labels | Whole-field logic does not require real names. Keep names/identity labels a separately negotiated, explicit capability rather than a default export. |
+
+The initial field projection must not include raw `LatestSample`, iRacing SDK arrays/F2/estimated-time buffers, user/team identifiers, iRating, local display settings, paths, logs, raw captures, YAML/session-info files, private diagnostics, history, tokens, or credentials. Use session-scoped opaque car identifiers for logic. Any later identity-label capability needs an explicit privacy/product decision.
+
+#### Snapshot, versioning, and cadence contract
+
+V1.3 starts with bounded, compact full snapshots, not deltas. A full snapshot on join and at meaningful events makes reconnection, loss, compatibility, and diagnostics straightforward.
+
+Every envelope must carry at least:
+
+- Bridge protocol major/minor version and supported capabilities.
+- Non-authoritative app version/schema hash for diagnostics.
+- Room/stream opaque identifiers, publisher device identity, session identity, session epoch, monotonic sequence, source mode (`live` or explicitly test-only `raw_capture_replay`), publication time/age, and bounded payload size.
+- Canonical snapshot identifier plus sender integrity/authenticity evidence appropriate to the selected relay trust model.
+
+Compatibility policy:
+
+- Major protocol mismatch: reject safely without attempting to parse the payload.
+- Minor mismatch: negotiate the mutually supported capability set and ignore unknown additive fields.
+- Schema hash/app version: diagnostic only; never a substitute for protocol/capability negotiation.
+- Unknown capability, malformed value, duplicate/out-of-order sequence, invalid epoch, oversized message, or unsupported source mode: fail that message/group closed and surface a safe health reason.
+
+Cadence policy:
+
+- Full snapshot when a viewer joins, on completed lap/sector, pit entry/exit/service change, driver handoff, session/flag change, and other material state transitions.
+- A small bounded active-driver heartbeat approximately once per second for fuel and pit-relevant freshness. Lap-only or sector-only updates are insufficient for in-lap, caution, and pit decisions.
+- All messages retain explicit source age. Receivers apply a bounded staleness window per capability group and tombstone rather than extrapolate after expiry.
+
+#### Track-map assets and retained data
+
+Built track maps are potentially useful team value, but are not V1.3 telemetry payloads. V1.3 may advertise a map identity/hash/quality so a receiver can determine whether it already has a compatible local asset. A later explicit asset-transfer design must use numeric-only structured validation, bounded size/vertex counts, content hashes, quarantine, app/track compatibility metadata, user approval, and no executable/path/capture import behavior.
+
+Future durable Bridge configuration, when needed, belongs in its own versioned app-owned file such as `%LOCALAPPDATA%\\TmrOverlay\\settings\\overlay-bridge.json`. It should contain only configuration version, opaque room/device identifiers, display labels, public-key fingerprints, consent/role/scope, and safe expiry metadata. Private keys stay in OS-protected storage. No payloads, peer telemetry, raw captures, history, secret invitation values, or persistent peer network addresses belong there. Corrupt or future-version configuration fails closed.
+
+The currently implemented Overlay Bridge settings tab is intentionally inert/read-only: unavailable, disabled, no listener, no pairing, no credentials, no persistence, and no telemetry export. It is the UI/evidence starting boundary, not an implied operating transport.
+
+#### Implementation and validation plan
+
+1. **Record the design and threat model.** Keep this proposal, a concrete protocol/threat-model document, and a capability/redaction matrix aligned before network code. Lock the relay trust decision, identity-label policy, room ownership transfer, and supported Windows TLS baseline.
+2. **Build pure contracts and projection tests.** Add the Bridge envelope, protocol/capability declarations, safe DTOs, redactor/projector, group provenance/freshness, receiver-side remote state, and capability resolver. The projector reads normalized `LiveTelemetrySnapshot.Models` through `CompleteModels()`; it never exports raw/local-only state.
+3. **Prove replay composition offline.** Use `ReplayTelemetryHostedService`, `RawCaptureSemanticReplayReader`, and the existing replay/export tools to emulate a Windows publisher and one or more receiver sessions. Exercise lap/sector cadence, fuel heartbeat, driver handoff, stale data, session mismatch, unsupported schema, invalid payload, and receiver local-source precedence.
+4. **Add deterministic CI security/integration coverage.** Run pure mapper/redaction/schema tests plus loopback transport tests using synthetic fixtures and throwaway certificates. Test one publisher/many viewers, invitation expiry/reuse rejection, per-device approval/revoke, role enforcement, replay-source gating, sequence/epoch rejection, size/rate limits, and safe diagnostics redaction. CI proves deterministic protocol behavior, not real router/firewall/keychain/LAN behavior.
+5. **Implement room configuration and pairing UX.** Add owner/device/role state, one-time invite links, voice confirmation, explicit approval, revocation, safe diagnostics, and Settings native/browser evidence. Keep all network endpoints disabled until the user enables a room explicitly.
+6. **Implement the selected relay transport.** Use outbound connections only, enforce device authorization/capability negotiation, and keep source/age/provenance visible. Add full Windows build/screenshot validation and a real Windows publisher to separate monitor/client test before broad teammate testing.
+7. **Validate live team races deliberately.** Capture enough in-car/off-car/driver-swap/pit/spectator data to prove the rules iRacing imposes. Do not use remote data to fill an unproven capability or silently relax a local overlay's in-car safety gate.
+
+Preserve the PR Windows build-publish workflow throughout V1.3 so testers can download WIP installer artifacts. Browser review remains the local development surface, Windows native remains the production/iRacing and screenshot gate, and localhost remains strictly an OBS route rather than Bridge transport.
 
 ### v1.4 - Fuel Calculator V2
 
@@ -625,19 +734,9 @@ Migrate style one overlay at a time with screenshot validation.
 
 ### Overlay Bridge / External Overlay Platform
 
-The v1.3 Overlay Bridge is the boundary for a trusted Windows publisher and separately running developer/client monitor. Treat it as a platform branch, not as another in-process overlay and not as the local OBS/localhost server. Its initial read-only monitor path may later grow into trusted teammate-to-teammate context sharing only after the normalized live snapshot schema has proven stable.
+The detailed V1.3 team-data design lives in the V1.3 section above. Treat Overlay Bridge as a platform/source boundary, not as another in-process overlay or the local OBS/localhost server. Future external renderers, VR clients, and developer tools should consume the same versioned, redacted, provenance-aware Bridge contracts rather than reaching into raw telemetry, local history, or overlay-local calculations.
 
-Bridge v2 should define:
-
-1. Versioned snapshot contracts for model-v2 telemetry, app health, overlay metadata, and selected display settings.
-2. Safe access controls, explicit enable/disable controls, peer/client status, and schema-version display in the settings panel.
-3. A peer/client development path that consumes normalized app state rather than talking to iRacing directly.
-4. Compatibility rules for bridge clients when model-v2 fields are added, renamed, deprecated, or unavailable.
-5. An opt-in peer/session context path for trusted teammates to share missed-history summaries when one user joins mid-race after another user has already observed the session.
-
-This branch fits after enough Windows overlays consume `LiveTelemetrySnapshot.Models` that the external schema reflects real product semantics instead of temporary overlay-local assumptions.
-
-The peer context path should be treated as derived context exchange, not raw telemetry sync. It should carry provenance, session identity, observation window, roster/timing coverage, schema version, and trust/source labels, then merge only into model-v2 availability as partial remote context. It should not silently overwrite local telemetry, and it should not share raw `telemetry.bin`, source `.ibt` files, or private local history by default.
+The receiver-side composition rule remains invariant for later platform clients: remote data can fill explicitly negotiated capability groups, but it must not silently overwrite canonical local telemetry, raw capture, private local history, or user settings.
 
 ### VR Renderer
 

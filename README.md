@@ -104,7 +104,7 @@ Terminology going forward:
 The browser review server is the preferred non-Windows overlay development loop:
 
 - `npm run review:browser` serves fixture-backed browser review URLs from the same assets used by localhost pages.
-- Review routes are available under `/review/app`, `/review/settings/general`, `/review/overlays/<overlay-id>`, and `/overlays/<overlay-id>`.
+- Review routes are available under `/review/app`, `/review/settings/general`, `/review/overlays/<overlay-id>`, and `/overlays/<overlay-id>`. The developer-only Overlay Bridge workbench is separately available at `/review/bridge/workbench`; it contains synthetic offline fixture evidence only and is neither a localhost/OBS route nor a live relay/client.
 - Asset changes are read from source and trigger browser reloads through lightweight polling.
 - This validates browser layout, JavaScript behavior, and localhost parity; Windows CI or a real Windows run still owns native focus, topmost, click-through, and iRacing SDK behavior.
 

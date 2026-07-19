@@ -91,6 +91,11 @@ const configuredCanvasCaptureBackdrop = {
   scope: 'configured-canvas-screenshot-only'
 };
 const previewModes = ['practice', 'qualifying', 'race'];
+const bridgeWorkbenchScreenshotCases = [
+  ['current-sector', 'active-team-live'],
+  ['decoder-rejection', 'malformed-cbor'],
+  ['aged-receipt', 'stale-publication']
+];
 const nonHappyPathOverlayVariants = [
   { overlayId: 'fuel-calculator', slug: 'waiting', query: 'fixture=fuel-waiting' },
   { overlayId: 'fuel-calculator', slug: 'calculating', query: 'fixture=fuel-calculating' },
@@ -311,6 +316,8 @@ function screenshotRoutes(surface) {
           `/review/app?preview=${encodeURIComponent(mode)}`,
           { tab: 'general', region: 'general', previewMode: mode }))
     );
+    routes.push(...bridgeWorkbenchScreenshotCases.map(([slug, caseId]) =>
+      bridgeWorkbenchRoute(`bridge-workbench/${slug}.png`, caseId)));
 
     for (const overlayId of overlayIds) {
       for (const region of regionsForOverlay(overlayId)) {
@@ -659,6 +666,24 @@ function installerReviewRoute(relativePath, urlPath, metadata = {}) {
   };
 }
 
+function bridgeWorkbenchRoute(relativePath, caseId) {
+  return {
+    relativePath,
+    urlPath: `/review/bridge/workbench?case=${encodeURIComponent(caseId)}`,
+    selector: '[data-workbench-surface="offline-fixture-evidence"]',
+    viewport: { width: 1280, height: 960 },
+    minBytes: 10_000,
+    surface: 'browser-review-bridge-workbench',
+    renderer: 'overlay-bridge-offline-workbench',
+    sourceContract: 'tools/browser-review/bridge-workbench/fixtures.mjs',
+    moduleAsset: 'tools/browser-review/bridge-workbench/render.mjs',
+    fixtureVariant: caseId,
+    captureMode: 'developer-only-offline-fixture-workbench',
+    comparisonMode: 'browser-only-developer-evidence',
+    comparisonLimit: 'No localhost/OBS or Windows-native runtime exists because this is not a product surface.'
+  };
+}
+
 async function captureRoute(page, route, manifest) {
   await page.setViewportSize(route.viewport);
   const url = `${baseUrl}${route.urlPath}`;
@@ -670,6 +695,7 @@ async function captureRoute(page, route, manifest) {
   const model = await readOverlayModel(route);
   const dom = await readDomDiagnostics(element);
   const runtimeAssets = await readRuntimeAssetEvidence(page, route);
+  const bridgeWorkbenchEvidence = await readBridgeWorkbenchEvidence(page, route);
 
   const screenshotPath = join(outputRoot, route.relativePath);
   mkdirSync(dirname(screenshotPath), { recursive: true });
@@ -746,11 +772,35 @@ async function captureRoute(page, route, manifest) {
     modelEvidence: modelLayoutEvidence(model, dom.layout, route),
     v102Evidence: v102EvidenceForRoute(route),
     runtimeAssets,
+    bridgeWorkbenchEvidence,
     scenarioEvidence: scenarioEvidence(route, model, dom.layout),
     width: artifact.width,
     height: artifact.height,
     bytes: artifact.bytes
   });
+}
+
+async function readBridgeWorkbenchEvidence(page, route) {
+  if (route.surface !== 'browser-review-bridge-workbench') {
+    return null;
+  }
+
+  return page.evaluate((fixtureVariant) => {
+    const banner = document.querySelector('.boundary-banner');
+    const workbench = document.querySelector('[data-workbench-surface="offline-fixture-evidence"]');
+    const iframes = Array.from(document.querySelectorAll('iframe'));
+    const footer = document.querySelector('.boundary-footer');
+    return {
+      contract: 'overlay-bridge-workbench-evidence/v1',
+      developerOnly: true,
+      fixtureTruth: workbench?.getAttribute('data-workbench-surface') || null,
+      fixtureVariant,
+      offlineBanner: String(banner?.textContent || '').replace(/\s+/g, ' ').trim(),
+      noLiveRuntimeStatement: String(footer?.textContent || '').replace(/\s+/g, ' ').trim(),
+      sandboxedDocumentCount: iframes.filter((frame) => frame.hasAttribute('sandbox')).length,
+      scriptCount: document.querySelectorAll('script').length
+    };
+  }, route.fixtureVariant);
 }
 
 async function injectCaptureTransform(page, route) {
@@ -2875,7 +2925,9 @@ function scenarioEvidence(route, model, layout = null) {
     comparisonLimit: route.comparisonLimit || null,
     compositingMode: route.compositingMode || null,
     captureBackdrop: route.captureBackdrop || null,
-    fixture: route.surface?.includes('settings')
+    fixture: route.surface === 'browser-review-bridge-workbench'
+      ? 'browser-review-offline-bridge-workbench-fixture'
+      : route.surface?.includes('settings')
       ? 'browser-review-settings-fixture'
       : route.surface?.includes('installer')
         ? 'browser-review-installer-fixture'

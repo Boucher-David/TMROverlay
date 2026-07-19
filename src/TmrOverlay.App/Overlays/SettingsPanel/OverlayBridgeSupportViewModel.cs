@@ -26,14 +26,14 @@ internal sealed record OverlayBridgeSupportViewModel(
                 ? "Available"
                 : "Unavailable",
             EnabledText: snapshot.Enabled ? "Enabled" : "Disabled",
-            PairingTransportText: PairingTransportText(snapshot),
-            SchemaText: SchemaText(snapshot),
+            PairingTransportText: FormatPairingTransportText(snapshot),
+            SchemaText: FormatSchemaText(snapshot),
             ConnectedPairedClientsText: $"{Math.Max(0, snapshot.ConnectedPairedClientCount)} connected",
-            LatestFrameAgeText: LatestFrameAgeText(snapshot.LatestFrameAge),
+            LatestFrameAgeText: FormatLatestFrameAgeText(snapshot.LatestFrameAge),
             LastSafeErrorText: SafeErrorText(snapshot.LastSafeError));
     }
 
-    private static string PairingTransportText(OverlayBridgeSupportSnapshot snapshot)
+    private static string FormatPairingTransportText(OverlayBridgeSupportSnapshot snapshot)
     {
         if (snapshot.Availability == OverlayBridgeAvailability.Unavailable)
         {
@@ -51,7 +51,7 @@ internal sealed record OverlayBridgeSupportViewModel(
         };
     }
 
-    private static string SchemaText(OverlayBridgeSupportSnapshot snapshot)
+    private static string FormatSchemaText(OverlayBridgeSupportSnapshot snapshot)
     {
         if (string.IsNullOrWhiteSpace(snapshot.SchemaVersion) && string.IsNullOrWhiteSpace(snapshot.SchemaHash))
         {
@@ -71,7 +71,7 @@ internal sealed record OverlayBridgeSupportViewModel(
         return $"{snapshot.SchemaVersion.Trim()} · {snapshot.SchemaHash.Trim()}";
     }
 
-    private static string LatestFrameAgeText(TimeSpan? age)
+    private static string FormatLatestFrameAgeText(TimeSpan? age)
     {
         if (age is null)
         {

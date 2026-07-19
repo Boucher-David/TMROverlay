@@ -946,6 +946,11 @@ BROWSER_REVIEW_UPDATE_STATUS_TEXT = {
 
 BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS = SETTINGS_COMPONENT_PNG_SIZES
 BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS = FUTURE_SETTINGS_COMPONENT_PNG_SIZES
+BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS = {
+    "bridge-workbench/current-sector.png",
+    "bridge-workbench/decoder-rejection.png",
+    "bridge-workbench/aged-receipt.png",
+}
 
 BROWSER_REVIEW_INSTALLER_PNGS = [
     "review-installer/welcome.png",
@@ -1527,6 +1532,16 @@ def validate_browser_review_ci(root: Path, min_unique_bytes: int, failures: list
             minimum_size=SETTINGS_CAPTURE_SIZE,
         )
 
+    for relative_path in BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS:
+        validate_png(
+            root=root,
+            relative_path=relative_path,
+            expected_size=None,
+            min_unique_bytes=min_unique_bytes,
+            failures=failures,
+            minimum_size=(720, 400),
+        )
+
     validate_browser_review_settings_component_pngs(root, min_unique_bytes, failures)
     validate_browser_review_installer_pngs(root, min_unique_bytes, failures)
     validate_web_overlay_pngs(root, "browser-overlays", min_unique_bytes, failures)
@@ -1570,6 +1585,16 @@ def validate_browser_localhost_ci(root: Path, min_unique_bytes: int, failures: l
             min_unique_bytes=min_unique_bytes,
             failures=failures,
             minimum_size=SETTINGS_CAPTURE_SIZE,
+        )
+
+    for relative_path in BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS:
+        validate_png(
+            root=root,
+            relative_path=relative_path,
+            expected_size=None,
+            min_unique_bytes=min_unique_bytes,
+            failures=failures,
+            minimum_size=(720, 400),
         )
 
     validate_browser_review_settings_component_pngs(root, min_unique_bytes, failures)
@@ -2346,6 +2371,7 @@ def browser_review_manifest_paths() -> set[str]:
         | set(BROWSER_REVIEW_SETTINGS_COMPONENT_PNGS)
         | set(BROWSER_REVIEW_FUTURE_SETTINGS_COMPONENT_PNGS)
         | set(BROWSER_REVIEW_INSTALLER_PNGS)
+        | BROWSER_REVIEW_BRIDGE_WORKBENCH_PNGS
     )
     paths.update(web_overlay_manifest_paths("browser-overlays"))
     return paths
@@ -2498,6 +2524,9 @@ def validate_browser_review_manifest(
         if path.startswith("review-installer/"):
             require_manifest_fields(path, screenshot, ["menuId", "moduleAsset", "uiEvidence"], failures)
             require_installer_ui_evidence(path, screenshot.get("uiEvidence"), failures)
+        if path.startswith("bridge-workbench/"):
+            require_manifest_fields(path, screenshot, ["fixtureVariant", "bridgeWorkbenchEvidence"], failures)
+            validate_bridge_workbench_manifest(path, screenshot, failures)
         if path.startswith(("settings/", "components/settings/", "components/settings-future/")):
             require_manifest_fields(path, screenshot, ["tab", "region", "uiEvidence"], failures)
             require_settings_ui_evidence(path, screenshot.get("uiEvidence"), failures)
@@ -2506,6 +2535,40 @@ def validate_browser_review_manifest(
                 validate_settings_shell_transparency(root / path, path, failures)
             if path.startswith(("components/settings/", "components/settings-future/")):
                 validate_browser_settings_component_manifest(path, screenshot, failures)
+
+
+def validate_bridge_workbench_manifest(
+    path: str,
+    screenshot: dict[str, object],
+    failures: list[str],
+) -> None:
+    evidence = screenshot.get("bridgeWorkbenchEvidence")
+    if not isinstance(evidence, dict):
+        failures.append(f"{path}: missing Bridge workbench evidence")
+        return
+
+    if evidence.get("contract") != "overlay-bridge-workbench-evidence/v1":
+        failures.append(f"{path}: Bridge workbench evidence contract is unexpected")
+    if evidence.get("developerOnly") is not True:
+        failures.append(f"{path}: Bridge workbench evidence must declare developerOnly")
+    if evidence.get("fixtureTruth") != "offline-fixture-evidence":
+        failures.append(f"{path}: Bridge workbench fixture truth must remain offline-fixture-evidence")
+    if evidence.get("fixtureVariant") != screenshot.get("fixtureVariant"):
+        failures.append(f"{path}: Bridge workbench fixture variant drifted from route metadata")
+    if evidence.get("sandboxedDocumentCount") != 2:
+        failures.append(f"{path}: Bridge workbench must retain two sandboxed fixture documents")
+    if evidence.get("scriptCount") != 0:
+        failures.append(f"{path}: Bridge workbench must not ship a script runtime")
+
+    offline_banner = str(evidence.get("offlineBanner") or "")
+    required_banner = ("Offline fixture evidence.", "No connection", "Oracle not configured", "no live telemetry")
+    if not all(token in offline_banner for token in required_banner):
+        failures.append(f"{path}: Bridge workbench offline banner is incomplete")
+
+    no_live_statement = str(evidence.get("noLiveRuntimeStatement") or "")
+    required_statement = ("No live app state", "telemetry", "transport", "pairing", "Oracle service", "relay")
+    if not all(token in no_live_statement for token in required_statement):
+        failures.append(f"{path}: Bridge workbench no-live-runtime statement is incomplete")
 
 
 def validate_settings_shell_transparency(path: Path, relative_path: str, failures: list[str]) -> None:

@@ -1,7 +1,7 @@
 {
   "contract": "overlay-scenario-contract/v1",
   "tracker": "v1.2.md",
-  "updated": "2026-05-24",
+  "updated": "2026-07-18",
   "purpose": "Parseable matrix for overlay-specific screenshot, replay, and cross-surface parity scenarios. This is the planning contract for what each overlay must prove across browser review, localhost/OBS, Windows native, compact replay fixtures, and optional full-capture replay.",
   "productDescriptor": {
     "source": "src/TmrOverlay.Core/Overlays/OverlayBehaviorDescriptorCatalog.cs",
@@ -186,8 +186,8 @@
         "tests/browser-overlays/browserOverlayPlaywright.pw.spec.js:Overlay Bridge application tab is an honest, read-only unavailable state"
       ],
       "validatorRules": [
-        "tools/validate_overlay_screenshots.py:support.bridge.* required text evidence",
-        "tools/browser-review/render-screenshots.mjs:settings/overlay-bridge/general.png",
+        "tools/validate_overlay_screenshots.py:support.bridge.availability.value",
+        "tools/browser-review/render-screenshots.mjs:settingsTabScreenshotPath('overlay-bridge')",
         "tools/TmrOverlay.WindowsScreenshots/Program.cs:settings-overlay-bridge"
       ],
       "assertions": [
@@ -459,6 +459,40 @@
       ],
       "gaps": [
         "scenario is still thin: no deterministic screenshot or diagnostics replay proves preview teardown across an actual focus-loss transition"
+      ]
+    }
+  ],
+  "developerScenarios": [
+    {
+      "id": "overlay-bridge-offline-local-workbench",
+      "area": "overlay-bridge",
+      "family": "developer-workbench",
+      "tier": "tier1-ci-contract-fixtures",
+      "status": "covered",
+      "surfaces": ["browserReview"],
+      "surfaceExemptions": {
+        "localhostObs": "Not applicable: this is deliberately outside shipped localhost/OBS assets and routes.",
+        "windowsNative": "Not applicable: this is a deterministic developer evidence page, not a Windows product surface."
+      },
+      "artifacts": [
+        "bridge-workbench/current-sector.png",
+        "bridge-workbench/decoder-rejection.png",
+        "bridge-workbench/aged-receipt.png"
+      ],
+      "fixtures": [
+        "tools/browser-review/bridge-workbench/fixtures.mjs"
+      ],
+      "testFiles": [
+        "tests/browser-overlays/bridgeWorkbench.test.js:offline-only import boundary"
+      ],
+      "validatorRules": [
+        "tools/validate_overlay_screenshots.py:validate_bridge_workbench_manifest",
+        "tools/browser-review/render-screenshots.mjs:bridgeWorkbenchScreenshotCases"
+      ],
+      "assertions": [
+        "three deterministic cases cover a current sector publication, decoder rejection before admission, and an aged receipt whose overlay freshness decision remains pending",
+        "every workbench screenshot proves the offline banner, no-live-runtime statement, two sandboxed fixture documents, no script runtime, and synthetic fixture variant",
+        "the browser-only workbench is not a localhost/OBS or Windows-native product surface and has no live app, telemetry, relay, pairing, or Oracle dependency"
       ]
     }
   ],

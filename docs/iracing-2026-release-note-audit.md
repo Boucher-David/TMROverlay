@@ -16,3 +16,11 @@ TmrOverlay does not write the user's iRacing `app.ini`. Users who need all activ
 ## Follow-up evidence
 
 The existing 72-slot capture proves schema capacity, not populated high-index opponents. Collect an `irsdkLogAllCars=1` race with more than 64 active entrants and replay it through timing, relative, standings, radar, and diagnostics before claiming end-to-end high-index live evidence.
+
+## Overlay Bridge normalized-fuel preflight — 2026-07-18
+
+Reviewed the current Season 3 Patch 3 / Hotfix 1 notes before promoting the Bridge projector's normalized fuel inputs. There is no new raw SDK fuel/capacity channel or Bridge-relevant telemetry schema change in those patches. Patch 3 does fix late-join team/driver lap-count reporting for driver-swap sessions; that reinforces, rather than removes, the need for session/lease provenance, immediate handoff invalidation, and real late-join/driver-swap replay coverage. Its `CamCarIdx` pace-car correction is not a projector dependency: publisher eligibility requires local confirmed in-car evidence and the projector does not use camera focus.
+
+The 2026 Season 3 release adds series-specific regulations and changes pit/fuel behavior for some cars. The current normalized `LiveFuelPitModel` therefore promotes only capture/context-proven physical tank capacity and density (`DriverCarFuelMaxLiters`, `DriverCarFuelKgPerLiter`) plus clean-burn evidence. It deliberately leaves effective session capacity and maximum allowed fuel percentage unknown until the applicable ruleset/session fields have paired capture evidence; it must not treat the physical tank as a session restriction.
+
+The tracked SDK availability corpus still records `FuelLevel`, `FuelLevelPct`, and `FuelUsePerHour`. The Bridge projector consumes no raw SDK frame: it reads those values only after the existing collector has normalized them into Model V2, and it publishes only a bounded completed-green-lap burn window. No capture-format, raw-capture compatibility, or durable user-data schema change is required by this promotion. Required next evidence is a real team driver-swap/late-join capture covering tank/density availability, session fuel restrictions when present, completed clean burns, pit/service, and the outgoing/incoming publisher transition.

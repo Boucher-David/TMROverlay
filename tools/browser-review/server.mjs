@@ -17,6 +17,14 @@ import {
   overlayGeometry,
   settingsBrowserSourceSize
 } from '../../tests/browser-overlays/browserOverlayAssets.js';
+import { renderBridgeWorkbenchHtml } from './bridge-workbench/render.mjs';
+
+// Only the developer-only Bridge fixture pages opt into this restrictive CSP. Other browser
+// review pages intentionally use scripts and live-reload during normal overlay development.
+const offlineBridgeWorkbenchHeaders = {
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+  'Referrer-Policy': 'no-referrer'
+};
 
 const port = Number.parseInt(process.env.TMR_BROWSER_REVIEW_PORT || '5177', 10);
 const initialReviewUnitSystem = normalizeUnitSystem(process.env.TMR_REVIEW_UNIT_SYSTEM || process.env.TMR_UNIT_SYSTEM || 'Metric');
@@ -309,6 +317,18 @@ const server = createServer((request, response) => {
       serveHtml(response, withLiveReload(renderInstallerReviewHtml({
         menuId: url.searchParams.get('menu') || 'welcome'
       })));
+      return;
+    }
+
+    const bridgeWorkbenchRoute = bridgeWorkbenchRouteFromPath(path);
+    if (bridgeWorkbenchRoute) {
+      serveHtml(
+        response,
+        renderBridgeWorkbenchHtml({
+          view: bridgeWorkbenchRoute,
+          caseId: url.searchParams.get('case') || 'active-team-live'
+        }),
+        offlineBridgeWorkbenchHeaders);
       return;
     }
 
@@ -806,6 +826,19 @@ function overlayIdFromPath(path) {
   }
 
   return null;
+}
+
+function bridgeWorkbenchRouteFromPath(path) {
+  switch (path) {
+    case '/review/bridge/workbench':
+      return 'workbench';
+    case '/review/bridge/producer':
+      return 'producer';
+    case '/review/bridge/consumer':
+      return 'consumer';
+    default:
+      return null;
+  }
 }
 
 function reviewLiveSnapshot(previewMode = 'off', searchParams = new URLSearchParams()) {
@@ -4863,8 +4896,11 @@ function broadcastReload() {
   }
 }
 
-function serveHtml(response, body) {
-  response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+function serveHtml(response, body, extraHeaders = {}) {
+  response.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    ...extraHeaders
+  });
   response.end(body);
 }
 

@@ -13,24 +13,26 @@ Use `docs/model-v2-future-branches.md` for session-handoff notes, current model-
 
 ## Current Branch Target
 
-### v1.3 - Overlay Bridge Developer Foundation
+### v1.3.0 - Overlay Bridge Developer Foundation
 
 Status: active implementation on branch `v1.3-overlay-bridge`.
 
 Suggested squash title:
 
 ```text
-[v1.3] Build Overlay Bridge developer foundation
+[v1.3.0] Build Overlay Bridge developer foundation
 ```
 
 Suggested squash body:
 
 ```text
-- Preserve the PR workflow's short-lived portable Windows test build and MSI download artifacts so live Windows testing remains practical throughout the branch.
-- Establish the Overlay Bridge as a separate, opt-in developer/client boundary rather than extending localhost/OBS routes or giving external clients direct iRacing access.
-- Start with versioned, read-only normalized model contracts, deterministic fixtures, safe connection diagnostics, and explicit compatibility rules; defer commands, raw telemetry sharing, and peer-history promotion.
-- Validate Windows publisher behavior independently from browser-review and localhost evidence; a Mac bridge monitor accelerates iteration but does not replace Windows-native validation.
-- User-data compatibility: preserve existing settings/history readers and do not change the raw-capture format without its matching migrations and documentation.
+- Preserve the PR workflow's portable Windows test-build/MSI artifacts so teammate WIP testing remains practical throughout V1.3 development.
+- Make V1.3 the Overlay Bridge milestone and V1.4 the Fuel Calculator V2 milestone; add the native Settings support tab and matching browser/validation coverage without turning Bridge into an OBS/localhost overlay.
+- Carry forward dynamic SDK `CarIdx` schema support so current 72-slot captures remain valid beside the earlier 64-slot corpus.
+- Add the first local-only Overlay Bridge foundation: versioned canonical-CBOR fact contracts, redacted normalized-live projection, capability-group receiver admission/composition, lease/handoff safeguards, bounded loopback virtual circuits, and deterministic Core tests. The first remote policy remains live Active Team Car facts only.
+- Add an offline browser-review producer/consumer workbench with immutable synthetic fixtures and forensic screenshot evidence. It has no live telemetry, pairing, relay, or shared application state.
+- Record the payload-blind Oracle relay design, pairing, freshness, compatibility, track-map, security, and remote-release gates; defer real networking, credentials, relay provisioning, and remote room operation.
+- User-data compatibility: preserve settings/history readers and the raw-capture format. The dynamic `CarIdx` reader accepts wider SDK layouts without changing existing capture semantics; Bridge facts are transient and do not promote teammate state into durable history.
 ```
 
 ## Merged Mainline Milestones

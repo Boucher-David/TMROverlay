@@ -100,6 +100,12 @@ const appItems = [
     output: 'app/14-settings-diagnostics.png',
     title: 'Settings - Diagnostics',
     description: 'Enhanced iRacing telemetry capture, bundle actions, and data analysis opt-out controls.'
+  },
+  {
+    source: 'settings/overlay-bridge/general.png',
+    output: 'app/15-settings-overlay-bridge.png',
+    title: 'Settings - Overlay Bridge',
+    description: 'Overlay Bridge support status, local developer foundation, and deliberately deferred remote-room controls.'
   }
 ];
 

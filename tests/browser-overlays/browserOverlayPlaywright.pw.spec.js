@@ -786,7 +786,7 @@ test.describe('browser overlay Playwright integration', () => {
     await page.goto('http://localhost:8765/review/settings/general');
 
     await expect(page.locator('h1')).toHaveText('General');
-    await expect(page.locator('.sidebar-tab')).toHaveCount(14);
+    await expect(page.locator('.sidebar-tab')).toHaveCount(15);
     await expect(page.locator('.sidebar-tab.active')).toHaveText('General');
     await expect(page.getByText('Preview off')).toBeVisible();
     await expect(page.locator('.overlay-frame')).toHaveCount(0);

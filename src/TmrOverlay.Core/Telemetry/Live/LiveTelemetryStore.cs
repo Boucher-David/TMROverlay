@@ -935,7 +935,7 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
         private const double MinimumLapSeconds = 20d;
         private const double MaximumLapSeconds = 1800d;
 
-        private readonly Queue<double> _measuredFuelPerLap = new();
+        private readonly Queue<LiveFuelBurnSample> _measuredFuelPerLap = new();
         private FuelLapAnchor? _anchor;
 
         public void Reset()
@@ -999,7 +999,10 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
                 var fuelPerLap = fuelDelta / progressDelta;
                 if (IsPositiveFinite(fuelPerLap) && fuelPerLap <= MaximumFuelBurnLitersPerLap)
                 {
-                    _measuredFuelPerLap.Enqueue(fuelPerLap);
+                    _measuredFuelPerLap.Enqueue(new LiveFuelBurnSample(
+                        CompletedLapNumber: completed,
+                        FuelUsedLiters: fuelPerLap,
+                        LapTimeSeconds: elapsedSeconds));
                     while (_measuredFuelPerLap.Count > RollingLapLimit)
                     {
                         _measuredFuelPerLap.Dequeue();
@@ -1015,10 +1018,13 @@ internal sealed class LiveTelemetryStore : ILiveTelemetrySource, ILiveTelemetryS
         {
             return _measuredFuelPerLap.Count > 0
                 ? fuel.WithMeasuredFuelPerLap(
-                    _measuredFuelPerLap.Average(),
-                    _measuredFuelPerLap.Min(),
-                    _measuredFuelPerLap.Max(),
-                    _measuredFuelPerLap.Count)
+                    _measuredFuelPerLap.Average(sample => sample.FuelUsedLiters),
+                    _measuredFuelPerLap.Min(sample => sample.FuelUsedLiters),
+                    _measuredFuelPerLap.Max(sample => sample.FuelUsedLiters),
+                    _measuredFuelPerLap.Count) with
+                {
+                    MeasuredFuelBurnSamples = _measuredFuelPerLap.ToArray()
+                }
                 : fuel;
         }
 

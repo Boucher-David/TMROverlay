@@ -3,7 +3,7 @@
   "source": "artifacts/browser-review-screenshots/manifest.json",
   "sourceSurface": "browser-review",
   "unitSystem": "Metric",
-  "itemCount": 28,
+  "itemCount": 29,
   "items": [
     {
       "title": "Settings - General",
@@ -12,7 +12,7 @@
       "source": "settings/app/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 114939,
+      "bytes": 116381,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -58,14 +58,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "3e3c0cab40e96c00f97826c3e8b6e705f7ec62544c7cada112d37de655b50c4c"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "702fda2d193a6c8928209095c56a539df2bd95c1a84dba434f8e76d19afabdc0"
       }
     },
     {
@@ -75,7 +75,7 @@
       "source": "settings/standings/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 116541,
+      "bytes": 117918,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -123,14 +123,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "494c6f7d820e3e3dd3f92de4cb8a1d43dc2aee34af9f2b33efcf5f6cbbe54f75"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "cbd01517f5d6963494215138679c4b76ac5341d4548889824a8a51f92ca34e06"
       }
     },
     {
@@ -140,7 +140,7 @@
       "source": "settings/relative/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 110429,
+      "bytes": 111861,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -189,14 +189,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "9addf27c87320aca874f5b5e6704da1fd06d90ef4cfdd560591a2e5a302eb555"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "d377565fb5bad857416d7e17e986f4fba7e7e645e2e46d74c5da515334e4a45e"
       }
     },
     {
@@ -206,7 +206,7 @@
       "source": "settings/gap-to-leader/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 110535,
+      "bytes": 111966,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -256,14 +256,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "66ec65e87183b202f6008190df8e127101562b69083708a655646263cc80d480"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "5ad466b915a8431da9cbd9fff7ff1cd1abec51139b6af9479fc1741868d7f5f4"
       }
     },
     {
@@ -273,7 +273,7 @@
       "source": "settings/track-map/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 103572,
+      "bytes": 105045,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -316,14 +316,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "eb905971d8895313124b1c8c08761ab1386fa7db98a0d30299294f61b22e7f81"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "afd29d15f4f476093fd451ae1d313dfa915949ca1a3cab3a49b106e78dee02bb"
       }
     },
     {
@@ -333,7 +333,7 @@
       "source": "settings/stream-chat/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 107515,
+      "bytes": 108920,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -375,14 +375,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "a9a4bb72ce86eda20b3dd68afbe2ee317eaf6182a0ebebb05a26182989e979d2"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "84a9d5cb2a8cf8f365c6db9990d837f0d385d4a0c852ecd10b77ee4f56af09b0"
       }
     },
     {
@@ -392,7 +392,7 @@
       "source": "settings/garage-cover/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 109610,
+      "bytes": 111052,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -435,14 +435,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "2a32f604f897b795eb8485d7edec46e083890af73e8ce3f4c0e646bceb0fcb7a"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "0503ff84da637d49ece22a0e38b7b59472f70bcf725815fa22ec6046c3892905"
       }
     },
     {
@@ -452,7 +452,7 @@
       "source": "settings/fuel-calculator/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 107604,
+      "bytes": 109010,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -496,14 +496,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "a40a0cb0178bcb561b5b061a58b1f651c19820507687bbe89965023def5ad325"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "a61cb46f495821d2b11f5e0a53de9e86223aaa09dbda61890bbd2dbb0a7457d0"
       }
     },
     {
@@ -513,7 +513,7 @@
       "source": "settings/input-state/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 105458,
+      "bytes": 106924,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -556,14 +556,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "f332e78600b221de3f7b782330b3d1f32eca54775e2733fb1ad2b0669c79e798"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "e5c1c114adc22d93eded8b37c8d59adc0866b4b0574217d6566416fbec74744f"
       }
     },
     {
@@ -573,7 +573,7 @@
       "source": "settings/car-radar/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 112432,
+      "bytes": 113816,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -615,14 +615,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "ac1d581031358f873cb0d2f1febfe92d1d2774cc0282f2c1389204d47c752cc8"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "00974b1ef52a72ea399e556bc6a7258600fa1a73159fc6f9df7df5ec993f3ce5"
       }
     },
     {
@@ -632,7 +632,7 @@
       "source": "settings/flags/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 101708,
+      "bytes": 103184,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -675,14 +675,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "7b451bfe4c49e88f15388d2283aea59ad287ac8b58a04bb21d2725cb2b3307f9"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "c167e0973ea6254d0131a5da7a5bb140e598ce82ce713c29a5339cff91352f74"
       }
     },
     {
@@ -692,7 +692,7 @@
       "source": "settings/session-weather/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 108989,
+      "bytes": 110407,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -736,14 +736,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "d51f14f93a3eeff93ac1312a1a68b0f29db6ef592559034c4888a1d81e2e9f79"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "759af5a9771616e7bda6dfbae34cc8aae5b10400a265c0b24e9812df101b2bea"
       }
     },
     {
@@ -753,7 +753,7 @@
       "source": "settings/pit-service/general.png",
       "width": 1152,
       "height": 608,
-      "bytes": 106557,
+      "bytes": 107979,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -798,14 +798,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "4ddbe54a9a9065c7c65d180277621be7d290f546420be37e82f7a45745bb7de6"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "16141d61b2e427e4d69954b7df8642ce878695422cf0e6ce5191d0a8d483990a"
       }
     },
     {
@@ -815,7 +815,7 @@
       "source": "settings/support/diagnostics.png",
       "width": 1152,
       "height": 608,
-      "bytes": 126519,
+      "bytes": 127747,
       "status": null,
       "bodyKind": null,
       "curation": null,
@@ -864,14 +864,70 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
             "exists": true,
-            "bytes": 79433,
-            "sha256": "9fabc6e123696125fd1f8224fa0d331a3dc4861afb7a633c50f2ca04bae6d814"
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
           }
         ],
         "modelSummary": null,
         "modelHash": null,
-        "sourceHash": "01969f3bd9cdd47f89fb1ca9609b56f07405c052f7fec5e28a0b232865a017ab",
-        "scenarioHash": "f39133c0cb28f155690b194bdee8bcccbb77c3770f1d56f4973f5751a0622b2d"
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "cb3897d8764e6f1edd5aafbb6e81fb2c6bab22cea558f44c9c0ecec4cec4f460"
+      }
+    },
+    {
+      "title": "Settings - Overlay Bridge",
+      "description": "Overlay Bridge support status, local developer foundation, and deliberately deferred remote-room controls.",
+      "path": "app/15-settings-overlay-bridge.png",
+      "source": "settings/overlay-bridge/general.png",
+      "width": 1152,
+      "height": 608,
+      "bytes": 114186,
+      "status": null,
+      "bodyKind": null,
+      "curation": null,
+      "scenarioEvidence": {
+        "contract": "screenshot-scenario-evidence/v1",
+        "surface": "browser-review-settings",
+        "renderer": "settings-general.html",
+        "sourceContract": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+        "moduleAsset": null,
+        "overlayId": null,
+        "tab": "overlay-bridge",
+        "region": "general",
+        "previewMode": null,
+        "unitSystem": "Metric",
+        "routeAlias": null,
+        "fixtureVariant": null,
+        "captureMode": null,
+        "cropBounds": null,
+        "configuredOverlaySize": null,
+        "minScale": null,
+        "scaleTransform": null,
+        "comparisonMode": "browser-review-settings-vs-native-code-path",
+        "comparisonLimit": "Windows-native screenshot requires a Windows run",
+        "compositingMode": null,
+        "captureBackdrop": null,
+        "fixture": "browser-review-settings-fixture",
+        "urlPath": "/review/app?tab=overlay-bridge",
+        "selector": "#settings-app",
+        "settingsContract": {
+          "unitSystem": "Metric",
+          "unitToggleLifecycle": "browser-review-renders-model-values-without-native-form-lifecycle"
+        },
+        "provenance": null,
+        "v102Evidence": [],
+        "sourceFiles": [
+          {
+            "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/templates/settings-general.html",
+            "exists": true,
+            "bytes": 82444,
+            "sha256": "f6e532e3ba83adb16c80f4e00cae41fac8720c5670ad602010e99f85509c626a"
+          }
+        ],
+        "modelSummary": null,
+        "modelHash": null,
+        "sourceHash": "e0ae6821455ff2b65f2afc7aa899b85b5cba261cf171c71a9bf86c57eb167a7c",
+        "scenarioHash": "f7d32028d4b7968ce8074ec0f386d052a002c86d16dafe47b1877a01845a441b"
       }
     },
     {
@@ -934,8 +990,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/standings.js",
@@ -956,9 +1012,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "70022bbbd8f72e4fc70b26013b3cb2d5dd371cedef9962ffbc0a467d52287433",
-        "sourceHash": "58d4bb36e6541c98fab71d03dda5b5fe8c0e1f01d15541e799dddd579b637082",
-        "scenarioHash": "4b4bf23c7d25635db59ff5320c33a83bb97756ccb9c1b1b972d7385b94fb8ece"
+        "modelHash": "0bcce51db450dc649f66ebf041a0ae427776200be18071eb692fb227947e5f83",
+        "sourceHash": "5edc63b0f1e655313b3cea129f3765d06310e7dfc870663b879e7c8d6ec03069",
+        "scenarioHash": "782e75dc21f02edb28f7dfad3044fb6aacd1e4a563d8e57a75d12f4aed9558cf"
       }
     },
     {
@@ -1022,8 +1078,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/relative.js",
@@ -1044,9 +1100,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "cd6725e055a7989ff3bd569deb1f4aee35b94f1b1e67eff10921380a9f205271",
-        "sourceHash": "7aa955a8d9080965c309d61c9d63f9eb03cb65c6d7b78dfbc1eb503d50825132",
-        "scenarioHash": "4a8fcfbc7283617d1bafb2f45cd302dd0ab38e893af89867957aed3d4c8f0dde"
+        "modelHash": "d5d2e6d1e6612bbcf8c8228671768a815b675615889519810b45ff389cb4c102",
+        "sourceHash": "a5c8c1f1c67a41b5027d8a65569c9255440da0c84508e578215efa04e8bd4ca2",
+        "scenarioHash": "af594ab487217863af54fcc5d751584c3ae8cdc01d449591443cdb245ceda9ed"
       }
     },
     {
@@ -1105,8 +1161,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/fuel-calculator.js",
@@ -1127,9 +1183,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "ffc3c08c6e4dd974fbfea55bc1493b0f3ad6831c5ced1df093932c6ddabb56d9",
-        "sourceHash": "dd7c7b20e09f366d22478b612e2b914ebce4ac5a95d201889b03aa4a3d2a919e",
-        "scenarioHash": "94aef0b3e6482eaeb54d31c8ef0c27f7ac0a842b54bd4ee78e1a4a3887cb813c"
+        "modelHash": "940c85268971987beaaddfb2497a64ccd61941b20c3a58cf90372a7dd8bc71e3",
+        "sourceHash": "3cf09a6e37958b6d2f840550aaa9723751bae8dbaccf0748745d58fbecc7a446",
+        "scenarioHash": "8e281f805bb8d175e65d90f300e0b4ffe34bfa50799c84ce2cb4adf2903d11b4"
       }
     },
     {
@@ -1194,8 +1250,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/gap-to-leader.js",
@@ -1216,9 +1272,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "826ef645146b95bda74a6f439e585ce1338eb2e6cff0b2a7d3d2363b2f61b4ed",
-        "sourceHash": "85e830e02b8602b7d35ae14b38681e32d7f2ba21d78c929c0d808ba849b467f3",
-        "scenarioHash": "2774f8bb238f05c25744fe631f18297b6c1b96175a99cb28f6c16011fae2ea3f"
+        "modelHash": "2abeea537846e8bbc2bdd28d5608a6aac7f2e86b73491f713d5dd5c4fefa7b61",
+        "sourceHash": "ae3c9e0419f4a48e67b40fdb75e9832075fe09c22983fdca8203ccdd1d0d55b9",
+        "scenarioHash": "73c232096af26fccfa36d173f49ab99f80467050d58fe1259298896ac9cadc29"
       }
     },
     {
@@ -1284,14 +1340,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/track-map.js",
             "exists": true,
-            "bytes": 6435,
-            "sha256": "95911cd6df95ca58d92d8bb9c62aa954119ed015af87fc6a9b2e0ea54c3d1ebb"
+            "bytes": 6768,
+            "sha256": "958db02df7661043e6bb25da5192727bde8fd557d0885c83b93213b7b59111ef"
           }
         ],
         "modelSummary": {
@@ -1306,9 +1362,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 4
         },
-        "modelHash": "1c344a4aab7fc1054977ea3491d5ba2b662c1a6f940fa7cfd43afeed08511133",
-        "sourceHash": "0a8d18fad92547585f16b6d8694ecb268d9cb039e6dcc57be28a0f7124d4ed51",
-        "scenarioHash": "db0964849b4355dec7e379c2a8f51a5a6347fd36b0f2f1622a4ffd9aea8d078a"
+        "modelHash": "d85961f680edfec79fdeda43f403ac95f28f72935d3bc6d87711f76065560d16",
+        "sourceHash": "13a77c9bb788289b6afbcaf6352d7d2eea4027f189937e58f5cd6c283b1288cd",
+        "scenarioHash": "987ab8684a8d2761acb3d6ec6d3d411334018ff6fb33dec5e6d6d0c47a158dc6"
       }
     },
     {
@@ -1374,14 +1430,14 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/track-map.js",
             "exists": true,
-            "bytes": 6435,
-            "sha256": "95911cd6df95ca58d92d8bb9c62aa954119ed015af87fc6a9b2e0ea54c3d1ebb"
+            "bytes": 6768,
+            "sha256": "958db02df7661043e6bb25da5192727bde8fd557d0885c83b93213b7b59111ef"
           }
         ],
         "modelSummary": {
@@ -1396,9 +1452,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 4
         },
-        "modelHash": "d755a43a78d45d785ffb5109a90a9a1dbbe530c725a1bda63d0877db19ea824b",
-        "sourceHash": "0a8d18fad92547585f16b6d8694ecb268d9cb039e6dcc57be28a0f7124d4ed51",
-        "scenarioHash": "34323b16714f0d146261a3407706ea20db44ebf2b8404a8e8ea3b87913f65cca"
+        "modelHash": "8e68544747b84126610227928ba3301e729934e60951c74fb1dd67f2ddb3bb83",
+        "sourceHash": "13a77c9bb788289b6afbcaf6352d7d2eea4027f189937e58f5cd6c283b1288cd",
+        "scenarioHash": "dd362c86873aa19ba8c7bfa2a3c6dcbd1c7fdeca93dc0fd29ece764acb2c387b"
       }
     },
     {
@@ -1457,8 +1513,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/session-weather.js",
@@ -1479,9 +1535,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "d94a9e1e1dbd7cf9dac15eca2bea3d0f273198bdfdcb62698ed4d28b3f5ac28a",
-        "sourceHash": "414b4815cb09e0bf3e223de4ff28b177e643806ebe16b93e8f754f820d17e29d",
-        "scenarioHash": "4f0306d8aa95ff90ded3efca42922c5981fd545bf86cd0aff9364bc2b9a53e7a"
+        "modelHash": "bca19892543253cf9811ef4e10a960e8de349c616d88daf3dc41262474c3115c",
+        "sourceHash": "48906a756ce2620c70b2d22dfca1c385073235c08e3544d5822484e79d1fc5ad",
+        "scenarioHash": "eac2c094a13026a4b58ac588fff886db6a5d7cb1161e889afd8f67dd5a539b75"
       }
     },
     {
@@ -1491,7 +1547,7 @@
       "source": "browser-overlays/pit-service/race.png",
       "width": 530,
       "height": 707,
-      "bytes": 59961,
+      "bytes": 60080,
       "status": "service active",
       "bodyKind": "metrics",
       "curation": null,
@@ -1541,8 +1597,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/pit-service.js",
@@ -1563,9 +1619,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "fc90bfad76fd72aaf36b6bc99f32dfeec1cd6a5c33968cd0e9a21c9df0b48eab",
-        "sourceHash": "94d77d03ad353a7f6ad6f5d289e053fb0a33e7bf4de8fdee351052beee79c41d",
-        "scenarioHash": "6b35f5438c6eff85c64184621164413240d17cfee4612248ea6dd1c54b229102"
+        "modelHash": "adf6a752de76e61a6da5daaa37237ef07a5ab90b15ba3fb606594c817e7a193a",
+        "sourceHash": "857ec9503de56e3670ca9ec26db9271b286305f7d5853b25c4783c613e12781d",
+        "scenarioHash": "19cff9f2997a816686d8f7039ddd2d4dca90dd9ecf6fbb848e9b4679e2aa3dc5"
       }
     },
     {
@@ -1575,7 +1631,7 @@
       "source": "browser-overlays/pit-service/idle.png",
       "width": 530,
       "height": 707,
-      "bytes": 46560,
+      "bytes": 46524,
       "status": "pit ready",
       "bodyKind": "metrics",
       "curation": null,
@@ -1625,8 +1681,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/pit-service.js",
@@ -1647,9 +1703,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "57a0d07dd2c07176a2a34ec4924ebe3c2eca6115052c6bc6e51c45207a5cf125",
-        "sourceHash": "94d77d03ad353a7f6ad6f5d289e053fb0a33e7bf4de8fdee351052beee79c41d",
-        "scenarioHash": "a8dcd51053ac437d76ef4c39a5db30b1adf189eb257833f1a5507a27841581ed"
+        "modelHash": "d471c987a7b3562eea276b1fcc9f40e75d56eff81c4c80513c158aba9aa6d197",
+        "sourceHash": "857ec9503de56e3670ca9ec26db9271b286305f7d5853b25c4783c613e12781d",
+        "scenarioHash": "714ba9c2fa82ad2b2af3e659fd9c3ea25b52feec21c1c5f67f909fe1e1bf0b4d"
       }
     },
     {
@@ -1707,8 +1763,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/input-state.js",
@@ -1729,9 +1785,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "e97fd8f398becb99be9f8b4f124442c837a95bd71ac40278745ca37eafe9eebb",
-        "sourceHash": "42067ffde478644a03cb48c1d9cc9daaea77fd7a37ec20c2778c04de552660da",
-        "scenarioHash": "1700ce276febfd88245ef3e096775137a6757443f9bd01e55c41498fb91ed777"
+        "modelHash": "e1742f90d65d3e8560e584726cf5a9807f7562e2fd09f92cb565068537764514",
+        "sourceHash": "9bbcc54499e00867f9cd758bf9ccdcb196166ffd717dd47cc1ea9e641db339fa",
+        "scenarioHash": "086f03cf4efdfb1c23dfca58020a5627599156c204a96f509a2cf23cceecaf2c"
       }
     },
     {
@@ -1796,8 +1852,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/car-radar.js",
@@ -1818,9 +1874,9 @@
           "carRadarCarCount": 3,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "47bdcd653b5605ce2764350767d60657fe59b3b5e02cbb76cb1e99b7710135db",
-        "sourceHash": "b2b11ae9f4580816dc0e5b2b7564d82ea34d8dd2ed915cbff2a6b80ec4dbd79d",
-        "scenarioHash": "4d8d6e466b5df73992b7f208139704ab4a33b9358e6edc737c04d3bf10dd7f52"
+        "modelHash": "5e7e9776dd8b8d6c58f38487eb1f7cf1383a43013f7f2d49b651cd419573f5ae",
+        "sourceHash": "7f9ffd990497f3eee0caae54aaa0bc75ca617e7c9f786f8c8e9a8a76e0b3f91e",
+        "scenarioHash": "9401ade8945089232a7a225b5c4e0c48c68b81ca75478f882a79025999e10f85"
       }
     },
     {
@@ -1886,8 +1942,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/flags.js",
@@ -1908,9 +1964,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "bdbc57db3513c9b7d0c048126159387882e1cc2e4aeb0d0d79b1d07f986c3de8",
-        "sourceHash": "e944603e263b07172b36697a12a8428454603711f24e37479067472a82403636",
-        "scenarioHash": "967f3552c4470c7d0e4ab92eaa8974c71738d99dfe9a8f8357c9025a59528e3d"
+        "modelHash": "331271639e8365926265f0ec3316a0a1956c9014edd3b22c92773d6ffef8a19a",
+        "sourceHash": "e114626df6d22db3ecb80a4e66764154c2d516cf01de8caacc1db6474883af0f",
+        "scenarioHash": "16a37ba4c79c59466388ac003a8fc5d6fea3470fdec811731755c092119acd2f"
       }
     },
     {
@@ -1967,8 +2023,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/stream-chat.js",
@@ -1989,9 +2045,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "1e28a334eeef6f0f2625ba9982020098cb21f5f68b84e50b7d3015634abea694",
-        "sourceHash": "e118d86a895030e869edc346abf564a9bd3b853108b7ac6df5109ffcff027df7",
-        "scenarioHash": "a1ca4d070aa6f2484104187a0e168af507af83451a0cc2615245a15e0bf3f4bf"
+        "modelHash": "c9a1a8133c7acec13dd5e7524aefc561c23ad00c8d6d25db62d39cb7f45bd8dd",
+        "sourceHash": "baa96ff90c8d016a4de00d6d25910a4e6c8edfe35616d53926bea4416502abf5",
+        "scenarioHash": "2204a5897351440084276307e31fd53fcdc80e390c310d6f47c9c642ab2040de"
       }
     },
     {
@@ -2049,8 +2105,8 @@
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/BrowserOverlayModelFactory.cs",
             "exists": true,
-            "bytes": 180835,
-            "sha256": "973ef9a294936b06f072d99ca5affff9ada54cfd5dbdea5e46d82dbfaedc7646"
+            "bytes": 180246,
+            "sha256": "69efaf83a99e52fe1dd967a3cb2256e412b457f83f27cc8cfc358cfbd622b6a6"
           },
           {
             "path": "src/TmrOverlay.App/Overlays/BrowserSources/Assets/modules/garage-cover.js",
@@ -2071,9 +2127,9 @@
           "carRadarCarCount": 0,
           "trackMapMarkerCount": 0
         },
-        "modelHash": "711a95138fe46f871eb9049c3b26d5587abdac5ea82abfb87f2186c76826dddf",
-        "sourceHash": "f5564dfa411f225253f389ca420aebbb09a5efe2aeb3c0f9a9165a8e34f32ebb",
-        "scenarioHash": "7799c69ae43cb97aca7d7f9bf84462ea08b6d2952d9ba04dff2bdcd9d569b35a"
+        "modelHash": "1653c9cd32790033f923900cf2c45ad9bd6cb9354178e7364400d912411fb9f1",
+        "sourceHash": "07624d0445bd9ae5806c04685de46f6949f1720be5fe7e7acee8ac85bffe5d3b",
+        "scenarioHash": "84db1053297d1c602023b9e706f38c248a00c1537eb587cd0807f35932a731ae"
       }
     }
   ]

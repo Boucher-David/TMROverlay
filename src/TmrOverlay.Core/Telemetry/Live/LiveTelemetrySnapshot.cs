@@ -1002,6 +1002,15 @@ internal sealed record LiveClassGapCar(
     bool IsOnPitRoad = false,
     int? CurrentLap = null);
 
+/// <summary>
+/// One accepted completed-lap fuel measurement retained by the normalized live model. This is
+/// deliberately bounded by the live collector and contains no raw frame data or history.
+/// </summary>
+internal sealed record LiveFuelBurnSample(
+    int CompletedLapNumber,
+    double FuelUsedLiters,
+    double? LapTimeSeconds);
+
 internal sealed record LiveFuelSnapshot(
     bool HasValidFuel,
     string Source,
@@ -1020,6 +1029,13 @@ internal sealed record LiveFuelSnapshot(
     double? EstimatedLapsRemaining,
     string Confidence)
 {
+    /// <summary>
+    /// Current-session, accepted clean-burn measurements. The collector retains a small rolling
+    /// window so source-neutral consumers can reason from evidence instead of a precomputed
+    /// strategy conclusion.
+    /// </summary>
+    public IReadOnlyList<LiveFuelBurnSample> MeasuredFuelBurnSamples { get; init; } = [];
+
     public static LiveFuelSnapshot Unavailable { get; } = new(
         HasValidFuel: false,
         Source: "unavailable",
